@@ -11,20 +11,25 @@ platform :ios do
       in_house: false
     )
 
+    keychain_name = "ci_keychain"
+    keychain_password = "temporary_ci_password_123"
+
     create_keychain(
-      name: "ci_keychain",
-      password: "temporary_ci_password_123",
+      name: keychain_name,
+      password: keychain_password,
       default_keychain: true,
       unlock: true,
       timeout: 3600
     )
 
-    keychain_path = lane_context[SharedValues::KEYCHAIN_PATH] || File.expand_path("~/Library/Keychains/ci_keychain-db")
+    # In macOS Sonoma (14.x), Apple stores keychains with a -db suffix
+    raw_path = File.expand_path("~/Library/Keychains/#{keychain_name}")
+    keychain_path = File.exist?("#{raw_path}-db") ? "#{raw_path}-db" : raw_path
 
     get_certificates(
       api_key: api_key,
       keychain_path: keychain_path,
-      keychain_password: "temporary_ci_password_123"
+      keychain_password: keychain_password
     )
 
     get_provisioning_profile(
@@ -35,6 +40,7 @@ platform :ios do
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
+      clean: false,
       export_method: "app-store",
       output_directory: "../build/ios/ipa",
       output_name: "Zikirce.ipa"
