@@ -32,11 +32,17 @@ jobs:
           cache: true
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
-      - name: 4. Check Flutter environment
-        run: flutter doctor -v
+      - name: 4. Configure Flutter environment
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter doctor -v
 
       - name: 5. Install dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          cd ios
+          pod install --repo-update
+          cd ..
 
       - name: 6. Build iOS Release (Free / No Code Signing Required)
         run: |
