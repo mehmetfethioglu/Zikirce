@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_prayer_card_bg"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="14dp"
+    android:paddingVertical="7dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Top Row: City (Left) & Next Prayer Title (Right) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_city"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="📍 İSTANBUL"
+            android:textColor="@color/widget_prayer_city"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_prayer_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="İKİNDİ VAKTİ"
+            android:textColor="@color/widget_prayer_title"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.02"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <!-- Middle Row: Progress Bar -->
+    <ProgressBar
+        android:id="@+id/widget_prayer_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="5dp"
+        android:layout_marginBottom="5dp"
+        android:max="100"
+        android:progress="45"
+        android:progressDrawable="@drawable/widget_prayer_progress" />
+
+    <!-- Bottom Row: Kalan Süre (Left) & Ezan Vakti (Right) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="KALAN SÜRE"
+                android:textColor="@color/widget_prayer_subtitle"
+                android:textSize="8sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:singleLine="true" />
+
+            <Chronometer
+                android:id="@+id/widget_next_prayer_countdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_prayer_time_color"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:countDown="true" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="EZAN VAKTİ"
+                android:textColor="@color/widget_prayer_subtitle"
+                android:textSize="8sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.05"
+                android:singleLine="true" />
+
+            <TextView
+                android:id="@+id/widget_next_prayer_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="16:45"
+                android:textColor="@color/widget_prayer_time_color"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:singleLine="true" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

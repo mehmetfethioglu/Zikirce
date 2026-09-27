@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#F7F1E5</color>
+    <!-- Digital Clock Widget Colors (Dark Theme) -->
+    <color name="widget_digital_bg">#000000</color>
+    <color name="widget_digital_border">#1E293B</color>
+    <color name="widget_digital_primary">#FFFFFF</color>
+    <color name="widget_digital_accent">#FFB300</color>
+    <color name="widget_digital_secondary">#3F3F46</color>
+    
+    <!-- Analog Clock Hand & Sub-dial Colors (Dark Theme) -->
+    <color name="widget_hour_hand_color">#F8FAFC</color>
+    <color name="widget_minute_hand_color">#FFFFFF</color>
+    <color name="widget_second_hand_color">#EF4444</color>
+    <color name="widget_hand_lume">#38BDF8</color>
+    <color name="widget_subdial_bg">#121214</color>
+    <color name="widget_subdial_border">#27272A</color>
+    
+    <!-- Hygge Minimalist Analog Clock Hand & Ray Colors (Dark Theme) -->
+    <color name="widget_hygge_hour_fill">#F59E0B</color>
+    <color name="widget_hygge_minute_fill">#18181B</color>
+    <color name="widget_hygge_minute_stroke">#F8FAFC</color>
+    <color name="widget_hygge_minute_ray">#CBD5E1</color>
+    <color name="widget_hygge_second_fill">#F59E0B</color>
+    
+    <!-- Widget Dark Mode Colors -->
+    <color name="widget_window_background">#000000</color>
+    <color name="widget_card_background">#000000</color>
+    <color name="widget_text_primary">#F7F1E5</color>
+    <color name="widget_text_secondary">#A09C96</color>
+    <color name="widget_prayer_text_color">#FFC107</color>
+    <color name="widget_divider">#1A1A1A</color>
+    <color name="widget_active_tint">#E5B88A</color>
+    <color name="widget_inactive_tint">#1A1A1A</color>
+    <color name="widget_border_color">#15FFFFFF</color>
+
+    <!-- Widget Sub-card Dark Theme Colors -->
+    <color name="widget_weekly_bg_color">#000000</color>
+    <color name="widget_weekly_text">#81C784</color>
+    <color name="widget_monthly_bg_start">#000000</color>
+    <color name="widget_monthly_bg_end">#0C0A09</color>
+    <color name="widget_monthly_text">#9FA8DA</color>
+    <color name="widget_monthly_text_accent">#C5CAE9</color>
+
+    <!-- Widget Prayer Next & Mini Colors (Night) -->
+    <color name="widget_prayer_card_bg">#14100C</color>
+    <color name="widget_prayer_card_border">#24FFFFFF</color>
+    <color name="widget_prayer_title">#FBBF24</color>
+    <color name="widget_prayer_city">#A1A1AA</color>
+    <color name="widget_prayer_subtitle">#78716C</color>
+    <color name="widget_prayer_time_color">#FFFFFF</color>
+    <color name="widget_prayer_progress_track">#28221C</color>
+    <color name="widget_prayer_progress_fill">#F59E0B</color>
+    <color name="widget_prayer_pill_bg">#261D15</color>
+</resources>

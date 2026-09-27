@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_digital_clock_bg"
+    android:padding="0dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <FrameLayout
+        android:id="@+id/widget_clock_frame"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true">
+
+        <!-- 1. Native Vector Squircle Dial: 60 Edge Minute Ticks & 8 Bold Batons -->
+        <ImageView
+            android:id="@+id/widget_clock_marks"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:src="@drawable/widget_analog_dial_marks"
+            android:scaleType="fitCenter" />
+
+        <!-- 2. Native Cardinal Numbers (12, 3, 6, 9) - 100% Theme Synchronized -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <TextView
+                android:id="@+id/clock_num_12"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_centerHorizontal="true"
+                android:layout_marginTop="10dp"
+                android:text="12"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/clock_num_6"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentBottom="true"
+                android:layout_centerHorizontal="true"
+                android:layout_marginBottom="10dp"
+                android:text="6"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/clock_num_9"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true"
+                android:layout_marginStart="14dp"
+                android:text="9"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/clock_num_3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true"
+                android:layout_marginEnd="14dp"
+                android:text="3"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+        </RelativeLayout>
+
+        <!-- 3. Central Chrono Info Hub (Framed directly by concentric rings) -->
+        <LinearLayout
+            android:id="@+id/widget_prayer_info_container"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="2dp">
+
+            <TextView
+                android:id="@+id/widget_next_prayer_name"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_digital_accent"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:gravity="center" />
+
+            <Chronometer
+                android:id="@+id/widget_countdown"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:layout_marginBottom="1dp"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:countDown="true"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/widget_next_prayer_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_digital_secondary"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:gravity="center" />
+        </LinearLayout>
+
+        <!-- 4. Real-time Native Analog Clock Hands (Zero Battery Lag, Red Second) -->
+        <AnalogClock
+            android:id="@+id/widget_analog_clock"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:dial="@drawable/widget_analog_clock_dial_transparent"
+            android:hand_hour="@drawable/widget_hour_hand"
+            android:hand_minute="@drawable/widget_minute_hand"
+            android:hand_second="@drawable/widget_second_hand" />
+
+    </FrameLayout>
+
+    <!-- Placeholder Content -->
+    <LinearLayout
+        android:id="@+id/widget_placeholder_layout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Namaz Vakti"
+            android:textColor="@color/widget_digital_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="YÜKLENİYOR"
+            android:textColor="@color/widget_digital_primary"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+    </LinearLayout>
+
+</RelativeLayout>

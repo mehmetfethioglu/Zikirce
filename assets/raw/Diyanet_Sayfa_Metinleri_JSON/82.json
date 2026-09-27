@@ -1,0 +1,133 @@
+{
+    "PointerList": [
+        {
+            "PointerId": 17,
+            "SureId": 4,
+            "AyetId": 24,
+            "Page": 82,
+            "Type": "Cüz",
+            "No": 5
+        }
+    ],
+    "CuzNo": 5,
+    "PageNo": 82,
+    "ArCuzNo": "٥",
+    "ArPageNo": "۸۲",
+    "QuranAyats": [
+        {
+            "Id": 3619,
+            "SureId": 4,
+            "AyetId": 24,
+            "LanguageId": 7,
+            "AyetNumber": "٢٤",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "وَالْمُحْصَنَاتُ مِنَ النِّسَٓاءِ اِلَّا مَا مَلَكَتْ اَیْمَانُكُمْۚ كِتَابَ اللّٰهِ عَلَیْكُمْؗ وَاُحِلَّ لَكُمْ مَا وَرَٓاءَ ذٰلِكُمْ اَنْ تَبْتَغُوا بِاَمْوَالِكُمْ مُحْصِنٖینَ غَیْرَ مُسَافِحٖینَؕ فَمَا اسْتَمْتَعْتُمْ بِهٖ مِنْهُنَّ فَاٰتُوهُنَّ اُجُورَهُنَّ فَرٖیضَةًؕ وَلَا جُنَاحَ عَلَیْكُمْ فٖیمَا تَرَاضَیْتُمْ بِهٖ مِنْ بَعْدِ الْفَرٖیضَةِؕ اِنَّ اللّٰهَ كَانَ عَلٖیمًا حَكٖیمًا",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 4,
+                "MealInfo": "Medine döneminde inmiştir. 176 âyettir. Sûre, özellikle kadın haklarından,onların hukûkî ve sosyal konumlarından bahsettiği için bu adı almıştır. <b>“Nisâ” kadınlar demektir.</b>",
+                "SureNameTurkish": "Nisâ",
+                "SureNameArabic": "النِّسَاءِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": true,
+                "InisOrder": 92,
+                "AyetCount": 176,
+                "Cuz": 4,
+                "FirstPage": 77,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 3626,
+            "SureId": 4,
+            "AyetId": 25,
+            "LanguageId": 7,
+            "AyetNumber": "٢٥",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "وَمَنْ لَمْ یَسْتَطِـعْ مِنْكُمْ طَوْلًا اَنْ یَنْكِـحَ الْمُحْصَنَاتِ الْمُؤْمِنَاتِ فَمِنْ مَا مَلَكَتْ اَیْمَانُكُمْ مِنْ فَتَیَاتِكُمُ الْمُؤْمِنَاتِؕ وَاللّٰهُ اَعْلَمُ بِاٖیمَانِكُمْؕ بَعْضُكُمْ مِنْ بَعْضٍۚ فَانْكِحُوهُنَّ بِاِذْنِ اَهْلِهِنَّ وَاٰتُوهُنَّ اُجُورَهُنَّ بِالْمَعْرُوفِ مُحْصَنَاتٍ غَیْرَ مُسَافِحَاتٍ وَلَا مُتَّخِذَاتِ اَخْدَانٍۚ فَاِذَٓا اُحْصِنَّ فَاِنْ اَتَیْنَ بِفَاحِشَةٍ فَعَلَیْهِنَّ نِصْفُ مَا عَلَى الْمُحْصَنَاتِ مِنَ الْعَذَابِؕ ذٰلِكَ لِمَنْ خَشِیَ الْعَنَتَ مِنْكُمْؕ وَاَنْ تَصْبِرُوا خَیْرٌ لَكُمْؕ وَاللّٰهُ غَفُورٌ رَحٖیمٌࣖ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 3633,
+            "SureId": 4,
+            "AyetId": 26,
+            "LanguageId": 7,
+            "AyetNumber": "٢٦",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "یُرٖیدُ اللّٰهُ لِیُبَیِّنَ لَكُمْ وَیَهْدِیَكُمْ سُنَنَ الَّذٖینَ مِنْ قَبْلِكُمْ وَیَتُوبَ عَلَیْكُمْؕ وَاللّٰهُ عَلٖیمٌ حَكٖیمٌ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "QuranAyatsText": null,
+    "MealAyats": [
+        {
+            "Id": 3617,
+            "SureId": 4,
+            "AyetId": 24,
+            "LanguageId": 5,
+            "AyetNumber": "24",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "Elinizin altında bulunan câriyeler müstesna, evli kadınlar da size haram kılındı; Allah’ın size emri budur. Bunlardan başkasını, iffetli yaşamak ve zina etmemek kaydıyla, mallarınızla (mehir vecibesini göz ardı etmeden) istemeniz size helâl kılındı. Onlardan karı-koca ilişkisi yaşadıklarınıza kararlaştırılmış olan mehirlerini verin. Mehir kesiminden sonra karşılıklı anlaşmanızda size günah yoktur. Şüphesiz Allah ilim ve hikmet sahibidir.",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 4,
+                "MealInfo": "Medine döneminde inmiştir. 176 âyettir. Sûre, özellikle kadın haklarından,onların hukûkî ve sosyal konumlarından bahsettiği için bu adı almıştır. <b>“Nisâ” kadınlar demektir.</b>",
+                "SureNameTurkish": "Nisâ",
+                "SureNameArabic": "النِّسَاءِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": true,
+                "InisOrder": 92,
+                "AyetCount": 176,
+                "Cuz": 4,
+                "FirstPage": 77,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 3624,
+            "SureId": 4,
+            "AyetId": 25,
+            "LanguageId": 5,
+            "AyetNumber": "25",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "İçinizden mümin ve hür kadınlarla evlenmeye gücü yetmeyen kimse, ellerinizin altında bulunan mümin câriye kızlarınızdan alabilir. Allah sizin imanınızı daha iyi bilmektedir. Birbirinizden türeyip gelmektesiniz. Öyleyse iffetli yaşamaları, zina etmemeleri, gizli dost tutmamaları şartıyla ve ailelerinin de izniyle onları nikâhlayın, mehirlerini de âdete uygun olarak verin. Evlendikten sonra bir fuhuş yaparlarsa onlara, hür kadınların cezasının yarısı gerekir. Bu (câriye ile evlenmek), içinizden günaha düşmekten korkanlar içindir; sabretmeniz ise sizin için daha hayırlıdır. Allah çok bağışlayıcı ve esirgeyicidir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 3631,
+            "SureId": 4,
+            "AyetId": 26,
+            "LanguageId": 5,
+            "AyetNumber": "26",
+            "AyetVisible": true,
+            "Page": 82,
+            "AyetText": "Allah size bilmediklerinizi açıklamak ve sizi, sizden öncekilerin yollarına iletmek, günahlarınızı bağışlamak istiyor. Allah hakkıyla bilmektedir, hikmet sahibidir.",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "TefsirList": null,
+    "MealSureLabel": "Nisâ",
+    "QuranSureLabel": "النِّسَاءِ",
+    "EndPageSure": null
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1000dp"
+    android:height="1000dp"
+    android:viewportWidth="1000"
+    android:viewportHeight="1000">
+
+    <!-- 1. Middle Orbital Ring for Minute Hand: R=210 to R=224 (Center R=217, Width=14) -->
+    <!-- Tangent to inner Saniye ring (R=210) and outer Hour ring (R=224) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@color/widget_minute_hand_color"
+        android:strokeWidth="14"
+        android:pathData="M 500,283 A 217,217 0 1,0 500,717 A 217,217 0 1,0 500,283 Z" />
+
+    <!-- 2. Modern Tapered Sword Minute Hand Frame (from y=276 to y=50, R=450) -->
+    <path
+        android:fillColor="@color/widget_minute_hand_color"
+        android:pathData="M 489,276 L 494.5,70 L 500,50 L 505.5,70 L 511,276 Z" />
+
+    <!-- 3. Inner Luminous Channel (Fosfor Kanalı) -->
+    <path
+        android:fillColor="@color/widget_hand_lume"
+        android:pathData="M 493,260 L 497,76 L 500,64 L 503,76 L 507,260 Z" />
+
+    <!-- 4. Luminous Accent Tip at Sword Point -->
+    <path
+        android:fillColor="@color/widget_digital_accent"
+        android:pathData="M 496,78 L 500,54 L 504,78 Z" />
+</vector>

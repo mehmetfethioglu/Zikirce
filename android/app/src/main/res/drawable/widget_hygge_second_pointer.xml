@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="400dp"
+    android:viewportWidth="400"
+    android:viewportHeight="400">
+    <!-- Second pointer: Slim inward indicator at the outer seconds ring (R=176, Y=24) -->
+    <path
+        android:fillColor="@color/widget_hygge_second_fill"
+        android:pathData="M 195,22 L 205,22 L 200,35 Z" />
+</vector>

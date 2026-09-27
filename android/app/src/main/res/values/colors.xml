@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#F5E6D3</color>
+    <color name="colorPrimaryDark">#2A2520</color>
+    <color name="colorAccent">#D4A574</color>
+    <color name="ic_launcher_background">#F7F1E5</color>
+    
+    <!-- Digital Clock Widget Colors (Light Theme) -->
+    <color name="widget_digital_bg">#FFFDF9</color>
+    <color name="widget_digital_border">#F1F5F9</color>
+    <color name="widget_digital_primary">#1E293B</color>
+    <color name="widget_digital_accent">#B45309</color>
+    <color name="widget_digital_secondary">#94A3B8</color>
+    
+    <!-- Analog Clock Hand & Sub-dial Colors (Light Theme) -->
+    <color name="widget_hour_hand_color">#1E293B</color>
+    <color name="widget_minute_hand_color">#0F172A</color>
+    <color name="widget_second_hand_color">#EF4444</color>
+    <color name="widget_hand_lume">#E2E8F0</color>
+    <color name="widget_subdial_bg">#F8FAFC</color>
+    <color name="widget_subdial_border">#E2E8F0</color>
+    
+    <!-- Hygge Minimalist Analog Clock Hand & Ray Colors (Light Theme) -->
+    <color name="widget_hygge_hour_fill">#F59E0B</color>
+    <color name="widget_hygge_minute_fill">#FFFFFF</color>
+    <color name="widget_hygge_minute_stroke">#334155</color>
+    <color name="widget_hygge_minute_ray">#475569</color>
+    <color name="widget_hygge_second_fill">#F59E0B</color>
+    
+    <!-- Widget Light Mode Colors -->
+    <color name="widget_window_background">#F7F1E5</color>
+    <color name="widget_card_background">#FFFFFF</color>
+    <color name="widget_text_primary">#2A2520</color>
+    <color name="widget_text_secondary">#7A7570</color>
+    <color name="widget_prayer_text_color">#5D4037</color>
+    <color name="widget_divider">#E6DFD5</color>
+    <color name="widget_active_tint">#D4A574</color>
+    <color name="widget_inactive_tint">#E0E0E0</color>
+    <color name="widget_border_color">#1A000000</color>
+    
+    <!-- Widget Sub-card Light Theme Colors -->
+    <color name="widget_weekly_bg_color">#E6F4EA</color>
+    <color name="widget_weekly_text">#137333</color>
+    <color name="widget_monthly_bg_start">#E8EAF6</color>
+    <color name="widget_monthly_bg_end">#FFF3E0</color>
+    <color name="widget_monthly_text">#283593</color>
+    <color name="widget_monthly_text_accent">#1A237E</color>
+
+    <!-- Widget Prayer Next & Mini Colors -->
+    <color name="widget_prayer_card_bg">#FFFDF9</color>
+    <color name="widget_prayer_card_border">#14000000</color>
+    <color name="widget_prayer_title">#B45309</color>
+    <color name="widget_prayer_city">#64748B</color>
+    <color name="widget_prayer_subtitle">#94A3B8</color>
+    <color name="widget_prayer_time_color">#0F172A</color>
+    <color name="widget_prayer_progress_track">#EAE1D5</color>
+    <color name="widget_prayer_progress_fill">#D97706</color>
+    <color name="widget_prayer_pill_bg">#F2EAE0</color>
+</resources>

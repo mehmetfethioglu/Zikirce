@@ -1,0 +1,161 @@
+{
+    "PointerList": [
+        {
+            "PointerId": 9,
+            "SureId": 2,
+            "AyetId": 253,
+            "Page": 42,
+            "Type": "Cüz",
+            "No": 3
+        }
+    ],
+    "CuzNo": 3,
+    "PageNo": 42,
+    "ArCuzNo": "۳",
+    "ArPageNo": "٤۲",
+    "QuranAyats": [
+        {
+            "Id": 1820,
+            "SureId": 2,
+            "AyetId": 253,
+            "LanguageId": 7,
+            "AyetNumber": "٢٥٣",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "تِلْكَ الرُّسُلُ فَضَّلْنَا بَعْضَهُمْ عَلٰى بَعْضٍۘ مِنْهُمْ مَنْ كَلَّمَ اللّٰهُ وَرَفَعَ بَعْضَهُمْ دَرَجَاتٍؕ وَاٰتَیْنَا عٖیسَى ابْنَ مَرْیَمَ الْبَیِّنَاتِ وَاَیَّدْنَاهُ بِرُوحِ الْقُدُسِؕ وَلَوْ شَٓاءَ اللّٰهُ مَا اقْتَتَلَ الَّذٖینَ مِنْ بَعْدِهِمْ مِنْ بَعْدِ مَا جَٓاءَتْهُمُ الْبَیِّنَاتُ وَلٰكِنِ اخْتَلَفُوا فَمِنْهُمْ مَنْ اٰمَنَ وَمِنْهُمْ مَنْ كَفَرَؕ وَلَوْ شَٓاءَ اللّٰهُ مَا اقْتَتَلُوا وَلٰكِنَّ اللّٰهَ یَفْعَلُ مَا یُرٖیدُࣖ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1827,
+            "SureId": 2,
+            "AyetId": 254,
+            "LanguageId": 7,
+            "AyetNumber": "٢٥٤",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "یَٓا اَیُّهَا الَّذٖینَ اٰمَنُٓوا اَنْفِقُوا مِمَّا رَزَقْنَاكُمْ مِنْ قَبْلِ اَنْ یَاْتِیَ یَوْمٌ لَا بَیْعٌ فٖیهِ وَلَا خُلَّةٌ وَلَا شَفَاعَةٌؕ وَالْكَافِرُونَ هُمُ الظَّالِمُونَ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1834,
+            "SureId": 2,
+            "AyetId": 255,
+            "LanguageId": 7,
+            "AyetNumber": "٢٥٥",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "اَللّٰهُ لَٓا اِلٰهَ اِلَّا هُوَۚ اَلْحَیُّ الْقَیُّومُۚ لَا تَاْخُذُهُ سِنَةٌ وَلَا نَوْمٌؕ لَهُ مَا فِی السَّمٰوَاتِ وَمَا فِی الْاَرْضِؕ مَنْ ذَا الَّذٖی یَشْفَعُ عِنْدَهُٓ اِلَّا بِاِذْنِهٖؕ یَعْلَمُ مَا بَیْنَ اَیْدٖیهِمْ وَمَا خَلْفَهُمْۚ وَلَا یُحٖیطُونَ بِشَیْءٍ مِنْ عِلْمِهٖٓ اِلَّا بِمَا شَٓاءَۚ وَسِعَ كُرْسِیُّهُ السَّمٰوَاتِ وَالْاَرْضَۚ وَلَا یَؤُ𐻿دُهُ حِفْظُهُمَاۚ وَهُوَ الْعَلِیُّ الْعَظٖیمُ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1841,
+            "SureId": 2,
+            "AyetId": 256,
+            "LanguageId": 7,
+            "AyetNumber": "٢٥٦",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "لَٓا اِكْرَاهَ فِی الدّٖینِ قَدْ تَبَیَّنَ الرُّشْدُ مِنَ الْغَیِّۚ فَمَنْ یَكْفُرْ بِالطَّاغُوتِ وَیُؤْمِنْ بِاللّٰهِ فَقَدِ اسْتَمْسَكَ بِالْعُرْوَةِ الْوُثْقٰىࣗ لَا انْفِصَامَ لَهَاؕ وَاللّٰهُ سَمٖیعٌ عَلٖیمٌ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "QuranAyatsText": null,
+    "MealAyats": [
+        {
+            "Id": 1818,
+            "SureId": 2,
+            "AyetId": 253,
+            "LanguageId": 5,
+            "AyetNumber": "253",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "O peygamberlerin kimini kiminden üstün kıldık. Allah içlerinden bir kısmıyla konuşmuş, bir kısmını da derecelerle yükseltmiştir. Meryem oğlu Îsâ’ya açık deliller verdik ve onu Rûhulkudüs’le destekledik. Allah dileseydi elçilerin ardından gelen insanlar, kendilerine bunca açık delil geldikten sonra birbirine düşüp savaşmazlardı; lâkin farklı yollara yöneldiler. Bu sebeple kimileri iman etmiş, kimileri de inkâr etmişlerdir. Allah dileseydi aralarında savaşmazlardı fakat Allah dilediğini yapar.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1825,
+            "SureId": 2,
+            "AyetId": 254,
+            "LanguageId": 5,
+            "AyetNumber": "254",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "Ey iman edenler! Alım satım, dostluk ve aracılığın olmadığı bir gün gelip çatmadan Allah’ın size verdiklerinden O’nun için harcama yapın. Kâfirler zalimlerin ta kendileridir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1832,
+            "SureId": 2,
+            "AyetId": 255,
+            "LanguageId": 5,
+            "AyetNumber": "255",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "Allah, O’ndan başka tanrı yoktur; diridir, her şeyin varlığı O’na bağlı ve dayalıdır. Ne uykusu gelir ne de uyur. Göklerde ve yerde ne varsa hepsi O’nundur. O’nun izni olmadıkça katında hiçbir kimse şefaat edemez. Onların önlerinde ve arkalarında olanları O bilir. O’nun ilminden hiçbir şeyi -dilediği müstesna- kimse bilgisi içine sığdıramaz. O’nun kürsüsü gökleri ve yeri içine almıştır. Onları korumak kendisine zor gelmez. O yücedir, mutlak büyüktür.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1839,
+            "SureId": 2,
+            "AyetId": 256,
+            "LanguageId": 5,
+            "AyetNumber": "256",
+            "AyetVisible": true,
+            "Page": 42,
+            "AyetText": "Dinde zorlama yoktur. Doğru eğriden açıkça ayrılmıştır. Artık kim sahte tanrıları reddeder de Allah’a inanırsa kopmayan sağlam bir kulpa yapışmıştır. Allah her şeyi işitir ve bilir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "TefsirList": null,
+    "MealSureLabel": "Bakara",
+    "QuranSureLabel": "الْبَقَرَةِ",
+    "EndPageSure": null
+}

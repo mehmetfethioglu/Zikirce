@@ -1,0 +1,161 @@
+{
+    "PointerList": [
+        {
+            "PointerId": 5,
+            "SureId": 2,
+            "AyetId": 142,
+            "Page": 22,
+            "Type": "Cüz",
+            "No": 2
+        }
+    ],
+    "CuzNo": 2,
+    "PageNo": 22,
+    "ArCuzNo": "۲",
+    "ArPageNo": "۲۲",
+    "QuranAyats": [
+        {
+            "Id": 1043,
+            "SureId": 2,
+            "AyetId": 142,
+            "LanguageId": 7,
+            "AyetNumber": "١٤٢",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "سَیَقُولُ السُّفَهَٓاءُ مِنَ النَّاسِ مَا وَلّٰیهُمْ عَنْ قِبْلَتِهِمُ الَّتٖی كَانُوا عَلَیْهَاؕ قُلْ لِلّٰهِ الْمَشْرِقُ وَالْمَغْرِبُؕ یَهْدٖی مَنْ یَشَٓاءُ اِلٰى صِرَاطٍ مُسْتَقٖیمٍ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1050,
+            "SureId": 2,
+            "AyetId": 143,
+            "LanguageId": 7,
+            "AyetNumber": "١٤٣",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "وَكَذٰلِكَ جَعَلْنَاكُمْ اُمَّةً وَسَطًا لِتَكُونُوا شُهَدَٓاءَ عَلَى النَّاسِ وَیَكُونَ الرَّسُولُ عَلَیْكُمْ شَهٖیدًاؕ وَمَا جَعَلْنَا الْقِبْلَةَ الَّتٖی كُنْتَ عَلَیْهَٓا اِلَّا لِنَعْلَمَ مَنْ یَتَّبِـعُ الرَّسُولَ مِمَّنْ یَنْقَلِبُ عَلٰى عَقِبَیْهِؕ وَاِنْ كَانَتْ لَكَبٖیرَةً اِلَّا عَلَى الَّذٖینَ هَدَى اللّٰهُؕ وَمَا كَانَ اللّٰهُ لِیُضٖیعَ اٖیمَانَكُمْؕ اِنَّ اللّٰهَ بِالنَّاسِ لَرَؤُ𐻿فٌ رَحٖیمٌ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1057,
+            "SureId": 2,
+            "AyetId": 144,
+            "LanguageId": 7,
+            "AyetNumber": "١٤٤",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "قَدْ نَرٰى تَقَلُّبَ وَجْهِكَ فِی السَّمَٓاءِۚ فَلَنُوَلِّیَنَّكَ قِبْلَةً تَرْضٰیهَاࣕ فَوَلِّ وَجْهَكَ شَطْرَ الْمَسْجِدِ الْحَرَامِؕ وَحَیْثُ مَا كُنْتُمْ فَوَلُّوا وُجُوهَكُمْ شَطْرَهُؕ وَاِنَّ الَّذٖینَ اُو𐻿تُوا الْكِتَابَ لَیَعْلَمُونَ اَنَّهُ الْحَقُّ مِنْ رَبِّهِمْؕ وَمَا اللّٰهُ بِغَافِلٍ عَمَّا یَعْمَلُونَ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1064,
+            "SureId": 2,
+            "AyetId": 145,
+            "LanguageId": 7,
+            "AyetNumber": "١٤٥",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "وَلَئِنْ اَتَیْتَ الَّذٖینَ اُو𐻿تُوا الْكِتَابَ بِكُلِّ اٰیَةٍ مَا تَبِعُوا قِبْلَتَكَۚ وَمَٓا اَنْتَ بِتَابِـعٍ قِبْلَتَهُمْۚ وَمَا بَعْضُهُمْ بِتَابِـعٍ قِبْلَةَ بَعْضٍؕ وَلَئِنِ اتَّبَعْتَ اَهْوَٓاءَهُمْ مِنْ بَعْدِ مَا جَٓاءَكَ مِنَ الْعِلْمِۙ اِنَّكَ اِذًا لَمِنَ الظَّالِمٖینَۘ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "QuranAyatsText": null,
+    "MealAyats": [
+        {
+            "Id": 1041,
+            "SureId": 2,
+            "AyetId": 142,
+            "LanguageId": 5,
+            "AyetNumber": "142",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "İnsanlardan bir kısım sefihler, “Onları şimdiye kadar yöneldikleri kıbleden vazgeçiren sebep nedir?” diyeceklerdir. De ki: “Doğu da batı da Allah’ındır. O, dilediğini dosdoğru yola iletir.”",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1048,
+            "SureId": 2,
+            "AyetId": 143,
+            "LanguageId": 5,
+            "AyetNumber": "143",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "İşte böylece, siz insanlara şahit olasınız, peygamber de size şahit olsun diye sizi aşırılıklardan uzak bir ümmet yaptık. Biz bu yöneldiğin kıbleyi özellikle resule uyanlarla sırt çevirenleri açıkça ayırt edelim diye belirledik. Bu, Allah’ın hidayet verdiği kimselerden başkasına elbette ağır gelecektir. Allah imanınızı asla zayi edecek değildir. Çünkü Allah insanlara karşı çok şefkatli, çok merhametlidir.",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1055,
+            "SureId": 2,
+            "AyetId": 144,
+            "LanguageId": 5,
+            "AyetNumber": "144",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "Biz senin, yüzünü göğe doğru çevirdiğini elbette görüyoruz. İşte şimdi kesin olarak seni memnun olacağın kıbleye döndürüyoruz. Artık yüzünü Mescid-i Harâm tarafına çevir; nerede olursanız olun yüzünüzü o yöne çevirin. Kuşku yok ki kendilerine kitap verilenler bunun rablerinden gelmiş bir gerçek olduğunu elbette bilirler. Allah, onların yaptıklarından habersiz değildir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1062,
+            "SureId": 2,
+            "AyetId": 145,
+            "LanguageId": 5,
+            "AyetNumber": "145",
+            "AyetVisible": true,
+            "Page": 22,
+            "AyetText": "Ehl-i kitaba her türlü mûcizeyi getirsen onlar yine de senin kıblene asla dönmezler. Sen de onların kıblesine uymayacaksın. Onlar birbirinin kıblesine de uymazlar. Eğer sana gelen kesin bilgiden sonra onların arzusuna uyarsan, işte o vakit sen kesinlikle hakkı çiğneyenlerden olursun.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "TefsirList": null,
+    "MealSureLabel": "Bakara",
+    "QuranSureLabel": "الْبَقَرَةِ",
+    "EndPageSure": null
+}

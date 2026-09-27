@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="1000dp"
+    android:height="1000dp"
+    android:viewportWidth="1000"
+    android:viewportHeight="1000">
+
+    <!-- 1. Innermost Red Second Ring: Exactly R=200 to R=210 (Center R=205, Width=10) -->
+    <!-- Center prayer text area (R < 200) is 100% transparent and open -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#EF4444"
+        android:strokeWidth="10"
+        android:pathData="M 500,295 A 205,205 0 1,0 500,705 A 205,205 0 1,0 500,295 Z" />
+
+    <!-- 2. Precision Red Needle Stem Extending Outward (from y=290 to y=35) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M 498.2,290 L 498.2,40 C 498.2,36 500,32 500,32 C 500,32 501.8,36 501.8,40 L 501.8,290 Z" />
+
+    <!-- 3. Futuristic Target Droplet Pip at R=380 (y=120) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M 500,106 A 14,14 0 1,0 500,134 A 14,14 0 1,0 500,106 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 500,113 A 7,7 0 1,0 500,127 A 7,7 0 1,0 500,113 Z" />
+
+    <!-- 4. Sharp Red Needle Tip Accent -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M 500,26 L 504.5,42 L 495.5,42 Z" />
+</vector>

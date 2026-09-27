@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zikirce</string>
+    <string name="widget_prayer_times_name">Namaz Vakitleri</string>
+    <string name="widget_prayer_times_description">Günün tüm namaz vakitlerini ve kalan süreyi gösterir.</string>
+    <string name="widget_prayer_times_mini_name">Namaz Vakitleri (Mini)</string>
+    <string name="widget_prayer_times_mini_description">Sonraki vakti ve kalan süreyi kompakt şerit olarak gösterir.</string>
+    <string name="widget_prayer_countdown_name">Vakit Sayacı</string>
+    <string name="widget_prayer_countdown_description">Dinamik fıkhi renk skalalı dairesel vakit ilerleme halkası.</string>
+    <string name="widget_prayer_digital_clock_name">Dijital Saat Vakitleri</string>
+    <string name="widget_prayer_digital_clock_description">Büyük dijital saat, sonraki vakit ve geri sayım.</string>
+    <string name="widget_prayer_analog_clock_name">Namaz Vakti Saati</string>
+    <string name="widget_prayer_analog_clock_description">Analog saat kadranı ve 6 vakit sektörel renkleri.</string>
+    <string name="widget_daily_verse_name">Hicri Takvim</string>
+    <string name="widget_daily_verse_description">Günün Hicri ve Miladi takvim bilgilerini gösterir.</string>
+    <string name="widget_prayer_kaza_name">Namaz &amp; Kaza Takibi</string>
+    <string name="widget_prayer_kaza_description">Kaza borçlarınızı takip edin ve widget üzerinden tek dokunuşla düşün.</string>
+    <string name="widget_kalp_sagligi_name">Manevi Kalp Sağlığı</string>
+    <string name="widget_kalp_sagligi_description">Günlük zikir miktarı ve son 7 günün manevi kalp trend eğrisi.</string>
+    <string name="widget_zikir_name">Günlük Seri</string>
+    <string name="widget_zikir_description">Günlük ibadet serinizi ve haftalık başarılarınızı takip edin.</string>
+    <string name="widget_prayer_next_name">Sıradaki Vakit</string>
+    <string name="widget_prayer_next_description">Sıradaki namaz vaktini, fıkhi dolum barını, kalan süreyi ve ezan saatini gösteren geniş banner.</string>
+    <string name="widget_streak_name">Zikir Serisi</string>
+    <string name="widget_streak_description">Günlük ibadet serinizi, haftalık 7 günlük aktivite rozetlerinizi ve hedef durumunuzu gösterir.</string>
+    <string name="widget_kaza_quick_name">Hızlı Kaza Butonu</string>
+    <string name="widget_kaza_quick_description">Tahiyyat silüetiyle en çok borçlu namazı gösterir ve tek dokunuşla -1 düşürür. Kaza kılınan gün yeşile bürünür.</string>
+    <string name="widget_prayer_mini_name">Mini Vakit</string>
+    <string name="widget_prayer_mini_description">Vakit adı, ezan saati ve kalan süreyi alt alta gösteren ultra kompakt dikey widget.</string>
+</resources>

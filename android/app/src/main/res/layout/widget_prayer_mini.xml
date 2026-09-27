@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_prayer_card_bg"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingHorizontal="4dp"
+    android:paddingVertical="4dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Top: Vakit Adı -->
+    <TextView
+        android:id="@+id/widget_prayer_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="YATSI"
+        android:textColor="@color/widget_prayer_title"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.04"
+        android:singleLine="true" />
+
+    <!-- Middle: Ezan Saati -->
+    <TextView
+        android:id="@+id/widget_next_prayer_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:layout_marginBottom="3dp"
+        android:text="20:16"
+        android:textColor="@color/widget_prayer_time_color"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:singleLine="true" />
+
+    <!-- Bottom: Kalan Süre Pill -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_prayer_pill_bg"
+        android:gravity="center"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="2dp">
+
+        <Chronometer
+            android:id="@+id/widget_next_prayer_countdown"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/widget_prayer_title"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:countDown="true" />
+    </LinearLayout>
+
+</LinearLayout>

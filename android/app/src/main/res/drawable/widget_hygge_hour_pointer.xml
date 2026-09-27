@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="400dp"
+    android:viewportWidth="400"
+    android:viewportHeight="400">
+    <!-- Hour pointer: Triangular wedge on colored ring outer edge (R=146, Y=54) -->
+    <path
+        android:fillColor="@color/widget_hygge_hour_fill"
+        android:pathData="M 189,54 L 211,54 L 200,39 Z" />
+    <!-- Hour Laser Ray: Guidance line from tip towards tick marks -->
+    <path
+        android:strokeColor="@color/widget_hygge_hour_fill"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.85"
+        android:pathData="M 200,39 L 200,26" />
+</vector>

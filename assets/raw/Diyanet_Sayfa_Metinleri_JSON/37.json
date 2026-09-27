@@ -1,0 +1,133 @@
+{
+    "PointerList": [
+        {
+            "PointerId": 8,
+            "SureId": 2,
+            "AyetId": 233,
+            "Page": 37,
+            "Type": "Hizib",
+            "No": 4
+        }
+    ],
+    "CuzNo": 2,
+    "PageNo": 37,
+    "ArCuzNo": "۲",
+    "ArPageNo": "۳۷",
+    "QuranAyats": [
+        {
+            "Id": 1666,
+            "SureId": 2,
+            "AyetId": 231,
+            "LanguageId": 7,
+            "AyetNumber": "٢٣١",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "وَاِذَا طَلَّقْتُمُ النِّسَٓاءَ فَبَلَغْنَ اَجَلَهُنَّ فَاَمْسِكُوهُنَّ بِمَعْرُوفٍ اَوْ سَرِّحُوهُنَّ بِمَعْرُوفٍࣕ وَلَا تُمْسِكُوهُنَّ ضِرَارًا لِتَعْتَدُواۚ وَمَنْ یَفْعَلْ ذٰلِكَ فَقَدْ ظَلَمَ نَفْسَهُؕ وَلَا تَتَّخِذُٓوا اٰیَاتِ اللّٰهِ هُزُوًاؗ وَاذْكُرُوا نِعْمَتَ اللّٰهِ عَلَیْكُمْ وَمَٓا اَنْزَلَ عَلَیْكُمْ مِنَ الْكِتَابِ وَالْحِكْمَةِ یَعِظُـكُمْ بِهٖؕ وَاتَّقُوا اللّٰهَ وَاعْلَمُٓوا اَنَّ اللّٰهَ بِكُلِّ شَیْءٍ عَلٖیمٌࣖ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1673,
+            "SureId": 2,
+            "AyetId": 232,
+            "LanguageId": 7,
+            "AyetNumber": "٢٣٢",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "وَاِذَا طَلَّقْتُمُ النِّسَٓاءَ فَبَلَغْنَ اَجَلَهُنَّ فَلَا تَعْضُلُوهُنَّ اَنْ یَنْكِحْنَ اَزْوَاجَهُنَّ اِذَا تَرَاضَوْا بَیْنَهُمْ بِالْمَعْرُوفِؕ ذٰلِكَ یُوعَظُ بِهٖ مَنْ كَانَ مِنْكُمْ یُؤْمِنُ بِاللّٰهِ وَالْیَوْمِ الْاٰخِرِؕ ذٰلِكُمْ اَزْكٰى لَكُمْ وَاَطْهَرُؕ وَاللّٰهُ یَعْلَمُ وَاَنْتُمْ لَا تَعْلَمُونَ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1680,
+            "SureId": 2,
+            "AyetId": 233,
+            "LanguageId": 7,
+            "AyetNumber": "٢٣٣",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "وَالْوَالِدَاتُ یُرْضِعْنَ اَوْلَادَهُنَّ حَوْلَیْنِ كَامِلَیْنِ لِمَنْ اَرَادَ اَنْ یُتِمَّ الرَّضَاعَةَؕ وَعَلَى الْمَوْلُودِ لَهُ رِزْقُهُنَّ وَكِسْوَتُهُنَّ بِالْمَعْرُوفِؕ لَا تُكَلَّفُ نَفْسٌ اِلَّا وُسْعَهَاۚ لَا تُضَٓارَّ وَالِدَةٌ بِوَلَدِهَا وَلَا مَوْلُودٌ لَهُ بِوَلَدِهٖ وَعَلَى الْوَارِثِ مِثْلُ ذٰلِكَۚ فَاِنْ اَرَادَا فِصَالًا عَنْ تَرَاضٍ مِنْهُمَا وَتَشَاوُرٍ فَلَا جُنَاحَ عَلَیْهِمَاؕ وَاِنْ اَرَدْتُمْ اَنْ تَسْتَرْضِعُٓوا اَوْلَادَكُمْ فَلَا جُنَاحَ عَلَیْكُمْ اِذَا سَلَّمْتُمْ مَٓا اٰتَیْتُمْ بِالْمَعْرُوفِؕ وَاتَّقُوا اللّٰهَ وَاعْلَمُٓوا اَنَّ اللّٰهَ بِمَا تَعْمَلُونَ بَصٖیرٌ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "QuranAyatsText": null,
+    "MealAyats": [
+        {
+            "Id": 1664,
+            "SureId": 2,
+            "AyetId": 231,
+            "LanguageId": 5,
+            "AyetNumber": "231",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "Kadınları boşadığınızda, onlar da bekleme sürelerini doldurduklarında ya onlarla yeniden evlenip iyilikle tutun ya da iyilikle serbest bırakın. Onları zarar vererek haklarını çiğnemek için nikâh altında tutmayın. Bunu yapan bilsin ki kendine kötülük etmiştir. Allah’ın âyetlerini sakın alaya almayın. Allah’ın size bahşettiği nimetleri, kitaptan ve hikmetten size öğüt vermek üzere gönderdiklerini dilinizden düşürmeyin. Allah’tan korkun ve bilin ki Allah her şeyi bilmektedir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        },
+        {
+            "Id": 1671,
+            "SureId": 2,
+            "AyetId": 232,
+            "LanguageId": 5,
+            "AyetNumber": "232",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "Kadınları boşadığınızda, onlar da bekleme sürelerini tamamladıklarında, aralarında mâkul ve meşrû ölçülerde rızalaştıkları takdirde boşayan kocalarıyla yeniden evlenmelerine engel olmayın. Bu söylenenler, içinizden Allah’a ve âhiret gününe iman edenlere verilen öğüttür. Bunlar sizin için en iyi iç ve dış temizliği sağlayan öğütlerdir. Tam manasıyla bilen Allah’tır, siz ise bilmezsiniz.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        },
+        {
+            "Id": 1678,
+            "SureId": 2,
+            "AyetId": 233,
+            "LanguageId": 5,
+            "AyetNumber": "233",
+            "AyetVisible": true,
+            "Page": 37,
+            "AyetText": "Emzirmeyi tamamlamak isteyen için analar çocuklarını tam iki yıl emzirirler. Onların normal ölçülerde yiyecek ve giyeceklerini sağlamak da çocuk kendisinden olanın (babanın) borcudur. Hiç kimse gücünü aşan bir şeyle yükümlü kılınamaz. Ne ana çocuğu yüzünden zarara uğratılsın ne de babası çocuğundan dolayı zarar görsün. Kendisine miras kalan kimseye de benzer yükümlülük vardır. Ana baba karşılıklı danışarak ve anlaşarak çocuğu sütten kesmek isterlerse bundan dolayı onlar için bir sakınca yoktur. Çocuklarınızı sütannelere emzirtmek isterseniz münasip olan ücreti verdiğiniz takdirde sizin için bir günah yoktur. Allah’ın koyduğu kurallara aykırı davranmaktan sakının ve bilin ki Allah yaptıklarınızın tamamını görmektedir.",
+            "Recitation": null,
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": null
+        }
+    ],
+    "TefsirList": null,
+    "MealSureLabel": "Bakara",
+    "QuranSureLabel": "الْبَقَرَةِ",
+    "EndPageSure": null
+}

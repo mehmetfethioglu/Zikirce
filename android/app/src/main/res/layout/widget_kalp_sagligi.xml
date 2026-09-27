@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_digital_clock_bg"
+    android:padding="8dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- 1. Background Graph Arc/Curve (Orange Gradient) -->
+    <ImageView
+        android:id="@+id/widget_graph_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true"
+        android:scaleType="fitCenter" />
+
+    <!-- 2. Native Foreground Text Elements (100% Theme Synchronized) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:layout_centerInParent="true"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/widget_today_count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0"
+            android:textColor="@color/widget_digital_primary"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Kalp Sağlığı"
+            android:textColor="@color/widget_digital_accent"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_hadith_quote"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bilesiniz ki, kalpler\nancak Allah'ı anmakla huzur bulur."
+            android:textColor="@color/widget_digital_secondary"
+            android:textSize="8.5sp"
+            android:gravity="center"
+            android:maxLines="2" />
+
+    </LinearLayout>
+
+</RelativeLayout>

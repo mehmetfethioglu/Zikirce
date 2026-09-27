@@ -1,0 +1,68 @@
+{
+    "PointerList": null,
+    "CuzNo": 3,
+    "PageNo": 48,
+    "ArCuzNo": "۳",
+    "ArPageNo": "٤۸",
+    "QuranAyats": [
+        {
+            "Id": 2023,
+            "SureId": 2,
+            "AyetId": 282,
+            "LanguageId": 7,
+            "AyetNumber": "٢٨٢",
+            "AyetVisible": true,
+            "Page": 48,
+            "AyetText": "یَٓا اَیُّهَا الَّذٖینَ اٰمَنُٓوا اِذَا تَدَایَنْتُمْ بِدَیْنٍ اِلٰٓى اَجَلٍ مُسَمًّى فَاكْتُبُوهُؕ وَلْیَكْتُبْ بَیْنَكُمْ كَاتِبٌ بِالْعَدْلِࣕ وَلَا یَاْبَ كَاتِبٌ اَنْ یَكْتُبَ كَمَا عَلَّمَهُ اللّٰهُ فَلْیَكْتُبْۚ وَلْیُمْلِلِ الَّذٖی عَلَیْهِ الْحَقُّ وَلْیَتَّقِ اللّٰهَ رَبَّهُ وَلَا یَبْخَسْ مِنْهُ شَیْـًٔاؕ فَاِنْ كَانَ الَّذٖی عَلَیْهِ الْحَقُّ سَفٖیهًا اَوْ ضَعٖیفًا اَوْ لَا یَسْتَطٖیعُ اَنْ یُمِلَّ هُوَ فَلْیُمْلِلْ وَلِیُّهُ بِالْعَدْلِؕ وَاسْتَشْهِدُوا شَهٖیدَیْنِ مِنْ رِجَالِكُمْۚ فَاِنْ لَمْ یَكُونَا رَجُلَیْنِ فَرَجُلٌ وَامْرَاَتَانِ مِمَّنْ تَرْضَوْنَ مِنَ الشُّهَدَٓاءِ اَنْ تَضِلَّ اِحْدٰیهُمَا فَتُذَكِّرَ اِحْدٰیهُمَا الْاُخْرٰىؕ وَلَا یَاْبَ الشُّهَدَٓاءُ اِذَا مَا دُعُواؕ وَلَا تَسْـَٔمُٓوا اَنْ تَكْتُبُوهُ صَغٖیرًا اَوْ كَبٖیرًا اِلٰٓى اَجَلِهٖؕ ذٰلِكُمْ اَقْسَطُ عِنْدَ اللّٰهِ وَاَقْوَمُ لِلشَّهَادَةِ وَاَدْنٰٓى اَلَّا تَرْتَابُٓوا اِلَّٓا اَنْ تَكُونَ تِجَارَةً حَاضِرَةً تُدٖیرُونَهَا بَیْنَكُمْ فَلَیْسَ عَلَیْكُمْ جُنَاحٌ اَلَّا تَكْتُبُوهَاؕ وَاَشْهِدُٓوا اِذَا تَبَایَعْتُمْࣕ وَلَا یُضَٓارَّ كَاتِبٌ وَلَا شَهٖیدٌؕ وَاِنْ تَفْعَلُوا فَاِنَّهُ فُسُوقٌ بِكُمْؕ وَاتَّقُوا اللّٰهَؕ وَیُعَلِّمُكُمُ اللّٰهُؕ وَاللّٰهُ بِكُلِّ شَیْءٍ عَلٖیمٌ",
+            "Recitation": "",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        }
+    ],
+    "QuranAyatsText": null,
+    "MealAyats": [
+        {
+            "Id": 2021,
+            "SureId": 2,
+            "AyetId": 282,
+            "LanguageId": 5,
+            "AyetNumber": "282",
+            "AyetVisible": true,
+            "Page": 48,
+            "AyetText": "Ey iman edenler! Belirlenmiş bir zamana kadar bir borç ilişkisi kurduğunuzda bunu yazın. Aranızdan bir kâtip bunu adaletle yazsın. Kâtip Allah’ın kendisine öğrettiği gibi yazmaktan geri durmasın. Artık o yazsın, borçlu da yazdırsın; rabbi olan Allah’tan korksun ve borçtan hiçbir şeyi eksik bırakmasın. Eğer borçlu akılca zayıf veya eksik yahut kendisi yazdıramaz durumda olursa velisi adaletle yazdırsın. Erkeklerinizden iki şahidi de tanık tutun. Şahitler iki erkek olmazlarsa, rıza göstereceğiniz şahitlerden bir erkekle -biri yanılırsa diğerinin ona hatırlatması için- iki de kadın olsunlar. Çağrıldıklarında şahitler gelmezlik etmesinler. Borç küçük olsun büyük olsun vadesini belirterek onu yazmaktan üşenmeyin. Böyle yapmanız Allah katında daha adaletli, şahitlik için daha destekleyici ve şüpheye düşmemeniz için daha uygundur. Borç ilişkisinin, aranızda alıp vererek bitirdiğiniz peşin ticaret olması müstesnadır; onu yazmamanızda sizin için bir sakınca yoktur. Alış veriş yaptığınızda şahit tutun. Kâtip de şahit de zarar görmesin. Eğer zarar verirseniz şüphesiz bu sizin yoldan çıkmanız demektir. Allah’tan korkun, Allah size öğretiyor, Allah her şeyi hakkıyla bilmektedir.",
+            "Recitation": " borçlu da yazdırsın; rabbi olan Allah’tan korksun ve borçtan hiçbir şeyi eksik bırakmasın. Eğer borçlu akılca zayıf veya eksik yahut kendisi yazdıramaz durumda olursa velisi adaletle yazdırsın. Erkeklerinizden iki şahidi de tanık tutun. Şahitler iki erkek olmazlarsa",
+            "AyetMeta": null,
+            "RegionList": null,
+            "Sure": {
+                "SureId": 2,
+                "MealInfo": "Medine döneminde inmiştir. Kur’an-ı Kerim’in en uzun sûresi olup 286 âyettir. Adını, 67-73. âyetlerde yer alan <b>“bakara (<i>sığı</i>r)”</b> kelimesinden alır. Sûre, İslâm hukukunun ana konularıyla ilgili pek çok hüküm içermektedir.",
+                "SureNameTurkish": "Bakara",
+                "SureNameArabic": "الْبَقَرَةِ",
+                "BesmeleVisible": true,
+                "HeaderOnBackPage": false,
+                "InisOrder": 87,
+                "AyetCount": 286,
+                "Cuz": 1,
+                "FirstPage": 2,
+                "ExcludeMenu": false
+            }
+        }
+    ],
+    "TefsirList": null,
+    "MealSureLabel": "Bakara",
+    "QuranSureLabel": "الْبَقَرَةِ",
+    "EndPageSure": null
+}

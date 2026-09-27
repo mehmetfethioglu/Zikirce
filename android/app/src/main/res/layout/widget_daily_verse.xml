@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_digital_clock_bg"
+    android:padding="12dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:layout_centerInParent="true">
+
+        <!-- 1. Day of Week (e.g., SALI) -->
+        <TextView
+            android:id="@+id/widget_day_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SALI"
+            android:textColor="@color/widget_digital_accent"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <!-- 2. Big Prominent Hijri Day Number (e.g., 19) -->
+        <TextView
+            android:id="@+id/widget_hijri_day"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp"
+            android:text="19"
+            android:textColor="@color/widget_digital_primary"
+            android:textSize="52sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <!-- 3. Hijri Month & Year (e.g., REBİÜLEVVEL 1448) -->
+        <TextView
+            android:id="@+id/widget_hijri_month_year"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="REBİÜLEVVEL 1448"
+            android:textColor="@color/widget_digital_accent"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+        <!-- 4. Gregorian Date (e.g., 1 EYLÜL 2026) -->
+        <TextView
+            android:id="@+id/widget_gregorian_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="1 EYLÜL 2026"
+            android:textColor="@color/widget_digital_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:gravity="center" />
+
+    </LinearLayout>
+
+</RelativeLayout>

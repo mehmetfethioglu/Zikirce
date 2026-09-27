@@ -1,0 +1,352 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+
+    <!-- Remove unused FOREGROUND_SERVICE permission injected by transitive dependencies (WorkManager/Glance) to clear Google Play policy blocks -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove" />
+
+    <!-- ================= HARDWARE FEATURES (PREVENT GOOGLE PLAY INCOMPATIBILITY FILTERING) ================= -->
+    <!-- Camera -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.any" android:required="false"/>
+
+    <!-- Audio & Microphone -->
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <uses-feature android:name="android.hardware.audio.output" android:required="false"/>
+    <uses-feature android:name="android.hardware.audio.low_latency" android:required="false"/>
+
+    <!-- Sensors (CRITICAL: Prevents budget phones without hardware gyroscope/sensors from being filtered) -->
+    <uses-feature android:name="android.hardware.sensor.compass" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.light" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.proximity" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.barometer" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false"/>
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false"/>
+
+    <!-- Connectivity & Telephony -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false"/>
+    <uses-feature android:name="android.hardware.telephony" android:required="false"/>
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false"/>
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.network" android:required="false"/>
+
+    <!-- Touch & Screen (Ensures tablets, Chromebooks, Android TV & emulators are supported) -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+    <uses-feature android:name="android.hardware.touchscreen.multitouch" android:required="false"/>
+    <uses-feature android:name="android.hardware.touchscreen.multitouch.distinct" android:required="false"/>
+    <uses-feature android:name="android.hardware.faketouch" android:required="false"/>
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false"/>
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="false"/>
+
+    <!-- Screen Compatibility -->
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+        android:anyDensity="true"/>
+
+    <application
+        android:label="Zikirce"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:resizeableActivity="true"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+        <!-- ================= APP WIDGET RECEIVERS ================= -->
+        
+        <!-- 1. Prayer Times Table Widget (4x2 / 4x3) -->
+        <receiver
+            android:name=".widgets.PrayerTimesWidgetProvider"
+            android:label="@string/widget_prayer_times_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_times_info" />
+        </receiver>
+
+        <!-- 2. Prayer Times Mini Widget (4x1 / 2x1) -->
+        <receiver
+            android:name=".widgets.PrayerTimesMiniWidgetProvider"
+            android:label="@string/widget_prayer_times_mini_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_times_mini_info" />
+        </receiver>
+
+        <!-- 3. Prayer Countdown Circular Widget (2x2) -->
+        <receiver
+            android:name=".widgets.PrayerCountdownWidgetProvider"
+            android:label="@string/widget_prayer_countdown_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_countdown_info" />
+        </receiver>
+
+        <!-- 4. Prayer Digital Clock Widget (2x2 / 3x2) -->
+        <receiver
+            android:name=".widgets.PrayerDigitalClockWidgetProvider"
+            android:label="@string/widget_prayer_digital_clock_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_digital_clock_info" />
+        </receiver>
+
+        <!-- 5. Prayer Analog Clock Widget (2x2 / 3x3) -->
+        <receiver
+            android:name=".widgets.PrayerAnalogClockWidgetProvider"
+            android:label="@string/widget_prayer_analog_clock_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.CONFIGURATION_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_analog_clock_info" />
+        </receiver>
+
+        <!-- 6. Daily Verse / Hijri Calendar Widget (2x2 / 3x2) -->
+        <receiver
+            android:name=".widgets.DailyVerseWidgetProvider"
+            android:label="@string/widget_daily_verse_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_daily_verse_info" />
+        </receiver>
+
+        <!-- 7. Prayer & Kaza Tracker Widget (4x1 / 4x2) -->
+        <receiver
+            android:name=".widgets.PrayerKazaWidgetProvider"
+            android:label="@string/widget_prayer_kaza_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="Zikirce.ACTION_DECREMENT_KAZA" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_kaza_info" />
+        </receiver>
+
+        <!-- 8. Spiritual Heart Health Widget (2x2 / 3x2) -->
+        <receiver
+            android:name=".widgets.KalpSagligiWidgetProvider"
+            android:label="@string/widget_kalp_sagligi_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_kalp_sagligi_info" />
+        </receiver>
+
+        <!-- 9. Daily Streak / Dhikr Widget (2x2 / 3x2) -->
+        <receiver
+            android:name=".widgets.ZikirCounterWidgetProvider"
+            android:label="@string/widget_zikir_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_zikir_info" />
+        </receiver>
+
+        <!-- 10. 2x1 Sıradaki Vakit Banner Widget -->
+        <receiver
+            android:name=".widgets.PrayerNextWidgetProvider"
+            android:label="@string/widget_prayer_next_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_next_info" />
+        </receiver>
+
+        <!-- 11. 2x1 Zikir Serisi Banner Widget -->
+        <receiver
+            android:name=".widgets.StreakWidgetProvider"
+            android:label="@string/widget_streak_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_streak_info" />
+        </receiver>
+
+        <!-- 12. 2x1 Hızlı Kaza Banner Widget -->
+        <receiver
+            android:name=".widgets.KazaQuickWidgetProvider"
+            android:label="@string/widget_kaza_quick_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="Zikirce.ACTION_DECREMENT_KAZA_QUICK" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_kaza_quick_info" />
+        </receiver>
+
+        <!-- 13. Mini Vakit Widget (Vakit Adı, Ezan Saati, Kalan Süre) -->
+        <receiver
+            android:name=".widgets.PrayerMiniWidgetProvider"
+            android:label="@string/widget_prayer_mini_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_prayer_mini_info" />
+        </receiver>
+
+        <!-- Alarm & Time Tick Receivers -->
+        <receiver
+            android:name=".widgets.WidgetPrayerAlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".widgets.WidgetTimeTickReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Local Notifications Receivers for Background & Reboot Scheduling -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
+
+        <!-- ================= LEGACY MAUI RECEIVERS (DISABLED TO PURGE GHOST WIDGETS) ================= -->
+        <receiver android:name="crc6438055f7ab4ad13a7.DailyVerseWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.KalpSagligiWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerAnalogClockWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerCountdownWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerDigitalClockWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerKazaWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerTimesMiniWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.PrayerTimesWidgetProvider" android:enabled="false" android:exported="false" />
+        <receiver android:name="crc6438055f7ab4ad13a7.ZikirCounterWidgetProvider" android:enabled="false" android:exported="false" />
+
+    </application>
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
+        </intent>
+    </queries>
+</manifest>

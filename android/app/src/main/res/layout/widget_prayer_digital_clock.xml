@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_digital_clock_bg"
+    android:padding="12dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <LinearLayout
+        android:id="@+id/widget_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <!-- 1. Aktif Vakit İsmi -->
+        <TextView
+            android:id="@+id/widget_active_vakit"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/widget_digital_accent"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:singleLine="true" />
+
+        <!-- 2. Geri Sayım Sayacı -->
+        <Chronometer
+            android:id="@+id/widget_countdown"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textColor="@color/widget_digital_accent"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:countDown="true"
+            android:gravity="center" />
+
+        <!-- 3. Dijital Saat Konteyneri -->
+        <LinearLayout
+            android:id="@+id/widget_clock_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp"
+            android:gravity="center">
+
+            <TextClock
+                android:id="@+id/widget_hour_clock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:format24Hour="HH:mm"
+                android:format12Hour="hh:mm"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:gravity="center" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</RelativeLayout>

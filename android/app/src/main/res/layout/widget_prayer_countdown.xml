@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_digital_clock_bg"
+    android:padding="4dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_centerInParent="true">
+
+        <ImageView
+            android:id="@+id/widget_rings_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:scaleType="fitCenter"
+            android:visibility="visible" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_margin="16dp"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_next_prayer_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="AKŞAM"
+                android:textColor="@color/widget_digital_accent"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:letterSpacing="0.05"
+                android:ellipsize="end"
+                android:maxLines="1" />
+
+            <Chronometer
+                android:id="@+id/widget_next_prayer_countdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/widget_digital_primary"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:countDown="true"
+                android:gravity="center"
+                android:visibility="visible" />
+        </LinearLayout>
+    </FrameLayout>
+</RelativeLayout>

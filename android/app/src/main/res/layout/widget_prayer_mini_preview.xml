@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_streak_background"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Top: Vakit Adı -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="İKİNDİ"
+        android:textColor="#B45309"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.05" />
+
+    <!-- Middle: Ezan Saati -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="2dp"
+        android:text="16:45"
+        android:textColor="#0F172A"
+        android:textSize="26sp"
+        android:textStyle="bold" />
+
+    <!-- Bottom: Kalan Süre Pill -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_time_bg_normal"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="3dp"
+        android:text="⏳ 1s 25d"
+        android:textColor="#334155"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

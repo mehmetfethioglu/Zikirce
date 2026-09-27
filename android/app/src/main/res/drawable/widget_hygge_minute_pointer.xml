@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="400dp"
+    android:viewportWidth="400"
+    android:viewportHeight="400">
+    <!-- Minute pointer: Triangular wedge matching the hour hand form -->
+    <path
+        android:fillColor="@color/widget_hygge_minute_fill"
+        android:strokeColor="@color/widget_hygge_minute_stroke"
+        android:strokeWidth="1.2"
+        android:pathData="M 190,54 L 210,54 L 200,39 Z" />
+    <!-- Minute Laser Ray: High-precision guidance line extending to outer perimeter ticks -->
+    <path
+        android:strokeColor="@color/widget_hygge_minute_ray"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M 200,39 L 200,24" />
+</vector>
