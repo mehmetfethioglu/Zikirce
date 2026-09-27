@@ -37,13 +37,39 @@ platform :ios do
       app_identifier: "com.akarworks.zikirce"
     )
 
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    profile_data = sh("security cms -D -i '#{profile_path}'")
+    team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1]
+    UI.message("Extracted Apple Development Team ID: #{team_id}")
+
+    update_project_team(
+      path: "Runner.xcodeproj",
+      teamid: team_id
+    )
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      targets: ["Runner"],
+      team_id: team_id,
+      bundle_identifier: "com.akarworks.zikirce",
+      profile_name: lane_context[SharedValues::SIGH_NAME],
+      code_sign_identity: "Apple Distribution"
+    )
+
     build_app(
       workspace: "Runner.xcworkspace",
       scheme: "Runner",
       clean: false,
       export_method: "app-store",
       output_directory: "../build/ios/ipa",
-      output_name: "Zikirce.ipa"
+      output_name: "Zikirce.ipa",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.akarworks.zikirce" => lane_context[SharedValues::SIGH_NAME]
+        }
+      }
     )
 
     upload_to_testflight(
