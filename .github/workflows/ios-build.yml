@@ -8,7 +8,7 @@ on:
 jobs:
   build-ios:
     name: Build iOS (macOS Apple Silicon)
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 60
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
