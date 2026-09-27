@@ -19,9 +19,11 @@ platform :ios do
       timeout: 3600
     )
 
+    keychain_path = lane_context[SharedValues::KEYCHAIN_PATH] || File.expand_path("~/Library/Keychains/ci_keychain-db")
+
     get_certificates(
       api_key: api_key,
-      keychain_name: "ci_keychain",
+      keychain_path: keychain_path,
       keychain_password: "temporary_ci_password_123"
     )
 
