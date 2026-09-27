@@ -10,6 +10,10 @@ jobs:
     name: Build iOS (macOS Apple Silicon)
     runs-on: macos-14
     timeout-minutes: 60
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
 
     steps:
       - name: 1. Checkout repository
@@ -55,7 +59,7 @@ jobs:
       # 9. TESTFLIGHT AUTOMATIC DEPLOYMENT
       # =========================================================================
       - name: 9. Deploy to TestFlight via Fastlane
-        if: ${{ secrets.APP_STORE_KEY_ID != '' && secrets.APP_STORE_ISSUER_ID != '' && secrets.APP_STORE_PRIVATE_KEY != '' }}
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         env:
           APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
           APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
