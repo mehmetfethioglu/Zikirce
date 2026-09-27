@@ -52,14 +52,16 @@ jobs:
           retention-days: 14
 
       # =========================================================================
-      # 9. (FUTURE) TESTFLIGHT AUTOMATIC DEPLOYMENT (When Apple Developer is Ready)
+      # 9. TESTFLIGHT AUTOMATIC DEPLOYMENT
       # =========================================================================
-      # Uncomment the steps below after creating Apple Developer account and adding
-      # APP_STORE_CONNECT_KEY_ID, ISSUER_ID, and API_KEY to GitHub Secrets:
-      #
-      # - name: Build & Upload to TestFlight
-      #   env:
-      #     APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-      #   run: |
-      #     flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
-      #     xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey ${{ secrets.APP_STORE_KEY_ID }} --apiIssuer ${{ secrets.APP_STORE_ISSUER_ID }}
+      - name: 9. Deploy to TestFlight via Fastlane
+        if: ${{ secrets.APP_STORE_KEY_ID != '' && secrets.APP_STORE_ISSUER_ID != '' && secrets.APP_STORE_PRIVATE_KEY != '' }}
+        env:
+          APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+        run: |
+          cd ios
+          bundle install
+          bundle exec fastlane beta
+

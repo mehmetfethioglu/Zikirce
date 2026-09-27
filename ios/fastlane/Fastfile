@@ -1,0 +1,47 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload to Apple TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_KEY_ID"],
+      issuer_id: ENV["APP_STORE_ISSUER_ID"],
+      key_content: ENV["APP_STORE_PRIVATE_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    create_keychain(
+      name: "ci_keychain",
+      password: "temporary_ci_password_123",
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600
+    )
+
+    get_certificates(
+      api_key: api_key,
+      keychain_name: "ci_keychain",
+      keychain_password: "temporary_ci_password_123"
+    )
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.akarworks.zikirce"
+    )
+
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "Runner",
+      export_method: "app-store",
+      output_directory: "../build/ios/ipa",
+      output_name: "Zikirce.ipa"
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "../build/ios/ipa/Zikirce.ipa",
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
