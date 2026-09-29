@@ -17,6 +17,7 @@ import 'core/session/session_manager_service.dart';
 import 'core/session/session_providers.dart';
 import 'core/session/user_session.dart';
 import 'core/theme/theme_provider.dart';
+import 'features/namaz_vakitleri/providers/prayer_providers.dart';
 import 'features/gamification/services/daily_streak_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/config/sentry_config.dart';
@@ -32,10 +33,25 @@ void main(List<String> args) async {
 
   // Set preferred orientations & system overlay on mobile
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
+    final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+    final shortestSide = view != null
+        ? view.physicalSize.shortestSide / view.devicePixelRatio
+        : 0.0;
+    final isTablet = shortestSide >= 600;
+
+    if (!isTablet) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+    } else {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
 
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
@@ -96,12 +112,16 @@ void main(List<String> args) async {
     debugPrint('[Main] WidgetSync notice: $e');
   }
 
+  // Pre-load theme settings and prayer city before runApp to prevent flickering / race conditions
+  final savedThemeKey = await ThemeNotifier.loadSavedThemeKey(activeSessionId);
+  final savedLightSubTheme = await ThemeNotifier.loadSavedLightSubTheme(activeSessionId);
+  final savedCity = await CityNotifier.loadSavedCity(activeSessionId);
+
   // Pre-schedule 6 prayer entries, 5 questions, and Quran reminder for next 24-48 hours (Mobile only)
   if (Platform.isAndroid || Platform.isIOS) {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final city = prefs.getString('SelectedCity') ?? prefs.getString('AppCity') ?? 'Şanlıurfa';
-      final timings = await PrayerTimesService.getPrayerTimes(city: city);
+      final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
       await LocalNotificationService.scheduleAllPrayerNotifications(timings);
 
       final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
@@ -114,10 +134,6 @@ void main(List<String> args) async {
       debugPrint('[Main] Pre-scheduling notifications notice: $e');
     }
   }
-
-  // Pre-load theme settings before runApp to prevent theme flickering on startup
-  final savedThemeKey = await ThemeNotifier.loadSavedThemeKey(activeSessionId);
-  final savedLightSubTheme = await ThemeNotifier.loadSavedLightSubTheme(activeSessionId);
 
   // Close the initial startup DB instance so Riverpod's databaseProvider manages the single active connection
   try {
@@ -144,11 +160,43 @@ void main(List<String> args) async {
               isLoading: false,
             ),
           ),
+          initialCityProvider.overrideWithValue(savedCity),
           initialThemeKeyProvider.overrideWithValue(savedThemeKey),
           initialLightSubThemeProvider.overrideWithValue(savedLightSubTheme),
         ],
       );
       CloudSyncEngine.instance.setContainer(container);
+
+      ErrorWidget.builder = (FlutterErrorDetails details) {
+        debugPrint('[FlutterError] Caught by ErrorWidget.builder: ${details.exception}');
+        return Material(
+          color: const Color(0xFFECF3F0),
+          child: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: Color(0xFF236B56), size: 48),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Bileşen Yüklenirken Bir Sorun Oluştu',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E2B27)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      details.exceptionAsString(),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF506861)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      };
 
       runApp(
         UncontrolledProviderScope(

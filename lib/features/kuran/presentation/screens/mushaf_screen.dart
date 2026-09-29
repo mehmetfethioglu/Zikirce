@@ -22,6 +22,8 @@ import '../../../../core/session/user_session.dart';
 import 'surah_juz_index_screen.dart';
 import 'quran_search_screen.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
+import '../../../../core/services/celebration_service.dart';
+import '../../../../core/utils/pref_utils.dart';
 import '../../data/tilavet_secdesi_data.dart';
 import '../../providers/tilavet_secdesi_provider.dart';
 import '../widgets/tilavet_secdesi_floating_banner.dart';
@@ -316,6 +318,25 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
         final db = ref.read(databaseProvider);
         await DailyStreakService.recordDailyActivity(db);
+
+        // Award gold for pages read (+10 Gold per page)
+        await ref.read(gamificationNotifierProvider).addGold(delta * 10);
+
+        // Check if daily Quran page goal is newly reached today
+        final kuranGoal = PrefUtils.getIntFromKeys(prefs, ['DailyQuranGoal$sfx', 'KuranDailyGoal$sfx', 'DailyQuranGoal', 'KuranDailyGoal'], 5);
+        final claimedQuranGoalKey = 'DailyQuranRewardClaimed_$todayStr$sfx';
+        final alreadyClaimedQuran = prefs.getBool(claimedQuranGoalKey) ?? (isDefault ? prefs.getBool('DailyQuranRewardClaimed_$todayStr') ?? false : false);
+        if (!alreadyClaimedQuran && (curToday + delta) >= kuranGoal) {
+          await prefs.setBool(claimedQuranGoalKey, true);
+          if (isDefault) await prefs.setBool('DailyQuranRewardClaimed_$todayStr', true);
+          await ref.read(gamificationNotifierProvider).addGold(25);
+          ref.read(celebrationProvider.notifier).trigger(
+            CelebrationEvent.dailyGoalCompleted(
+              goalTitle: 'Günlük $kuranGoal Sayfa Kur\'an Hedefi Tamamlandı! (+25 🪙)',
+            ),
+          );
+        }
+
         ref.read(badgeRefreshTriggerProvider.notifier).state++;
         CloudSyncEngine.instance
             .triggerDebouncedSync(ref, delay: const Duration(seconds: 1));

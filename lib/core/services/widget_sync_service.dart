@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,22 @@ import 'backup_service.dart';
 import 'prayer_times_service.dart';
 
 class WidgetSyncService {
+  static const String appGroupId = 'group.com.akarworks.zikirce';
+  static bool _isAppGroupInitialized = false;
+
+  static Future<void> _ensureInitialized() async {
+    if (!_isAppGroupInitialized && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        await HomeWidget.setAppGroupId(appGroupId);
+        _isAppGroupInitialized = true;
+      } catch (e) {
+        if (kDebugMode) {
+          print('[WidgetSyncService] setAppGroupId error: $e');
+        }
+      }
+    }
+  }
+
   static const List<String> widgetProviderNames = [
     'PrayerTimesWidgetProvider',
     'PrayerTimesMiniWidgetProvider',
@@ -30,8 +47,10 @@ class WidgetSyncService {
     required String city,
     required PrayerTimings timings,
     String? language,
+    String? sessionId,
   }) async {
     try {
+      await _ensureInitialized();
       final now = DateTime.now();
       final hijri = HijriDate.fromGregorian(now);
 
@@ -62,19 +81,28 @@ class WidgetSyncService {
 
       // Persist to standard SharedPreferences
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('SelectedCity', city);
+      final isDefault = sessionId == null || sessionId == 'default_user';
+      final sfx = isDefault ? '' : '_$sessionId';
+
+      await prefs.setString('SelectedCity$sfx', city);
+      if (isDefault) {
+        await prefs.setString('SelectedCity', city);
+      }
       await prefs.setString('CachedPrayerTimes_$city', jsonStr);
 
-      try {
-        await HomeWidget.saveWidgetData<String>('SelectedCity', city);
-        await HomeWidget.saveWidgetData<String>('CachedPrayerTimes_$city', jsonStr);
-        if (language != null) {
-          await HomeWidget.saveWidgetData<String>('AppLanguage', language);
-        }
-        await triggerWidgetUpdate();
-      } catch (e) {
-        if (kDebugMode) {
-          print('[WidgetSyncService] HomeWidget channel error: $e');
+      if (Platform.isAndroid || Platform.isIOS) {
+        try {
+          await HomeWidget.saveWidgetData<String>('SelectedCity', city);
+          await HomeWidget.saveWidgetData<String>('CachedPrayerTimes_$city', jsonStr);
+          await HomeWidget.saveWidgetData<String>('PrayerTimesJson', jsonStr);
+          if (language != null) {
+            await HomeWidget.saveWidgetData<String>('AppLanguage', language);
+          }
+          await triggerWidgetUpdate();
+        } catch (e) {
+          if (kDebugMode) {
+            print('[WidgetSyncService] HomeWidget channel error: $e');
+          }
         }
       }
     } catch (e) {
@@ -93,6 +121,7 @@ class WidgetSyncService {
     List<int>? weeklyCounts,
   }) async {
     try {
+      await _ensureInitialized();
       await HomeWidget.saveWidgetData<int>('TodayZikirCount', todayDhikr);
       await HomeWidget.saveWidgetData<int>('CurrentStreak', currentStreak);
       await HomeWidget.saveWidgetData<bool>('IsTodayGoldCompleted', isGoldCompleted);
@@ -161,12 +190,20 @@ class WidgetSyncService {
       final isDefault = sessionId == null || sessionId == 'default_user';
       final sfx = isDefault ? '' : '_$sessionId';
 
-      final city = PrefUtils.getStringFromKeys(prefs, ['SelectedCity$sfx', 'AppCity$sfx', 'SelectedCity', 'AppCity'], 'İstanbul');
-      final lang = PrefUtils.getStringFromKeys(prefs, ['app_language$sfx', 'SelectedLanguage$sfx', 'AppLanguage$sfx', 'app_language', 'SelectedLanguage', 'AppLanguage'], 'tr');
+      final city = PrefUtils.getStringFromKeys(
+        prefs,
+        ['SelectedCity$sfx', 'AppCity$sfx', 'selected_city$sfx', 'SelectedCity', 'AppCity', 'selected_city'],
+        'İstanbul',
+      );
+      final lang = PrefUtils.getStringFromKeys(
+        prefs,
+        ['app_language$sfx', 'SelectedLanguage$sfx', 'AppLanguage$sfx', 'app_language', 'SelectedLanguage', 'AppLanguage'],
+        'tr',
+      );
 
       // 1. Prayer times
       final timings = await PrayerTimesService.getPrayerTimes(city: city);
-      await syncPrayerTimes(city: city, timings: timings, language: lang);
+      await syncPrayerTimes(city: city, timings: timings, language: lang, sessionId: sessionId);
 
       // 2. Dhikr & Streak
       final streak = await (db.select(db.userStreaks)..limit(1)).getSingleOrNull();
@@ -220,11 +257,24 @@ class WidgetSyncService {
 
   /// Triggers update broadcast to all registered native widgets
   static Future<void> triggerWidgetUpdate() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
-      for (final name in widgetProviderNames) {
+      await _ensureInitialized();
+      if (Platform.isAndroid) {
+        for (final name in widgetProviderNames) {
+          await HomeWidget.updateWidget(
+            name: name,
+            androidName: name,
+          );
+        }
+      } else if (Platform.isIOS) {
         await HomeWidget.updateWidget(
-          name: name,
-          androidName: name,
+          name: 'PrayerTimesWidget',
+          iOSName: 'PrayerTimesWidget',
+        );
+        await HomeWidget.updateWidget(
+          name: 'StreakWidget',
+          iOSName: 'StreakWidget',
         );
       }
     } catch (e) {

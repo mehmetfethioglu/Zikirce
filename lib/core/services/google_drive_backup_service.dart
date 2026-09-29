@@ -193,7 +193,8 @@ class GoogleDriveBackupService {
         expiryMs = PrefUtils.getInt(prefs, tokenExpiryKey, 0);
       }
 
-      if (DateTime.now().millisecondsSinceEpoch < (expiryMs - 60000)) {
+      // 5 dakika (300.000 ms) güvenlik marjı ile proaktif yenileme
+      if (DateTime.now().millisecondsSinceEpoch < (expiryMs - 300000)) {
         return token;
       }
 
@@ -201,7 +202,7 @@ class GoogleDriveBackupService {
       if (_isDefaultSession && (refreshToken == null || refreshToken.isEmpty)) {
         refreshToken = await SecureStorageHelper.read(refreshTokenKey);
       }
-      if (refreshToken == null || refreshToken.isEmpty) return token;
+      if (refreshToken == null || refreshToken.isEmpty) return null;
 
       try {
         final response = await _dio.post(
@@ -218,12 +219,20 @@ class GoogleDriveBackupService {
           final data = response.data as Map<String, dynamic>;
           final newAccessToken = data['access_token']?.toString() ?? '';
           final expiresIn = (data['expires_in'] as num?)?.toInt() ?? 3600;
+          final newRefreshToken = data['refresh_token']?.toString();
 
           if (_isDefaultSession) {
             await SecureStorageHelper.write(accessTokenKey, newAccessToken);
             await SecureStorageHelper.write('${accessTokenKey}_default_user', newAccessToken);
+            if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
+              await SecureStorageHelper.write(refreshTokenKey, newRefreshToken);
+              await SecureStorageHelper.write('${refreshTokenKey}_default_user', newRefreshToken);
+            }
           } else {
             await SecureStorageHelper.write(_sKey(accessTokenKey), newAccessToken);
+            if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
+              await SecureStorageHelper.write(_sKey(refreshTokenKey), newRefreshToken);
+            }
           }
 
           final newExpiryMs = DateTime.now().millisecondsSinceEpoch + (expiresIn * 1000);
@@ -240,7 +249,7 @@ class GoogleDriveBackupService {
         debugPrint('[GoogleDrive] Token refresh error: $e');
       }
 
-      return token;
+      return null;
     } catch (e) {
       debugPrint('[GoogleDriveBackupService] getValidAccessToken error: $e');
       return null;
@@ -472,7 +481,7 @@ class GoogleDriveBackupService {
       'BestReadingStreak': PrefUtils.getIntFromKeys(prefs, ['best_reading_streak$sfx', 'BestReadingStreak$sfx', 'best_reading_streak'], 0),
       'AverageDailyPages': PrefUtils.getIntFromKeys(prefs, ['average_daily_pages$sfx', 'AverageDailyPages$sfx', 'average_daily_pages'], 0),
       'TotalReadingDays': PrefUtils.getIntFromKeys(prefs, ['total_reading_days$sfx', 'TotalReadingDays$sfx', 'total_reading_days'], 0),
-      'SelectedCity': PrefUtils.getString(prefs, _sKey('selected_city'), 'İstanbul'),
+      'SelectedCity': PrefUtils.getStringFromKeys(prefs, [_sKey('SelectedCity'), _sKey('selected_city'), 'SelectedCity', 'AppCity', 'selected_city'], 'İstanbul'),
       'UserDisplayName': userDisplayName,
       'SelectedBird': PrefUtils.getStringFromKeys(prefs, ['selected_bird$sfx', 'SelectedBird$sfx', 'selected_bird'], 'yeni_bird.json'),
       'QuranArabicFontSize': PrefUtils.getDouble(prefs, _sKey('quran_arabic_font_size'), 38.0),
@@ -784,7 +793,10 @@ class GoogleDriveBackupService {
           }
         }
         if (appSettings.containsKey('SelectedCity') && appSettings['SelectedCity'] != null) {
-          await _setSessionPrefString(prefs, 'selected_city', appSettings['SelectedCity'].toString());
+          final city = appSettings['SelectedCity'].toString();
+          await _setSessionPrefString(prefs, 'selected_city', city);
+          await _setSessionPrefString(prefs, 'SelectedCity', city);
+          await _setSessionPrefString(prefs, 'AppCity', city);
         }
         if (appSettings.containsKey('SelectedBird') && appSettings['SelectedBird'] != null) {
           final bird = appSettings['SelectedBird'].toString();

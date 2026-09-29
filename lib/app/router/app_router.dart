@@ -180,7 +180,13 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
 
     return Scaffold(
       extendBody: true,
-      body: child,
+      backgroundColor: colors.pageBackground,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: child,
+        ),
+      ),
       bottomNavigationBar: hideNavBar
           ? null
           : SafeArea(
@@ -188,22 +194,27 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
               left: false,
               right: false,
               bottom: true,
-              child: Container(
-                margin: const EdgeInsets.only(left: 14, right: 14, bottom: 14),
-                height: 68,
-                decoration: BoxDecoration(
-                  color: navBg,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: colors.borderStroke, width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-                      blurRadius: 18,
-                      offset: const Offset(0, 4),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                heightFactor: 1.0,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Container(
+                    margin: const EdgeInsets.only(left: 14, right: 14, bottom: 14),
+                    height: 68,
+                    decoration: BoxDecoration(
+                      color: navBg,
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(color: colors.borderStroke, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+                          blurRadius: 18,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Row(
+                    child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _buildNavItem(
@@ -255,6 +266,8 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+        ),
     );
   }
 

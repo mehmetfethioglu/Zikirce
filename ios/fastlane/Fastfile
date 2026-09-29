@@ -42,6 +42,8 @@ platform :ios do
     team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1]
     UI.message("Extracted Apple Development Team ID: #{team_id}")
 
+    runner_profile_name = lane_context[SharedValues::SIGH_NAME]
+
     update_project_team(
       path: "Runner.xcodeproj",
       teamid: team_id
@@ -53,9 +55,35 @@ platform :ios do
       targets: ["Runner"],
       team_id: team_id,
       bundle_identifier: "com.akarworks.zikirce",
-      profile_name: lane_context[SharedValues::SIGH_NAME],
+      profile_name: runner_profile_name,
       code_sign_identity: "Apple Distribution"
     )
+
+    # 2. Widget Extension Provisioning Profile
+    widget_profile_name = nil
+    begin
+      get_provisioning_profile(
+        api_key: api_key,
+        app_identifier: "com.akarworks.zikirce.ZikirceWidgets"
+      )
+      widget_profile_name = lane_context[SharedValues::SIGH_NAME]
+      update_code_signing_settings(
+        use_automatic_signing: false,
+        path: "Runner.xcodeproj",
+        targets: ["ZikirceWidgetsExtension"],
+        team_id: team_id,
+        bundle_identifier: "com.akarworks.zikirce.ZikirceWidgets",
+        profile_name: widget_profile_name,
+        code_sign_identity: "Apple Distribution"
+      )
+    rescue => ex
+      UI.important("Notice: Widget extension profile check: #{ex.message}")
+    end
+
+    prov_profiles = {
+      "com.akarworks.zikirce" => runner_profile_name
+    }
+    prov_profiles["com.akarworks.zikirce.ZikirceWidgets"] = widget_profile_name if widget_profile_name
 
     build_app(
       workspace: "Runner.xcworkspace",
@@ -66,16 +94,22 @@ platform :ios do
       output_name: "Zikirce.ipa",
       export_options: {
         signingStyle: "manual",
-        provisioningProfiles: {
-          "com.akarworks.zikirce" => lane_context[SharedValues::SIGH_NAME]
-        }
+        provisioningProfiles: prov_profiles
       }
     )
+
+    changelog_text = <<~CHANGELOG
+      Zikirce v2.1.0 Yenilikleri:
+      • iOS WidgetKit Desteği: Ezan Vakitleri ve Günün Serisi widget'ları artık Ana Ekran ve Kilit Ekranı'nda!
+      • Sistem Uyumlu Tasarım: Açık ve koyu mod dinamik renkleriyle göz yormayan arayüz.
+      • Kararlılık ve Performans: Widget senkronizasyonu ve genel optimizasyonlar.
+    CHANGELOG
 
     upload_to_testflight(
       api_key: api_key,
       ipa: "../build/ios/ipa/Zikirce.ipa",
-      skip_waiting_for_build_processing: true
+      skip_waiting_for_build_processing: true,
+      changelog: changelog_text
     )
   end
 end

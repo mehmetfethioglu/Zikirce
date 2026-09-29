@@ -78,11 +78,22 @@ final goldCountProvider = FutureProvider<int>((ref) async {
 
   final streak = (await (db.select(db.userStreaks)..limit(1)).get()).firstOrNull;
   final prefGold = prefs.getInt(gKey) ?? (isDefault ? prefs.getInt('GoldCount') : null);
+  final dbXp = streak?.xp ?? 0;
 
-  if (prefGold != null) {
-    return prefGold;
+  final effectiveGold = max(prefGold ?? 0, dbXp);
+
+  // Self-heal both stores so they never diverge
+  if (prefGold != effectiveGold) {
+    await prefs.setInt(gKey, effectiveGold);
+    if (isDefault) await prefs.setInt('GoldCount', effectiveGold);
   }
-  return streak?.xp ?? 0;
+  if (streak != null && streak.xp != effectiveGold) {
+    await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
+      UserStreaksCompanion(xp: Value(effectiveGold)),
+    );
+  }
+
+  return effectiveGold;
 });
 
 final shieldCountProvider = StreamProvider<int>((ref) {
@@ -587,13 +598,15 @@ class GamificationNotifier extends StateNotifier<void> {
   Future<void> addGold(int amount) async {
     final db = ref.read(databaseProvider);
     final prefs = await SharedPreferences.getInstance();
+    final streak = (await (db.select(db.userStreaks)..limit(1)).get()).firstOrNull;
     final cur = prefs.getInt(_sKey('GoldCount')) ?? (prefs.getInt('GoldCount') ?? 0);
-    final newCount = cur + amount;
+    final currentBase = max(cur, streak?.xp ?? 0);
+    final newCount = currentBase + amount;
+
     await prefs.setInt(_sKey('GoldCount'), newCount);
     if (ref.read(activeSessionProvider).id == UserSession.defaultSessionId) {
       await prefs.setInt('GoldCount', newCount);
     }
-    final streak = (await (db.select(db.userStreaks)..limit(1)).get()).firstOrNull;
     if (streak != null) {
       await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
         UserStreaksCompanion(xp: Value(newCount)),
@@ -707,16 +720,9 @@ class GamificationNotifier extends StateNotifier<void> {
       }
     }
 
-    // Add XP (+50 XP) to user streak table
+    // Add XP (+50 Gold) to user balance & user streak table
     const xpGained = 50;
-    final streak = await db.select(db.userStreaks).getSingleOrNull();
-    if (streak != null) {
-      await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
-        UserStreaksCompanion(
-          xp: Value(streak.xp + xpGained),
-        ),
-      );
-    }
+    await addGold(xpGained);
     await db.into(db.userStreakHistories).insert(
       UserStreakHistoriesCompanion.insert(
         dateStr: todayStr,

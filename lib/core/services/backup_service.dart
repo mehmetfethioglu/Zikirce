@@ -188,7 +188,7 @@ class BackupService {
       'BestReadingStreak': PrefUtils.getIntFromKeys(prefs, ['BestReadingStreak', 'best_reading_streak'], 0),
       'AverageDailyPages': PrefUtils.getIntFromKeys(prefs, ['AverageDailyPages', 'average_daily_pages'], 0),
       'TotalReadingDays': PrefUtils.getIntFromKeys(prefs, ['TotalReadingDays', 'total_reading_days'], 0),
-      'SelectedCity': PrefUtils.getString(prefs, 'selected_city', 'İstanbul'),
+      'SelectedCity': PrefUtils.getStringFromKeys(prefs, ['SelectedCity', 'AppCity', 'selected_city'], 'İstanbul'),
       'UserDisplayName': userDisplayName,
       'SelectedBird': PrefUtils.getStringFromKeys(prefs, ['SelectedBird', 'selected_bird'], 'yeni_bird.json'),
       'QuranArabicFontSize': PrefUtils.getDouble(prefs, 'Quran_ArabicFontSize', 38.0),

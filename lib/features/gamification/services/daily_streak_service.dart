@@ -170,6 +170,10 @@ class DailyStreakService {
         ),
       );
 
+      final prefs = await SharedPreferences.getInstance();
+      final curGold = prefs.getInt('GoldCount') ?? 0;
+      await prefs.setInt('GoldCount', max(curGold, newXp));
+
       await db.into(db.userStreakHistories).insert(
         UserStreakHistoriesCompanion.insert(
           dateStr: todayStr,

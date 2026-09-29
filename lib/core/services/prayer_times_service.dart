@@ -239,7 +239,7 @@ class PrayerTimesService {
   };
 
   /// Fetches prayer times from Aladhan API (Diyanet Method 13) with cache and offline calculator fallback
-  static Future<PrayerTimings> getPrayerTimes({String city = 'Şanlıurfa'}) async {
+  static Future<PrayerTimings> getPrayerTimes({String city = 'İstanbul'}) async {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final cacheKey = 'prayer_times_${city}_$todayStr';
@@ -252,7 +252,6 @@ class PrayerTimesService {
       try {
         final map = jsonDecode(cached) as Map<String, dynamic>;
         result = PrayerTimings.fromJson(map, todayStr);
-        WidgetSyncService.syncPrayerTimes(city: city, timings: result);
         return result;
       } catch (_) {}
     }
@@ -267,7 +266,6 @@ class PrayerTimesService {
         final hijriMap = response.data['data']['date']?['hijri'] as Map<String, dynamic>?;
         result = PrayerTimings.fromJson(timingsMap, todayStr, hijriMap);
         await prefs.setString(cacheKey, jsonEncode(result.toJson()));
-        WidgetSyncService.syncPrayerTimes(city: city, timings: result);
         return result;
       }
     } catch (e) {
@@ -276,7 +274,6 @@ class PrayerTimesService {
 
     // Offline astronomical calculation for Turkey
     result = calculateOfflinePrayerTimes(city, now);
-    WidgetSyncService.syncPrayerTimes(city: city, timings: result);
     return result;
   }
 

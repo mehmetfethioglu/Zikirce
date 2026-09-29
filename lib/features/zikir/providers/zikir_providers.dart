@@ -348,6 +348,7 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
             xpGained: 50,
           ),
         );
+        ref.read(gamificationNotifierProvider).addGold(50);
       } catch (_) {}
 
       _flushPending(0, nextLap, nextTotal);
@@ -359,6 +360,26 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
       final nextLap = (isInfinite && state.target > 0)
           ? (nextCount ~/ state.target)
           : state.lap;
+      
+      final bool isLapCompletedInInfinite = isInfinite && state.target > 0 && nextCount > 0 && (nextCount % state.target == 0);
+      if (isLapCompletedInInfinite) {
+        if (isVibrationEnabled) HapticService.targetReached();
+        if (isSoundEnabled) SoundPoolService.playChirp(type: zikir.soundEffect);
+        final randomBird = birdList[Random().nextInt(birdList.length)];
+        try {
+          ref.read(celebrationProvider.notifier).trigger(
+            CelebrationEvent(
+              type: CelebrationType.zikirTarget,
+              title: 'Elhamdülillah 🌟',
+              subtitle: '${zikir.name} (${state.target} zikir) tamamlandı',
+              hadithOrVirtue: randomBird['desc']!,
+              xpGained: 50,
+            ),
+          );
+          ref.read(gamificationNotifierProvider).addGold(50);
+        } catch (_) {}
+      }
+
       state = state.copyWith(
         currentCount: nextCount,
         lap: nextLap,
@@ -484,6 +505,34 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
 
       // Advance daily streak
       await DailyStreakService.recordDailyActivity(db);
+
+      // Check if Daily Zikir Goal is newly reached today
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final activeSession = ref.read(activeSessionProvider);
+        final isDefault = activeSession.id == UserSession.defaultSessionId;
+        final sfx = isDefault ? '' : '_${activeSession.id}';
+        final claimedKey = 'DailyZikirRewardClaimed_$dateStr$sfx';
+        final alreadyClaimed = prefs.getBool(claimedKey) ?? (isDefault ? prefs.getBool('DailyZikirRewardClaimed_$dateStr') ?? false : false);
+
+        if (!alreadyClaimed) {
+          final zikirGoal = PrefUtils.getIntFromKeys(prefs, ['DailyZikirGoal$sfx', 'ZikirDailyGoal$sfx', 'DailyZikirGoal', 'ZikirDailyGoal'], 100);
+          final todayLogs = await (db.select(db.zikirLogs)..where((t) => t.dateStr.equals(dateStr))).get();
+          final totalToday = todayLogs.fold<int>(0, (sum, item) => sum + item.count);
+          if (totalToday >= zikirGoal) {
+            await prefs.setBool(claimedKey, true);
+            if (isDefault) await prefs.setBool('DailyZikirRewardClaimed_$dateStr', true);
+            // Award 1 Diamond + 5 Gold for Daily Goal milestone
+            await ref.read(gamificationNotifierProvider).addDiamonds(1);
+            await ref.read(gamificationNotifierProvider).addGold(5);
+            ref.read(celebrationProvider.notifier).trigger(
+              CelebrationEvent.dailyGoalCompleted(
+                goalTitle: 'Günlük $zikirGoal Zikir Hedefi Tamamlandı! (+1 💎, +5 🪙)',
+              ),
+            );
+          }
+        }
+      } catch (_) {}
 
       // Sync to Android widgets (Kalp Sağlığı, Zikir Counter, etc.) and refresh daily goals
       WidgetSyncService.syncAll(db);

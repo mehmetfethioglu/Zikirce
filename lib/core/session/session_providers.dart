@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/gamification/providers/gamification_providers.dart';
 import '../../features/settings/providers/settings_provider.dart';
+import '../../features/namaz_vakitleri/providers/prayer_providers.dart';
 import '../database/app_database.dart';
 import '../database/zikir_seed_data.dart';
 import '../services/google_drive_backup_service.dart';
@@ -104,12 +105,15 @@ class SessionNotifier extends StateNotifier<SessionState> {
     // 3. Oturum değişim tetikleyicisini artır
     ref.read(sessionSwitchTriggerProvider.notifier).state++;
 
-    // 4. Temayı ve ayarları yeni oturum için senkronize et
+    // 4. Temayı, ayarları ve namaz şehrini yeni oturum için senkronize et
     try {
-      ref.read(themeNotifierProvider.notifier).reloadForSession(targetSessionId);
+      await ref.read(themeNotifierProvider.notifier).reloadForSession(targetSessionId);
     } catch (_) {}
     try {
-      ref.read(userSettingsProvider.notifier).reloadForSession(targetSessionId);
+      await ref.read(userSettingsProvider.notifier).reloadForSession(targetSessionId);
+    } catch (_) {}
+    try {
+      await ref.read(selectedCityProvider.notifier).reloadForSession(targetSessionId);
     } catch (_) {}
     try {
       ref.invalidate(userProfileStreamProvider);

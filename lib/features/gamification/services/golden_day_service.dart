@@ -287,13 +287,20 @@ class GoldenDayService {
     return base;
   }
 
-  static Future<void> _addGoldPref(SharedPreferences prefs, int amount, String? sessionId) async {
+  static Future<void> _addGoldPref(SharedPreferences prefs, int amount, String? sessionId, [AppDatabase? db]) async {
     final key = _sKey('GoldCount', sessionId);
     final cur = prefs.getInt(key) ?? (prefs.getInt('GoldCount') ?? 0);
-    final newCount = cur + amount;
+    final streak = db != null ? (await (db.select(db.userStreaks)..limit(1)).get()).firstOrNull : null;
+    final base = max(cur, streak?.xp ?? 0);
+    final newCount = base + amount;
     await prefs.setInt(key, newCount);
     if (sessionId == null || sessionId == UserSession.defaultSessionId) {
       await prefs.setInt('GoldCount', newCount);
+    }
+    if (db != null && streak != null) {
+      await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
+        UserStreaksCompanion(xp: Value(newCount)),
+      );
     }
   }
 
@@ -308,7 +315,7 @@ class GoldenDayService {
   }
 
   /// Claims pending rewards (e.g. gold won before Yatsi prayer) when Yatsi is prayed
-  static Future<int> claimPendingRewardsIfAny(String todayStr, [String? sessionId]) async {
+  static Future<int> claimPendingRewardsIfAny(String todayStr, [String? sessionId, AppDatabase? db]) async {
     final prefs = await SharedPreferences.getInstance();
     final isDefault = sessionId == null || sessionId == UserSession.defaultSessionId;
     final sfx = isDefault ? '' : '_$sessionId';
@@ -317,7 +324,7 @@ class GoldenDayService {
 
     if (pendingGold > 0 || pendingDiamond > 0) {
       if (pendingGold > 0) {
-        await _addGoldPref(prefs, pendingGold, sessionId);
+        await _addGoldPref(prefs, pendingGold, sessionId, db);
         await prefs.setInt('PendingGoldReward_$todayStr$sfx', 0);
         if (isDefault) await prefs.setInt('PendingGoldReward_$todayStr', 0);
       }
@@ -404,7 +411,7 @@ class GoldenDayService {
         const earnedDiamonds = 15;
 
         if (isYatsiCompleted) {
-          await _addGoldPref(prefs, earnedGold, sessionId);
+          await _addGoldPref(prefs, earnedGold, sessionId, db);
           await _addDiamondPref(prefs, earnedDiamonds, sessionId);
         } else {
           await prefs.setInt('PendingGoldReward_$todayStr$sfx', earnedGold);
@@ -440,7 +447,7 @@ class GoldenDayService {
       final earnedGold = random.nextInt(46) + 30;
 
       if (isYatsiCompleted) {
-        await _addGoldPref(prefs, earnedGold, sessionId);
+        await _addGoldPref(prefs, earnedGold, sessionId, db);
       } else {
         await prefs.setInt('PendingGoldReward_$todayStr$sfx', earnedGold);
       }

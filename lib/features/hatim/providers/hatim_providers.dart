@@ -209,14 +209,7 @@ class HatimNotifier extends StateNotifier<void> {
     final pagesDelta = (targetPage - oldPages).clamp(0, 604);
     if (pagesDelta > 0) {
       final xpGained = pagesDelta * 20;
-      final streak = await db.select(db.userStreaks).getSingleOrNull();
-      if (streak != null) {
-        await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
-          UserStreaksCompanion(
-            xp: Value(streak.xp + xpGained),
-          ),
-        );
-      }
+      await ref.read(gamificationNotifierProvider).addGold(xpGained);
 
       // Record today's read pages (overall & per hatim & per session)
       final activeSession = ref.read(activeSessionProvider);

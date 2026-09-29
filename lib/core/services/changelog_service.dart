@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 54;
-  static const String currentVersionName = '2.0.10';
+  static const int currentVersionCode = 55;
+  static const String currentVersionName = '2.1.0';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 55,
+      versionName: '2.1.0',
+      releaseDateTr: 'Eylül 2026',
+      releaseDateEn: 'September 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'iOS WidgetKit & Kilit Ekranı Desteği',
+          titleEn: 'iOS WidgetKit & Lock Screen Support',
+          descTr: 'Ezan Vakitleri ve Günün Serisi (Streak) widget\'ları artık Ana Ekranınızda ve Kilit Ekranınızda! Namaz vakitlerini ve zikir zincirinizi anlık takip edin.',
+          descEn: 'Prayer Times and Daily Streak widgets are now available on your iOS Home Screen and Lock Screen with live updates.',
+          icon: Icons.widgets_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Sistem Uyumlu Akıllı Renkler',
+          titleEn: 'Adaptive System Theme Support',
+          descTr: 'Widget\'lar cihazınızın açık ve koyu mod dinamiklerine göre otomatik olarak adapte olur.',
+          descEn: 'Widgets adapt dynamically to light and dark system color modes.',
+          icon: Icons.palette_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Arka Plan Senkronizasyon İyileştirmesi',
+          titleEn: 'Background Sync Engine Upgrade',
+          descTr: 'Vakit değişiklikleri ve zikir istatistikleri yerel App Group köprüsü ile anlık ve verimli senkronize edilir.',
+          descEn: 'Prayer calculations and dhikr progress sync seamlessly via native App Groups.',
+          icon: Icons.sync_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 54,
       versionName: '2.0.10',

@@ -30,7 +30,8 @@ class CircularCounterPainter extends CustomPainter {
 
     // 2. Draw Progress Arc starting from bottom (6 o'clock = 90 deg = math.pi / 2)
     // Matching MAUI OnCircularProgressPaintSurface: float startAngle = 90; float sweepAngle = 360 * progress;
-    if (progress > 0) {
+    final safeProgress = (progress.isNaN || progress.isInfinite) ? 0.0 : progress.clamp(0.0, 1.0);
+    if (safeProgress > 0) {
       final rect = Rect.fromCircle(center: center, radius: radius);
       final progressPaint = Paint()
         ..color = progressColor
@@ -38,7 +39,7 @@ class CircularCounterPainter extends CustomPainter {
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round;
 
-      final sweepAngle = 2 * math.pi * progress.clamp(0.0, 1.0);
+      final sweepAngle = 2 * math.pi * safeProgress;
       canvas.drawArc(
         rect,
         math.pi / 2,

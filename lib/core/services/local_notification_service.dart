@@ -298,24 +298,8 @@ class LocalNotificationService {
     }
 
     final channelConfig = _resolveChannelConfig(effectiveSound);
-
-    final androidDetails = AndroidNotificationDetails(
-      channelConfig.channelId,
-      channelConfig.channelName,
-      channelDescription: channelConfig.description,
-      importance: channelConfig.importance,
-      priority: Priority.max,
-      sound: channelConfig.sound,
-      playSound: channelConfig.playSound,
-      enableVibration: channelConfig.enableVibration,
-      icon: '@mipmap/ic_launcher',
-      visibility: NotificationVisibility.public,
-      channelShowBadge: true,
-      category: AndroidNotificationCategory.reminder,
-      ticker: title,
-    );
-
-    final details = NotificationDetails(android: androidDetails);
+    final details =
+        _buildNotificationDetails(config: channelConfig, title: title);
     await _notificationsPlugin.show(id, title, body, details,
         payload: payload);
   }
@@ -435,21 +419,8 @@ class LocalNotificationService {
         final title = '${prayer.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
         final body = '${farzItem.title}: ${farzItem.notificationSummary}';
 
-        final androidDetails = AndroidNotificationDetails(
-          channelConfig.channelId,
-          channelConfig.channelName,
-          channelDescription: channelConfig.description,
-          importance: channelConfig.importance,
-          priority: Priority.max,
-          sound: channelConfig.sound,
-          playSound: channelConfig.playSound,
-          enableVibration: channelConfig.enableVibration,
-          icon: '@mipmap/ic_launcher',
-          visibility: NotificationVisibility.public,
-          channelShowBadge: true,
-          category: AndroidNotificationCategory.reminder,
-          ticker: title,
-        );
+        final details =
+            _buildNotificationDetails(config: channelConfig, title: title);
 
         final scheduledTZ = tz.TZDateTime.from(prayer.targetTime, tz.local);
         await _scheduleZonedWithFallback(
@@ -457,7 +428,7 @@ class LocalNotificationService {
           title: title,
           body: body,
           scheduledDate: scheduledTZ,
-          notificationDetails: NotificationDetails(android: androidDetails),
+          notificationDetails: details,
           payload: 'farz_article|${farzItem.id}',
         );
         debugPrint(
@@ -512,21 +483,8 @@ class LocalNotificationService {
         final body = '${q.name} namazınızı kıldınız mı?';
         final payload = 'prayer_question|${q.name}|$todayStr';
 
-        final androidDetails = AndroidNotificationDetails(
-          channelConfig.channelId,
-          channelConfig.channelName,
-          channelDescription: channelConfig.description,
-          importance: channelConfig.importance,
-          priority: Priority.max,
-          sound: channelConfig.sound,
-          playSound: channelConfig.playSound,
-          enableVibration: channelConfig.enableVibration,
-          icon: '@mipmap/ic_launcher',
-          visibility: NotificationVisibility.public,
-          channelShowBadge: true,
-          category: AndroidNotificationCategory.reminder,
-          ticker: title,
-        );
+        final details =
+            _buildNotificationDetails(config: channelConfig, title: title);
 
         final scheduledTZ = tz.TZDateTime.from(questionTime, tz.local);
         await _scheduleZonedWithFallback(
@@ -534,7 +492,7 @@ class LocalNotificationService {
           title: title,
           body: body,
           scheduledDate: scheduledTZ,
-          notificationDetails: NotificationDetails(android: androidDetails),
+          notificationDetails: details,
           payload: payload,
         );
         debugPrint(
@@ -567,32 +525,21 @@ class LocalNotificationService {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final soundSetting = prefs.getString('SelectedReminderSound') ?? 'Bülbül Sesi';
+      final soundSetting =
+          prefs.getString('SelectedReminderSound') ?? 'Bülbül Sesi';
       final channelConfig = _resolveChannelConfig(soundSetting);
-
-      final androidDetails = AndroidNotificationDetails(
-        channelConfig.channelId,
-        channelConfig.channelName,
-        channelDescription: channelConfig.description,
-        importance: Importance.max,
-        priority: Priority.max,
-        sound: channelConfig.sound,
-        playSound: channelConfig.playSound,
-        enableVibration: true,
-        icon: '@mipmap/ic_launcher',
-        visibility: NotificationVisibility.public,
-        channelShowBadge: true,
-        category: AndroidNotificationCategory.reminder,
-        ticker: '📖 Günlük Kur\'an Hatırlatması',
-      );
+      const title = '📖 Günlük Kur\'an Hatırlatması';
+      final details =
+          _buildNotificationDetails(config: channelConfig, title: title);
 
       final scheduledTZ = tz.TZDateTime.from(targetTime, tz.local);
       await _scheduleZonedWithFallback(
         id: dailyQuranReminderNotificationId,
-        title: '📖 Günlük Kur\'an Hatırlatması',
-        body: 'Günün Kur\'an tilavetini tamamlayıp manevi hedefine bir adım daha yaklaş.',
+        title: title,
+        body:
+            'Günün Kur\'an tilavetini tamamlayıp manevi hedefine bir adım daha yaklaş.',
         scheduledDate: scheduledTZ,
-        notificationDetails: NotificationDetails(android: androidDetails),
+        notificationDetails: details,
         payload: 'quran_reminder',
       );
       debugPrint(
@@ -609,6 +556,12 @@ class LocalNotificationService {
     if (androidImpl != null) {
       await androidImpl.requestNotificationsPermission();
     }
+    final iosImpl = _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+    if (iosImpl != null) {
+      await iosImpl.requestPermissions(alert: true, badge: true, sound: true);
+    }
 
     String effectiveSound = sound ?? '';
     if (effectiveSound.isEmpty) {
@@ -618,32 +571,50 @@ class LocalNotificationService {
     }
 
     final channelConfig = _resolveChannelConfig(effectiveSound);
+    final sampleFarz = kFarz32List.first;
+    final title = '🕌 Öğle Vakti Girdi • 32 Farz (#${sampleFarz.id})';
+    final details =
+        _buildNotificationDetails(config: channelConfig, title: title);
 
+    await _notificationsPlugin.show(
+      999,
+      title,
+      '${sampleFarz.title}: ${sampleFarz.notificationSummary}',
+      details,
+      payload: 'farz_article|${sampleFarz.id}',
+    );
+  }
+
+  static NotificationDetails _buildNotificationDetails({
+    required _NotificationChannelConfig config,
+    required String title,
+  }) {
     final androidDetails = AndroidNotificationDetails(
-      channelConfig.channelId,
-      channelConfig.channelName,
-      channelDescription: channelConfig.description,
-      importance: Importance.max,
+      config.channelId,
+      config.channelName,
+      channelDescription: config.description,
+      importance: config.importance,
       priority: Priority.max,
-      sound: channelConfig.sound,
-      playSound: channelConfig.playSound,
-      enableVibration: true,
+      sound: config.sound,
+      playSound: config.playSound,
+      enableVibration: config.enableVibration,
       icon: '@mipmap/ic_launcher',
       visibility: NotificationVisibility.public,
       channelShowBadge: true,
       category: AndroidNotificationCategory.reminder,
-      ticker: '📖 Kur\'an & Zikir Hatırlatıcısı',
+      ticker: title,
     );
 
-    final details = NotificationDetails(android: androidDetails);
+    final darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: config.playSound,
+      sound: config.playSound ? config.darwinSound : null,
+    );
 
-    final sampleFarz = kFarz32List.first;
-    await _notificationsPlugin.show(
-      999,
-      '🕌 Öğle Vakti Girdi • 32 Farz (#${sampleFarz.id})',
-      '${sampleFarz.title}: ${sampleFarz.notificationSummary}',
-      details,
-      payload: 'farz_article|${sampleFarz.id}',
+    return NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
     );
   }
 
@@ -655,6 +626,7 @@ class LocalNotificationService {
         channelName: 'Zikirce (Kumru Sesi)',
         description: 'Kumru kuşu sesi ile hatırlatma',
         sound: RawResourceAndroidNotificationSound('kumru'),
+        darwinSound: 'kumru.wav',
         playSound: true,
         enableVibration: true,
         importance: Importance.max,
@@ -665,6 +637,7 @@ class LocalNotificationService {
         channelName: 'Zikirce (Sessiz)',
         description: 'Sessiz bildirimler',
         sound: null,
+        darwinSound: null,
         playSound: false,
         enableVibration: false,
         importance: Importance.low,
@@ -677,6 +650,7 @@ class LocalNotificationService {
         channelName: 'Zikirce (Standart)',
         description: 'Standart bildirim sesi',
         sound: null,
+        darwinSound: null,
         playSound: true,
         enableVibration: true,
         importance: Importance.max,
@@ -688,6 +662,7 @@ class LocalNotificationService {
         channelName: 'Zikirce (Bülbül Sesi)',
         description: 'Bülbül kuşu sesi ile hatırlatma',
         sound: RawResourceAndroidNotificationSound('bulbul'),
+        darwinSound: 'bulbul.wav',
         playSound: true,
         enableVibration: true,
         importance: Importance.max,
@@ -778,6 +753,7 @@ class _NotificationChannelConfig {
   final String channelName;
   final String description;
   final AndroidNotificationSound? sound;
+  final String? darwinSound;
   final bool playSound;
   final bool enableVibration;
   final Importance importance;
@@ -787,6 +763,7 @@ class _NotificationChannelConfig {
     required this.channelName,
     required this.description,
     this.sound,
+    this.darwinSound,
     required this.playSound,
     required this.enableVibration,
     required this.importance,

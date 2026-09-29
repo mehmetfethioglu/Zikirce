@@ -14,7 +14,6 @@ import '../../../../core/theme/app_theme_colors.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
-import '../../../../core/widgets/celebration/spiritual_celebration_overlay.dart';
 import '../../providers/zikir_providers.dart';
 import '../widgets/circular_counter_painter.dart';
 import '../widgets/add_edit_zikir_sheet.dart';
@@ -63,7 +62,7 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
       if (ref.read(settingsProvider).isKeepScreenAwakeEnabled) {
         ScreenAwakeService.setKeepAwake(true);
       }
-      if (mounted) {
+      if (mounted && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
         _desktopFocusNode.requestFocus();
       }
     });
@@ -83,17 +82,19 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
   }
 
   void _flushCurrentZikir() {
-    try {
-      if (!mounted) {
-        CloudSyncEngine.instance.triggerDebouncedSync(null, delay: const Duration(milliseconds: 500));
-        return;
-      }
-      final currentZikir = ref.read(currentZikirProvider);
-      if (currentZikir != null) {
-        ref.read(zikirCounterNotifierProvider(currentZikir.id).notifier).flushPending();
-        CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
-      }
-    } catch (_) {}
+    Future.microtask(() {
+      try {
+        if (!mounted) {
+          CloudSyncEngine.instance.triggerDebouncedSync(null, delay: const Duration(milliseconds: 500));
+          return;
+        }
+        final currentZikir = ref.read(currentZikirProvider);
+        if (currentZikir != null) {
+          ref.read(zikirCounterNotifierProvider(currentZikir.id).notifier).flushPending();
+          CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
+        }
+      } catch (_) {}
+    });
   }
 
   @override
@@ -445,13 +446,40 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
 
   @override
   Widget build(BuildContext context) {
-    final currentZikir = ref.watch(currentZikirProvider);
+    try {
+      final currentZikir = ref.watch(currentZikirProvider);
 
-    if (currentZikir == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+      if (currentZikir == null) {
+        final zikirs = ref.watch(zikirListStreamProvider).valueOrNull ?? [];
+        return Scaffold(
+          backgroundColor: context.colors.pageBackground,
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: context.colors.accent),
+                const SizedBox(height: 16),
+                Text(
+                  context.l10n.isTurkish ? 'Zikir yükleniyor...' : 'Loading Dhikr...',
+                  style: TextStyle(color: context.colors.primaryText, fontSize: 15),
+                ),
+                if (zikirs.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      ref.read(selectedZikirIdProvider.notifier).select(zikirs.first.id);
+                    },
+                    child: Text(
+                      context.l10n.isTurkish ? '${zikirs.first.name} ile Başla' : 'Start with ${zikirs.first.name}',
+                      style: TextStyle(color: context.colors.accent, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }
 
     final counterState = ref.watch(zikirCounterNotifierProvider(currentZikir.id));
     final counterNotifier = ref.read(zikirCounterNotifierProvider(currentZikir.id).notifier);
@@ -470,10 +498,9 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     // =========================================================================
     final Widget counterContent;
     if (isFocusMode) {
-      counterContent = SpiritualCelebrationOverlay(
-        child: PopScope(
-          canPop: false,
-          onPopInvokedWithResult: (didPop, result) {
+      counterContent = PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
           if (!didPop) {
             ref.read(isZikirFocusModeProvider.notifier).state = false;
           }
@@ -546,7 +573,6 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                 ],
               ),
             ),
-            ),
           ),
         ),
       );
@@ -557,9 +583,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
       final arabicColor = colors.zikirArabicColor;
       final progressValue = quickSettings.isInfiniteMode ? 1.0 : counterState.progress;
 
-      counterContent = SpiritualCelebrationOverlay(
-        child: Scaffold(
-          backgroundColor: pageBg,
+      counterContent = Scaffold(
+        backgroundColor: pageBg,
           body: SafeArea(
             child: GestureDetector(
               behavior: HitTestBehavior.translucent,
@@ -687,9 +712,19 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                                         child: Lottie.asset(
                                           selectedBird.fileName,
                                           controller: _birdLottieController,
+                                          errorBuilder: (context, error, stackTrace) {
+                                            return Center(
+                                              child: Text(
+                                                selectedBird.badge,
+                                                style: const TextStyle(fontSize: 48),
+                                              ),
+                                            );
+                                          },
                                           onLoaded: (comp) {
-                                            _birdLottieController.duration = comp.duration;
-                                            _birdLottieController.value = 0.5;
+                                            if (mounted) {
+                                              _birdLottieController.duration = comp.duration;
+                                              _birdLottieController.value = 0.5;
+                                            }
                                           },
                                         ),
                                       ),
@@ -929,42 +964,74 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
         ),
       ),
     ),
-    ),
     );
     }
 
-    return KeyboardListener(
-      focusNode: _desktopFocusNode,
-      autofocus: true,
-      onKeyEvent: (KeyEvent event) {
-        if (event is KeyDownEvent) {
-          final isSpace = event.logicalKey == LogicalKeyboardKey.space;
-          final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
-              event.logicalKey == LogicalKeyboardKey.numpadEnter;
-          final isArrow = event.logicalKey == LogicalKeyboardKey.arrowDown ||
-              event.logicalKey == LogicalKeyboardKey.arrowUp;
+      return KeyboardListener(
+        focusNode: _desktopFocusNode,
+        autofocus: true,
+        onKeyEvent: (KeyEvent event) {
+          if (event is KeyDownEvent) {
+            final isSpace = event.logicalKey == LogicalKeyboardKey.space;
+            final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter;
+            final isArrow = event.logicalKey == LogicalKeyboardKey.arrowDown ||
+                event.logicalKey == LogicalKeyboardKey.arrowUp;
 
-          if ((isSpace && settings.desktopSpaceKeyEnabled) ||
-              (isEnter && settings.desktopEnterKeyEnabled) ||
-              (isArrow && settings.desktopArrowKeysEnabled)) {
-            _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
-          }
-        }
-      },
-      child: Listener(
-        onPointerSignal: (pointerSignal) {
-          if (pointerSignal is PointerScrollEvent && settings.desktopMouseWheelEnabled) {
-            final now = DateTime.now();
-            if (_lastWheelScrollTime == null ||
-                now.difference(_lastWheelScrollTime!).inMilliseconds > 120) {
-              _lastWheelScrollTime = now;
+            if ((isSpace && settings.desktopSpaceKeyEnabled) ||
+                (isEnter && settings.desktopEnterKeyEnabled) ||
+                (isArrow && settings.desktopArrowKeysEnabled)) {
               _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
             }
           }
         },
-        child: counterContent,
-      ),
-    );
+        child: Listener(
+          onPointerSignal: (pointerSignal) {
+            if (pointerSignal is PointerScrollEvent && settings.desktopMouseWheelEnabled) {
+              final now = DateTime.now();
+              if (_lastWheelScrollTime == null ||
+                  now.difference(_lastWheelScrollTime!).inMilliseconds > 120) {
+                _lastWheelScrollTime = now;
+                _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
+              }
+            }
+          },
+          child: counterContent,
+        ),
+      );
+    } catch (e, stack) {
+      debugPrint('[ZikirCounterScreen] Error in build: $e\n$stack');
+      return Scaffold(
+        backgroundColor: context.colors.pageBackground,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.refresh_rounded, color: context.colors.accent, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  context.l10n.isTurkish ? 'Zikir Sayacı Hazırlanıyor' : 'Preparing Dhikr Counter',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.colors.primaryText),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  e.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: context.colors.secondaryTextAlt),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => setState(() {}),
+                  child: Text(context.l10n.isTurkish ? 'Yenile' : 'Reload'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildSettingToggle({

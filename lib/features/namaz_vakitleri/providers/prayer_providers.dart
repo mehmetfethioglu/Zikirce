@@ -11,31 +11,86 @@ import '../../gamification/providers/gamification_providers.dart';
 import '../../gamification/services/daily_streak_service.dart';
 import '../../gamification/services/golden_day_service.dart';
 
+import 'package:flutter/foundation.dart';
+import '../../../../core/session/session_providers.dart';
+import '../../../../core/services/widget_sync_service.dart';
+import '../../../../core/utils/pref_utils.dart';
+
+final initialCityProvider = Provider<String>((ref) => 'İstanbul');
+
 class CityNotifier extends StateNotifier<String> {
-  CityNotifier() : super('Şanlıurfa') {
-    _loadCity();
+  final Ref _ref;
+  int _latestOperationId = 0;
+
+  CityNotifier(this._ref, String initialCity) : super(initialCity);
+
+  static Future<String> loadSavedCity(String? sessionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDefault = sessionId == null || sessionId == 'default_user';
+    final sfx = isDefault ? '' : '_$sessionId';
+
+    if (!isDefault) {
+      final sessionCity = PrefUtils.getStringOrNull(prefs, 'SelectedCity$sfx') ??
+          PrefUtils.getStringOrNull(prefs, 'AppCity$sfx') ??
+          PrefUtils.getStringOrNull(prefs, 'selected_city$sfx');
+      if (sessionCity != null && sessionCity.isNotEmpty) {
+        return sessionCity;
+      }
+    }
+
+    return PrefUtils.getStringFromKeys(
+      prefs,
+      [
+        'SelectedCity',
+        'AppCity',
+        'selected_city',
+      ],
+      'İstanbul',
+    );
   }
 
-  static const String _prefKey = 'SelectedCity';
-
-  Future<void> _loadCity() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_prefKey) ?? prefs.getString('AppCity');
-    if (saved != null && saved.isNotEmpty) {
+  Future<void> reloadForSession(String sessionId) async {
+    final opId = ++_latestOperationId;
+    final saved = await loadSavedCity(sessionId);
+    if (opId == _latestOperationId && saved.isNotEmpty && saved != state) {
       state = saved;
     }
   }
 
   Future<void> setCity(String city) async {
+    if (city.isEmpty) return;
+    _latestOperationId++;
     state = city;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKey, city);
-    await prefs.setString('AppCity', city);
+    final activeSession = _ref.read(activeSessionProvider);
+    final sessionId = activeSession.id;
+    final isDefault = sessionId == 'default_user';
+    final sfx = isDefault ? '' : '_$sessionId';
+
+    await prefs.setString('SelectedCity$sfx', city);
+    await prefs.setString('AppCity$sfx', city);
+    await prefs.setString('selected_city$sfx', city);
+
+    if (isDefault) {
+      await prefs.setString('SelectedCity', city);
+      await prefs.setString('AppCity', city);
+      await prefs.setString('selected_city', city);
+    }
+
+    // Sync widgets and local notifications for the newly selected city
+    try {
+      final timings = await PrayerTimesService.getPrayerTimes(city: city);
+      await WidgetSyncService.syncPrayerTimes(city: city, timings: timings, sessionId: sessionId);
+      await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+    } catch (e) {
+      debugPrint('[CityNotifier] Sync notice: $e');
+    }
   }
 }
 
 final selectedCityProvider = StateNotifierProvider<CityNotifier, String>((ref) {
-  return CityNotifier();
+  final initialCity = ref.watch(initialCityProvider);
+  return CityNotifier(ref, initialCity);
 });
 
 final currentDateProvider = Provider<String>((ref) {
