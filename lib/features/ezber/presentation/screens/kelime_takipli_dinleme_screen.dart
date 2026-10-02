@@ -12,6 +12,11 @@ import '../../../kuran/presentation/widgets/besmele_playback_banner.dart';
 import '../../../kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../../../core/services/haptic_service.dart';
+import '../../../../core/session/session_providers.dart';
+import '../../../gamification/providers/gamification_providers.dart';
+import '../../../gamification/services/custom_badge_service.dart';
+import '../../../kuran/presentation/widgets/add_custom_quran_badge_sheet.dart';
 
 enum TalimTargetType { page, surah, juz, ashr }
 
@@ -90,6 +95,7 @@ class _KelimeTakipliDinlemeScreenState
   double _fontSize = 26.0;
   bool _isBatchDownloading = false;
   bool _isCurrentScopeDownloaded = false;
+  bool _hasMarkedSurahAsCompleted = false;
 
   StreamSubscription? _posSub;
   StreamSubscription? _playerStateSub;
@@ -278,9 +284,306 @@ class _KelimeTakipliDinlemeScreenState
             _isPlaying = false;
             _activeWordOrder = 0;
           });
+          if (widget.targetType == TalimTargetType.surah) {
+            _handleSurahCompleted();
+          }
         }
       }
     }
+  }
+
+  Future<void> _handleSurahCompleted() async {
+    if (_hasMarkedSurahAsCompleted || widget.targetType != TalimTargetType.surah) return;
+
+    final surah = SurahDataProvider.surahs
+        .where((s) => s.id == widget.targetId)
+        .firstOrNull;
+    if (surah == null) return;
+
+    final activeSession = ref.read(activeSessionProvider);
+    final hasCustom = await CustomBadgeService.hasCustomBadgeForSurah(
+        surah.id, activeSession.id);
+    const builtInSurahIds = [18, 36, 48, 55, 56, 67, 78, 112, 113, 114];
+    final hasBuiltIn = builtInSurahIds.contains(surah.id);
+
+    if (!hasCustom && !hasBuiltIn && mounted) {
+      final shouldCreate = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final cardBg = isDark ? const Color(0xFF1E2129) : Colors.white;
+          final textColor =
+              isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
+          final subColor =
+              isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
+
+          return AlertDialog(
+            backgroundColor: cardBg,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                const Text('🎉 ', style: TextStyle(fontSize: 22)),
+                Expanded(
+                  child: Text(
+                    '${surah.name} Sûresi Tamamlandı',
+                    style: TextStyle(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.bold,
+                        color: textColor),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Mâşâallâh! Bu sure için rozet kartı oluşturup okumalarınızı takip etmek ister misiniz?',
+              style: TextStyle(fontSize: 13.5, color: subColor, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text('Şimdilik Değil',
+                    style: TextStyle(
+                        color: subColor, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D9488),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Rozet Oluştur',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldCreate == true && mounted) {
+        await AddCustomQuranBadgeSheet.show(
+          context,
+          initialSurahId: surah.id,
+          onBadgeCreated: () {
+            ref.read(badgeRefreshTriggerProvider.notifier).state++;
+          },
+        );
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _hasMarkedSurahAsCompleted = true;
+    });
+    HapticService.targetReached();
+
+    final result = await ref
+        .read(gamificationNotifierProvider)
+        .recordSurahReadingCompleted(surah: surah);
+
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final cardBg = isDark ? const Color(0xFF1E2129) : Colors.white;
+        final textColor =
+            isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
+        final subColor =
+            isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 20,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text('🌟', style: TextStyle(fontSize: 48)),
+                const SizedBox(height: 12),
+                Text(
+                  'Tebrikler! Mâşâallâh',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${surah.name} Sûresi kelime takipli dinleme & okuma kaydı başarıyla işlendi.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: subColor,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF262A34)
+                        : const Color(0xFFF4F6F8),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFF383D4D)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          const Text('📖', style: TextStyle(fontSize: 22)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${result.readCount}/40 Okuma',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0D9488),
+                            ),
+                          ),
+                          Text('Toplam Okuma',
+                              style: TextStyle(fontSize: 11, color: subColor)),
+                        ],
+                      ),
+                      if (result.currentStreak > 1) ...[
+                        Container(
+                            width: 1,
+                            height: 36,
+                            color: Colors.grey.withValues(alpha: 0.3)),
+                        Column(
+                          children: [
+                            const Text('🔥', style: TextStyle(fontSize: 22)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${result.currentStreak} Gün',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFD97706),
+                              ),
+                            ),
+                            Text('Günlük Seri',
+                                style:
+                                    TextStyle(fontSize: 11, color: subColor)),
+                          ],
+                        ),
+                      ],
+                      Container(
+                          width: 1,
+                          height: 36,
+                          color: Colors.grey.withValues(alpha: 0.3)),
+                      Column(
+                        children: [
+                          const Text('✨', style: TextStyle(fontSize: 22)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '+${result.xpGained} XP',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          Text('Kazanılan Puan',
+                              style: TextStyle(fontSize: 11, color: subColor)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (result.isBadgeUnlocked && result.unlockedBadgeName != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD97706).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFD97706), width: 1.2),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🏅', style: TextStyle(fontSize: 20)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Yeni Rozet: ${result.unlockedBadgeName}!',
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFD97706),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text(
+                      'Tamam',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _loadAndPlayNextPage() async {
@@ -1277,6 +1580,45 @@ class _KelimeTakipliDinlemeScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (widget.targetType == TalimTargetType.surah &&
+                _verses.isNotEmpty &&
+                _currentVerseIndex == _verses.length - 1) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _hasMarkedSurahAsCompleted
+                        ? const Color(0xFF0F766E)
+                        : accentTeal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                  ),
+                  onPressed: _hasMarkedSurahAsCompleted
+                      ? null
+                      : () => _handleSurahCompleted(),
+                  icon: Icon(
+                    _hasMarkedSurahAsCompleted
+                        ? Icons.check_circle_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _hasMarkedSurahAsCompleted
+                        ? 'Sûre Okundu / Dinlendi'
+                        : 'Sûreyi Dinledim & Tamamladım',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             // Top mini row: Current Ayah title & Word Indicator
             if (currentVerse != null)
               Row(

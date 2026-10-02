@@ -13,7 +13,9 @@ class Badge {
   final String criteria;
   final int unlockCost;
 
-  // 40-Day Surah Reading Streak Progress
+  // Read count and streak progress
+  int totalReadCount;
+  int targetReadCount;
   int currentStreak;
   int targetDays;
 
@@ -29,13 +31,34 @@ class Badge {
     required this.glowColor,
     required this.criteria,
     this.unlockCost = 0,
+    this.totalReadCount = 0,
+    this.targetReadCount = 0,
     this.currentStreak = 0,
     this.targetDays = 0,
   });
 
-  double get progressRatio => targetDays > 0 ? (currentStreak / targetDays).clamp(0.0, 1.0) : 0.0;
-  String get progressText => targetDays > 0 ? '$currentStreak/$targetDays Gün' : '';
-  bool get hasStreakProgress => targetDays > 0;
+  double get progressRatio {
+    if (targetReadCount > 0) {
+      return (totalReadCount / targetReadCount).clamp(0.0, 1.0);
+    }
+    if (targetDays > 0) {
+      return (currentStreak / targetDays).clamp(0.0, 1.0);
+    }
+    return 0.0;
+  }
+
+  String get progressText {
+    if (targetReadCount > 0) {
+      final streakSuffix = currentStreak > 1 ? ' • 🔥 $currentStreak Gün' : '';
+      return '$totalReadCount/$targetReadCount Okuma$streakSuffix';
+    }
+    if (targetDays > 0) {
+      return '$currentStreak/$targetDays Gün';
+    }
+    return '';
+  }
+
+  bool get hasStreakProgress => targetReadCount > 0 || targetDays > 0;
 }
 
 class CustomQuranBadge {
@@ -45,6 +68,7 @@ class CustomQuranBadge {
   final String scopeValue; // Surah Number ("56"), Juz ("29"), Page count ("5"), or "Hatim"
   final String scopeDisplayName;
   final int targetDays;
+  int totalReadCount;
   int currentStreak;
   int bestStreak;
   bool isUnlocked;
@@ -61,6 +85,7 @@ class CustomQuranBadge {
     this.scopeValue = '56',
     this.scopeDisplayName = 'Vakıa Sûresi',
     this.targetDays = 40,
+    this.totalReadCount = 0,
     this.currentStreak = 0,
     this.bestStreak = 0,
     this.isUnlocked = false,
@@ -80,8 +105,16 @@ class CustomQuranBadge {
     }
   }
 
-  double get progressRatio => targetDays > 0 ? (currentStreak / targetDays).clamp(0.0, 1.0) : 0.0;
-  String get progressText => targetDays > 0 ? '$currentStreak/$targetDays Gün' : '';
+  double get progressRatio => targetDays > 0
+      ? ((totalReadCount > 0 ? totalReadCount : currentStreak) / targetDays).clamp(0.0, 1.0)
+      : 0.0;
+
+  String get progressText {
+    if (targetDays <= 0) return '';
+    final count = totalReadCount > 0 ? totalReadCount : currentStreak;
+    final streakSuffix = currentStreak > 1 ? ' • 🔥 $currentStreak Gün' : '';
+    return '$count/$targetDays Okuma$streakSuffix';
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -91,6 +124,7 @@ class CustomQuranBadge {
       'scopeValue': scopeValue,
       'scopeDisplayName': scopeDisplayName,
       'targetDays': targetDays,
+      'totalReadCount': totalReadCount,
       'currentStreak': currentStreak,
       'bestStreak': bestStreak,
       'isUnlocked': isUnlocked,
@@ -103,6 +137,7 @@ class CustomQuranBadge {
   }
 
   factory CustomQuranBadge.fromJson(Map<String, dynamic> json) {
+    final curStreak = json['currentStreak'] as int? ?? 0;
     return CustomQuranBadge(
       id: json['id'] as String? ?? UniqueKey().toString(),
       title: json['title'] as String? ?? 'Özel Rozet',
@@ -110,7 +145,8 @@ class CustomQuranBadge {
       scopeValue: json['scopeValue'] as String? ?? '56',
       scopeDisplayName: json['scopeDisplayName'] as String? ?? 'Vakıa Sûresi',
       targetDays: json['targetDays'] as int? ?? 40,
-      currentStreak: json['currentStreak'] as int? ?? 0,
+      totalReadCount: json['totalReadCount'] as int? ?? curStreak,
+      currentStreak: curStreak,
       bestStreak: json['bestStreak'] as int? ?? 0,
       isUnlocked: json['isUnlocked'] as bool? ?? false,
       unlockedDate: json['unlockedDate'] != null ? DateTime.tryParse(json['unlockedDate'] as String) : null,

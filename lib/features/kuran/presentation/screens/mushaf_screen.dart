@@ -29,6 +29,8 @@ import '../../providers/tilavet_secdesi_provider.dart';
 import '../widgets/tilavet_secdesi_floating_banner.dart';
 import '../widgets/tilavet_secdesi_exit_dialog.dart';
 import '../widgets/tilavet_secdesi_guide_sheet.dart';
+import '../../../gamification/services/custom_badge_service.dart';
+import '../widgets/add_custom_quran_badge_sheet.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
   final int initialPage;
@@ -53,6 +55,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   late final FocusNode _focusNode;
   int _startPage = 1;
   bool _hasMarkedAsRead = false;
+  final Set<int> _completedSurahIdsInSession = <int>{};
   final Set<int> _encounteredSecdePages = <int>{};
   bool _dismissedBannerForCurrentPage = false;
   int? _lastBannerPage;
@@ -182,7 +185,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final currentPage = ref.read(currentMushafPageProvider);
 
     if (widget.activeHatim != null) {
-      final shouldSave = await showDialog<bool>(
+      final isLastPage = currentPage >= 604;
+      final shouldSave = await showDialog<bool?>(
         context: context,
         builder: (ctx) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
@@ -191,6 +195,65 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
           final subColor =
               isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
+
+          if (isLastPage) {
+            return AlertDialog(
+              backgroundColor: cardBg,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
+              title: Row(
+                children: [
+                  const Text('🎉 ', style: TextStyle(fontSize: 22)),
+                  Expanded(
+                    child: Text(
+                      'Hatim Tamamlandı mı?',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: textColor),
+                    ),
+                  ),
+                ],
+              ),
+              content: Text(
+                '604. son sayfadasınız. "${widget.activeHatim!.title}" hatminizi tamamladınız mı?',
+                style: TextStyle(fontSize: 14.5, color: subColor, height: 1.4),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(null),
+                  child: Text(
+                    'Kaydetme',
+                    style: TextStyle(
+                        color: isDark ? Colors.white60 : Colors.black54,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text(
+                    '604\'te Kaldım',
+                    style: TextStyle(
+                        color: Color(0xFF2D7D76),
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D7D76),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Evet, Bitir',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          }
 
           return AlertDialog(
             backgroundColor: cardBg,
@@ -216,7 +279,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
+                onPressed: () => Navigator.of(ctx).pop(null),
                 child: Text(
                   'Kaydetme',
                   style: TextStyle(
@@ -242,44 +305,61 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
         },
       );
 
-      if (shouldSave == true && mounted) {
-        await ref.read(hatimNotifierProvider).updateHatimPageProgress(
-              hatimId: widget.activeHatim!.id,
-              targetPage: currentPage,
-            );
-        HapticService.targetReached();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Text('📖 ', style: TextStyle(fontSize: 18)),
-                  Expanded(
-                    child: Text(
-                      'Hatim ilerlemeniz ($currentPage. Sayfa) kaydedildi.',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white),
+      if (shouldSave != null && mounted) {
+        final bool isHatimCompleted = isLastPage && shouldSave == true;
+        final int targetCompletedPages = isHatimCompleted
+            ? 604
+            : (currentPage - 1).clamp(0, 604);
+
+        try {
+          await ref.read(hatimNotifierProvider).updateHatimPageProgress(
+                hatimId: widget.activeHatim!.id,
+                targetPage: targetCompletedPages,
+              );
+          HapticService.targetReached();
+          if (mounted) {
+            final snackBarText = isHatimCompleted
+                ? 'Tebrikler! Hatm-i Şerifiniz başarıyla tamamlandı. 🎉'
+                : 'Hatim ilerlemeniz ($currentPage. Sayfa) kaydedildi.';
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    Text(isHatimCompleted ? '🎉 ' : '📖 ',
+                        style: const TextStyle(fontSize: 18)),
+                    Expanded(
+                      child: Text(
+                        snackBarText,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                backgroundColor: const Color(0xFF2D7D76),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                duration: const Duration(seconds: 2),
               ),
-              backgroundColor: const Color(0xFF2D7D76),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+            );
+          }
+        } catch (e) {
+          debugPrint('[_MushafScreenState] _handleExit save error: $e');
+        }
+        if (mounted) {
           await _promptSecdeDebtIfNeeded();
           if (mounted) {
             Navigator.of(context).pop();
           }
         }
-      } else if (shouldSave == false && mounted) {
+        return;
+      } else if (shouldSave == null && mounted) {
         await _promptSecdeDebtIfNeeded();
         if (mounted) {
           Navigator.of(context).pop();
         }
+        return;
       }
     } else {
       final delta = (currentPage - _startPage).clamp(0, 604);
@@ -351,8 +431,73 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   }
 
   void _handleSurahCompleted(SureItem surah) async {
+    final activeSession = ref.read(activeSessionProvider);
+    final hasCustom = await CustomBadgeService.hasCustomBadgeForSurah(surah.id, activeSession.id);
+    const builtInSurahIds = [18, 36, 48, 55, 56, 67, 78, 112, 113, 114];
+    final hasBuiltIn = builtInSurahIds.contains(surah.id);
+
+    if (!hasCustom && !hasBuiltIn && mounted) {
+      final shouldCreate = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final cardBg = isDark ? const Color(0xFF1E2129) : Colors.white;
+          final textColor = isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
+          final subColor = isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
+
+          return AlertDialog(
+            backgroundColor: cardBg,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                const Text('🎉 ', style: TextStyle(fontSize: 22)),
+                Expanded(
+                  child: Text(
+                    '${surah.name} Sûresi Tamamlandı',
+                    style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.bold, color: textColor),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Mâşâallâh! Bu sure için rozet kartı oluşturup okumalarınızı takip etmek ister misiniz?',
+              style: TextStyle(fontSize: 13.5, color: subColor, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text('Şimdilik Değil', style: TextStyle(color: subColor, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D7D76),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Rozet Oluştur', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (shouldCreate == true && mounted) {
+        await AddCustomQuranBadgeSheet.show(
+          context,
+          initialSurahId: surah.id,
+          onBadgeCreated: () {
+            ref.read(badgeRefreshTriggerProvider.notifier).state++;
+          },
+        );
+      }
+    }
+
     setState(() {
       _hasMarkedAsRead = true;
+      _completedSurahIdsInSession.add(surah.id);
     });
     HapticService.targetReached();
 
@@ -455,7 +600,30 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                               style: TextStyle(fontSize: 11, color: subColor)),
                         ],
                       ),
-                      if (result.isStreakSurah) ...[
+                      if (result.readCount > 0) ...[
+                        Container(
+                            width: 1,
+                            height: 36,
+                            color: Colors.grey.withValues(alpha: 0.3)),
+                        Column(
+                          children: [
+                            const Text('📖', style: TextStyle(fontSize: 22)),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${result.readCount}/40 Okuma',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF2D7D76),
+                              ),
+                            ),
+                            Text('Toplam Okuma',
+                                style:
+                                    TextStyle(fontSize: 11, color: subColor)),
+                          ],
+                        ),
+                      ],
+                      if (result.currentStreak > 1) ...[
                         Container(
                             width: 1,
                             height: 36,
@@ -465,14 +633,14 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                             const Text('🔥', style: TextStyle(fontSize: 22)),
                             const SizedBox(height: 4),
                             Text(
-                              '${result.currentStreak}/40 Gün',
+                              '${result.currentStreak} Gün',
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFFD97706),
                               ),
                             ),
-                            Text('Seri İlerlemesi',
+                            Text('Günlük Seri',
                                 style:
                                     TextStyle(fontSize: 11, color: subColor)),
                           ],
@@ -589,19 +757,42 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
         audioState.currentAyahId > 1 ||
         audioState.playbackProgress > 0;
 
-    // Check if the current page is the end page of the target surah
-    final bool isSurahEnd = widget.targetSurah != null &&
+    // Detect effective surah ending on this page
+    SureItem? detectedSurah;
+    if (widget.targetSurah != null) {
+      detectedSurah = widget.targetSurah;
+    } else {
+      pageAsync.whenData((data) {
+        for (final ayat in data.quranAyats) {
+          final s = SurahDataProvider.surahs
+              .where((item) => item.id == ayat.sureId)
+              .firstOrNull;
+          if (s != null && ayat.ayetId == s.ayetSayisi) {
+            detectedSurah = s;
+            break;
+          }
+        }
+      });
+    }
+
+    final effectiveSurah = detectedSurah;
+    final bool isSurahEnd = effectiveSurah != null &&
         pageAsync.maybeWhen(
           data: (data) =>
               data.quranAyats.any((a) =>
-                  a.sureId == widget.targetSurah!.id &&
-                  a.ayetId == widget.targetSurah!.ayetSayisi) ||
+                  a.sureId == effectiveSurah.id &&
+                  a.ayetId == effectiveSurah.ayetSayisi) ||
               currentPage >=
-                  SurahDataProvider.getSurahEndPage(widget.targetSurah!.id),
+                  SurahDataProvider.getSurahEndPage(effectiveSurah.id),
           orElse: () =>
               currentPage >=
-              SurahDataProvider.getSurahEndPage(widget.targetSurah!.id),
+              SurahDataProvider.getSurahEndPage(effectiveSurah.id),
         );
+    final bool isMarkedAsRead = effectiveSurah != null &&
+        (_completedSurahIdsInSession.contains(effectiveSurah.id) ||
+            (widget.targetSurah != null &&
+                widget.targetSurah!.id == effectiveSurah.id &&
+                _hasMarkedAsRead));
 
     return PopScope(
       canPop: false,
@@ -830,7 +1021,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
 
               // Floating "Sureyi Okudum" Action Button (at the end of the surah)
-              if (widget.targetSurah != null && isSurahEnd)
+              if (effectiveSurah != null && isSurahEnd)
                 Positioned(
                   left: 20,
                   right: 20,
@@ -842,7 +1033,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                       duration: const Duration(milliseconds: 300),
                       child: Container(
                         decoration: BoxDecoration(
-                          gradient: _hasMarkedAsRead
+                          gradient: isMarkedAsRead
                               ? const LinearGradient(
                                   colors: [
                                     Color(0xFF0F766E),
@@ -861,14 +1052,14 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                                 ),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: _hasMarkedAsRead
+                            color: isMarkedAsRead
                                 ? const Color(0xFF34D399)
                                 : const Color(0xFFD4AF37),
                             width: 1.2,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: (_hasMarkedAsRead
+                              color: (isMarkedAsRead
                                       ? const Color(0xFF0F766E)
                                       : const Color(0xFF0D4335))
                                   .withValues(alpha: 0.45),
@@ -881,8 +1072,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
-                              if (!_hasMarkedAsRead) {
-                                _handleSurahCompleted(widget.targetSurah!);
+                              if (!isMarkedAsRead) {
+                                _handleSurahCompleted(effectiveSurah);
                               } else {
                                 HapticService.tapClick();
                               }
@@ -895,15 +1086,15 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    _hasMarkedAsRead ? '✓' : '✨',
+                                    isMarkedAsRead ? '✓' : '✨',
                                     style: const TextStyle(
                                         fontSize: 18, color: Colors.white),
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
-                                    _hasMarkedAsRead
-                                        ? '${widget.targetSurah!.name} Sûresi Okundu'
-                                        : '${widget.targetSurah!.name} Sûresini Okudum',
+                                    isMarkedAsRead
+                                        ? '${effectiveSurah.name} Sûresi Okundu'
+                                        : '${effectiveSurah.name} Sûresini Okudum',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 15.5,
@@ -911,7 +1102,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                                       letterSpacing: 0.3,
                                     ),
                                   ),
-                                  if (!_hasMarkedAsRead) ...[
+                                  if (!isMarkedAsRead) ...[
                                     const SizedBox(width: 8),
                                     const Icon(Icons.check_circle_rounded,
                                         color: AppColors.gold300, size: 20),

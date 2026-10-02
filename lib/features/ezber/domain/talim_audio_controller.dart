@@ -122,7 +122,7 @@ class TalimAudioController {
       if (timestamp != null) {
         final audioSource = await getVerseAudioSource(surahId, verseId);
         if (_isDisposed) return;
-        await _wordSlicePlayer.stop();
+        if (_wordSlicePlayer.playing) await _wordSlicePlayer.pause();
         if (_isDisposed) return;
         await _wordSlicePlayer.setAudioSource(
           ClippingAudioSource(
@@ -190,7 +190,7 @@ class TalimAudioController {
     if (_lastUserRecordingPath == null || !File(_lastUserRecordingPath!).existsSync()) return;
 
     if (_isPlayingUserRecording) {
-      await _userRecordPlayer.stop();
+      await _userRecordPlayer.pause();
       _isPlayingUserRecording = false;
     } else {
       await stopAll();
@@ -215,9 +215,9 @@ class TalimAudioController {
         _activeWaitCompleter!.complete();
         _activeWaitCompleter = null;
       }
-      if (_versePlayer.playing) await _versePlayer.stop();
-      if (_wordSlicePlayer.playing) await _wordSlicePlayer.stop();
-      if (_userRecordPlayer.playing) await _userRecordPlayer.stop();
+      if (_versePlayer.playing) await _versePlayer.pause();
+      if (_wordSlicePlayer.playing) await _wordSlicePlayer.pause();
+      if (_userRecordPlayer.playing) await _userRecordPlayer.pause();
       if (_isRecording) await _audioRecorder.stop();
       _isRecording = false;
       _isPlayingUserRecording = false;

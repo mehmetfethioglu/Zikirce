@@ -48,11 +48,51 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 55;
-  static const String currentVersionName = '2.1.0';
+  static const int currentVersionCode = 56;
+  static const String currentVersionName = '2.1.1';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 56,
+      versionName: '2.1.1',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Sure Rozetleri & Kümülatif Okuma Takibi',
+          titleEn: 'Surah Badges & Cumulative Reading Tracker',
+          descTr: 'Mülk, Vâkıa, Yâsîn, Fetih, Rahmân, Kehf ve tüm özel sureleriniz için kümülatif okuma sayaçları aktif! Her okumanız rozet kartına anında işlenir ve 40 okumada kilit açılır.',
+          descEn: 'Cumulative reading counters are now active for Mulk, Waqiah, Yasin, Al-Fath, Ar-Rahman, Al-Kahf and all custom surahs! Reads advance your badge progress towards 40 reads.',
+          icon: Icons.military_tech_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kelime Takipli Dinleme & Talim Entegrasyonu',
+          titleEn: 'Word-by-Word Listening & Talim Integration',
+          descTr: 'Kelime takipli dinlemede sureyi tamamladığınızda okuma kaydı ve rozet ilerlemesi otomatik olarak hesabınıza işlenir.',
+          descEn: 'Completing a surah in Word-by-Word listening automatically logs your reading progress and contributes to badge achievements.',
+          icon: Icons.headphones_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Mushaf Son Sayfa & Anında Rozet Teklifi',
+          titleEn: 'Mushaf Completion & Instant Badge Creation',
+          descTr: 'Mushafta bir surenin son sayfasına geldiğinizde tek dokunuşla sûreyi okundu işaretleyebilir; henüz rozeti yoksa tek tıkla özel rozet kartı oluşturabilirsiniz.',
+          descEn: 'Easily mark surahs as completed on their final page in the Mushaf, or create a new custom badge card with a single tap.',
+          icon: Icons.auto_stories_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Oturum & Sayaç Senkronizasyon İyileştirmesi',
+          titleEn: 'Session & Counter Synchronization Fix',
+          descTr: 'Sure sayaçlarının oturumlar arasında eksiksiz ve bağımsız senkronize olması sağlandı, gün atlamalarında sayaç sıfırlanma sorunu giderildi.',
+          descEn: 'Fixed surah reading counters across multi-user sessions and prevented reset of cumulative reading counts on missed days.',
+          icon: Icons.sync_saved_locally_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 55,
       versionName: '2.1.0',

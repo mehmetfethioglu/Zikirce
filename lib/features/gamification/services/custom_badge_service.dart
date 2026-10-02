@@ -58,8 +58,13 @@ class CustomBadgeService {
       debugPrint('[CustomBadgeService] deleteCustomBadge Error: $e');
     }
   }
+ 
+  static Future<bool> hasCustomBadgeForSurah(int surahNumber, [String? sessionId]) async {
+    final badges = await getCustomBadges(sessionId);
+    return badges.any((b) => b.scope == 'Surah' && (b.scopeValue == surahNumber.toString() || b.scopeValue == 'All'));
+  }
 
-  static Future<void> onSurahRead(int surahNumber, [String? sessionId]) async {
+  static Future<void> onSurahRead(int surahNumber, [String? sessionId, int count = 1]) async {
     try {
       final badges = await getCustomBadges(sessionId);
       bool modified = false;
@@ -70,20 +75,26 @@ class CustomBadgeService {
 
       for (final b in badges) {
         if (b.scope == 'Surah' && (b.scopeValue == surahNumber.toString() || b.scopeValue == 'All')) {
-          if (b.lastReadDate == todayStr) continue; // Already counted today
+          // 1. Kümülatif toplam okuma her okumada artar
+          b.totalReadCount += count;
 
-          if (b.lastReadDate.isNotEmpty && b.lastReadDate == yesterdayStr) {
-            b.currentStreak++;
-          } else {
-            b.currentStreak = 1;
+          // 2. Günlük seri kontrolü (günde 1 kez seri ilerletilir)
+          if (b.lastReadDate != todayStr) {
+            if (b.lastReadDate.isNotEmpty && b.lastReadDate == yesterdayStr) {
+              b.currentStreak++;
+            } else if (b.currentStreak == 0 || b.lastReadDate.isEmpty) {
+              b.currentStreak = 1;
+            } else {
+              b.currentStreak = 1; // Gün atlandıysa seriyi 1'den başlat
+            }
+            b.lastReadDate = todayStr;
+            if (b.currentStreak > b.bestStreak) {
+              b.bestStreak = b.currentStreak;
+            }
           }
 
-          b.lastReadDate = todayStr;
-          if (b.currentStreak > b.bestStreak) {
-            b.bestStreak = b.currentStreak;
-          }
-
-          if (b.currentStreak >= b.targetDays && !b.isUnlocked) {
+          // 3. Kilit açma kontrolü (Toplam okuma veya seri hedefe ulaştığında)
+          if ((b.totalReadCount >= b.targetDays || b.currentStreak >= b.targetDays) && !b.isUnlocked) {
             b.isUnlocked = true;
             b.unlockedDate = DateTime.now();
           }

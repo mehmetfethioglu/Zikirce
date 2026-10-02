@@ -11,7 +11,7 @@ class BadgeService {
 
   BadgeService(this._db);
 
-  Future<List<Badge>> getBadges() async {
+  Future<List<Badge>> getBadges([String? sessionId]) async {
     final badges = <Badge>[];
 
     // 1. Zikir Rozetleri (Manevi Mertebeler)
@@ -68,33 +68,84 @@ class BadgeService {
         id: 'waqiah_40',
         category: 'Kuran',
         name: 'Vakıa Muhafızı',
-        description: '40 gün boyunca yatsıdan sonra kesintisiz Vakıa Sûresi okuyarak rızık bereketine erişin.',
+        description: '40 defa Vâkıa Sûresi okuyarak rızık ve bereket kapılarına erişin.',
         iconPath: 'assets/images/badge_waqiah.png',
         emoji: '💎',
         glowColor: const Color(0xFF2E7D32),
-        criteria: '40 Gün Yatsıdan Sonra',
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
         targetDays: 40,
       ),
       Badge(
         id: 'mulk_40',
         category: 'Kuran',
         name: 'Mülk Muhafızı',
-        description: '40 gün boyunca yatsıdan sonra kesintisiz Mülk Sûresi okuyarak kabir nuruna vesile olun.',
+        description: '40 defa Mülk Sûresi okuyarak kabir nuruna ve manevi şefaate vesile olun.',
         iconPath: 'assets/images/badge_mulk.png',
         emoji: '🌙',
         glowColor: const Color(0xFF1565C0),
-        criteria: '40 Gün Yatsıdan Sonra',
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
         targetDays: 40,
       ),
       Badge(
         id: 'naba_40',
         category: 'Kuran',
         name: 'Nebe Muhafızı',
-        description: '40 gün boyunca ikindiden sonra kesintisiz Nebe Sûresi okuyarak müjdelere nail olun.',
+        description: '40 defa Nebe Sûresi okuyarak büyük müjdelere ve hakikate nail olun.',
         iconPath: 'assets/images/badge_naba.png',
         emoji: '☀️',
         glowColor: const Color(0xFFEF6C00),
-        criteria: '40 Gün İkindiden Sonra',
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
+        targetDays: 40,
+      ),
+      Badge(
+        id: 'yasin_40',
+        category: 'Kuran',
+        name: 'Yâsîn Muhafızı',
+        description: '40 defa Yâsîn-i Şerîf okuyarak kalplerin nuruna ve hacetlerin kabulüne erişin.',
+        iconPath: 'assets/images/badge_quran_first.png',
+        emoji: '💚',
+        glowColor: const Color(0xFF00897B),
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
+        targetDays: 40,
+      ),
+      Badge(
+        id: 'fetih_40',
+        category: 'Kuran',
+        name: 'Fetih Muhafızı',
+        description: '40 defa Fetih Sûresi okuyarak manevi zafer ve hayırlı kapıların açılmasına vesile olun.',
+        iconPath: 'assets/images/badge_quran_10.png',
+        emoji: '🗡️',
+        glowColor: const Color(0xFFD81B60),
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
+        targetDays: 40,
+      ),
+      Badge(
+        id: 'rahman_40',
+        category: 'Kuran',
+        name: 'Rahmân Muhafızı',
+        description: '40 defa Rahmân Sûresi okuyarak sonsuz nimetlerin şükrüne nail olun.',
+        iconPath: 'assets/images/badge_quran_100.png',
+        emoji: '🌸',
+        glowColor: const Color(0xFF8E24AA),
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
+        targetDays: 40,
+      ),
+      Badge(
+        id: 'kehf_40',
+        category: 'Kuran',
+        name: 'Kehf Muhafızı',
+        description: '40 defa Kehf Sûresi okuyarak Cuma günlerinin nuruna ve fitnelerden korunma kalkanına sığının.',
+        iconPath: 'assets/images/badge_quran_first.png',
+        emoji: '⛰️',
+        glowColor: const Color(0xFF5D4037),
+        criteria: '40 Okuma Hedefi',
+        targetReadCount: 40,
         targetDays: 40,
       ),
       Badge(
@@ -105,7 +156,8 @@ class BadgeService {
         iconPath: 'assets/images/badge_sleep.png',
         emoji: '🛡️',
         glowColor: const Color(0xFF4A148C),
-        criteria: 'Her Gün Uyumadan Önce',
+        criteria: '40 Günlük Vird',
+        targetReadCount: 40,
         targetDays: 40,
       ),
       Badge(
@@ -257,49 +309,42 @@ class BadgeService {
         await markUnlocked(hundredPageBadge, earliestDate, 'Kuran');
       }
 
-      // 3. Special Surah Streaks Unlock Check
-      final waqiahStreak = max(
-        prefs.getInt('Streak_Waqiah') ?? 0,
-        prefs.getInt('BestStreak_Waqiah') ?? 0,
-      );
-      final waqiahBadge = badges.firstWhere((b) => b.id == 'waqiah_40');
-      waqiahBadge.targetDays = 40;
-      waqiahBadge.currentStreak = waqiahStreak;
-      if (waqiahStreak >= 40 || dbUnlockedSet.contains('waqiah_40')) {
-        await markUnlocked(waqiahBadge, earliestDate, 'Kuran');
+      // 3. Special Surah Streaks & Read Counts Unlock Check
+      int getSessionInt(String baseKey) {
+        final isDefault = sessionId == null || sessionId.isEmpty || sessionId == 'default_user';
+        final sfx = isDefault ? '' : '_$sessionId';
+        return prefs.getInt('$baseKey$sfx') ?? (isDefault ? prefs.getInt(baseKey) ?? 0 : 0);
       }
 
-      final mulkStreak = max(
-        prefs.getInt('Streak_Mulk') ?? 0,
-        prefs.getInt('BestStreak_Mulk') ?? 0,
-      );
-      final mulkBadge = badges.firstWhere((b) => b.id == 'mulk_40');
-      mulkBadge.targetDays = 40;
-      mulkBadge.currentStreak = mulkStreak;
-      if (mulkStreak >= 40 || dbUnlockedSet.contains('mulk_40')) {
-        await markUnlocked(mulkBadge, earliestDate, 'Kuran');
-      }
+      final surahBadgeConfigs = [
+        (badgeId: 'waqiah_40', key: 'Waqiah'),
+        (badgeId: 'mulk_40', key: 'Mulk'),
+        (badgeId: 'naba_40', key: 'Naba'),
+        (badgeId: 'yasin_40', key: 'Yasin'),
+        (badgeId: 'fetih_40', key: 'Fetih'),
+        (badgeId: 'rahman_40', key: 'Rahman'),
+        (badgeId: 'kehf_40', key: 'Kehf'),
+        (badgeId: 'sleep_protection', key: 'Sleep'),
+      ];
 
-      final nabaStreak = max(
-        prefs.getInt('Streak_Naba') ?? 0,
-        prefs.getInt('BestStreak_Naba') ?? 0,
-      );
-      final nabaBadge = badges.firstWhere((b) => b.id == 'naba_40');
-      nabaBadge.targetDays = 40;
-      nabaBadge.currentStreak = nabaStreak;
-      if (nabaStreak >= 40 || dbUnlockedSet.contains('naba_40')) {
-        await markUnlocked(nabaBadge, earliestDate, 'Kuran');
-      }
+      for (final cfg in surahBadgeConfigs) {
+        final streak = max(
+          getSessionInt('Streak_${cfg.key}'),
+          getSessionInt('BestStreak_${cfg.key}'),
+        );
+        final readCountRaw = getSessionInt('ReadCount_${cfg.key}');
+        // Migration: If readCount is 0 but streak exists, use streak as readCount
+        final readCount = max(readCountRaw, streak);
 
-      final sleepStreak = max(
-        prefs.getInt('Streak_Sleep') ?? 0,
-        prefs.getInt('BestStreak_Sleep') ?? 0,
-      );
-      final sleepBadge = badges.firstWhere((b) => b.id == 'sleep_protection');
-      sleepBadge.targetDays = 40;
-      sleepBadge.currentStreak = sleepStreak;
-      if (sleepStreak >= 40 || dbUnlockedSet.contains('sleep_protection')) {
-        await markUnlocked(sleepBadge, earliestDate, 'Kuran');
+        final badge = badges.firstWhere((b) => b.id == cfg.badgeId);
+        badge.targetReadCount = 40;
+        badge.targetDays = 40;
+        badge.totalReadCount = readCount;
+        badge.currentStreak = streak;
+
+        if (readCount >= 40 || streak >= 40 || dbUnlockedSet.contains(cfg.badgeId)) {
+          await markUnlocked(badge, earliestDate, 'Kuran');
+        }
       }
 
       // 4. Hatim Unlocks Check

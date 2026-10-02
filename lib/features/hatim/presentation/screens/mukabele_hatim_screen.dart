@@ -514,25 +514,29 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     final hatimId = widget.activeHatim?.id;
 
     // 1. Record Hatim page progress & today's reading goals
-    if (hatimId != null) {
-      await ref.read(hatimNotifierProvider).updateHatimPageProgress(
-            hatimId: hatimId,
-            targetPage: completedPage,
-          );
-      await ref
-          .read(hatimNotifierProvider)
-          .saveMukabeleLastPage(hatimId, (completedPage + 1).clamp(1, 604));
-    } else {
-      // If no active hatim attached, still record page reading for daily goals
-      final activeHatim = ref.read(activeMukabeleHatimProvider).valueOrNull;
-      if (activeHatim != null) {
+    try {
+      if (hatimId != null) {
         await ref.read(hatimNotifierProvider).updateHatimPageProgress(
-              hatimId: activeHatim.id,
+              hatimId: hatimId,
               targetPage: completedPage,
             );
-        await ref.read(hatimNotifierProvider).saveMukabeleLastPage(
-            activeHatim.id, (completedPage + 1).clamp(1, 604));
+        await ref
+            .read(hatimNotifierProvider)
+            .saveMukabeleLastPage(hatimId, (completedPage + 1).clamp(1, 604));
+      } else {
+        // If no active hatim attached, still record page reading for daily goals
+        final activeHatim = ref.read(activeMukabeleHatimProvider).valueOrNull;
+        if (activeHatim != null) {
+          await ref.read(hatimNotifierProvider).updateHatimPageProgress(
+                hatimId: activeHatim.id,
+                targetPage: completedPage,
+              );
+          await ref.read(hatimNotifierProvider).saveMukabeleLastPage(
+              activeHatim.id, (completedPage + 1).clamp(1, 604));
+        }
       }
+    } catch (e) {
+      debugPrint('[_MukabeleHatimScreenState] _handlePageCompleted error: $e');
     }
 
     CloudSyncEngine.instance.triggerDebouncedSync(ref);

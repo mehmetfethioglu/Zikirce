@@ -226,6 +226,10 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('PRAGMA journal_mode = WAL;');
         await customStatement('PRAGMA synchronous = NORMAL;');
         await customStatement('PRAGMA busy_timeout = 5000;');
+        await customStatement('PRAGMA temp_store = MEMORY;');
+        await customStatement('PRAGMA journal_size_limit = 4194304;'); // 4MB max journal/WAL size
+        await customStatement('PRAGMA wal_autocheckpoint = 500;');
+        await customStatement('PRAGMA wal_checkpoint(PASSIVE);');
       } catch (e) {
         debugPrint('[AppDatabase] beforeOpen pragma error: $e');
         try {
@@ -367,6 +371,9 @@ class AppDatabase extends _$AppDatabase {
 LazyDatabase _openConnection([String dbFileName = 'zikirce_app.sqlite']) {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
+    if (!dbFolder.existsSync()) {
+      await dbFolder.create(recursive: true);
+    }
     final file = File(p.join(dbFolder.path, dbFileName));
     return NativeDatabase.createInBackground(file);
   });

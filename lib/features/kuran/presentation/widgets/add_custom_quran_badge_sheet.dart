@@ -5,20 +5,23 @@ import '../../../../core/theme/app_theme_colors.dart';
 import '../../../gamification/models/badge_models.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/services/custom_badge_service.dart';
+import '../../../gamification/services/golden_day_service.dart';
+import '../../../../core/session/session_providers.dart';
 
 class AddCustomQuranBadgeSheet extends ConsumerStatefulWidget {
   final VoidCallback? onBadgeCreated;
+  final int? initialSurahId;
 
-  const AddCustomQuranBadgeSheet({super.key, this.onBadgeCreated});
+  const AddCustomQuranBadgeSheet({super.key, this.onBadgeCreated, this.initialSurahId});
 
-  static Future<void> show(BuildContext context, {VoidCallback? onBadgeCreated}) {
+  static Future<void> show(BuildContext context, {VoidCallback? onBadgeCreated, int? initialSurahId}) {
     return showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddCustomQuranBadgeSheet(onBadgeCreated: onBadgeCreated),
+      builder: (_) => AddCustomQuranBadgeSheet(onBadgeCreated: onBadgeCreated, initialSurahId: initialSurahId),
     );
   }
 
@@ -40,6 +43,20 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
   final List<String> _pageOptions = ['1 Sayfa/Gün', '3 Sayfa/Gün', '5 Sayfa/Gün', '10 Sayfa/Gün', '20 Sayfa/Gün'];
   final List<int> _targetDaysList = [7, 14, 21, 40, 100];
   final List<String> _emojis = ['📖', '✨', '🕌', '🌟', '📜', '🕊️'];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSurahId != null) {
+      _selectedScope = 'Sure Okuma';
+      final idx = SurahDataProvider.surahs.indexWhere((s) => s.id == widget.initialSurahId);
+      if (idx >= 0) {
+        _selectedSurahIndex = idx;
+        final s = SurahDataProvider.surahs[idx];
+        _titleController.text = '${s.name} Sûresi Rozeti';
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -99,6 +116,8 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
       scopeDisplayName = 'Hatim Okuma';
     }
 
+    final isFromImmediateReading = widget.initialSurahId != null;
+
     final newBadge = CustomQuranBadge(
       id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
       title: title,
@@ -106,11 +125,16 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
       scopeValue: scopeValue,
       scopeDisplayName: scopeDisplayName,
       targetDays: _selectedTargetDays,
+      totalReadCount: isFromImmediateReading ? 1 : 0,
+      currentStreak: isFromImmediateReading ? 1 : 0,
+      bestStreak: isFromImmediateReading ? 1 : 0,
+      lastReadDate: isFromImmediateReading ? GoldenDayService.getTodayStr() : '',
       iconEmoji: _selectedEmoji,
       glowColorHex: _selectedColorHex,
     );
 
-    await CustomBadgeService.saveCustomBadge(newBadge);
+    final activeSession = ref.read(activeSessionProvider);
+    await CustomBadgeService.saveCustomBadge(newBadge, activeSession.id);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
     widget.onBadgeCreated?.call();
 

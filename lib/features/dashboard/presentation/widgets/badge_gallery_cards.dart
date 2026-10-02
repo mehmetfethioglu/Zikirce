@@ -45,7 +45,7 @@ class BadgeGalleryCards extends ConsumerWidget {
             children: [
               Text('Kapsam: ${badge.scopeDisplayName}', style: TextStyle(fontSize: 13, color: colors.primaryText)),
               const SizedBox(height: 4),
-              Text('Hedef: ${badge.targetDays} Gün', style: TextStyle(fontSize: 13, color: colors.primaryText)),
+              Text('Hedef: ${badge.targetDays} Okuma', style: TextStyle(fontSize: 13, color: colors.primaryText)),
               const SizedBox(height: 4),
               Text(status, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: badge.glowColor)),
             ],
@@ -211,7 +211,7 @@ class BadgeGalleryCards extends ConsumerWidget {
           child: badgesAsync.when(
             data: (badges) {
               final defaultQuranBadges = badges.where((b) => b.category == 'Kuran').toList();
-              final customBadges = customBadgesAsync.value ?? [];
+              final customBadges = customBadgesAsync.valueOrNull ?? [];
 
               final totalItems = defaultQuranBadges.length + customBadges.length + 1; // +1 for "Yeni Rozet Ekle" card
 

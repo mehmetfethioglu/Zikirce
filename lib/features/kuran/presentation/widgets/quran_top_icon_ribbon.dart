@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/haptic_service.dart';
-import '../../../gamification/models/badge_models.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../hatim/providers/hatim_providers.dart';
-import '../../../ezber/providers/ezber_providers.dart';
 import '../../providers/tilavet_secdesi_provider.dart';
 import 'tilavet_secdesi_guide_sheet.dart';
 
@@ -43,8 +41,6 @@ class QuranTopIconRibbon extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final primaryTextColor =
-        isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
     final secondaryTextColor =
         isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
     final accentGreen =
@@ -68,7 +64,7 @@ class QuranTopIconRibbon extends ConsumerWidget {
         .toList();
     final unlockedBadges = unlockedBadgesAsync.valueOrNull ?? [];
     final customBadges = customBadgesAsync.valueOrNull ?? [];
-    final streaks = streaksAsync.value ?? const SurahStreaksData();
+    final streaks = streaksAsync.valueOrNull ?? const SurahStreaksData();
 
     final List<Widget> items = [];
 

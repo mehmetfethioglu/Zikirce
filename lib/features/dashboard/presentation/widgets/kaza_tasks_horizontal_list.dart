@@ -16,6 +16,13 @@ class KazaTasksHorizontalList extends ConsumerWidget {
 
   static final List<Map<String, dynamic>> _taskDefinitions = [
     {
+      'titleTr': 'Oruç',
+      'titleEn': 'Fasting',
+      'prayerKey': 'Oruç',
+      'asset': '',
+      'icon': Icons.nightlight_round,
+    },
+    {
       'titleTr': 'Sabah',
       'titleEn': 'Fajr',
       'prayerKey': 'Sabah',
@@ -171,20 +178,26 @@ class KazaTasksHorizontalList extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           alignment: Alignment.center,
-                          child: SvgPicture.asset(
-                            svgAsset,
-                            width: 18,
-                            height: 18,
-                            colorFilter: ColorFilter.mode(
-                              count > 0 ? colors.accent : colors.secondaryText,
-                              BlendMode.srcIn,
-                            ),
-                            placeholderBuilder: (_) => Icon(
-                              fallbackIcon,
-                              size: 18,
-                              color: count > 0 ? colors.accent : colors.secondaryText,
-                            ),
-                          ),
+                          child: svgAsset.isNotEmpty
+                              ? SvgPicture.asset(
+                                  svgAsset,
+                                  width: 18,
+                                  height: 18,
+                                  colorFilter: ColorFilter.mode(
+                                    count > 0 ? colors.accent : colors.secondaryText,
+                                    BlendMode.srcIn,
+                                  ),
+                                  placeholderBuilder: (_) => Icon(
+                                    fallbackIcon,
+                                    size: 18,
+                                    color: count > 0 ? colors.accent : colors.secondaryText,
+                                  ),
+                                )
+                              : Icon(
+                                  fallbackIcon,
+                                  size: 18,
+                                  color: count > 0 ? colors.accent : colors.secondaryText,
+                                ),
                         ),
 
                         // Title

@@ -85,7 +85,7 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
                 ? 'Tüm namaz vakitlerini, aktif vaktin geri sayımını ve Hicri tarihi gösterir.'
                 : 'Shows all prayer times, active prayer countdown, and Hijri date.',
             colors: colors,
-            child: _buildPrayerTimesTableMock(colors, prayerAsync.value),
+            child: _buildPrayerTimesTableMock(colors, prayerAsync.valueOrNull),
           ),
           const SizedBox(height: 16),
 
@@ -97,7 +97,7 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
                 ? 'Sonraki vakti ve kalan canlı süreyi tek satırda gösterir.'
                 : 'Displays the next prayer and live countdown in a compact bar.',
             colors: colors,
-            child: _buildPrayerTimesMiniMock(colors, prayerAsync.value),
+            child: _buildPrayerTimesMiniMock(colors, prayerAsync.valueOrNull),
           ),
           const SizedBox(height: 16),
 

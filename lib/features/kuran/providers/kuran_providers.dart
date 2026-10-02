@@ -253,7 +253,8 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    await _player.pause();
+    await _player.seek(Duration.zero);
     state = state.copyWith(isPlaying: false, currentWordOrder: 0);
   }
 

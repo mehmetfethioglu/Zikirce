@@ -33,8 +33,8 @@ class _AnnualHeatmapWidgetState extends ConsumerState<AnnualHeatmapWidget> {
 
     final contributionAsync = ref.watch(dailyZikirContributionProvider);
     final shieldedDatesAsync = ref.watch(shieldedDatesStreamProvider);
-    final data = widget.dailyCounts ?? contributionAsync.value ?? {};
-    final shieldedDates = shieldedDatesAsync.value ?? const <String>{};
+    final data = widget.dailyCounts ?? contributionAsync.valueOrNull ?? {};
+    final shieldedDates = shieldedDatesAsync.valueOrNull ?? const <String>{};
 
     return Container(
       padding: const EdgeInsets.all(16),

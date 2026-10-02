@@ -840,6 +840,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
   final String icon;
   final String badgeText;
   final List<Color> bgGradient;
+  final int readCount;
   final int streakDays;
   final int targetDays;
   final VoidCallback onStartReading;
@@ -851,6 +852,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     required this.icon,
     required this.badgeText,
     required this.bgGradient,
+    this.readCount = 0,
     required this.streakDays,
     this.targetDays = 40,
     required this.onStartReading,
@@ -863,6 +865,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     required String icon,
     required String badgeText,
     required List<Color> bgGradient,
+    int readCount = 0,
     required int streakDays,
     int targetDays = 40,
     required VoidCallback onStartReading,
@@ -880,6 +883,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
         icon: icon,
         badgeText: badgeText,
         bgGradient: bgGradient,
+        readCount: readCount,
         streakDays: streakDays,
         targetDays: targetDays,
         onStartReading: onStartReading,
@@ -898,8 +902,9 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     final borderStroke = isDark ? const Color(0xFF353C48) : const Color(0xFFDEE9E5);
     final accentColor = bgGradient.first;
 
-    final progressPct = ((streakDays / targetDays) * 100).clamp(0, 100).toInt();
-    final remainingDays = (targetDays - streakDays).clamp(0, targetDays);
+    final displayCount = readCount > 0 ? readCount : streakDays;
+    final progressPct = ((displayCount / targetDays) * 100).clamp(0, 100).toInt();
+    final remainingDays = (targetDays - displayCount).clamp(0, targetDays);
 
     return Container(
       constraints: BoxConstraints(
@@ -1017,22 +1022,22 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatColumn('Tamamlanan', '$streakDays Gün', accentColor),
+                    _buildStatColumn('Toplam Okuma', '$displayCount/$targetDays', accentColor),
                     Container(width: 1, height: 28, color: borderStroke),
-                    _buildStatColumn('Kalan', '$remainingDays Gün', secondaryTextColor),
+                    _buildStatColumn('Günlük Seri', streakDays > 0 ? '🔥 $streakDays Gün' : '0 Gün', const Color(0xFFEF6C00)),
                     Container(width: 1, height: 28, color: borderStroke),
-                    _buildStatColumn('Hedef', '$targetDays Gün', primaryTextColor),
+                    _buildStatColumn('Kalan', '$remainingDays', secondaryTextColor),
                   ],
                 ),
               ),
               const SizedBox(height: 18),
 
-              // 4. 40 Günlük Görsel İlerleme Izgarası (5x8)
+              // 4. 40 Okuma Görsel İlerleme Izgarası (5x8)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '40 Günlük Zincir Takvimi',
+                    '40 Okuma İlerleme Tablosu',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -1040,7 +1045,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    streakDays >= targetDays ? '🎉 Zincir Tamamlandı!' : '$streakDays/$targetDays Gün',
+                    displayCount >= targetDays ? '🎉 Hedef Tamamlandı!' : '$displayCount/$targetDays Okuma',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1069,8 +1074,8 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                   itemCount: targetDays,
                   itemBuilder: (context, index) {
                     final day = index + 1;
-                    final isDone = day <= streakDays;
-                    final isCurrent = day == streakDays + 1;
+                    final isDone = day <= displayCount;
+                    final isCurrent = day == displayCount + 1;
 
                     Color bg;
                     Color border;
@@ -1168,7 +1173,7 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                 },
                 icon: const Icon(Icons.auto_stories_rounded, size: 20),
                 label: Text(
-                  'Bugünkü Okumayı Başlat (${streakDays + 1}. Gün)',
+                  'Okumayı Başlat (${displayCount + 1}. Okuma)',
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                 ),
               ),

@@ -185,7 +185,8 @@ class BadgeDetailModal extends ConsumerWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('🔥 ', style: TextStyle(fontSize: 13)),
+                  Text(badge.targetReadCount > 0 ? '📖 ' : '🔥 ',
+                      style: const TextStyle(fontSize: 13)),
                   Text(
                     l10n.isTurkish ? 'İlerleme: ${badge.progressText}' : 'Progress: ${badge.progressText}',
                     style: TextStyle(

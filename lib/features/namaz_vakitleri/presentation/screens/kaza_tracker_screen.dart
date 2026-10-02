@@ -148,7 +148,10 @@ class KazaTrackerScreen extends ConsumerWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 icon: const Icon(Icons.check, size: 18),
-                label: const Text('Kıldım (-1)', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: Text(
+                  kaza.prayerType == 'Oruç' ? 'Tuttum (-1)' : 'Kıldım (-1)',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 onPressed: kaza.totalCount > 0
                     ? () => notifier.performKaza(kaza.prayerType)
                     : null,

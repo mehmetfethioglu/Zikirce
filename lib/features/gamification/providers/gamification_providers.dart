@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -119,6 +120,9 @@ final shieldedDatesStreamProvider = StreamProvider<Set<String>>((ref) {
   final db = ref.watch(databaseProvider);
   return db.select(db.streakGapDays).watch().asyncMap((_) async {
     return DailyStreakService.getShieldedDates(db);
+  }).handleError((error, stackTrace) {
+    debugPrint('[shieldedDatesStreamProvider] Error loading shielded dates: $error');
+    return <String>{};
   });
 });
 
@@ -178,8 +182,9 @@ final dailyGoalsStatusProvider = FutureProvider<DailyGoalsStatus>((ref) async {
 final allBadgesProvider = FutureProvider<List<Badge>>((ref) async {
   ref.watch(badgeRefreshTriggerProvider);
   ref.watch(unlockedBadgesStreamProvider);
+  final activeSession = ref.watch(activeSessionProvider);
   final service = ref.watch(badgeServiceProvider);
-  return service.getBadges();
+  return service.getBadges(activeSession.id);
 });
 
 final customBadgesProvider = FutureProvider<List<CustomQuranBadge>>((ref) async {
@@ -641,36 +646,72 @@ class GamificationNotifier extends StateNotifier<void> {
     String? effectiveStreakKey = streakKey;
     String? targetBadgeId;
     String? badgeTitle;
+    String? baseKey;
 
-    if (surah.id == 56 || effectiveStreakKey == 'Streak_Waqiah') {
+    if (surah.id == 56 || effectiveStreakKey == 'Streak_Waqiah' || effectiveStreakKey == 'waqiah') {
       effectiveStreakKey = 'Streak_Waqiah';
       targetBadgeId = 'waqiah_40';
       badgeTitle = 'Vakıa Muhafızı';
-    } else if (surah.id == 67 || effectiveStreakKey == 'Streak_Mulk') {
+      baseKey = 'Waqiah';
+    } else if (surah.id == 67 || effectiveStreakKey == 'Streak_Mulk' || effectiveStreakKey == 'mulk') {
       effectiveStreakKey = 'Streak_Mulk';
       targetBadgeId = 'mulk_40';
       badgeTitle = 'Mülk Muhafızı';
-    } else if (surah.id == 78 || effectiveStreakKey == 'Streak_Naba') {
+      baseKey = 'Mulk';
+    } else if (surah.id == 78 || effectiveStreakKey == 'Streak_Naba' || effectiveStreakKey == 'naba') {
       effectiveStreakKey = 'Streak_Naba';
       targetBadgeId = 'naba_40';
       badgeTitle = 'Nebe Muhafızı';
-    } else if (surah.id >= 112 || effectiveStreakKey == 'Streak_Sleep') {
+      baseKey = 'Naba';
+    } else if (surah.id == 36 || effectiveStreakKey == 'Streak_Yasin' || effectiveStreakKey == 'yasin') {
+      effectiveStreakKey = 'Streak_Yasin';
+      targetBadgeId = 'yasin_40';
+      badgeTitle = 'Yâsîn Muhafızı';
+      baseKey = 'Yasin';
+    } else if (surah.id == 48 || effectiveStreakKey == 'Streak_Fetih' || effectiveStreakKey == 'fetih') {
+      effectiveStreakKey = 'Streak_Fetih';
+      targetBadgeId = 'fetih_40';
+      badgeTitle = 'Fetih Muhafızı';
+      baseKey = 'Fetih';
+    } else if (surah.id == 55 || effectiveStreakKey == 'Streak_Rahman' || effectiveStreakKey == 'rahman') {
+      effectiveStreakKey = 'Streak_Rahman';
+      targetBadgeId = 'rahman_40';
+      badgeTitle = 'Rahmân Muhafızı';
+      baseKey = 'Rahman';
+    } else if (surah.id == 18 || effectiveStreakKey == 'Streak_Kehf' || effectiveStreakKey == 'kehf') {
+      effectiveStreakKey = 'Streak_Kehf';
+      targetBadgeId = 'kehf_40';
+      badgeTitle = 'Kehf Muhafızı';
+      baseKey = 'Kehf';
+    } else if (surah.id >= 112 || effectiveStreakKey == 'Streak_Sleep' || effectiveStreakKey == 'sleep') {
       effectiveStreakKey = 'Streak_Sleep';
       targetBadgeId = 'sleep_protection';
       badgeTitle = 'Gece Sığınağı';
+      baseKey = 'Sleep';
     }
 
     int newStreak = 0;
+    int newReadCount = 0;
     bool isBadgeUnlocked = false;
 
     final activeSession = ref.read(activeSessionProvider);
     final isDefault = activeSession.id == UserSession.defaultSessionId;
     final sfx = isDefault ? '' : '_${activeSession.id}';
 
-    if (effectiveStreakKey != null) {
-      final lastDateKey = 'LastDate_$effectiveStreakKey$sfx';
-      final lastDate = prefs.getString(lastDateKey) ?? (isDefault ? prefs.getString('LastDate_$effectiveStreakKey') : null);
-      final curStreak = prefs.getInt('$effectiveStreakKey$sfx') ?? (isDefault ? prefs.getInt(effectiveStreakKey) ?? 0 : 0);
+    if (baseKey != null) {
+      // 1. Kümülatif Toplam Okuma Sayısı (HER OKUMADA +1 artar)
+      final readCountKey = 'ReadCount_$baseKey$sfx';
+      final curReadCount = prefs.getInt(readCountKey) ?? (isDefault ? prefs.getInt('ReadCount_$baseKey') ?? 0 : 0);
+      newReadCount = curReadCount + 1;
+      await prefs.setInt(readCountKey, newReadCount);
+      if (isDefault) {
+        await prefs.setInt('ReadCount_$baseKey', newReadCount);
+      }
+
+      // 2. Günlük Seri Takibi (Günde en fazla 1 gün ilerler)
+      final lastDateKey = 'LastDate_Streak_$baseKey$sfx';
+      final lastDate = prefs.getString(lastDateKey) ?? (isDefault ? prefs.getString('LastDate_Streak_$baseKey') : null);
+      final curStreak = prefs.getInt('Streak_$baseKey$sfx') ?? (isDefault ? prefs.getInt('Streak_$baseKey') ?? 0 : 0);
 
       if (lastDate != todayStr) {
         final yesterday = DateTime.now().subtract(const Duration(days: 1));
@@ -684,41 +725,43 @@ class GamificationNotifier extends StateNotifier<void> {
           newStreak = 1; // reset streak if gap > 1
         }
 
-        await prefs.setInt('$effectiveStreakKey$sfx', newStreak);
+        await prefs.setInt('Streak_$baseKey$sfx', newStreak);
         await prefs.setString(lastDateKey, todayStr);
         if (isDefault) {
-          await prefs.setInt(effectiveStreakKey, newStreak);
-          await prefs.setString('LastDate_$effectiveStreakKey', todayStr);
+          await prefs.setInt('Streak_$baseKey', newStreak);
+          await prefs.setString('LastDate_Streak_$baseKey', todayStr);
         }
 
-        final bestKey = 'Best$effectiveStreakKey$sfx';
-        final best = prefs.getInt(bestKey) ?? (isDefault ? prefs.getInt('Best$effectiveStreakKey') ?? 0 : 0);
+        final bestKey = 'BestStreak_$baseKey$sfx';
+        final best = prefs.getInt(bestKey) ?? (isDefault ? prefs.getInt('BestStreak_$baseKey') ?? 0 : 0);
         if (newStreak > best) {
           await prefs.setInt(bestKey, newStreak);
           if (isDefault) {
-            await prefs.setInt('Best$effectiveStreakKey', newStreak);
-          }
-        }
-
-        // Check 40 days badge
-        final finalBadgeId = targetBadgeId;
-        if (finalBadgeId != null && newStreak >= 40) {
-          final existing = await (db.select(db.unlockedBadges)..where((t) => t.badgeId.equals(finalBadgeId))).getSingleOrNull();
-          if (existing == null) {
-            await db.into(db.unlockedBadges).insert(
-              UnlockedBadgesCompanion.insert(
-                badgeId: finalBadgeId,
-                unlockedAt: Value(DateTime.now()),
-                category: const Value('Kuran'),
-              ),
-            );
-            isBadgeUnlocked = true;
+            await prefs.setInt('BestStreak_$baseKey', newStreak);
           }
         }
       } else {
         newStreak = curStreak;
       }
+
+      // 3. 40 Okuma veya 40 Günlük Seri Tamamlama Kontrolü
+      if (targetBadgeId != null && (newReadCount >= 40 || newStreak >= 40)) {
+        final existing = await (db.select(db.unlockedBadges)..where((t) => t.badgeId.equals(targetBadgeId!))).getSingleOrNull();
+        if (existing == null) {
+          await db.into(db.unlockedBadges).insert(
+            UnlockedBadgesCompanion.insert(
+              badgeId: targetBadgeId,
+              unlockedAt: Value(DateTime.now()),
+              category: const Value('Kuran'),
+            ),
+          );
+          isBadgeUnlocked = true;
+        }
+      }
     }
+
+    // 4. Kullanıcının oluşturduğu özel rozetleri de güncelle
+    await CustomBadgeService.onSurahRead(surah.id, activeSession.id);
 
     // Add XP (+50 Gold) to user balance & user streak table
     const xpGained = 50;
@@ -766,6 +809,7 @@ class GamificationNotifier extends StateNotifier<void> {
       surah: surah,
       xpGained: xpGained,
       currentStreak: newStreak,
+      readCount: newReadCount,
       isStreakSurah: effectiveStreakKey != null,
       isBadgeUnlocked: isBadgeUnlocked,
       unlockedBadgeName: badgeTitle,
@@ -794,6 +838,7 @@ class SurahCompletionResult {
   final SureItem surah;
   final int xpGained;
   final int currentStreak;
+  final int readCount;
   final bool isStreakSurah;
   final bool isBadgeUnlocked;
   final String? unlockedBadgeName;
@@ -802,6 +847,7 @@ class SurahCompletionResult {
     required this.surah,
     this.xpGained = 50,
     this.currentStreak = 1,
+    this.readCount = 1,
     this.isStreakSurah = false,
     this.isBadgeUnlocked = false,
     this.unlockedBadgeName,
@@ -812,13 +858,38 @@ class SurahStreaksData {
   final int waqiahStreak;
   final int mulkStreak;
   final int nabaStreak;
+  final int yasinStreak;
+  final int fetihStreak;
+  final int rahmanStreak;
+  final int kehfStreak;
   final int sleepStreak;
+
+  final int waqiahReadCount;
+  final int mulkReadCount;
+  final int nabaReadCount;
+  final int yasinReadCount;
+  final int fetihReadCount;
+  final int rahmanReadCount;
+  final int kehfReadCount;
+  final int sleepReadCount;
 
   const SurahStreaksData({
     this.waqiahStreak = 0,
     this.mulkStreak = 0,
     this.nabaStreak = 0,
+    this.yasinStreak = 0,
+    this.fetihStreak = 0,
+    this.rahmanStreak = 0,
+    this.kehfStreak = 0,
     this.sleepStreak = 0,
+    this.waqiahReadCount = 0,
+    this.mulkReadCount = 0,
+    this.nabaReadCount = 0,
+    this.yasinReadCount = 0,
+    this.fetihReadCount = 0,
+    this.rahmanReadCount = 0,
+    this.kehfReadCount = 0,
+    this.sleepReadCount = 0,
   });
 }
 
@@ -828,11 +899,35 @@ final surahStreaksProvider = FutureProvider<SurahStreaksData>((ref) async {
   final isDefault = activeSession.id == UserSession.defaultSessionId;
   final sfx = isDefault ? '' : '_${activeSession.id}';
   final prefs = await SharedPreferences.getInstance();
+
+  int getVal(String key) => prefs.getInt('$key$sfx') ?? (isDefault ? prefs.getInt(key) ?? 0 : 0);
+
+  final wStreak = getVal('Streak_Waqiah');
+  final mStreak = getVal('Streak_Mulk');
+  final nStreak = getVal('Streak_Naba');
+  final yStreak = getVal('Streak_Yasin');
+  final fStreak = getVal('Streak_Fetih');
+  final rStreak = getVal('Streak_Rahman');
+  final kStreak = getVal('Streak_Kehf');
+  final sStreak = getVal('Streak_Sleep');
+
   return SurahStreaksData(
-    waqiahStreak: prefs.getInt('Streak_Waqiah$sfx') ?? (isDefault ? prefs.getInt('Streak_Waqiah') ?? 0 : 0),
-    mulkStreak: prefs.getInt('Streak_Mulk$sfx') ?? (isDefault ? prefs.getInt('Streak_Mulk') ?? 0 : 0),
-    nabaStreak: prefs.getInt('Streak_Naba$sfx') ?? (isDefault ? prefs.getInt('Streak_Naba') ?? 0 : 0),
-    sleepStreak: prefs.getInt('Streak_Sleep$sfx') ?? (isDefault ? prefs.getInt('Streak_Sleep') ?? 0 : 0),
+    waqiahStreak: wStreak,
+    mulkStreak: mStreak,
+    nabaStreak: nStreak,
+    yasinStreak: yStreak,
+    fetihStreak: fStreak,
+    rahmanStreak: rStreak,
+    kehfStreak: kStreak,
+    sleepStreak: sStreak,
+    waqiahReadCount: max(getVal('ReadCount_Waqiah'), wStreak),
+    mulkReadCount: max(getVal('ReadCount_Mulk'), mStreak),
+    nabaReadCount: max(getVal('ReadCount_Naba'), nStreak),
+    yasinReadCount: max(getVal('ReadCount_Yasin'), yStreak),
+    fetihReadCount: max(getVal('ReadCount_Fetih'), fStreak),
+    rahmanReadCount: max(getVal('ReadCount_Rahman'), rStreak),
+    kehfReadCount: max(getVal('ReadCount_Kehf'), kStreak),
+    sleepReadCount: max(getVal('ReadCount_Sleep'), sStreak),
   );
 });
 

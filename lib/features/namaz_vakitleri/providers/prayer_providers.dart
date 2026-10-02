@@ -185,8 +185,9 @@ final kazaSummaryProvider = Provider<KazaSummary>((ref) {
           generalMeltedPercent: 0.0,
         );
       }
-      final remaining = list.fold<int>(0, (sum, k) => sum + k.totalCount);
-      final completed = list.fold<int>(0, (sum, k) => sum + k.completedCount);
+      final prayerList = list.where((k) => k.prayerType != 'Oruç');
+      final remaining = prayerList.fold<int>(0, (sum, k) => sum + k.totalCount);
+      final completed = prayerList.fold<int>(0, (sum, k) => sum + k.completedCount);
       final total = remaining + completed;
       final generalPct = total > 0 ? (completed / total).clamp(0.0, 1.0) : 0.0;
       final weeklyPct = (completed / 45.0).clamp(0.0, 1.0);
@@ -287,10 +288,12 @@ class KazaNotifier extends StateNotifier<void> {
         ),
       );
 
-      final prefs = await SharedPreferences.getInstance();
-      final todayStr = GoldenDayService.getTodayStr();
-      final curCount = prefs.getInt('TodayKazaCount_$todayStr') ?? 0;
-      await prefs.setInt('TodayKazaCount_$todayStr', curCount + 1);
+      if (prayerType != 'Oruç') {
+        final prefs = await SharedPreferences.getInstance();
+        final todayStr = GoldenDayService.getTodayStr();
+        final curCount = prefs.getInt('TodayKazaCount_$todayStr') ?? 0;
+        await prefs.setInt('TodayKazaCount_$todayStr', curCount + 1);
+      }
 
       await DailyStreakService.recordDailyActivity(db);
       ref.read(badgeRefreshTriggerProvider.notifier).state++;

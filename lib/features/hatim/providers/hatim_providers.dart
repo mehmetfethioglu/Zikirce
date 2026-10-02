@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
@@ -93,24 +94,30 @@ class HatimNotifier extends StateNotifier<void> {
     final db = ref.read(databaseProvider);
     final id = 'hatim_${DateTime.now().millisecondsSinceEpoch}';
 
-    await db.into(db.hatims).insert(
-      HatimsCompanion.insert(
-        id: id,
-        title: title,
-        isGroup: Value(isGroup),
-        targetDate: Value(targetDate),
-      ),
-    );
+    try {
+      await db.transaction(() async {
+        await db.into(db.hatims).insert(
+          HatimsCompanion.insert(
+            id: id,
+            title: title,
+            isGroup: Value(isGroup),
+            targetDate: Value(targetDate),
+          ),
+        );
 
-    // Create 30 Juz progress items
-    for (int j = 1; j <= 30; j++) {
-      await db.into(db.hatimCuzProgresses).insert(
-        HatimCuzProgressesCompanion.insert(
-          hatimId: id,
-          juzNo: j,
-          isCompleted: const Value(false),
-        ),
-      );
+        // Create 30 Juz progress items
+        for (int j = 1; j <= 30; j++) {
+          await db.into(db.hatimCuzProgresses).insert(
+            HatimCuzProgressesCompanion.insert(
+              hatimId: id,
+              juzNo: j,
+              isCompleted: const Value(false),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('[HatimNotifier] createHatim DB error: $e');
     }
   }
 
@@ -119,26 +126,32 @@ class HatimNotifier extends StateNotifier<void> {
     final prefs = await SharedPreferences.getInstance();
     final todayStr = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
 
-    await (db.update(db.hatimCuzProgresses)
-          ..where((t) => t.hatimId.equals(hatimId) & t.juzNo.equals(juzNo)))
-        .write(
-      HatimCuzProgressesCompanion(
-        isCompleted: Value(isCompleted),
-        completedAt: Value(isCompleted ? DateTime.now() : null),
-      ),
-    );
+    try {
+      await db.transaction(() async {
+        await (db.update(db.hatimCuzProgresses)
+              ..where((t) => t.hatimId.equals(hatimId) & t.juzNo.equals(juzNo)))
+            .write(
+          HatimCuzProgressesCompanion(
+            isCompleted: Value(isCompleted),
+            completedAt: Value(isCompleted ? DateTime.now() : null),
+          ),
+        );
 
-    // Update total completed pages
-    final allJuz = await (db.select(db.hatimCuzProgresses)..where((t) => t.hatimId.equals(hatimId))).get();
-    final completedCount = allJuz.where((j) => j.isCompleted).length;
-    final compPages = completedCount * 20;
+        // Update total completed pages
+        final allJuz = await (db.select(db.hatimCuzProgresses)..where((t) => t.hatimId.equals(hatimId))).get();
+        final completedCount = allJuz.where((j) => j.isCompleted).length;
+        final compPages = completedCount * 20;
 
-    await (db.update(db.hatims)..where((t) => t.id.equals(hatimId))).write(
-      HatimsCompanion(
-        completedPages: Value(compPages),
-        isCompleted: Value(completedCount >= 30),
-      ),
-    );
+        await (db.update(db.hatims)..where((t) => t.id.equals(hatimId))).write(
+          HatimsCompanion(
+            completedPages: Value(compPages),
+            isCompleted: Value(completedCount >= 30),
+          ),
+        );
+      });
+    } catch (e) {
+      debugPrint('[HatimNotifier] toggleJuzCompletion DB error: $e');
+    }
 
     if (isCompleted) {
       final activeSession = ref.read(activeSessionProvider);
@@ -175,34 +188,45 @@ class HatimNotifier extends StateNotifier<void> {
     final prefs = await SharedPreferences.getInstance();
     final todayStr = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
 
-    final hatim = await (db.select(db.hatims)..where((t) => t.id.equals(hatimId))).getSingleOrNull();
+    Hatim? hatim;
+    try {
+      hatim = await (db.select(db.hatims)..where((t) => t.id.equals(hatimId))).getSingleOrNull();
+    } catch (e) {
+      debugPrint('[HatimNotifier] updateHatimPageProgress select error: $e');
+    }
     if (hatim == null) return;
 
     final oldPages = hatim.completedPages;
     final newPages = targetPage > oldPages ? targetPage : oldPages;
     final isDone = newPages >= 604;
 
-    // Update Hatim table
-    await (db.update(db.hatims)..where((t) => t.id.equals(hatimId))).write(
-      HatimsCompanion(
-        completedPages: Value(newPages),
-        isCompleted: Value(isDone),
-      ),
-    );
-
-    // Update 30 Juz progress
-    final completedJuzCount = (newPages / 20).floor().clamp(0, 30);
-    for (int j = 1; j <= 30; j++) {
-      if (j <= completedJuzCount) {
-        await (db.update(db.hatimCuzProgresses)
-              ..where((t) => t.hatimId.equals(hatimId) & t.juzNo.equals(j)))
-            .write(
-          HatimCuzProgressesCompanion(
-            isCompleted: const Value(true),
-            completedAt: Value(DateTime.now()),
+    try {
+      await db.transaction(() async {
+        // Update Hatim table
+        await (db.update(db.hatims)..where((t) => t.id.equals(hatimId))).write(
+          HatimsCompanion(
+            completedPages: Value(newPages),
+            isCompleted: Value(isDone),
           ),
         );
-      }
+
+        // Update 30 Juz progress
+        final completedJuzCount = (newPages / 20).floor().clamp(0, 30);
+        for (int j = 1; j <= 30; j++) {
+          if (j <= completedJuzCount) {
+            await (db.update(db.hatimCuzProgresses)
+                  ..where((t) => t.hatimId.equals(hatimId) & t.juzNo.equals(j)))
+                .write(
+              HatimCuzProgressesCompanion(
+                isCompleted: const Value(true),
+                completedAt: Value(DateTime.now()),
+              ),
+            );
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('[HatimNotifier] updateHatimPageProgress DB transaction error: $e');
     }
 
     // Award XP & Track Reading Pages (Only when advancing forward)
@@ -240,15 +264,19 @@ class HatimNotifier extends StateNotifier<void> {
 
     // Check Hatim Badges
     if (isDone) {
-      final existing = await (db.select(db.unlockedBadges)..where((t) => t.badgeId.equals('hatim_completed'))).getSingleOrNull();
-      if (existing == null) {
-        await db.into(db.unlockedBadges).insert(
-          UnlockedBadgesCompanion.insert(
-            badgeId: 'hatim_completed',
-            unlockedAt: Value(DateTime.now()),
-            category: const Value('Kuran'),
-          ),
-        );
+      try {
+        final existing = await (db.select(db.unlockedBadges)..where((t) => t.badgeId.equals('hatim_completed'))).getSingleOrNull();
+        if (existing == null) {
+          await db.into(db.unlockedBadges).insert(
+            UnlockedBadgesCompanion.insert(
+              badgeId: 'hatim_completed',
+              unlockedAt: Value(DateTime.now()),
+              category: const Value('Kuran'),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('[HatimNotifier] updateHatimPageProgress badge insert error: $e');
       }
     }
 
@@ -267,27 +295,33 @@ class HatimNotifier extends StateNotifier<void> {
     final id = 'mukabele_${DateTime.now().millisecondsSinceEpoch}';
     final initialCompletedPages = (startPage > 1 ? startPage - 1 : 0).clamp(0, 604);
 
-    await db.into(db.hatims).insert(
-      HatimsCompanion.insert(
-        id: id,
-        title: title,
-        isGroup: Value(isGroup),
-        targetDate: Value(targetDate),
-        completedPages: Value(initialCompletedPages),
-      ),
-    );
+    try {
+      await db.transaction(() async {
+        await db.into(db.hatims).insert(
+          HatimsCompanion.insert(
+            id: id,
+            title: title,
+            isGroup: Value(isGroup),
+            targetDate: Value(targetDate),
+            completedPages: Value(initialCompletedPages),
+          ),
+        );
 
-    // Create 30 Juz progress items
-    for (int j = 1; j <= 30; j++) {
-      final isDone = initialCompletedPages >= j * 20;
-      await db.into(db.hatimCuzProgresses).insert(
-        HatimCuzProgressesCompanion.insert(
-          hatimId: id,
-          juzNo: j,
-          isCompleted: Value(isDone),
-          completedAt: Value(isDone ? DateTime.now() : null),
-        ),
-      );
+        // Create 30 Juz progress items
+        for (int j = 1; j <= 30; j++) {
+          final isDone = initialCompletedPages >= j * 20;
+          await db.into(db.hatimCuzProgresses).insert(
+            HatimCuzProgressesCompanion.insert(
+              hatimId: id,
+              juzNo: j,
+              isCompleted: Value(isDone),
+              completedAt: Value(isDone ? DateTime.now() : null),
+            ),
+          );
+        }
+      });
+    } catch (e) {
+      debugPrint('[HatimNotifier] createMukabeleHatim DB error: $e');
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -316,11 +350,17 @@ class HatimNotifier extends StateNotifier<void> {
   Future<void> deleteHatim(String hatimId) async {
     final db = ref.read(databaseProvider);
 
-    // Delete juz progresses
-    await (db.delete(db.hatimCuzProgresses)..where((t) => t.hatimId.equals(hatimId))).go();
+    try {
+      await db.transaction(() async {
+        // Delete juz progresses
+        await (db.delete(db.hatimCuzProgresses)..where((t) => t.hatimId.equals(hatimId))).go();
 
-    // Delete hatim
-    await (db.delete(db.hatims)..where((t) => t.id.equals(hatimId))).go();
+        // Delete hatim
+        await (db.delete(db.hatims)..where((t) => t.id.equals(hatimId))).go();
+      });
+    } catch (e) {
+      debugPrint('[HatimNotifier] deleteHatim DB error: $e');
+    }
 
     // Clean up preferences
     final prefs = await SharedPreferences.getInstance();

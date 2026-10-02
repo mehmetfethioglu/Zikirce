@@ -300,12 +300,16 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  context.l10n.isTurkish ? '$prayerName Namazı Kaza Telafisi' : '$prayerName Missed Prayer Make-up',
+                  prayerName == 'Oruç'
+                      ? (context.l10n.isTurkish ? 'Oruç Kazası Telafisi' : 'Missed Fasting Make-up')
+                      : (context.l10n.isTurkish ? '$prayerName Namazı Kaza Telafisi' : '$prayerName Missed Prayer Make-up'),
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colors.primaryText),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  context.l10n.isTurkish ? 'Mevcut Kaza Borcu: $count Vakit' : 'Current Missed Debt: $count Times',
+                  prayerName == 'Oruç'
+                      ? (context.l10n.isTurkish ? 'Mevcut Kaza Borcu: $count Gün' : 'Current Missed Debt: $count Days')
+                      : (context.l10n.isTurkish ? 'Mevcut Kaza Borcu: $count Vakit' : 'Current Missed Debt: $count Times'),
                   style: TextStyle(fontSize: 14, color: colors.secondaryTextAlt),
                 ),
                 const SizedBox(height: 20),
@@ -323,7 +327,11 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                           ref.read(kazaNotifierProvider).adjustKaza(prayerName, 1);
                           Navigator.of(ctx).pop();
                         },
-                        child: Text(context.l10n.isTurkish ? '+1 Kaza Ekle' : '+1 Add Missed'),
+                        child: Text(
+                          prayerName == 'Oruç'
+                              ? (context.l10n.isTurkish ? '+1 Gün Ekle' : '+1 Add Day')
+                              : (context.l10n.isTurkish ? '+1 Kaza Ekle' : '+1 Add Missed'),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -338,11 +346,19 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                         onPressed: () {
                           ref.read(kazaNotifierProvider).performKaza(prayerName);
                           Navigator.of(ctx).pop();
+                          final message = prayerName == 'Oruç'
+                              ? (context.l10n.isTurkish ? 'Allah kabul etsin, oruç kazası kaydedildi.' : 'May Allah accept it, missed fast recorded.')
+                              : (context.l10n.isTurkish ? '$prayerName kaza namazı kaydedildi.' : '$prayerName missed prayer recorded.');
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(context.l10n.isTurkish ? '$prayerName kaza namazı kaydedildi.' : '$prayerName missed prayer recorded.')),
+                            SnackBar(content: Text(message)),
                           );
                         },
-                        child: Text(context.l10n.isTurkish ? 'Kılındı (-1)' : 'Prayed (-1)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          prayerName == 'Oruç'
+                              ? (context.l10n.isTurkish ? 'Tutuldu (-1)' : 'Fasted (-1)')
+                              : (context.l10n.isTurkish ? 'Kılındı (-1)' : 'Prayed (-1)'),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],

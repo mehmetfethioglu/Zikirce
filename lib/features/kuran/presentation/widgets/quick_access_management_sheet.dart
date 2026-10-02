@@ -58,9 +58,13 @@ class QuickAccessManagementSheet extends ConsumerWidget {
     // 3. System Cards
     allCards.add((id: 'card_dynamic_surah', title: 'Günün Sûresi (Dinamik)', icon: '📖', isHatim: false));
     allCards.add((id: 'card_shortcut', title: 'Hızlı Kısayol Kartı', icon: '✨', isHatim: false));
-    allCards.add((id: 'card_streak_waqiah', title: 'Vâkıa Sûresi (40 Günlük Seri)', icon: '🌿', isHatim: false));
-    allCards.add((id: 'card_streak_mulk', title: 'Mülk Sûresi (40 Günlük Seri)', icon: '🌌', isHatim: false));
-    allCards.add((id: 'card_streak_naba', title: 'Nebe Sûresi (40 Günlük Seri)', icon: '🌅', isHatim: false));
+    allCards.add((id: 'card_streak_waqiah', title: 'Vâkıa Sûresi (40 Okuma)', icon: '🌿', isHatim: false));
+    allCards.add((id: 'card_streak_mulk', title: 'Mülk Sûresi (40 Okuma)', icon: '🌌', isHatim: false));
+    allCards.add((id: 'card_streak_naba', title: 'Nebe Sûresi (40 Okuma)', icon: '🌅', isHatim: false));
+    allCards.add((id: 'card_streak_yasin', title: 'Yâsîn Sûresi (40 Okuma)', icon: '💚', isHatim: false));
+    allCards.add((id: 'card_streak_fetih', title: 'Fetih Sûresi (40 Okuma)', icon: '🗡️', isHatim: false));
+    allCards.add((id: 'card_streak_rahman', title: 'Rahmân Sûresi (40 Okuma)', icon: '🌸', isHatim: false));
+    allCards.add((id: 'card_streak_kehf', title: 'Kehf Sûresi (40 Okuma)', icon: '⛰️', isHatim: false));
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,

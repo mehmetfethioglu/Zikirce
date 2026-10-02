@@ -239,7 +239,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     final hatimStats = hatimStatsAsync.valueOrNull;
     final plansAsync = ref.watch(memorizationPlansStreamProvider);
     final streaksAsync = ref.watch(surahStreaksProvider);
-    final streaks = streaksAsync.value ?? const SurahStreaksData();
+    final streaks = streaksAsync.valueOrNull ?? const SurahStreaksData();
     final todayHafizLog = ref.watch(todayHafizlikLogProvider).valueOrNull;
 
     return Scaffold(
@@ -800,18 +800,19 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     // 5. Streak Cards
     allEntries.add((
       id: 'card_streak_waqiah',
-      title: 'Vâkıa 40 Gün',
+      title: 'Vâkıa 40 Okuma',
       icon: '🌿',
       isHatim: false,
       hatimId: null,
       widget: _buildStreakCard(
         title: 'Vâkıa',
-        subtitle: '40 Günlük Seri',
+        subtitle: streaks.waqiahStreak > 1 ? '🔥 ${streaks.waqiahStreak} Günlük Seri' : '40 Okuma Hedefi',
         icon: '🌿',
         badgeText: 'Rızık ve Bereket',
         bgGradient: const [Color(0xFF0F766E), Color(0xFF064E3B)],
+        readCount: streaks.waqiahReadCount,
         streakDays: streaks.waqiahStreak,
-        startPage: 533,
+        startPage: 534,
         surahId: 56,
         streakKey: 'waqiah',
       ),
@@ -819,18 +820,19 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
 
     allEntries.add((
       id: 'card_streak_mulk',
-      title: 'Mülk 40 Gün',
+      title: 'Mülk 40 Okuma',
       icon: '🌌',
       isHatim: false,
       hatimId: null,
       widget: _buildStreakCard(
         title: 'Mülk',
-        subtitle: '40 Günlük Seri',
+        subtitle: streaks.mulkStreak > 1 ? '🔥 ${streaks.mulkStreak} Günlük Seri' : '40 Okuma Hedefi',
         icon: '🌌',
         badgeText: 'Kabir Aydınlığı',
         bgGradient: const [Color(0xFF312E81), Color(0xFF1E1B4B)],
+        readCount: streaks.mulkReadCount,
         streakDays: streaks.mulkStreak,
-        startPage: 561,
+        startPage: 562,
         surahId: 67,
         streakKey: 'mulk',
       ),
@@ -838,20 +840,101 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
 
     allEntries.add((
       id: 'card_streak_naba',
-      title: 'Nebe 40 Gün',
+      title: 'Nebe 40 Okuma',
       icon: '🌅',
       isHatim: false,
       hatimId: null,
       widget: _buildStreakCard(
         title: 'Nebe',
-        subtitle: '40 Günlük Seri',
+        subtitle: streaks.nabaStreak > 1 ? '🔥 ${streaks.nabaStreak} Günlük Seri' : '40 Okuma Hedefi',
         icon: '🌅',
         badgeText: 'Kıyamet Haberi',
         bgGradient: const [Color(0xFF7C2D12), Color(0xFF451A03)],
+        readCount: streaks.nabaReadCount,
         streakDays: streaks.nabaStreak,
-        startPage: 581,
+        startPage: 582,
         surahId: 78,
         streakKey: 'naba',
+      ),
+    ));
+
+    allEntries.add((
+      id: 'card_streak_yasin',
+      title: 'Yâsîn 40 Okuma',
+      icon: '💚',
+      isHatim: false,
+      hatimId: null,
+      widget: _buildStreakCard(
+        title: 'Yâsîn',
+        subtitle: streaks.yasinStreak > 1 ? '🔥 ${streaks.yasinStreak} Günlük Seri' : '40 Okuma Hedefi',
+        icon: '💚',
+        badgeText: 'Kalbin Nuru',
+        bgGradient: const [Color(0xFF047857), Color(0xFF064E3B)],
+        readCount: streaks.yasinReadCount,
+        streakDays: streaks.yasinStreak,
+        startPage: 440,
+        surahId: 36,
+        streakKey: 'yasin',
+      ),
+    ));
+
+    allEntries.add((
+      id: 'card_streak_fetih',
+      title: 'Fetih 40 Okuma',
+      icon: '🗡️',
+      isHatim: false,
+      hatimId: null,
+      widget: _buildStreakCard(
+        title: 'Fetih',
+        subtitle: streaks.fetihStreak > 1 ? '🔥 ${streaks.fetihStreak} Günlük Seri' : '40 Okuma Hedefi',
+        icon: '🗡️',
+        badgeText: 'Manevi Zafer',
+        bgGradient: const [Color(0xFFBE185D), Color(0xFF831843)],
+        readCount: streaks.fetihReadCount,
+        streakDays: streaks.fetihStreak,
+        startPage: 511,
+        surahId: 48,
+        streakKey: 'fetih',
+      ),
+    ));
+
+    allEntries.add((
+      id: 'card_streak_rahman',
+      title: 'Rahmân 40 Okuma',
+      icon: '🌸',
+      isHatim: false,
+      hatimId: null,
+      widget: _buildStreakCard(
+        title: 'Rahmân',
+        subtitle: streaks.rahmanStreak > 1 ? '🔥 ${streaks.rahmanStreak} Günlük Seri' : '40 Okuma Hedefi',
+        icon: '🌸',
+        badgeText: 'Nimet Şükrü',
+        bgGradient: const [Color(0xFF7E22CE), Color(0xFF581C87)],
+        readCount: streaks.rahmanReadCount,
+        streakDays: streaks.rahmanStreak,
+        startPage: 531,
+        surahId: 55,
+        streakKey: 'rahman',
+      ),
+    ));
+
+    allEntries.add((
+      id: 'card_streak_kehf',
+      title: 'Kehf 40 Okuma',
+      icon: '⛰️',
+      isHatim: false,
+      hatimId: null,
+      widget: _buildStreakCard(
+        title: 'Kehf',
+        subtitle: streaks.kehfStreak > 1 ? '🔥 ${streaks.kehfStreak} Günlük Seri' : '40 Okuma Hedefi',
+        icon: '⛰️',
+        badgeText: 'Cuma Nuru',
+        bgGradient: const [Color(0xFF78350F), Color(0xFF451A03)],
+        readCount: streaks.kehfReadCount,
+        streakDays: streaks.kehfStreak,
+        startPage: 293,
+        surahId: 18,
+        streakKey: 'kehf',
       ),
     ));
 
@@ -2001,11 +2084,14 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     required String icon,
     required String badgeText,
     required List<Color> bgGradient,
+    int readCount = 0,
     required int streakDays,
     required int startPage,
     int? surahId,
     String? streakKey,
   }) {
+    final displayCount = readCount > 0 ? readCount : streakDays;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2016,6 +2102,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           icon: icon,
           badgeText: badgeText,
           bgGradient: bgGradient,
+          readCount: displayCount,
           streakDays: streakDays,
           onStartReading: () => _openMushafPage(
             startPage,
@@ -2071,7 +2158,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$title • $streakDays/40 Gün',
+                    '$title • $displayCount/40 Okuma',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -2119,7 +2206,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(2),
                       child: LinearProgressIndicator(
-                        value: (streakDays / 40.0).clamp(0.0, 1.0),
+                        value: (displayCount / 40.0).clamp(0.0, 1.0),
                         minHeight: 4,
                         backgroundColor: Colors.white24,
                         valueColor:

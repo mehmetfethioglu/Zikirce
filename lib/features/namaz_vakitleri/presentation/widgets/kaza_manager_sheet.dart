@@ -8,6 +8,7 @@ class KazaManagerSheet extends ConsumerWidget {
   const KazaManagerSheet({super.key});
 
   static const List<String> prayerTypes = [
+    'Oruç',
     'Sabah',
     'Öğle',
     'İkindi',
@@ -200,7 +201,7 @@ class KazaManagerSheet extends ConsumerWidget {
                                   ),
                                 ),
                                 Text(
-                                  '$count kaza borcu',
+                                  pName == 'Oruç' ? '$count gün kaza borcu' : '$count kaza borcu',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: colors.secondaryTextAlt,
@@ -263,8 +264,10 @@ class KazaManagerSheet extends ConsumerWidget {
 
   static String _getPrayerIcon(String name) {
     switch (name) {
-      case 'Sabah':
+      case 'Oruç':
         return '🌙';
+      case 'Sabah':
+        return '🌅';
       case 'Öğle':
         return '☀️';
       case 'İkindi':
@@ -282,18 +285,19 @@ class KazaManagerSheet extends ConsumerWidget {
 
   void _showEditDialog(BuildContext context, String prayerName, int current, KazaNotifier notifier) {
     final controller = TextEditingController(text: current.toString());
+    final isOruc = prayerName == 'Oruç';
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('$prayerName Kaza Sayısı'),
+        title: Text(isOruc ? 'Oruç Kazası (Gün)' : '$prayerName Kaza Sayısı'),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Kaza Adedi',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: isOruc ? 'Kaza Gün Sayısı' : 'Kaza Adedi',
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [

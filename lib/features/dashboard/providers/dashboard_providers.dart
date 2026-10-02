@@ -119,6 +119,9 @@ final dailyZikirContributionProvider = StreamProvider<Map<String, int>>((ref) {
       map[dateStr] = (map[dateStr] ?? 0) + log.count;
     }
     return map;
+  }).handleError((error, stackTrace) {
+    debugPrint('[dailyZikirContributionProvider] Error loading zikir logs: $error');
+    return <String, int>{};
   });
 });
 
