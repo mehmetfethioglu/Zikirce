@@ -45,27 +45,17 @@ jobs:
           pod install --repo-update
           cd ..
 
-      - name: 6. Build iOS Release (Free / No Code Signing Required)
+      # =========================================================================
+      # 6. Prepare Flutter iOS Assets & Config
+      # =========================================================================
+      - name: 6. Prepare Flutter iOS Assets & Config
         run: |
-          flutter build ios --release --no-codesign
-
-      - name: 7. Package Payload for Verification & Testing
-        run: |
-          mkdir -p build/ios/Payload
-          cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
-          cd build/ios && zip -r Runner-unsigned.ipa Payload
-
-      - name: 8. Upload iOS Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: zikirce-ios-unsigned
-          path: build/ios/Runner-unsigned.ipa
-          retention-days: 14
+          flutter build ios --config-only
 
       # =========================================================================
-      # 9. TESTFLIGHT AUTOMATIC DEPLOYMENT
+      # 7. Fastlane: Code Signing, Packaging & TestFlight Deployment
       # =========================================================================
-      - name: 9. Deploy to TestFlight via Fastlane
+      - name: 7. Deploy to TestFlight via Fastlane
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         env:
           APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
@@ -75,4 +65,16 @@ jobs:
           cd ios
           bundle install
           bundle exec fastlane beta
+
+      # =========================================================================
+      # 8. Upload Signed IPA Artifact
+      # =========================================================================
+      - name: 8. Upload TestFlight IPA Artifact
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: zikirce-ios-signed-ipa
+          path: build/ios/ipa/Zikirce.ipa
+          retention-days: 14
+
 

@@ -113,10 +113,11 @@ platform :ios do
     )
 
     changelog_text = <<~CHANGELOG
-      Zikirce v2.1.0 Yenilikleri:
-      • iOS WidgetKit Desteği: Ezan Vakitleri ve Günün Serisi widget'ları artık Ana Ekran ve Kilit Ekranı'nda!
-      • Sistem Uyumlu Tasarım: Açık ve koyu mod dinamik renkleriyle göz yormayan arayüz.
-      • Kararlılık ve Performans: Widget senkronizasyonu ve genel optimizasyonlar.
+      Zikirce v2.1.1 Yenilikleri:
+      • Sure Rozetleri & Kümülatif Okuma: Mülk, Vâkıa, Yâsîn, Fetih, Rahmân, Kehf ve özel sureler için sayaçlar aktif! Her okuma kümülatif (+1) artar, 40 okumada rozet açılır.
+      • Kelime Takipli Dinleme & Talim: Sure tamamlandığında okuma kaydı ve rozet ilerlemesi otomatik işlenir.
+      • Mushaf Son Sayfa & Rozet Teklifi: Sure son sayfasında tek tıkla okundu kaydı ve olmayan sureler için anında rozet oluşturma.
+      • Kararlılık & Senkronizasyon: Oturum duyarlı rozet senkronizasyonu ve genel optimizasyonlar.
     CHANGELOG
 
     upload_to_testflight(
