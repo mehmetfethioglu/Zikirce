@@ -60,6 +60,11 @@ jobs:
           bundle install
           bundle exec fastlane beta
 
+      - name: Print gym build log on failure
+        if: failure()
+        run: |
+          find ~/Library/Logs/gym -name "*.log" -exec cat {} + || true
+
       # =========================================================================
       # 7. Upload Signed IPA Artifact
       # =========================================================================
