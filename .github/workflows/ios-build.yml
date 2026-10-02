@@ -54,6 +54,7 @@ jobs:
           APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
           APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
           APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
         run: |
           cd ios
           bundle install
