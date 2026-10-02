@@ -89,7 +89,7 @@ class ChangelogService {
           titleEn: 'Session & Counter Synchronization Fix',
           descTr: 'Sure sayaçlarının oturumlar arasında eksiksiz ve bağımsız senkronize olması sağlandı, gün atlamalarında sayaç sıfırlanma sorunu giderildi.',
           descEn: 'Fixed surah reading counters across multi-user sessions and prevented reset of cumulative reading counts on missed days.',
-          icon: Icons.sync_saved_locally_rounded,
+          icon: Icons.sync_rounded,
         ),
       ],
     ),
