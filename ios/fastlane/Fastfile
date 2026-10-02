@@ -109,19 +109,30 @@ platform :ios do
 
     ENV["VERBOSE_SCRIPT_LOGGING"] = "1"
 
-    build_app(
-      workspace: "Runner.xcworkspace",
-      scheme: "Runner",
-      clean: false,
-      export_method: "app-store",
-      output_directory: "../build/ios/ipa",
-      output_name: "Zikirce.ipa",
-      codesigning_identity: "Apple Distribution",
-      export_options: {
-        signingStyle: "manual",
-        provisioningProfiles: prov_profiles
-      }
-    )
+    begin
+      build_app(
+        workspace: "Runner.xcworkspace",
+        scheme: "Runner",
+        clean: false,
+        export_method: "app-store",
+        output_directory: "../build/ios/ipa",
+        output_name: "Zikirce.ipa",
+        codesigning_identity: "Apple Distribution",
+        export_options: {
+          signingStyle: "manual",
+          provisioningProfiles: prov_profiles
+        }
+      )
+    rescue => ex
+      log_path = File.expand_path("~/Library/Logs/gym/Runner-Runner.log")
+      if File.exist?(log_path)
+        UI.error("=== DETAILED GYM LOG OUTPUT ===")
+        File.readlines(log_path).last(150).each do |line|
+          UI.error(line.chomp)
+        end
+      end
+      raise ex
+    end
 
     changelog_text = <<~CHANGELOG
       Zikirce v2.1.1 Yenilikleri:
