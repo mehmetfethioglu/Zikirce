@@ -48,11 +48,51 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 56;
-  static const String currentVersionName = '2.1.1';
+  static const int currentVersionCode = 57;
+  static const String currentVersionName = '2.1.2';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 57,
+      versionName: '2.1.2',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Namaz Bildirimleri & Ayarlar Konsolidasyonu',
+          titleEn: 'Prayer Notifications & Settings Consolidation',
+          descTr: 'Namaz vakit bildirim ayarları yenilendi! Ana aç/kapa şalteri ile tüm vakitler tek tıkla durdurulabilir; vakit bildirimleri, kaza hatırlatması ve ses tercihleri merkezi olarak yönetilir.',
+          descEn: 'Prayer time notification settings have been unified! Easily toggle all reminders with a master switch, customize individual prayers, question reminders, and sound preferences centrally.',
+          icon: Icons.notifications_active_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Android Namaz Vakit Widget\'ları & Canlı Senkronizasyon',
+          titleEn: 'Android Prayer Widgets & Live Sync',
+          descTr: 'Dijital, analog saat ve geri sayım widget\'ları arka plan alarm entegrasyonu ile daha hassas ve kesintisiz çalışacak şekilde optimize edildi.',
+          descEn: 'Digital and analog prayer clock widgets and countdowns now operate with precision background alarm scheduling.',
+          icon: Icons.widgets_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kaza Takibi & Vakit Öncesi Soru Bildirimi',
+          titleEn: 'Missed Prayer Tracking & Question Reminder',
+          descTr: 'Vakit çıkmadan önce kaza takip hatırlatması ("Namazınızı Kıldınız mı?") ve arka plan çizelgeleme mimarisi güçlendirildi.',
+          descEn: 'Pre-prayer expiry reminders and missed prayer tracking have been refined for deterministic notifications.',
+          icon: Icons.mosque_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Kararlılık & İzin Kontrol Rehberi',
+          titleEn: 'Stability & System Permission Guidance',
+          descTr: 'Xiaomi HyperOS ve Android 14 exact alarm izinleri için rehber bağlantısı eklendi, bildirim çizelgeleme döngüleri iyileştirildi.',
+          descEn: 'Exact alarm permission checks for Xiaomi HyperOS / Android 14 integrated, and scheduling loops strengthened.',
+          icon: Icons.verified_user_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 56,
       versionName: '2.1.1',

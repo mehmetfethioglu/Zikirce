@@ -336,6 +336,30 @@ object WidgetDataHelper {
         )
     }
 
+    fun formatRemainingTime(context: Context, remainingMs: Long): String {
+        if (remainingMs <= 0L) {
+            val lang = getStringPref(context, "AppLanguage", Locale.getDefault().language)
+            return if (lang.startsWith("en", ignoreCase = true)) "Adhan Time" else "Vakit Girdi"
+        }
+        val totalSeconds = remainingMs / 1000
+        val totalMinutes = (totalSeconds + 59) / 60
+        val hours = totalMinutes / 60
+        val minutes = totalMinutes % 60
+
+        val lang = getStringPref(context, "AppLanguage", Locale.getDefault().language)
+        val isEn = lang.startsWith("en", ignoreCase = true)
+
+        return if (hours > 0) {
+            if (minutes > 0) {
+                if (isEn) "${hours}h ${minutes}m" else "${hours} sa ${minutes} dk"
+            } else {
+                if (isEn) "${hours}h" else "${hours} sa"
+            }
+        } else {
+            if (isEn) "${minutes}m" else "${minutes} dk"
+        }
+    }
+
     fun getDirectionalPrayerName(context: Context, prayerName: String): String {
         val lang = getStringPref(context, "AppLanguage", Locale.getDefault().language)
         val isEn = lang.startsWith("en", ignoreCase = true)

@@ -202,11 +202,11 @@ class BadgeService {
       for (final z in allZikirs) {
         totalZikir += z.totalCount;
       }
-      final allLogs = await _db.select(_db.zikirLogs).get();
-      int logsSum = 0;
-      for (final l in allLogs) {
-        logsSum += l.count;
-      }
+      final logsSumRow = await _db.customSelect(
+        'SELECT COALESCE(SUM(count), 0) as total FROM zikir_logs',
+        readsFrom: {_db.zikirLogs},
+      ).getSingleOrNull();
+      final logsSum = logsSumRow?.read<int>('total') ?? 0;
       final prefsTotal = prefs.getInt('TotalZikir') ?? prefs.getInt('TotalZikirCount') ?? 0;
       totalZikir = max(max(totalZikir, logsSum), prefsTotal);
 
@@ -226,10 +226,13 @@ class BadgeService {
 
       // Calculate baseline earliest activity date from historical records
       DateTime earliestDate = DateTime.now();
-      if (allLogs.isNotEmpty) {
-        final sortedLogs = List<ZikirLog>.from(allLogs)
-          ..sort((a, b) => a.dateStr.compareTo(b.dateStr));
-        final parsed = DateTime.tryParse(sortedLogs.first.dateStr);
+      final minDateRow = await _db.customSelect(
+        'SELECT MIN(date_str) as min_date FROM zikir_logs',
+        readsFrom: {_db.zikirLogs},
+      ).getSingleOrNull();
+      final minDateStr = minDateRow?.read<String?>('min_date');
+      if (minDateStr != null) {
+        final parsed = DateTime.tryParse(minDateStr);
         if (parsed != null) earliestDate = parsed;
       } else if (allZikirs.isNotEmpty) {
         final sortedZikirs = List<Zikir>.from(allZikirs)
@@ -237,16 +240,25 @@ class BadgeService {
         earliestDate = sortedZikirs.first.createdAt;
       }
 
+      // Query daily sums chronologically once without loading raw log objects
+      final dailySumsRows = await _db.customSelect(
+        'SELECT date_str, SUM(count) as day_sum FROM zikir_logs GROUP BY date_str ORDER BY date_str ASC',
+        readsFrom: {_db.zikirLogs},
+      ).get();
+
+      final dailySums = dailySumsRows.map((r) => (
+        dateStr: r.read<String>('date_str'),
+        sum: r.read<int>('day_sum'),
+      )).toList();
+
       // Helper to determine exact date when cumulative zikir count crossed threshold
       DateTime findRankDate(int requiredZikir) {
-        if (allLogs.isEmpty) return earliestDate;
-        final sortedLogs = List<ZikirLog>.from(allLogs)
-          ..sort((a, b) => a.dateStr.compareTo(b.dateStr));
+        if (dailySums.isEmpty) return earliestDate;
         int runningSum = 0;
-        for (final log in sortedLogs) {
-          runningSum += log.count;
+        for (final entry in dailySums) {
+          runningSum += entry.sum;
           if (runningSum >= requiredZikir) {
-            final d = DateTime.tryParse(log.dateStr);
+            final d = DateTime.tryParse(entry.dateStr);
             if (d != null) return d;
           }
         }

@@ -27,12 +27,12 @@ class _TalimPageSelectionBottomSheetState extends State<TalimPageSelectionBottom
   @override
   void initState() {
     super.initState();
-    _currentPage = widget.initialPage.clamp(1, 604);
+    _currentPage = widget.initialPage.clamp(1, 605);
   }
 
   void _setPage(int p) {
     setState(() {
-      _currentPage = p.clamp(1, 604);
+      _currentPage = p.clamp(1, 605);
     });
   }
 
@@ -273,7 +273,7 @@ class _TalimPageSelectionBottomSheetState extends State<TalimPageSelectionBottom
                   child: Slider(
                     value: _currentPage.toDouble(),
                     min: 1,
-                    max: 604,
+                    max: 605,
                     onChanged: (val) {
                       _setPage(val.round());
                     },

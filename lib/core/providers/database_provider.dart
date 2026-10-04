@@ -11,8 +11,9 @@ final databaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase(null, activeSession.dbFileName);
   ref.onDispose(() => db.close());
 
-  // Automatically guarantee seed data, reconciliation & widget synchronization for the active session
-  Future.microtask(() async {
+  // Non-blocking deferred dispatch to allow UI isolate to render initial frame
+  // and satisfy OS watchdog deadlines before background reconciliation
+  Future.delayed(const Duration(milliseconds: 1500), () async {
     try {
       await ZikirSeedData.ensureAllDefaultZikirsExist(db);
       await DataReconciliationService.reconcileAll(db, activeSession.id);

@@ -56,12 +56,8 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_next_prayer_name, localizedNext.uppercase())
                 views.setTextViewText(R.id.widget_next_prayer_time, nextPrayer.timeStr)
 
-                val safeMs = max(0L, nextPrayer.remainingMs)
-                val baseTime = SystemClock.elapsedRealtime() + safeMs
-                views.setChronometer(R.id.widget_countdown, baseTime, null, true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    views.setChronometerCountDown(R.id.widget_countdown, true)
-                }
+                val remainingStr = WidgetDataHelper.formatRemainingTime(context, nextPrayer.remainingMs)
+                views.setTextViewText(R.id.widget_countdown, remainingStr)
 
                 val openIntent = Intent(context, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

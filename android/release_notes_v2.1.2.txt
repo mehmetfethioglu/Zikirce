@@ -1,0 +1,17 @@
+# ==============================================================================
+# Zikirce Android v2.1.2 (Build 57) Release Notes / Sürüm Notları
+# ==============================================================================
+
+[tr-TR] (Google Play Console - Maks. 500 Karakter)
+Zikirce v2.1.2 Yenilikleri:
+• Namaz Bildirimleri & Ayarlar: Vakit bildirim ayarları yenilendi! Ana aç/kapa şalteri ile tüm vakitler tek tıkla durdurulabilir, sesler tek merkezden yönetilir.
+• Android Vakit Widget'ları: Saat ve geri sayım widget'ları için canlı alarm senkronizasyonu güçlendirildi.
+• Kaza Takip & Soru Bildirimi: Vakit çıkmadan önce kaza takip hatırlatması optimize edildi.
+• Kararlılık & İzin Rehberi: Xiaomi HyperOS / Android 14 exact alarm izin kontrolleri eklendi.
+
+[en-US] (Google Play Console - Max. 500 Characters)
+Zikirce v2.1.2 What's New:
+• Prayer Notifications & Settings: Unified prayer notifications! Easily silence all prayers with a master switch; configure prayer alerts and audio preferences centrally.
+• Android Prayer Widgets: Enhanced live background alarm sync for digital, analog, and countdown widgets.
+• Missed Prayer Tracking: Refined question reminders before prayer expiry.
+• Stability & Permissions: Added direct alarm permission guidance for Android 14 and Xiaomi HyperOS.

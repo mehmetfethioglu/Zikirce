@@ -63,7 +63,7 @@ class _QuranSearchScreenState extends ConsumerState<QuranSearchScreen> {
     final isArabicInput = ArabicNormalizer.isArabic(q);
     final List<SearchResult> found = [];
 
-    for (int p = 1; p <= 604; p++) {
+    for (int p = 1; p <= 605; p++) {
       try {
         final pageData = await QuranPageRepository.getPage(p);
 

@@ -87,9 +87,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       start = SurahDataProvider.getJuzStartPage(widget.initialJuz!);
     } else if (widget.activeHatim != null &&
         widget.activeHatim!.completedPages > 0) {
-      start = (widget.activeHatim!.completedPages + 1).clamp(1, 604);
+      start = (widget.activeHatim!.completedPages + 1).clamp(1, 605);
     }
-    _currentPage = start.clamp(1, 604);
+    _currentPage = start.clamp(1, 605);
     if (TilavetSecdesiData.isSecdePage(_currentPage)) {
       _encounteredSecdePages.add(_currentPage);
     }
@@ -522,7 +522,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             );
         await ref
             .read(hatimNotifierProvider)
-            .saveMukabeleLastPage(hatimId, (completedPage + 1).clamp(1, 604));
+            .saveMukabeleLastPage(hatimId, (completedPage + 1).clamp(1, 605));
       } else {
         // If no active hatim attached, still record page reading for daily goals
         final activeHatim = ref.read(activeMukabeleHatimProvider).valueOrNull;
@@ -532,7 +532,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 targetPage: completedPage,
               );
           await ref.read(hatimNotifierProvider).saveMukabeleLastPage(
-              activeHatim.id, (completedPage + 1).clamp(1, 604));
+              activeHatim.id, (completedPage + 1).clamp(1, 605));
         }
       }
     } catch (e) {
@@ -543,15 +543,15 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
     HapticService.selectionClick();
 
-    // Check if a full Juz was completed (every 20 pages or page 604)
-    final isJuzEnd = completedPage % 20 == 0 || completedPage == 604;
+    // Check if a full Juz was completed (every 20 pages or page 605)
+    final isJuzEnd = completedPage % 20 == 0 || completedPage >= 605;
     final completedJuzNo = (completedPage / 20).ceil().clamp(1, 30);
 
     if (isJuzEnd && mounted) {
       _showJuzCompletedDialog(completedJuzNo);
     }
 
-    if (completedPage >= 604) {
+    if (completedPage >= 605) {
       // Full Hatim Finished!
       if (mounted) {
         setState(() {
@@ -808,14 +808,14 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     if (_isPlayingBesmele) return;
     if (_currentVerseIndex < _pageVerses.length - 1) {
       _prepareAndPlayVerse(_currentVerseIndex + 1);
-    } else if (_currentPage < 604) {
+    } else if (_currentPage < 605) {
       _goToPage(_currentPage + 1);
     }
   }
 
   Future<void> _goToPage(int page) async {
     _pageTransitionTimer?.cancel();
-    final target = page.clamp(1, 604);
+    final target = page.clamp(1, 605);
     setState(() {
       _currentPage = target;
       _isPageTransitioning = false;
@@ -970,7 +970,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                             ),
                             // Page Selector List
                             ListView.builder(
-                              itemCount: 604,
+                              itemCount: 605,
                               itemBuilder: (context, idx) {
                                 final p = idx + 1;
                                 final isCurrent = p == _currentPage;
@@ -1101,7 +1101,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 ],
               ),
               Text(
-                'Cüz $juzNo • Sayfa $_currentPage / 604',
+                'Cüz $juzNo • Sayfa $_currentPage / 605',
                 style: TextStyle(color: subtitleColor, fontSize: 12),
               ),
             ],
@@ -1141,7 +1141,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               // Arapça Mushaf RTL: Sol Ok -> Sonraki Sayfa, Sağ Ok -> Önceki Sayfa
               if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
                   event.logicalKey == LogicalKeyboardKey.pageDown) {
-                if (_currentPage < 604) _goToPage(_currentPage + 1);
+                if (_currentPage < 605) _goToPage(_currentPage + 1);
                 return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
                   event.logicalKey == LogicalKeyboardKey.pageUp) {
@@ -1224,7 +1224,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 ),
 
               // Masaüstü İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if (isDesktopMushafPlatform && _currentPage < 604)
+              if (isDesktopMushafPlatform && _currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
@@ -1290,7 +1290,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     return PageView.builder(
       controller: _pageController,
       reverse: true,
-      itemCount: 604,
+      itemCount: 605,
       onPageChanged: (index) {
         final newPage = index + 1;
         if (newPage != _currentPage) {

@@ -47,6 +47,7 @@ class DataReconciliationService {
     } catch (e, st) {
       debugPrint('[DataReconciliationService] Uzlaştırma hatası: $e\n$st');
     } finally {
+      _cachedDeviceBackup = null;
       _isReconciling = false;
     }
   }
@@ -65,17 +66,22 @@ class DataReconciliationService {
       await ZikirSeedData.ensureAllDefaultZikirsExist(db);
 
       final allZikirs = await db.select(db.zikirs).get();
-      final allLogs = await db.select(db.zikirLogs).get();
+      final logSums = await db.customSelect(
+        'SELECT zikir_id, COALESCE(SUM(count), 0) as total_count FROM zikir_logs GROUP BY zikir_id',
+        readsFrom: {db.zikirLogs},
+      ).get();
 
-      if (allLogs.isEmpty && allZikirs.isEmpty) return;
+      if (logSums.isEmpty && allZikirs.isEmpty) return;
 
       final zikirMap = {for (final z in allZikirs) z.id: z};
       final logsGroupedByZikir = <int, int>{};
       int grandLogsSum = 0;
 
-      for (final log in allLogs) {
-        grandLogsSum += log.count;
-        logsGroupedByZikir[log.zikirId] = (logsGroupedByZikir[log.zikirId] ?? 0) + log.count;
+      for (final row in logSums) {
+        final zId = row.read<int>('zikir_id');
+        final count = row.read<int>('total_count');
+        logsGroupedByZikir[zId] = count;
+        grandLogsSum += count;
       }
 
       await db.transaction(() async {
@@ -359,8 +365,13 @@ class DataReconciliationService {
     }
   }
 
+  static Map<String, dynamic>? _cachedDeviceBackup;
+
   /// Cihaz hafızasındaki (İndirilenler & Belgeler) en güncel Zikirce yedeğini bulur ve JSON olarak okur.
-  static Future<Map<String, dynamic>?> _findLatestBackupJsonOnDevice() async {
+  static Future<Map<String, dynamic>?> _findLatestBackupJsonOnDevice({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cachedDeviceBackup != null) {
+      return _cachedDeviceBackup;
+    }
     try {
       final candidateDirs = <Directory>[];
       if (Platform.isAndroid) {
@@ -376,11 +387,11 @@ class DataReconciliationService {
       for (final dir in candidateDirs) {
         if (!dir.existsSync()) continue;
         try {
-          final entities = dir.listSync();
+          final entities = await dir.list().toList();
           for (final e in entities) {
             if (e is File) {
               final name = p.basename(e.path);
-              if (name.startsWith('Zikirce_') && (name.endsWith('.json') || name.endsWith('.zikirback'))) {
+              if (name.startsWith('Zikirce_') && name.endsWith('.json')) {
                 files.add(e);
               }
             }
@@ -390,16 +401,29 @@ class DataReconciliationService {
 
       if (files.isEmpty) return null;
 
-      // Değiştirilme tarihine göre en yeniden en eskiye sırala
-      files.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+      // Değiştirilme tarihine göre en yeniden en eskiye sırala (Asenkron)
+      final filesWithDates = await Future.wait(files.map((f) async => (file: f, date: await f.lastModified())));
+      filesWithDates.sort((a, b) => b.date.compareTo(a.date));
 
-      for (final file in files) {
+      for (final item in filesWithDates) {
         try {
-          final text = file.readAsStringSync();
-          final decoded = jsonDecode(text);
+          final file = item.file;
+          final stat = await file.stat();
+          // 5 MB üzerindeki dosyaları watchdog/OOM koruması için es geç
+          if (stat.size > 5 * 1024 * 1024) continue;
+
+          final text = await file.readAsString();
+          final dynamic decoded;
+          if (text.length > 50000) {
+            decoded = await compute(jsonDecode, text);
+          } else {
+            decoded = jsonDecode(text);
+          }
+
           if (decoded is Map<String, dynamic> &&
               (decoded.containsKey('KazaPrayers') || decoded.containsKey('Zikirler') || decoded.containsKey('AppSettings'))) {
             debugPrint('[DataReconciliationService] En güncel cihaz yedeği bulundu: ${file.path}');
+            _cachedDeviceBackup = decoded;
             return decoded;
           }
         } catch (_) {}

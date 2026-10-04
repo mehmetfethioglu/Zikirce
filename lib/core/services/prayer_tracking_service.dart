@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
+import 'local_notification_service.dart';
 import 'prayer_times_service.dart';
 import 'widget_sync_service.dart';
 
@@ -207,6 +208,7 @@ class PrayerTrackingService {
           // If previously marked as missed (Hayır), decrement kaza debt
           await adjustKazaCount(db, prayerName, -1);
         }
+        await LocalNotificationService.cancelTodayQuestionNotification(prayerName);
       } else {
         if (previousAnswer != false) {
           await logPrayerAnswer(db, dateStr, prayerName, false);
@@ -242,6 +244,7 @@ class PrayerTrackingService {
         if (previousAnswer == false) {
           await adjustKazaCount(db, prayerName, -1);
         }
+        await LocalNotificationService.cancelTodayQuestionNotification(prayerName);
       }
 
       await _syncHomeWidgets(db);

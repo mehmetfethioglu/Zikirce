@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/providers/database_provider.dart';
-import '../../../../core/database/app_database.dart';
 import '../../../../core/session/session_providers.dart';
 import '../../../../core/session/user_session.dart';
+import 'package:drift/drift.dart';
 import '../../zikir/providers/zikir_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
 
@@ -112,11 +112,13 @@ final zikirDistributionProvider = Provider<List<ZikirDistributionItem>>((ref) {
 /// Yıllık aktivite ısı haritası ve istatistik grafikleri için günlük zikir toplamları stream provider'ı
 final dailyZikirContributionProvider = StreamProvider<Map<String, int>>((ref) {
   final db = ref.watch(databaseProvider);
-  return db.select(db.zikirLogs).watch().map((logs) {
+  return db.customSelect(
+    'SELECT date_str, COALESCE(SUM(count), 0) as total FROM zikir_logs GROUP BY date_str',
+    readsFrom: {db.zikirLogs},
+  ).watch().map((rows) {
     final map = <String, int>{};
-    for (final log in logs) {
-      final dateStr = log.dateStr;
-      map[dateStr] = (map[dateStr] ?? 0) + log.count;
+    for (final row in rows) {
+      map[row.read<String>('date_str')] = row.read<int>('total');
     }
     return map;
   }).handleError((error, stackTrace) {
@@ -171,28 +173,28 @@ final quickStatsProvider = StreamProvider<QuickStatsData>((ref) {
 
   final totalFromZikirs = zikirs.fold<int>(0, (sum, z) => sum + z.totalCount);
 
-  return db.select(db.zikirLogs).watch().asyncMap((logs) async {
+  final now = DateTime.now();
+  final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  final monday = now.subtract(Duration(days: now.weekday - 1));
+  final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+
+  return db.customSelect(
+    'SELECT '
+    'COALESCE(SUM(count), 0) as total_sum, '
+    'COALESCE(SUM(CASE WHEN date_str = ? THEN count ELSE 0 END), 0) as today_sum, '
+    'COALESCE(SUM(CASE WHEN timestamp >= ? THEN count ELSE 0 END), 0) as week_sum '
+    'FROM zikir_logs',
+    variables: [
+      Variable.withString(todayStr),
+      Variable.withDateTime(startOfWeek),
+    ],
+    readsFrom: {db.zikirLogs},
+  ).watchSingle().asyncMap((row) async {
     final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now();
-    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
-    // Monday of current week
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final startOfWeek = DateTime(monday.year, monday.month, monday.day);
-
-    int todaySum = 0;
-    int thisWeekSum = 0;
-    int totalLogsSum = 0;
-
-    for (final log in logs) {
-      totalLogsSum += log.count;
-      if (log.dateStr == todayStr) {
-        todaySum += log.count;
-      }
-      if (log.timestamp.isAfter(startOfWeek) || log.timestamp.isAtSameMomentAs(startOfWeek)) {
-        thisWeekSum += log.count;
-      }
-    }
+    final totalLogsSum = row.read<int>('total_sum');
+    final todaySum = row.read<int>('today_sum');
+    final thisWeekSum = row.read<int>('week_sum');
 
     final effectiveTotal = max(totalFromZikirs, totalLogsSum);
     final totalDays = max(1, streak?.totalDays ?? 1);
@@ -280,44 +282,60 @@ class ActivityTrendData {
 final activityTrendDataProvider = StreamProvider<ActivityTrendData>((ref) {
   final db = ref.watch(databaseProvider);
 
-  return db.select(db.zikirLogs).watch().map((logs) {
-    final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    
-    // Day names and colors
-    final dayNames = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-    final dayColors = [
-      const Color(0xFF29B6F6),
-      const Color(0xFF4CAF50),
-      const Color(0xFFFFA726),
-      const Color(0xFFAB47BC),
-      const Color(0xFFEF5350),
-      const Color(0xFF00BCD4),
-      const Color(0xFFEC407A),
-    ];
+  final now = DateTime.now();
+  final monday = now.subtract(Duration(days: now.weekday - 1));
+  final startOfWeek = DateTime(monday.year, monday.month, monday.day);
+  final sunday = startOfWeek.add(const Duration(days: 6));
+  final mondayStr = '${startOfWeek.year}-${startOfWeek.month.toString().padLeft(2, '0')}-${startOfWeek.day.toString().padLeft(2, '0')}';
+  final sundayStr = '${sunday.year}-${sunday.month.toString().padLeft(2, '0')}-${sunday.day.toString().padLeft(2, '0')}';
+  final startOfMonth = DateTime(now.year, now.month, 1);
+  final startOfYear = DateTime(now.year, 1, 1);
+
+  // Day names and colors
+  const dayNames = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  const dayColors = [
+    Color(0xFF29B6F6),
+    Color(0xFF4CAF50),
+    Color(0xFFFFA726),
+    Color(0xFFAB47BC),
+    Color(0xFFEF5350),
+    Color(0xFF00BCD4),
+    Color(0xFFEC407A),
+  ];
+
+  return db.customSelect(
+    'SELECT '
+    'COALESCE(SUM(CASE WHEN timestamp >= ? THEN count ELSE 0 END), 0) as year_total, '
+    'COALESCE(SUM(CASE WHEN timestamp >= ? THEN count ELSE 0 END), 0) as month_total '
+    'FROM zikir_logs',
+    variables: [
+      Variable.withDateTime(startOfYear),
+      Variable.withDateTime(startOfMonth),
+    ],
+    readsFrom: {db.zikirLogs},
+  ).watchSingle().asyncMap((sumsRow) async {
+    final yearTotal = sumsRow.read<int>('year_total');
+    final monthTotal = sumsRow.read<int>('month_total');
+
+    final weekRows = await db.customSelect(
+      'SELECT date_str, COALESCE(SUM(count), 0) as day_sum FROM zikir_logs WHERE date_str >= ? AND date_str <= ? GROUP BY date_str',
+      variables: [
+        Variable.withString(mondayStr),
+        Variable.withString(sundayStr),
+      ],
+      readsFrom: {db.zikirLogs},
+    ).get();
+
+    final weekMap = <String, int>{};
+    for (final r in weekRows) {
+      weekMap[r.read<String>('date_str')] = r.read<int>('day_sum');
+    }
 
     final weekCounts = List<int>.filled(7, 0);
-    int monthTotal = 0;
-    int yearTotal = 0;
-
-    final startOfMonth = DateTime(now.year, now.month, 1);
-    final startOfYear = DateTime(now.year, 1, 1);
-
-    for (final log in logs) {
-      if (log.timestamp.isAfter(startOfYear) || log.timestamp.isAtSameMomentAs(startOfYear)) {
-        yearTotal += log.count;
-      }
-      if (log.timestamp.isAfter(startOfMonth) || log.timestamp.isAtSameMomentAs(startOfMonth)) {
-        monthTotal += log.count;
-      }
-
-      for (int i = 0; i < 7; i++) {
-        final targetDate = monday.add(Duration(days: i));
-        final dateStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
-        if (log.dateStr == dateStr) {
-          weekCounts[i] += log.count;
-        }
-      }
+    for (int i = 0; i < 7; i++) {
+      final targetDate = monday.add(Duration(days: i));
+      final dateStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+      weekCounts[i] = weekMap[dateStr] ?? 0;
     }
 
     final daysInMonthSoFar = max(1, now.day);
@@ -367,43 +385,45 @@ final zikirHistoryListProvider = StreamProvider<List<DynamicZikirHistoryItem>>((
   final db = ref.watch(databaseProvider);
 
   return db.select(db.zikirs).watch().asyncMap((allZikirs) async {
-    final allLogs = await db.select(db.zikirLogs).get();
     if (allZikirs.isEmpty) return const [];
 
+    final summaryRows = await db.customSelect(
+      'SELECT zikir_id, '
+      'COALESCE(SUM(count), 0) as total_count, '
+      'COUNT(DISTINCT date_str) as distinct_days, '
+      'MAX(timestamp) as latest_ts '
+      'FROM zikir_logs '
+      'GROUP BY zikir_id',
+      readsFrom: {db.zikirLogs},
+    ).get();
+
     final zikirMap = {for (final z in allZikirs) z.id: z};
-    final groupedLogs = <int, List<ZikirLog>>{};
-
-    for (final log in allLogs) {
-      groupedLogs.putIfAbsent(log.zikirId, () => []).add(log);
-    }
-
     final List<DynamicZikirHistoryItem> historyList = [];
     final now = DateTime.now();
+    const turkishMonths = ['', 'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
-    for (final entry in groupedLogs.entries) {
-      final zikir = zikirMap[entry.key];
+    for (final row in summaryRows) {
+      final zId = row.read<int>('zikir_id');
+      final zikir = zikirMap[zId];
       if (zikir == null) continue;
 
-      final logs = entry.value;
-      final totalAmount = max(zikir.totalCount, logs.fold<int>(0, (s, l) => s + l.count));
+      final totalLogs = row.read<int>('total_count');
+      final distinctDays = row.read<int>('distinct_days');
+      final latestTs = row.readNullable<DateTime>('latest_ts') ?? DateTime.now();
+
+      final totalAmount = max(zikir.totalCount, totalLogs);
       if (totalAmount == 0) continue;
 
-      final distinctDates = logs.map((l) => l.dateStr).toSet();
-      final latestLog = logs.reduce((a, b) => a.timestamp.isAfter(b.timestamp) ? a : b);
-      
-      // Calculate display date string
+      final diffDays = now.difference(latestTs).inDays;
       String dateText;
-      final diffDays = now.difference(latestLog.timestamp).inDays;
-      final turkishMonths = ['', 'Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-
       if (diffDays == 0) {
-        dateText = 'Bugün • ${distinctDates.length} günde';
+        dateText = 'Bugün • $distinctDays günde';
       } else if (diffDays == 1) {
-        dateText = 'Dün • ${distinctDates.length} günde';
+        dateText = 'Dün • $distinctDays günde';
       } else {
-        final m = turkishMonths[latestLog.timestamp.month];
-        final d = latestLog.timestamp.day.toString().padLeft(2, '0');
-        dateText = '$d $m • ${distinctDates.length} günde';
+        final m = turkishMonths[latestTs.month];
+        final d = latestTs.day.toString().padLeft(2, '0');
+        dateText = '$d $m • $distinctDays günde';
       }
 
       final buffer = StringBuffer();
@@ -421,14 +441,12 @@ final zikirHistoryListProvider = StreamProvider<List<DynamicZikirHistoryItem>>((
         date: dateText,
         count: buffer.toString(),
         rawCount: totalAmount,
-        distinctDays: distinctDates.length,
-        dailyDetails: [],
+        distinctDays: distinctDays,
+        dailyDetails: const [],
       ));
     }
 
-    // Sort by largest rawCount / most active
     historyList.sort((a, b) => b.rawCount.compareTo(a.rawCount));
-
     return historyList;
   });
 });

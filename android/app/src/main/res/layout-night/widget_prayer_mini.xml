@@ -52,7 +52,8 @@
             android:textColor="@color/widget_prayer_title"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:countDown="true" />
+            android:countDown="true"
+            android:singleLine="true" />
     </LinearLayout>
 
 </LinearLayout>

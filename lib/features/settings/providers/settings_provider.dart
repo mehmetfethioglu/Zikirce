@@ -33,6 +33,7 @@ class SettingsState {
   final bool isQuranReminderEnabled;
   final String quranReminderTime;
   final bool isNamazReminderEnabled;
+  final bool isKazaQuestionEnabled;
   final Map<String, bool> prayerNotifications;
   final String selectedDhikrSound;
   final String selectedPrayerSound;
@@ -77,6 +78,7 @@ class SettingsState {
     this.isQuranReminderEnabled = true,
     this.quranReminderTime = '21:00',
     this.isNamazReminderEnabled = true,
+    this.isKazaQuestionEnabled = true,
     this.prayerNotifications = const {
       'İmsak': true,
       'Güneş': true,
@@ -129,6 +131,7 @@ class SettingsState {
     bool? isQuranReminderEnabled,
     String? quranReminderTime,
     bool? isNamazReminderEnabled,
+    bool? isKazaQuestionEnabled,
     Map<String, bool>? prayerNotifications,
     String? selectedDhikrSound,
     String? selectedPrayerSound,
@@ -173,6 +176,7 @@ class SettingsState {
       isQuranReminderEnabled: isQuranReminderEnabled ?? this.isQuranReminderEnabled,
       quranReminderTime: quranReminderTime ?? this.quranReminderTime,
       isNamazReminderEnabled: isNamazReminderEnabled ?? this.isNamazReminderEnabled,
+      isKazaQuestionEnabled: isKazaQuestionEnabled ?? this.isKazaQuestionEnabled,
       prayerNotifications: prayerNotifications ?? this.prayerNotifications,
       selectedDhikrSound: selectedDhikrSound ?? this.selectedDhikrSound,
       selectedPrayerSound: selectedPrayerSound ?? this.selectedPrayerSound,
@@ -275,19 +279,20 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final zikirTime = PrefUtils.getString(prefs, _sKey('ZikirReminderTime', sid), '09:00');
     final isQuranReminder = PrefUtils.getBool(prefs, _sKey('IsQuranReminderEnabled', sid), true);
     final quranTime = PrefUtils.getString(prefs, _sKey('QuranReminderTime', sid), '21:00');
-    final isNamazReminder = PrefUtils.getBool(prefs, _sKey('IsNamazReminderEnabled', sid), true);
+    final isNamazReminder = PrefUtils.getBool(prefs, _sKey('IsNamazReminderEnabled', sid), prefs.getBool('IsNamazReminderEnabled') ?? true);
+    final isKazaQuestion = PrefUtils.getBool(prefs, _sKey('KazaQuestionNotificationEnabled', sid), prefs.getBool('KazaQuestionNotificationEnabled') ?? true);
 
     final prayerMap = <String, bool>{
-      'İmsak': PrefUtils.getBool(prefs, _sKey('PrayerNotif_İmsak', sid), true),
-      'Güneş': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Güneş', sid), true),
-      'Öğle': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Öğle', sid), true),
-      'İkindi': PrefUtils.getBool(prefs, _sKey('PrayerNotif_İkindi', sid), true),
-      'Akşam': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Akşam', sid), true),
-      'Yatsı': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Yatsı', sid), true),
+      'İmsak': PrefUtils.getBool(prefs, _sKey('PrayerNotif_İmsak', sid), prefs.getBool('ImsakNotificationEnabled') ?? true),
+      'Güneş': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Güneş', sid), prefs.getBool('GunesNotificationEnabled') ?? true),
+      'Öğle': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Öğle', sid), prefs.getBool('OgleNotificationEnabled') ?? true),
+      'İkindi': PrefUtils.getBool(prefs, _sKey('PrayerNotif_İkindi', sid), prefs.getBool('IkindiNotificationEnabled') ?? true),
+      'Akşam': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Akşam', sid), prefs.getBool('AksamNotificationEnabled') ?? true),
+      'Yatsı': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Yatsı', sid), prefs.getBool('YatsiNotificationEnabled') ?? true),
     };
 
     final dhikrSound = PrefUtils.getString(prefs, _sKey('SelectedDhikrSound', sid), 'Bülbül Sesi');
-    final prayerSound = PrefUtils.getString(prefs, _sKey('SelectedPrayerSound', sid), 'Kumru Sesi');
+    final prayerSound = PrefUtils.getString(prefs, _sKey('SelectedPrayerSound', sid), prefs.getString('SelectedPrayerSound') ?? 'Kumru Sesi');
     final reminderSound = PrefUtils.getString(prefs, _sKey('SelectedReminderSound', sid), 'Bülbül Sesi');
     final congratSound = PrefUtils.getString(prefs, _sKey('SelectedCongratulationSound', sid), 'Bülbül Sesi');
 
@@ -320,6 +325,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       isQuranReminderEnabled: isQuranReminder,
       quranReminderTime: quranTime,
       isNamazReminderEnabled: isNamazReminder,
+      isKazaQuestionEnabled: isKazaQuestion,
       prayerNotifications: prayerMap,
       selectedDhikrSound: dhikrSound,
       selectedPrayerSound: prayerSound,
@@ -547,27 +553,29 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isNamazReminderEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsNamazReminderEnabled', enabled);
+    await prefs.setBool('IsNamazReminderEnabled', enabled);
 
     final timings = ref.read(prayerTimingsProvider).valueOrNull;
     if (timings != null) {
       if (enabled) {
-        await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+        await LocalNotificationService.scheduleAllPrayerNotifications(timings, force: true);
       } else {
         await LocalNotificationService.cancelAllPrayerNotifications();
       }
     }
   }
 
-  Future<void> togglePrayerNotification(String prayerKey) async {
+  Future<void> togglePrayerNotification(String prayerKey, [bool? directVal]) async {
     final currentMap = Map<String, bool>.from(state.prayerNotifications);
     final currentVal = currentMap[prayerKey] ?? true;
-    final newVal = !currentVal;
+    final newVal = directVal ?? !currentVal;
     currentMap[prayerKey] = newVal;
 
     state = state.copyWith(prayerNotifications: currentMap);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'PrayerNotif_$prayerKey', newVal);
     await _setSessionPrefBool(prefs, '${prayerKey}NotificationEnabled', newVal);
+    await prefs.setBool('${prayerKey}NotificationEnabled', newVal);
 
     // Also map Turkish prayer names to keys used in local_notification_service
     final mapKeys = {
@@ -581,11 +589,24 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     };
     if (mapKeys.containsKey(prayerKey)) {
       await _setSessionPrefBool(prefs, mapKeys[prayerKey]!, newVal);
+      await prefs.setBool(mapKeys[prayerKey]!, newVal);
     }
 
     final timings = ref.read(prayerTimingsProvider).valueOrNull;
     if (timings != null && state.isNamazReminderEnabled) {
-      await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+      await LocalNotificationService.scheduleAllPrayerNotifications(timings, force: true);
+    }
+  }
+
+  Future<void> toggleKazaQuestion(bool enabled) async {
+    state = state.copyWith(isKazaQuestionEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('KazaQuestionNotificationEnabled', enabled);
+    await _setSessionPrefBool(prefs, 'KazaQuestionNotificationEnabled', enabled);
+
+    final timings = ref.read(prayerTimingsProvider).valueOrNull;
+    if (timings != null && state.isNamazReminderEnabled) {
+      await LocalNotificationService.scheduleAllPrayerNotifications(timings, force: true);
     }
   }
 
@@ -599,9 +620,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(selectedPrayerSound: sound);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefString(prefs, 'SelectedPrayerSound', sound);
+    await prefs.setString('SelectedPrayerSound', sound);
     final timings = ref.read(prayerTimingsProvider).valueOrNull;
     if (timings != null && state.isNamazReminderEnabled) {
-      await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+      await LocalNotificationService.scheduleAllPrayerNotifications(timings, force: true);
     }
   }
 

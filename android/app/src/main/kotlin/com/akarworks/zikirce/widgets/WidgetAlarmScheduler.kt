@@ -11,6 +11,8 @@ object WidgetAlarmScheduler {
 
     fun scheduleNextPrayerAlarm(context: Context) {
         try {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+
             val city = WidgetDataHelper.getStringPref(context, "SelectedCity", "İstanbul")
             val cachedTimes = WidgetDataHelper.getCachedPrayerTimes(context, city)
 
@@ -53,42 +55,49 @@ object WidgetAlarmScheduler {
                 }
             }
 
-            val alarmUtcMillis = nextAlarmCal.timeInMillis
-            val alarmIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java)
-
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {
                 PendingIntent.FLAG_UPDATE_CURRENT
             }
 
-            val pendingIntent = PendingIntent.getBroadcast(context, 1001, alarmIntent, flags)
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            // 1. Primary prayer entry alarm (at exact HH:mm:01)
+            val prayerIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
+                action = "com.akarworks.zikirce.WIDGET_PRAYER_ALARM"
+            }
+            val prayerPendingIntent = PendingIntent.getBroadcast(context, 1001, prayerIntent, flags)
+            setAlarmSafe(alarmManager, nextAlarmCal.timeInMillis, prayerPendingIntent)
 
-            if (alarmManager != null && pendingIntent != null) {
-                try {
-                    // setAlarmClock is guaranteed to fire at exact time and bypasses Doze mode on API 21+
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        val alarmClockInfo = AlarmManager.AlarmClockInfo(alarmUtcMillis, pendingIntent)
-                        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                        alarmManager.setExact(AlarmManager.RTC_WAKEUP, alarmUtcMillis, pendingIntent)
-                    } else {
-                        alarmManager.set(AlarmManager.RTC_WAKEUP, alarmUtcMillis, pendingIntent)
-                    }
-                } catch (_: Exception) {
-                    try {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarmUtcMillis, pendingIntent)
-                        } else {
-                            alarmManager.set(AlarmManager.RTC_WAKEUP, alarmUtcMillis, pendingIntent)
-                        }
-                    } catch (_: Exception) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, alarmUtcMillis, pendingIntent)
-                        }
-                    }
+            // 2. Backup prayer entry alarm (1 minute after prayer entry to guarantee rollover)
+            val backupIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
+                action = "com.akarworks.zikirce.WIDGET_BACKUP_ALARM"
+            }
+            val backupPendingIntent = PendingIntent.getBroadcast(context, 1002, backupIntent, flags)
+            setAlarmSafe(alarmManager, nextAlarmCal.timeInMillis + 60_000L, backupPendingIntent)
+        } catch (_: Exception) {}
+    }
+
+    private fun setAlarmSafe(alarmManager: AlarmManager, triggerMillis: Long, pendingIntent: PendingIntent) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                    return
                 }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                return
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+                return
+            }
+        } catch (_: Exception) {}
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            } else {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
             }
         } catch (_: Exception) {}
     }

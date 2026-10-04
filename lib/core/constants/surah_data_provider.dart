@@ -122,38 +122,38 @@ class SurahDataProvider {
     SureItem(id: 80, name: 'Abese', ayetSayisi: 42, nameArabic: 'عَبَسَ', startPage: 585, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 81, name: 'Tekvîr', ayetSayisi: 29, nameArabic: 'التَّكْوِير', startPage: 586, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 82, name: 'İnfitâr', ayetSayisi: 19, nameArabic: 'الإِنْفِطَار', startPage: 587, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 83, name: 'Mutaffifîn', ayetSayisi: 36, nameArabic: 'المُطَفِّفِين', startPage: 587, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 83, name: 'Mutaffifîn', ayetSayisi: 36, nameArabic: 'المُطَفِّفِين', startPage: 588, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 84, name: 'İnşikâk', ayetSayisi: 25, nameArabic: 'الإِنْشِقَاق', startPage: 589, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 85, name: 'Burûc', ayetSayisi: 22, nameArabic: 'البُرُوج', startPage: 590, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 86, name: 'Târık', ayetSayisi: 17, nameArabic: 'الطَّارِق', startPage: 591, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 87, name: 'A\'lâ', ayetSayisi: 19, nameArabic: 'الأَعْلَى', startPage: 591, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 87, name: 'A\'lâ', ayetSayisi: 19, nameArabic: 'الأَعْلَى', startPage: 592, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 88, name: 'Gâşiye', ayetSayisi: 26, nameArabic: 'الغَاشِيَة', startPage: 592, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 89, name: 'Fecr', ayetSayisi: 30, nameArabic: 'الفَجْر', startPage: 593, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 90, name: 'Beled', ayetSayisi: 20, nameArabic: 'البَلَد', startPage: 594, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 91, name: 'Şems', ayetSayisi: 15, nameArabic: 'الشَّمْس', startPage: 595, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 92, name: 'Leyl', ayetSayisi: 21, nameArabic: 'اللَّيْل', startPage: 595, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 92, name: 'Leyl', ayetSayisi: 21, nameArabic: 'اللَّيْل', startPage: 596, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 93, name: 'Duhâ', ayetSayisi: 11, nameArabic: 'الضُّحَى', startPage: 596, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 94, name: 'İnşirah', ayetSayisi: 8, nameArabic: 'الشَّرْح', startPage: 596, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 94, name: 'İnşirah', ayetSayisi: 8, nameArabic: 'الشَّرْح', startPage: 597, juzNumber: 30, type: 'Mekkî'),
     SureItem(id: 95, name: 'Tîn', ayetSayisi: 8, nameArabic: 'التِّين', startPage: 597, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 96, name: 'Alak', ayetSayisi: 19, nameArabic: 'العَلَق', startPage: 597, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 97, name: 'Kadr', ayetSayisi: 5, nameArabic: 'القَدْر', startPage: 598, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 98, name: 'Beyyine', ayetSayisi: 8, nameArabic: 'البَيِّنَة', startPage: 598, juzNumber: 30, type: 'Medenî'),
-    SureItem(id: 99, name: 'Zilzâl', ayetSayisi: 8, nameArabic: 'الزَّلْزَلَة', startPage: 599, juzNumber: 30, type: 'Medenî'),
-    SureItem(id: 100, name: 'Âdiyât', ayetSayisi: 11, nameArabic: 'العَادِيَات', startPage: 599, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 101, name: 'Kâria', ayetSayisi: 11, nameArabic: 'القَارِعَة', startPage: 600, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 102, name: 'Tekâsür', ayetSayisi: 8, nameArabic: 'التَّكَاثُر', startPage: 600, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 103, name: 'Asr', ayetSayisi: 3, nameArabic: 'العَصْر', startPage: 601, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 104, name: 'Hümeze', ayetSayisi: 9, nameArabic: 'الهُمَزَة', startPage: 601, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 105, name: 'Fil', ayetSayisi: 5, nameArabic: 'الفِيل', startPage: 601, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 106, name: 'Kureyş', ayetSayisi: 4, nameArabic: 'قُرَيْش', startPage: 602, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 107, name: 'Maûn', ayetSayisi: 7, nameArabic: 'المَاعُون', startPage: 602, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 108, name: 'Kevser', ayetSayisi: 3, nameArabic: 'الكَوْثَر', startPage: 602, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 109, name: 'Kâfirûn', ayetSayisi: 6, nameArabic: 'الكٰفِرُون', startPage: 603, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 110, name: 'Nasr', ayetSayisi: 3, nameArabic: 'النَّصْر', startPage: 603, juzNumber: 30, type: 'Medenî'),
-    SureItem(id: 111, name: 'Tebbet', ayetSayisi: 5, nameArabic: 'المَسَد', startPage: 603, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 112, name: 'İhlâs', ayetSayisi: 4, nameArabic: 'الإِخْلَاص', startPage: 604, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 113, name: 'Felak', ayetSayisi: 5, nameArabic: 'الفَلَق', startPage: 604, juzNumber: 30, type: 'Mekkî'),
-    SureItem(id: 114, name: 'Nâs', ayetSayisi: 6, nameArabic: 'النَّاس', startPage: 604, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 96, name: 'Alak', ayetSayisi: 19, nameArabic: 'العَلَق', startPage: 598, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 97, name: 'Kadr', ayetSayisi: 5, nameArabic: 'القَدْر', startPage: 599, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 98, name: 'Beyyine', ayetSayisi: 8, nameArabic: 'البَيِّنَة', startPage: 599, juzNumber: 30, type: 'Medenî'),
+    SureItem(id: 99, name: 'Zilzâl', ayetSayisi: 8, nameArabic: 'الزَّلْزَلَة', startPage: 600, juzNumber: 30, type: 'Medenî'),
+    SureItem(id: 100, name: 'Âdiyât', ayetSayisi: 11, nameArabic: 'العَادِيَات', startPage: 600, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 101, name: 'Kâria', ayetSayisi: 11, nameArabic: 'القَارِعَة', startPage: 601, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 102, name: 'Tekâsür', ayetSayisi: 8, nameArabic: 'التَّكَاثُر', startPage: 601, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 103, name: 'Asr', ayetSayisi: 3, nameArabic: 'العَصْر', startPage: 602, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 104, name: 'Hümeze', ayetSayisi: 9, nameArabic: 'الهُمَزَة', startPage: 602, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 105, name: 'Fil', ayetSayisi: 5, nameArabic: 'الفِيل', startPage: 602, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 106, name: 'Kureyş', ayetSayisi: 4, nameArabic: 'قُرَيْش', startPage: 603, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 107, name: 'Maûn', ayetSayisi: 7, nameArabic: 'المَاعُون', startPage: 603, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 108, name: 'Kevser', ayetSayisi: 3, nameArabic: 'الكَوْثَر', startPage: 603, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 109, name: 'Kâfirûn', ayetSayisi: 6, nameArabic: 'الكٰفِرُون', startPage: 604, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 110, name: 'Nasr', ayetSayisi: 3, nameArabic: 'النَّصْر', startPage: 604, juzNumber: 30, type: 'Medenî'),
+    SureItem(id: 111, name: 'Tebbet', ayetSayisi: 5, nameArabic: 'المَسَد', startPage: 604, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 112, name: 'İhlâs', ayetSayisi: 4, nameArabic: 'الإِخْلَاص', startPage: 605, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 113, name: 'Felak', ayetSayisi: 5, nameArabic: 'الفَلَق', startPage: 605, juzNumber: 30, type: 'Mekkî'),
+    SureItem(id: 114, name: 'Nâs', ayetSayisi: 6, nameArabic: 'النَّاس', startPage: 605, juzNumber: 30, type: 'Mekkî'),
   ];
 
   static const List<int> juzStartPages = [
@@ -173,15 +173,13 @@ class SurahDataProvider {
   }
 
   static SureItem? getSurahForPage(int page) {
-    SureItem? found;
     for (final s in surahs) {
-      if (s.startPage <= page) {
-        found = s;
-      } else {
-        break;
+      final range = diyanetSurahPageRanges[s.id];
+      if (range != null && page >= range.$1 && page <= range.$2) {
+        return s;
       }
     }
-    return found;
+    return surahs.first;
   }
 
   static String getSurahNameForPage(int page) {

@@ -195,7 +195,7 @@ class _TalimSelectionBottomSheetState
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _currentPage = widget.initialPage.clamp(1, 604);
+    _currentPage = widget.initialPage.clamp(1, 605);
   }
 
   @override
@@ -207,7 +207,7 @@ class _TalimSelectionBottomSheetState
 
   void _setPage(int p) {
     setState(() {
-      _currentPage = p.clamp(1, 604);
+      _currentPage = p.clamp(1, 605);
     });
   }
 
@@ -472,7 +472,7 @@ class _TalimSelectionBottomSheetState
                 const SizedBox(width: 8),
                 _buildQuickChip('✨', 'Nebe (582)', 582, cardBg, borderStroke, primaryTextColor),
                 const SizedBox(width: 8),
-                _buildQuickChip('🎯', 'İhlâs (604)', 604, cardBg, borderStroke, primaryTextColor),
+                _buildQuickChip('🎯', 'İhlâs (605)', 605, cardBg, borderStroke, primaryTextColor),
               ],
             ),
           ),
@@ -583,7 +583,7 @@ class _TalimSelectionBottomSheetState
                   child: Slider(
                     value: _currentPage.toDouble(),
                     min: 1,
-                    max: 604,
+                    max: 605,
                     onChanged: (val) {
                       _setPage(val.round());
                     },

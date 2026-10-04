@@ -50,7 +50,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => MushafScreen(
-          initialPage: page.clamp(1, 604),
+          initialPage: page.clamp(1, 605),
           activeHatim: activeHatim,
           targetSurah: targetSurah,
           streakKey: streakKey,
@@ -72,7 +72,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           MaterialPageRoute(
             builder: (_) => MukabeleHatimScreen(
               activeHatim: activeHatim,
-              initialPage: initialPage.clamp(1, 604),
+              initialPage: initialPage.clamp(1, 605),
               initialJuz: initialJuz,
             ),
           ),
@@ -117,7 +117,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
       ),
     );
 
-    if (selectedPage != null && selectedPage >= 1 && selectedPage <= 604) {
+    if (selectedPage != null && selectedPage >= 1 && selectedPage <= 605) {
       if (mounted) {
         Navigator.of(context, rootNavigator: true).push(
           MaterialPageRoute(
@@ -707,8 +707,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     // 1. Mukabele Card
     final mukabele = activeMukabeleAsync.valueOrNull;
     if (mukabele != null && !mukabele.isCompleted) {
-      final currentPage = mukabele.completedPages < 604 ? mukabele.completedPages + 1 : 604;
-      final progressPercent = ((mukabele.completedPages / 604.0) * 100).clamp(0, 100).toInt();
+      final totalPages = mukabele.totalPages > 0 ? mukabele.totalPages : 605;
+      final currentPage = mukabele.completedPages < totalPages ? mukabele.completedPages + 1 : totalPages;
+      final progressPercent = ((mukabele.completedPages / totalPages.toDouble()) * 100).clamp(0, 100).toInt();
       final todayPages = hatimStats?.todayPagesByHatim[mukabele.id] ?? 0;
       final lastRead = hatimStats?.lastReadByHatim[mukabele.id];
 
@@ -740,12 +741,13 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
 
     // 2. Active Personal Hatims
     final hatims = hatimsAsync.valueOrNull ?? [];
-    final activeHatims = hatims.where((h) => !h.isCompleted && h.completedPages < 604).toList();
+    final activeHatims = hatims.where((h) => !h.isCompleted && h.completedPages < (h.totalPages > 0 ? h.totalPages : 605)).toList();
 
     if (activeHatims.isNotEmpty) {
       for (final h in activeHatims) {
-        final currentPage = h.completedPages < 604 ? h.completedPages + 1 : 604;
-        final progressPercent = ((h.completedPages / 604.0) * 100).clamp(0, 100).toInt();
+        final totalPages = h.totalPages > 0 ? h.totalPages : 605;
+        final currentPage = h.completedPages < totalPages ? h.completedPages + 1 : totalPages;
+        final progressPercent = ((h.completedPages / totalPages.toDouble()) * 100).clamp(0, 100).toInt();
         final todayPages = hatimStats?.todayPagesByHatim[h.id] ?? 0;
         final lastRead = hatimStats?.lastReadByHatim[h.id];
 

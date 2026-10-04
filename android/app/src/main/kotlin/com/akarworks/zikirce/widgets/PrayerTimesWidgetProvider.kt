@@ -69,12 +69,11 @@ class PrayerTimesWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_next_prayer_name, localizedNext)
                 views.setTextViewText(R.id.widget_next_prayer_time, nextPrayer.timeStr)
 
-                val safeMs = kotlin.math.max(0L, nextPrayer.remainingMs)
-                val baseTime = SystemClock.elapsedRealtime() + safeMs
-                views.setChronometer(R.id.widget_next_prayer_countdown, baseTime, null, true)
+                val targetRealtime = SystemClock.elapsedRealtime() + nextPrayer.remainingMs
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     views.setChronometerCountDown(R.id.widget_next_prayer_countdown, true)
                 }
+                views.setChronometer(R.id.widget_next_prayer_countdown, targetRealtime, null, true)
 
                 // Reset all container backgrounds
                 views.setInt(R.id.widget_imsak_container, "setBackgroundResource", R.drawable.widget_time_bg_normal)

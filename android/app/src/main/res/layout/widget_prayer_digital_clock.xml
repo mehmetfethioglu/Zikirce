@@ -27,15 +27,15 @@
             android:singleLine="true" />
 
         <!-- 2. Geri Sayım Sayacı -->
-        <Chronometer
+        <TextView
             android:id="@+id/widget_countdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:textColor="@color/widget_digital_accent"
-            android:textSize="28sp"
+            android:textSize="22sp"
             android:textStyle="bold"
-            android:countDown="true"
+            android:singleLine="true"
             android:gravity="center" />
 
         <!-- 3. Dijital Saat Konteyneri -->

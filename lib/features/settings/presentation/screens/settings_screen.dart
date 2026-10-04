@@ -29,6 +29,7 @@ import '../../../../core/session/user_session.dart';
 import 'widgets_preview_screen.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../dashboard/presentation/widgets/whats_new_bottom_sheet.dart';
+import '../../../namaz_vakitleri/presentation/widgets/prayer_notification_settings_sheet.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -97,24 +98,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  String _getPrayerDisplayName(String prayerName, AppLocalizations l10n) {
-    switch (prayerName) {
-      case 'İmsak':
-        return l10n.settingsImsak;
-      case 'Güneş':
-        return l10n.settingsGunes;
-      case 'Öğle':
-        return l10n.settingsOgle;
-      case 'İkindi':
-        return l10n.settingsIkindi;
-      case 'Akşam':
-        return l10n.settingsAksam;
-      case 'Yatsı':
-        return l10n.settingsYatsi;
-      default:
-        return prayerName;
-    }
-  }
 
   final List<String> _builtInAvatars = [
     'assets/images/avatar_male_1.png',
@@ -2008,63 +1991,102 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
                 const Divider(height: 20),
 
-                // Namaz Vakitleri Bildirimleri
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(l10n.settingsPrayerNotifications, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.primaryText)),
-                          const SizedBox(height: 2),
-                          Text(l10n.settingsPrayerNotificationsDesc, style: TextStyle(fontSize: 10.5, color: colors.secondaryTextAlt)),
-                        ],
+                // Namaz Vakitleri Bildirimleri (Entegre Bottom Sheet)
+                InkWell(
+                  onTap: () {
+                    HapticService.selectionClick();
+                    PrayerNotificationSettingsSheet.show(context);
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: colors.cardBackgroundAlt,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: settings.isNamazReminderEnabled
+                            ? colors.accent.withValues(alpha: 0.35)
+                            : colors.borderStroke,
                       ),
                     ),
-                    Switch(
-                      value: settings.isNamazReminderEnabled,
-                      activeTrackColor: colors.accent,
-                      onChanged: (val) => settingsNotifier.toggleNamazReminder(val),
-                    ),
-                  ],
-                ),
-
-                // 3x2 Prayer Times Grid
-                if (settings.isNamazReminderEnabled) ...[
-                  const SizedBox(height: 12),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    childAspectRatio: 1.6,
-                    children: ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'].map((p) {
-                      final isSelected = settings.prayerNotifications[p] ?? true;
-                      final prayerLabel = _getPrayerDisplayName(p, l10n);
-                      return GestureDetector(
-                        onTap: () => settingsNotifier.togglePrayerNotification(p),
-                        child: Container(
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
                           decoration: BoxDecoration(
-                            color: isSelected ? colors.cardBackgroundAlt : colors.pageBackground,
+                            color: settings.isNamazReminderEnabled
+                                ? colors.accent.withValues(alpha: 0.15)
+                                : colors.pageBackground,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isSelected ? colors.accent : colors.borderStroke),
                           ),
                           alignment: Alignment.center,
+                          child: Text(
+                            settings.isNamazReminderEnabled ? '🕌' : '🔕',
+                            style: const TextStyle(fontSize: 20),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(prayerLabel, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: colors.primaryText), textAlign: TextAlign.center),
+                              Text(
+                                l10n.settingsPrayerNotifications,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.primaryText,
+                                ),
+                              ),
                               const SizedBox(height: 2),
-                              Text(isSelected ? (l10n.isTurkish ? '🔔 Açık' : '🔔 On') : (l10n.isTurkish ? '🔕 Kapalı' : '🔕 Off'), style: TextStyle(fontSize: 9.5, color: isSelected ? colors.accent : colors.secondaryTextAlt)),
+                              Text(
+                                settings.isNamazReminderEnabled
+                                    ? (l10n.isTurkish
+                                        ? 'Açık (${settings.prayerNotifications.values.where((v) => v).length} vakit aktif)'
+                                        : 'On (${settings.prayerNotifications.values.where((v) => v).length} prayers active)')
+                                    : (l10n.isTurkish ? 'Kapalı' : 'Off'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: settings.isNamazReminderEnabled
+                                      ? colors.accent
+                                      : colors.secondaryTextAlt,
+                                  fontWeight: settings.isNamazReminderEnabled
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    }).toList(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: colors.pageBackground,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: colors.borderStroke),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                l10n.isTurkish ? 'Ayarla' : 'Configure',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.primaryText,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.chevron_right_rounded,
+                                  size: 16, color: colors.secondaryTextAlt),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
                 const SizedBox(height: 14),
 
                 // Xiaomi / Pil Optimizasyonu
@@ -2137,6 +2159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     l10n.settingsSoundDove,
                     l10n.settingsSoundNightingale,
                     l10n.settingsSoundDefaultClick,
+                    l10n.isTurkish ? 'Sessiz' : 'Silent',
                   ],
                   colors: colors,
                   onChanged: (val) {

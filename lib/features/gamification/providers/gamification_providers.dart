@@ -199,9 +199,12 @@ final totalZikirCountProvider = StreamProvider<int>((ref) {
   final activeSession = ref.watch(activeSessionProvider);
 
   return db.select(db.zikirs).watch().asyncMap((zikirs) async {
-    final allLogs = await db.select(db.zikirLogs).get();
+    final logsSumRow = await db.customSelect(
+      'SELECT COALESCE(SUM(count), 0) as total FROM zikir_logs',
+      readsFrom: {db.zikirLogs},
+    ).getSingleOrNull();
+    final logsSum = logsSumRow?.read<int>('total') ?? 0;
     final zikirsSum = zikirs.fold<int>(0, (sum, z) => sum + z.totalCount);
-    final logsSum = allLogs.fold<int>(0, (sum, l) => sum + l.count);
 
     final prefs = await SharedPreferences.getInstance();
     final isDefault = activeSession.id == UserSession.defaultSessionId;

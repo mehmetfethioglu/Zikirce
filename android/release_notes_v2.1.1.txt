@@ -1,0 +1,17 @@
+# ==============================================================================
+# Zikirce Android v2.1.1 (Build 56) Release Notes / Sürüm Notları
+# ==============================================================================
+
+[tr-TR] (Google Play Console - Maks. 500 Karakter)
+Zikirce v2.1.1 Yenilikleri:
+• Sure Rozetleri & Kümülatif Okuma: Mülk, Vâkıa, Yâsîn, Fetih, Rahmân, Kehf ve özel sureler için sayaçlar aktif! Her okuma kümülatif (+1) artar, 40 okumada rozet açılır.
+• Kelime Takipli Dinleme & Talim: Sure tamamlandığında okuma kaydı ve rozet ilerlemesi otomatik işlenir.
+• Mushaf Son Sayfa & Rozet Teklifi: Sure son sayfasında tek tıkla okundu kaydı ve olmayan sureler için anında rozet oluşturma.
+• Kararlılık & Senkronizasyon: Oturum duyarlı rozet senkronizasyonu ve genel optimizasyonlar.
+
+[en-US] (Google Play Console - Max. 500 Characters)
+Zikirce v2.1.1 What's New:
+• Surah Badges & Cumulative Reading: Cumulative counters for Mulk, Waqiah, Yasin, Al-Fath, Ar-Rahman, Al-Kahf & custom surahs! Reads add up toward unlocking badges at 40 reads.
+• Word-by-Word Listening & Recitation: Completing a surah automatically records your reading and advances badge progress.
+• Mushaf Final Page & Instant Badge: Mark surahs as read on the final page or create a custom badge card in one tap.
+• Stability & Sync: Session-aware badge sync and overall performance improvements.

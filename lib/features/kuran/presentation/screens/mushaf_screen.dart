@@ -67,7 +67,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     _focusNode = FocusNode();
     final startPage = ref.read(currentMushafPageProvider);
     final targetPage = widget.initialPage > 0 ? widget.initialPage : startPage;
-    _startPage = targetPage.clamp(1, 604);
+    _startPage = targetPage.clamp(1, 605);
     _pageController = PageController(initialPage: _startPage - 1);
 
     if (TilavetSecdesiData.isSecdePage(_startPage)) {
@@ -77,7 +77,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     // Synchronize initial page to current provider and verify screen awake
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(currentMushafPageProvider.notifier).state =
-          targetPage.clamp(1, 604);
+          targetPage.clamp(1, 605);
       if (ref.read(settingsProvider).isKeepScreenAwakeEnabled) {
         ScreenAwakeService.setKeepAwake(true);
       }
@@ -111,7 +111,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   void _goToNextPage() {
     final currentPage = ref.read(currentMushafPageProvider);
-    if (currentPage < 604) {
+    if (currentPage < 605) {
       final next = currentPage + 1;
       ref.read(currentMushafPageProvider.notifier).state = next;
       if (_pageController.hasClients) {
@@ -185,7 +185,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final currentPage = ref.read(currentMushafPageProvider);
 
     if (widget.activeHatim != null) {
-      final isLastPage = currentPage >= 604;
+      final totalHatimPages = widget.activeHatim?.totalPages ?? 605;
+      final isLastPage = currentPage >= totalHatimPages || currentPage >= 604;
       final shouldSave = await showDialog<bool?>(
         context: context,
         builder: (ctx) {
@@ -216,7 +217,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ],
               ),
               content: Text(
-                '604. son sayfadasınız. "${widget.activeHatim!.title}" hatminizi tamamladınız mı?',
+                '$currentPage. sayfadasınız. "${widget.activeHatim!.title}" hatminizi tamamladınız mı?',
                 style: TextStyle(fontSize: 14.5, color: subColor, height: 1.4),
               ),
               actions: [
@@ -231,9 +232,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text(
-                    '604\'te Kaldım',
-                    style: TextStyle(
+                  child: Text(
+                    '$currentPage\'te Kaldım',
+                    style: const TextStyle(
                         color: Color(0xFF2D7D76),
                         fontWeight: FontWeight.bold),
                   ),
@@ -308,8 +309,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
       if (shouldSave != null && mounted) {
         final bool isHatimCompleted = isLastPage && shouldSave == true;
         final int targetCompletedPages = isHatimCompleted
-            ? 604
-            : (currentPage - 1).clamp(0, 604);
+            ? (widget.activeHatim?.totalPages ?? 605)
+            : (currentPage - 1).clamp(0, 605);
 
         try {
           await ref.read(hatimNotifierProvider).updateHatimPageProgress(
@@ -362,7 +363,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
         return;
       }
     } else {
-      final delta = (currentPage - _startPage).clamp(0, 604);
+      final delta = (currentPage - _startPage).clamp(0, 605);
       if (delta > 0) {
         final prefs = await SharedPreferences.getInstance();
         final activeSession = ref.read(activeSessionProvider);
@@ -820,7 +821,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                   style: AppTypography.headingSmall(color: titleColor),
                 ),
                 Text(
-                  'Sayfa ${data.pageNo} / 604',
+                  'Sayfa ${data.pageNo} / 605',
                   style: TextStyle(color: subtitleColor, fontSize: 12),
                 ),
               ],
@@ -850,7 +851,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 );
                 if (selectedPage != null &&
                     selectedPage >= 1 &&
-                    selectedPage <= 604) {
+                    selectedPage <= 605) {
                   ref.read(currentMushafPageProvider.notifier).state =
                       selectedPage;
                   _pageController.jumpToPage(selectedPage - 1);
@@ -885,11 +886,11 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
           },
           child: Stack(
             children: [
-              // 604 PageView (RTL Swiping for Quran reading)
+              // 605 PageView (RTL Swiping for Quran reading)
               PageView.builder(
                 controller: _pageController,
                 reverse: true, // Right-to-Left standard for Arabic Mushaf
-                itemCount: 604,
+                itemCount: 605,
                 onPageChanged: (pageIndex) {
                   final newPage = pageIndex + 1;
                   ref.read(currentMushafPageProvider.notifier).state = newPage;
@@ -1021,7 +1022,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
 
               // Floating "Sureyi Okudum" Action Button (at the end of the surah)
-              if (effectiveSurah != null && isSurahEnd)
+              // Hatim ve Mukabele modlarında genel hedef hatim tamamlamak olduğu için sûre okundu butonu gösterilmez
+              if (widget.activeHatim == null && effectiveSurah != null && isSurahEnd)
                 Positioned(
                   left: 20,
                   right: 20,
@@ -1126,7 +1128,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               ),
 
               // Masaüstü İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if (isDesktopMushafPlatform && currentPage < 604)
+              if (isDesktopMushafPlatform && currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
@@ -1172,7 +1174,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Sayfaya Git (1 - 604)',
+        title: Text('Sayfaya Git (1 - 605)',
             style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
@@ -1180,7 +1182,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
           autofocus: true,
           style: TextStyle(color: textColor),
           decoration: InputDecoration(
-            hintText: 'Sayfa Numarası (1-604)',
+            hintText: 'Sayfa Numarası (1-605)',
             hintStyle: const TextStyle(color: Color(0xFF8A9BAE)),
             filled: true,
             fillColor:
@@ -1206,7 +1208,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             ),
             onPressed: () {
               final p = int.tryParse(controller.text.trim());
-              if (p != null && p >= 1 && p <= 604) {
+              if (p != null && p >= 1 && p <= 605) {
                 ref.read(currentMushafPageProvider.notifier).state = p;
                 _pageController.jumpToPage(p - 1);
                 Navigator.of(ctx).pop();

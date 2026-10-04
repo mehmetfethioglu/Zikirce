@@ -90,7 +90,8 @@
             android:textColor="#34D399"
             android:textSize="13sp"
             android:textStyle="bold"
-            android:countDown="true" />
+            android:countDown="true"
+            android:singleLine="true" />
     </LinearLayout>
 
     <!-- Namaz Vakitleri Grid (3 satır, 2 kolon) -->

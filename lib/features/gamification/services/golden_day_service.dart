@@ -209,11 +209,13 @@ class GoldenDayService {
     // 4. Kaza Prayers Goal (Default enabled true, robust local date matching)
     final isKazaEnabled = PrefUtils.getBoolFromKeys(prefs, ['IsDailyKazaGoalEnabled$sfx', 'IsKazaGoalEnabled$sfx', 'IsDailyKazaGoalEnabled', 'IsKazaGoalEnabled'], true);
     final kazaGoal = PrefUtils.getIntFromKeys(prefs, ['DailyKazaGoal$sfx', 'KazaDailyGoal$sfx', 'DailyKazaGoal', 'KazaDailyGoal', 'kaza_daily_goal'], 1);
-    final allMelts = await db.select(db.kazaMeltLogs).get();
-    final todayMelts = allMelts.where((m) {
-      final loc = m.timestamp.toLocal();
-      return loc.year == now.year && loc.month == now.month && loc.day == now.day;
-    });
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final todayMelts = await (db.select(db.kazaMeltLogs)
+          ..where((t) =>
+              t.timestamp.isBiggerOrEqualValue(startOfDay) &
+              t.timestamp.isSmallerThanValue(endOfDay)))
+        .get();
     final dbKazaCount = todayMelts.fold<int>(0, (sum, m) => sum + m.meltAmount);
     final todayKazaCount = max(dbKazaCount, PrefUtils.getInt(prefs, 'TodayKazaCount_$todayStr$sfx', PrefUtils.getInt(prefs, 'TodayKazaCount_$todayStr', 0)));
     final isKazaMet = !isKazaEnabled || (todayKazaCount >= kazaGoal);

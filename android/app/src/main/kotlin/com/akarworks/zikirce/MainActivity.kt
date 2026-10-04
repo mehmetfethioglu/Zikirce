@@ -68,6 +68,12 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        com.akarworks.zikirce.widgets.WidgetTimeTickReceiver.updateAllWidgets(this)
+        com.akarworks.zikirce.widgets.WidgetAlarmScheduler.scheduleNextPrayerAlarm(this)
+    }
+
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         com.akarworks.zikirce.widgets.WidgetTimeTickReceiver.updateAllWidgets(this)

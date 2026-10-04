@@ -83,9 +83,10 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textColor="@color/widget_prayer_time_color"
-                android:textSize="16sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
-                android:countDown="true" />
+                android:countDown="true"
+                android:singleLine="true" />
         </LinearLayout>
 
         <LinearLayout

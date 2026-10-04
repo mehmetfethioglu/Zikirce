@@ -346,7 +346,7 @@ class HatimDetailBottomSheet extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final juzNo = index + 1;
                     final start = SurahDataProvider.getJuzStartPage(juzNo);
-                    final end = (juzNo == 30) ? 604 : SurahDataProvider.getJuzStartPage(juzNo + 1) - 1;
+                    final end = (juzNo == 30) ? 605 : SurahDataProvider.getJuzStartPage(juzNo + 1) - 1;
 
                     final isCompleted = completedPages >= end;
                     final isCurrent = !isCompleted && completedPages >= start;

@@ -62,12 +62,11 @@ class PrayerNextWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_next_prayer_time, nextPrayer.timeStr)
                 views.setProgressBar(R.id.widget_prayer_progress, 100, nextPrayer.progressPercent, false)
 
-                val safeMs = kotlin.math.max(0L, nextPrayer.remainingMs)
-                val baseTime = SystemClock.elapsedRealtime() + safeMs
-                views.setChronometer(R.id.widget_next_prayer_countdown, baseTime, null, true)
+                val targetRealtime = SystemClock.elapsedRealtime() + nextPrayer.remainingMs
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     views.setChronometerCountDown(R.id.widget_next_prayer_countdown, true)
                 }
+                views.setChronometer(R.id.widget_next_prayer_countdown, targetRealtime, null, true)
 
                 val openIntent = Intent(context, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)

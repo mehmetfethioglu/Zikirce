@@ -27,8 +27,8 @@ android {
         applicationId = "com.akarworks.zikirce"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = flutter.versionCode ?: 56
-        versionName = flutter.versionName ?: "2.1.1"
+        versionCode = flutter.versionCode ?: 57
+        versionName = flutter.versionName ?: "2.1.2"
         multiDexEnabled = true
     }
 

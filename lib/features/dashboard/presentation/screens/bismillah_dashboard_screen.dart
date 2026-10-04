@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/providers/database_provider.dart';
@@ -15,6 +16,8 @@ import '../../../namaz_vakitleri/presentation/widgets/pending_prayer_dialog.dart
 import '../../../namaz_vakitleri/presentation/widgets/past_days_prayer_dialog.dart';
 import '../../../namaz_vakitleri/presentation/widgets/bulk_kaza_prompt_dialog.dart';
 import '../../../namaz_vakitleri/presentation/widgets/today_prayers_card.dart';
+import '../../../namaz_vakitleri/presentation/widgets/exact_alarm_prompt_sheet.dart';
+import '../../../../core/services/battery_optimization_service.dart';
 import '../../../namaz_vakitleri/presentation/screens/fiqh_library_screen.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/dashboard_providers.dart';
@@ -102,6 +105,9 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
 
       if (mounted) {
         await _triggerPastDaysConfirmationFlow();
+        if (mounted) {
+          await _checkExactAlarmPermissionIfNeeded();
+        }
       }
     });
   }
@@ -157,6 +163,25 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
       ref.invalidate(namazStreakProvider);
     } catch (e) {
       debugPrint('[BismillahDashboard] Error in past days confirmation flow: $e');
+    }
+  }
+
+  Future<void> _checkExactAlarmPermissionIfNeeded() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final alreadyPrompted = prefs.getBool('ExactAlarmPromptShown') ?? false;
+      if (alreadyPrompted) return;
+
+      final canExact = await BatteryOptimizationService.canScheduleExactAlarms();
+      if (!canExact) {
+        await prefs.setBool('ExactAlarmPromptShown', true);
+        if (mounted) {
+          await ExactAlarmPromptSheet.show(context);
+        }
+      }
+    } catch (e) {
+      debugPrint('[BismillahDashboard] Error checking exact alarm permission: $e');
     }
   }
   Widget _buildAvatarImage(String imagePath) {

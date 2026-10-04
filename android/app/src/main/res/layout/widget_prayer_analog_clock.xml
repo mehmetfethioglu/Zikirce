@@ -96,16 +96,16 @@
                 android:textStyle="bold"
                 android:gravity="center" />
 
-            <Chronometer
+            <TextView
                 android:id="@+id/widget_countdown"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="1dp"
                 android:layout_marginBottom="1dp"
                 android:textColor="@color/widget_digital_primary"
-                android:textSize="16sp"
+                android:textSize="14sp"
                 android:textStyle="bold"
-                android:countDown="true"
+                android:singleLine="true"
                 android:gravity="center" />
 
             <TextView

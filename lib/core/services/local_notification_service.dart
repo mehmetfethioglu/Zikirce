@@ -304,13 +304,13 @@ class LocalNotificationService {
         payload: payload);
   }
 
-  /// Cancels all prayer and question notifications
+  /// Cancels all prayer and question notifications across 7-day range
   static Future<void> cancelAllPrayerNotifications() async {
     try {
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < 70; i++) {
         await _notificationsPlugin.cancel(basePrayerNotificationId + i);
       }
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 70; i++) {
         await _notificationsPlugin.cancel(baseQuestionNotificationId + i);
       }
       await _notificationsPlugin.cancel(dailyKazaReminderNotificationId);
@@ -320,184 +320,208 @@ class LocalNotificationService {
     }
   }
 
-  /// Schedules all 6 prayer time entry notifications and 5 "Namazınızı Kıldınız mı?" interactive questions
-  /// Exactly mirrors .NET MAUI `NotificationService.ScheduleAllPrayerNotificationsAsync`
-  static Future<void> scheduleAllPrayerNotifications(
-      PrayerTimings timings) async {
-    try {
-      await cancelAllPrayerNotifications();
+  /// Cancels today's 45-minute question notification for a specific prayer when prayed
+  static Future<void> cancelTodayQuestionNotification(String prayerName) async {
+    final questionIndexMap = {
+      'Sabah': 0,
+      'İmsak': 0,
+      'Öğle': 1,
+      'İkindi': 2,
+      'Akşam': 3,
+      'Yatsı': 4,
+    };
+    final idx = questionIndexMap[prayerName];
+    if (idx != null) {
+      final id = baseQuestionNotificationId + idx; // Day 0 ID
+      await _notificationsPlugin.cancel(id);
+      debugPrint('[LocalNotificationService] Smart cancellation: Cancelled question notification for $prayerName (id: $id)');
+    }
+  }
 
-      final prefs = await SharedPreferences.getInstance();
+  static String? _lastScheduledSignature;
+  static DateTime? _lastScheduledTime;
+
+  /// Schedules 7-day rolling window for all 6 prayer entries and 5 "Namazınızı Kıldınız mı?" interactive questions
+  static Future<void> scheduleAllPrayerNotifications(
+      PrayerTimings timings, {bool force = false}) async {
+    try {
       final now = DateTime.now();
       final todayStr =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final signature = '${timings.date}_${timings.fajr}_${timings.isha}_$todayStr';
 
-      DateTime parseTime(String hhmm) {
-        final clean = hhmm.trim();
-        final parts = clean.split(':');
-        if (parts.length < 2) return DateTime.fromMillisecondsSinceEpoch(0);
-        final h = int.tryParse(parts[0].trim()) ?? 0;
-        final m = int.tryParse(parts[1].trim()) ?? 0;
-        return DateTime(now.year, now.month, now.day, h, m);
+      if (!force &&
+          _lastScheduledSignature == signature &&
+          _lastScheduledTime != null &&
+          now.difference(_lastScheduledTime!) < const Duration(minutes: 30)) {
+        debugPrint(
+            '[LocalNotificationService] scheduleAllPrayerNotifications skipped (already scheduled for $todayStr)');
+        return;
+      }
+      _lastScheduledSignature = signature;
+      _lastScheduledTime = now;
+
+      await cancelAllPrayerNotifications();
+
+      final prefs = await SharedPreferences.getInstance();
+      final isNamazMasterEnabled = prefs.getBool('IsNamazReminderEnabled') ?? true;
+      if (!isNamazMasterEnabled) {
+        debugPrint(
+            '[LocalNotificationService] scheduleAllPrayerNotifications skipped: IsNamazReminderEnabled is false');
+        return;
       }
 
-      final prayerItems = [
-        (
-          name: 'İmsak',
-          time: parseTime(timings.fajr),
-          prefKey: 'ImsakNotificationEnabled'
-        ),
-        (
-          name: 'Güneş',
-          time: parseTime(timings.sunrise),
-          prefKey: 'GunesNotificationEnabled'
-        ),
-        (
-          name: 'Öğle',
-          time: parseTime(timings.dhuhr),
-          prefKey: 'OgleNotificationEnabled'
-        ),
-        (
-          name: 'İkindi',
-          time: parseTime(timings.asr),
-          prefKey: 'IkindiNotificationEnabled'
-        ),
-        (
-          name: 'Akşam',
-          time: parseTime(timings.maghrib),
-          prefKey: 'AksamNotificationEnabled'
-        ),
-        (
-          name: 'Yatsı',
-          time: parseTime(timings.isha),
-          prefKey: 'YatsiNotificationEnabled'
-        ),
-      ];
+      final city = prefs.getString('SelectedCity') ?? 'İstanbul';
 
       final soundSetting = prefs.getString('SelectedPrayerSound') ??
           prefs.getString('SelectedReminderSound') ??
           'Bülbül Sesi';
       final channelConfig = _resolveChannelConfig(soundSetting);
 
-      // 1. Schedule Vakit Girdi Bildirimleri (IDs: 1000 - 1005) with 32 Farz
-      final validPrayers = <({String name, DateTime targetTime, int originalIndex})>[];
-      for (int i = 0; i < prayerItems.length; i++) {
-        final item = prayerItems[i];
-        final isEnabled = prefs.getBool(item.prefKey) ??
-            prefs.getBool('${item.name}NotificationEnabled') ??
-            true;
-        if (!isEnabled) continue;
+      final isQuestionMasterEnabled =
+          prefs.getBool('KazaQuestionNotificationEnabled') ?? true;
 
-        var targetTime = item.time;
-        if (targetTime.isBefore(now)) {
-          targetTime = targetTime.add(const Duration(days: 1));
-        }
-        validPrayers.add((name: item.name, targetTime: targetTime, originalIndex: i));
-      }
-
-      // Sort upcoming prayers chronologically so farz progression is in exact order
-      validPrayers.sort((a, b) => a.targetTime.compareTo(b.targetTime));
-
-      // Retrieve persistent base index for 32 Farz cycle
+      // 32 Farz progression tracker
       final lastScheduledDay = prefs.getString('FarzNotificationLastScheduledDay');
       int baseFarzIdx = prefs.getInt('FarzNotificationCurrentIndex') ?? 0;
-
-      // If scheduled for a new day, advance base index; otherwise keep idempotent
       if (lastScheduledDay != null && lastScheduledDay != todayStr) {
         final lastDayCount = prefs.getInt('FarzNotificationDaySlotsCount') ?? 5;
         baseFarzIdx = (baseFarzIdx + lastDayCount) % kFarz32List.length;
         await prefs.setInt('FarzNotificationCurrentIndex', baseFarzIdx);
       }
       await prefs.setString('FarzNotificationLastScheduledDay', todayStr);
-      await prefs.setInt('FarzNotificationDaySlotsCount', validPrayers.length);
 
-      for (int step = 0; step < validPrayers.length; step++) {
-        final prayer = validPrayers[step];
-        final farzIdx = (baseFarzIdx + step) % kFarz32List.length;
-        final farzItem = kFarz32List[farzIdx];
+      int globalFarzStep = 0;
 
-        final title = '${prayer.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
-        final body = '${farzItem.title}: ${farzItem.notificationSummary}';
+      // Iterate 7 days rolling forward (Day 0 to Day 6)
+      for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+        final targetDate = now.add(Duration(days: dayOffset));
+        final dayStr =
+            '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
 
-        final details =
-            _buildNotificationDetails(config: channelConfig, title: title);
+        final dayTimings = (dayOffset == 0)
+            ? timings
+            : PrayerTimesService.calculateOfflinePrayerTimes(city, targetDate);
 
-        final scheduledTZ = tz.TZDateTime.from(prayer.targetTime, tz.local);
-        await _scheduleZonedWithFallback(
-          id: basePrayerNotificationId + prayer.originalIndex,
-          title: title,
-          body: body,
-          scheduledDate: scheduledTZ,
-          notificationDetails: details,
-          payload: 'farz_article|${farzItem.id}',
-        );
-        debugPrint(
-            '[LocalNotificationService] Scheduled prayer entry for ${prayer.name} with Farz #${farzItem.id} (${farzItem.title}) at ${prayer.targetTime} ($scheduledTZ)');
-      }
-
-      // 2. Schedule "Namazınızı Kıldınız mı? 🕌" Question Notifications (IDs: 6000 - 6004)
-      final tSunrise = parseTime(timings.sunrise);
-      final tAsr = parseTime(timings.asr);
-      final tMaghrib = parseTime(timings.maghrib);
-      final tIsha = parseTime(timings.isha);
-
-      final questionItems = [
-        (
-          name: 'Sabah',
-          targetTime: tSunrise.subtract(const Duration(minutes: 45)),
-          prefKey: 'SabahNotificationEnabled'
-        ),
-        (
-          name: 'Öğle',
-          targetTime: tAsr.subtract(const Duration(minutes: 45)),
-          prefKey: 'OgleNotificationEnabled'
-        ),
-        (
-          name: 'İkindi',
-          targetTime: tMaghrib.subtract(const Duration(minutes: 45)),
-          prefKey: 'IkindiNotificationEnabled'
-        ),
-        (
-          name: 'Akşam',
-          targetTime: tIsha.subtract(const Duration(minutes: 45)),
-          prefKey: 'AksamNotificationEnabled'
-        ),
-        (
-          name: 'Yatsı',
-          targetTime: tIsha.add(const Duration(hours: 1)),
-          prefKey: 'YatsiNotificationEnabled'
-        ),
-      ];
-
-      for (int i = 0; i < questionItems.length; i++) {
-        final q = questionItems[i];
-        final isEnabled = prefs.getBool(q.prefKey) ?? true;
-        if (!isEnabled) continue;
-
-        var questionTime = q.targetTime;
-        if (questionTime.isBefore(now)) {
-          questionTime = questionTime.add(const Duration(days: 1));
+        DateTime parseTime(String hhmm) {
+          final clean = hhmm.trim();
+          final parts = clean.split(':');
+          if (parts.length < 2) return DateTime.fromMillisecondsSinceEpoch(0);
+          final h = int.tryParse(parts[0].trim()) ?? 0;
+          final m = int.tryParse(parts[1].trim()) ?? 0;
+          return DateTime(targetDate.year, targetDate.month, targetDate.day, h, m);
         }
 
-        const title = 'Namazınızı Kıldınız mı? 🕌';
-        final body = '${q.name} namazınızı kıldınız mı?';
-        final payload = 'prayer_question|${q.name}|$todayStr';
+        // 1. Prayer Entry Items (İmsak, Güneş, Öğle, İkindi, Akşam, Yatsı)
+        final prayerItems = [
+          (name: 'İmsak', time: parseTime(dayTimings.fajr), prefKey: 'ImsakNotificationEnabled'),
+          (name: 'Güneş', time: parseTime(dayTimings.sunrise), prefKey: 'GunesNotificationEnabled'),
+          (name: 'Öğle', time: parseTime(dayTimings.dhuhr), prefKey: 'OgleNotificationEnabled'),
+          (name: 'İkindi', time: parseTime(dayTimings.asr), prefKey: 'IkindiNotificationEnabled'),
+          (name: 'Akşam', time: parseTime(dayTimings.maghrib), prefKey: 'AksamNotificationEnabled'),
+          (name: 'Yatsı', time: parseTime(dayTimings.isha), prefKey: 'YatsiNotificationEnabled'),
+        ];
 
-        final details =
-            _buildNotificationDetails(config: channelConfig, title: title);
+        for (int pIdx = 0; pIdx < prayerItems.length; pIdx++) {
+          final item = prayerItems[pIdx];
+          final isEnabled = prefs.getBool(item.prefKey) ??
+              prefs.getBool('${item.name}NotificationEnabled') ??
+              true;
+          if (!isEnabled) continue;
 
-        final scheduledTZ = tz.TZDateTime.from(questionTime, tz.local);
-        await _scheduleZonedWithFallback(
-          id: baseQuestionNotificationId + i,
-          title: title,
-          body: body,
-          scheduledDate: scheduledTZ,
-          notificationDetails: details,
-          payload: payload,
-        );
-        debugPrint(
-            '[LocalNotificationService] Scheduled kaza question for ${q.name} at $questionTime ($scheduledTZ)');
+          final targetTime = item.time;
+          if (targetTime.isBefore(now)) continue; // Already in the past
+
+          final farzIdx = (baseFarzIdx + globalFarzStep) % kFarz32List.length;
+          globalFarzStep++;
+          final farzItem = kFarz32List[farzIdx];
+
+          final title = '${item.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
+          final body = '${farzItem.title}: ${farzItem.notificationSummary}';
+          final details = _buildNotificationDetails(config: channelConfig, title: title);
+          final scheduledTZ = tz.TZDateTime.from(targetTime, tz.local);
+
+          final notifId = basePrayerNotificationId + (dayOffset * 10) + pIdx;
+          await _scheduleZonedWithFallback(
+            id: notifId,
+            title: title,
+            body: body,
+            scheduledDate: scheduledTZ,
+            notificationDetails: details,
+            payload: 'farz_article|${farzItem.id}',
+          );
+        }
+
+        // 2. Question Notifications ("Namazınızı Kıldınız mı? 🕌")
+        if (isQuestionMasterEnabled) {
+          final tSunrise = parseTime(dayTimings.sunrise);
+          final tAsr = parseTime(dayTimings.asr);
+          final tMaghrib = parseTime(dayTimings.maghrib);
+          final tIsha = parseTime(dayTimings.isha);
+
+          final questionItems = [
+            (
+              name: 'Sabah',
+              targetTime: tSunrise.subtract(const Duration(minutes: 45)),
+              prefKey: 'ImsakNotificationEnabled',
+              fallbackKey: 'SabahNotificationEnabled',
+            ),
+            (
+              name: 'Öğle',
+              targetTime: tAsr.subtract(const Duration(minutes: 45)),
+              prefKey: 'OgleNotificationEnabled',
+              fallbackKey: 'OgleNotificationEnabled',
+            ),
+            (
+              name: 'İkindi',
+              targetTime: tMaghrib.subtract(const Duration(minutes: 45)),
+              prefKey: 'IkindiNotificationEnabled',
+              fallbackKey: 'IkindiNotificationEnabled',
+            ),
+            (
+              name: 'Akşam',
+              targetTime: tIsha.subtract(const Duration(minutes: 45)),
+              prefKey: 'AksamNotificationEnabled',
+              fallbackKey: 'AksamNotificationEnabled',
+            ),
+            (
+              name: 'Yatsı',
+              targetTime: tIsha.add(const Duration(hours: 1)),
+              prefKey: 'YatsiNotificationEnabled',
+              fallbackKey: 'YatsiNotificationEnabled',
+            ),
+          ];
+
+          for (int qIdx = 0; qIdx < questionItems.length; qIdx++) {
+            final q = questionItems[qIdx];
+            final isEnabled = prefs.getBool(q.prefKey) ?? prefs.getBool(q.fallbackKey) ?? true;
+            if (!isEnabled) continue;
+
+            final questionTime = q.targetTime;
+            if (questionTime.isBefore(now)) continue; // In the past
+
+            const title = 'Namazınızı Kıldınız mı? 🕌';
+            final body = '${q.name} namazınızı kıldınız mı?';
+            final payload = 'prayer_question|${q.name}|$dayStr';
+
+            final details = _buildNotificationDetails(config: channelConfig, title: title);
+            final scheduledTZ = tz.TZDateTime.from(questionTime, tz.local);
+
+            final notifId = baseQuestionNotificationId + (dayOffset * 10) + qIdx;
+            await _scheduleZonedWithFallback(
+              id: notifId,
+              title: title,
+              body: body,
+              scheduledDate: scheduledTZ,
+              notificationDetails: details,
+              payload: payload,
+            );
+          }
+        }
       }
+
+      await prefs.setInt('FarzNotificationDaySlotsCount', globalFarzStep.clamp(1, 42));
+      debugPrint('[LocalNotificationService] Successfully scheduled 7-day rolling prayer & question notifications');
     } catch (e) {
       debugPrint(
           '[LocalNotificationService] scheduleAllPrayerNotifications error: $e');

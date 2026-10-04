@@ -198,7 +198,7 @@ class HatimNotifier extends StateNotifier<void> {
 
     final oldPages = hatim.completedPages;
     final newPages = targetPage > oldPages ? targetPage : oldPages;
-    final isDone = newPages >= 604;
+    final isDone = newPages >= hatim.totalPages || newPages >= 604;
 
     try {
       await db.transaction(() async {
@@ -230,7 +230,7 @@ class HatimNotifier extends StateNotifier<void> {
     }
 
     // Award XP & Track Reading Pages (Only when advancing forward)
-    final pagesDelta = (targetPage - oldPages).clamp(0, 604);
+    final pagesDelta = (targetPage - oldPages).clamp(0, 605);
     if (pagesDelta > 0) {
       final xpGained = pagesDelta * 20;
       await ref.read(gamificationNotifierProvider).addGold(xpGained);
@@ -293,7 +293,7 @@ class HatimNotifier extends StateNotifier<void> {
   }) async {
     final db = ref.read(databaseProvider);
     final id = 'mukabele_${DateTime.now().millisecondsSinceEpoch}';
-    final initialCompletedPages = (startPage > 1 ? startPage - 1 : 0).clamp(0, 604);
+    final initialCompletedPages = (startPage > 1 ? startPage - 1 : 0).clamp(0, 605);
 
     try {
       await db.transaction(() async {
@@ -325,7 +325,7 @@ class HatimNotifier extends StateNotifier<void> {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('MukabeleLastPage_$id', startPage.clamp(1, 604));
+    await prefs.setInt('MukabeleLastPage_$id', startPage.clamp(1, 605));
     await prefs.setString('MukabeleLastActiveHatimId', id);
     await prefs.setString('HatimLastReadDate_$id', DateTime.now().toIso8601String());
 
@@ -335,7 +335,7 @@ class HatimNotifier extends StateNotifier<void> {
   /// Saves the last read page position for Mukabele
   Future<void> saveMukabeleLastPage(String hatimId, int page) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('MukabeleLastPage_$hatimId', page.clamp(1, 604));
+    await prefs.setInt('MukabeleLastPage_$hatimId', page.clamp(1, 605));
     await prefs.setString('MukabeleLastActiveHatimId', hatimId);
     await prefs.setString('HatimLastReadDate_$hatimId', DateTime.now().toIso8601String());
   }
