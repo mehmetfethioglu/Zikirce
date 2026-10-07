@@ -1,0 +1,50 @@
+[
+  {
+    "brand_name": "Coca-Cola",
+    "parent_company": "The Coca-Cola Company",
+    "status_flag": "FLAGGED",
+    "reason": "Filistin işgal bölgelerindeki fabrika yatırımları ve etik ihlaller."
+  },
+  {
+    "brand_name": "Fanta",
+    "parent_company": "The Coca-Cola Company",
+    "status_flag": "FLAGGED",
+    "reason": "The Coca-Cola Company grup markası."
+  },
+  {
+    "brand_name": "Nestle",
+    "parent_company": "Nestlé S.A.",
+    "status_flag": "FLAGGED",
+    "reason": "Su özelleştirme skandalları ve işgal bölgesi ortaklıkları."
+  },
+  {
+    "brand_name": "Danone",
+    "parent_company": "Danone S.A.",
+    "status_flag": "CAUTION",
+    "reason": "Yerel sut endüstrisindeki tekelci satın almalar."
+  },
+  {
+    "brand_name": "Pepsico",
+    "parent_company": "PepsiCo, Inc.",
+    "status_flag": "FLAGGED",
+    "reason": "SodaStream ve İsrail merkezli gıda yatırımları."
+  },
+  {
+    "brand_name": "Lipton",
+    "parent_company": "Ekaterra / CVC Capital",
+    "status_flag": "CAUTION",
+    "reason": "Sürdürülebilirlik incelemesinde."
+  },
+  {
+    "brand_name": "Torku",
+    "parent_company": "Anadolu Birlik Holding",
+    "status_flag": "CLEAR",
+    "reason": "Yerli üretici, %100 şeker pancarı ve doğal içerik taahhüdü."
+  },
+  {
+    "brand_name": "Pınar",
+    "parent_company": "Yaşar Holding",
+    "status_flag": "CLEAR",
+    "reason": "Yerli üretici, temiz etiket standartları."
+  }
+]

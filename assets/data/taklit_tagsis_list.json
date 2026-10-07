@@ -1,0 +1,4498 @@
+[
+  {
+    "company_name": "MİRZABEY ET SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "TADINDA",
+    "product_name": "AYRAN",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Protein Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243869100
+  },
+  {
+    "company_name": "ANAMAS GIDA-ABDULLAH YILMAZ",
+    "brand_name": "ANAMAS",
+    "product_name": "TEREYAĞI (10 G)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243805480
+  },
+  {
+    "company_name": "KOÇ GÜLTEKİN SÜT ÜRÜNLERİ GIDA TARIM VE HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KOÇ GÜLTEKİN",
+    "product_name": "TAM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243740963
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYDİL GAZİOĞLU",
+    "product_name": "TAM YAĞLI TAZE TOST PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243672416
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÜVEN AL",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243659876
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TATSAN",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243649546
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TATSAN",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243638876
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ENEZBEY SÜT VE SÜT ÜRÜNLERİ",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243618076
+  },
+  {
+    "company_name": "ZENİ SÜT VE SÜT ÜRÜNLERİ İTHALAT İHRACAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TATSAN",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243610316
+  },
+  {
+    "company_name": "HNC SÜT VE SÜT ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ATA ÇİFTLİĞİ",
+    "product_name": "TAZE TOST PEYNİRİ AZ YAĞLI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243595956
+  },
+  {
+    "company_name": "OTARAN SÜT VE SÜT ÜRÜNLERİ-TAYFUN ÇAVUŞOĞLU",
+    "brand_name": "KURTBEY ÇİFTLİĞİ",
+    "product_name": "TUZSUZ TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243582336
+  },
+  {
+    "company_name": "MUTUM SÜT ÜRÜNLERİ TARIM HAYVANCILIK İNŞAAT GIDA NAKLİYE TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DOY HOREKA",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243560460
+  },
+  {
+    "company_name": "ÖZ MY GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "NARLIKUYU ANADOLU SÜT ÇİFTLİĞİ",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİRİ (1000GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243548663
+  },
+  {
+    "company_name": "KÖYCE SÜT VE SÜT ÜRÜNLERİ-ÜMMÜ GÜLSÜM AKTÜRK",
+    "brand_name": "KÖYCE",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243526260
+  },
+  {
+    "company_name": "DERMANSÜT GIDA VE İNŞAAT METAL SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "DERMAN SÜT",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243494210
+  },
+  {
+    "company_name": "HAMM SÜT ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HAMM SÜT",
+    "product_name": "TAM YAĞLI TAZE ÇEÇİL PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243479830
+  },
+  {
+    "company_name": "ELMAS SÜT ÜRÜNLERİ HAYVANCILIK BESİCİLİK GIDA NAKLİYAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "LOKMA",
+    "product_name": "LOKMA TAM YAĞLI TAZE PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243394076
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÜÇLER 1986",
+    "product_name": "AZ YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243359703
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÜÇLER",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243347416
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "PEYSÜT",
+    "product_name": "YARIM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243331823
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÜÇLER",
+    "product_name": "AZ YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243324330
+  },
+  {
+    "company_name": "AYDINOĞLU GIDA KATI YAKIT AKARYAKIT HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TOMRİS",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243317463
+  },
+  {
+    "company_name": "AYDINOĞLU GIDA KATI YAKIT AKARYAKIT HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TOMRİS",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243308070
+  },
+  {
+    "company_name": "AYLAÇ SÜT VE YEM ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÇİĞDEMLİ",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243300543
+  },
+  {
+    "company_name": "AYLAÇ SÜT VE YEM ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜTPLUS",
+    "product_name": "YARIM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1787243291816
+  },
+  {
+    "company_name": "ER ET ERCİYES ET VE ET ÜRÜNLERİ GIDA TİCARET VE SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "YILDIZ",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787243232913
+  },
+  {
+    "company_name": "ER ET ERCİYES ET VE ET ÜRÜNLERİ GIDA TİCARET VE SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "YILDIZ",
+    "product_name": "DİLİMLİ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787243221763
+  },
+  {
+    "company_name": "CEYLAN ET-YUSUF CEYLAN",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787243191160
+  },
+  {
+    "company_name": "EMKO GIDA ÜRETİM PAZARLAMA SANAYİ TURİZM VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "İNCİRLİOVA GÜVEN ET ÜRÜNLERİ DEVE ISIL İŞLEM GÖRMÜŞ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787243126463
+  },
+  {
+    "company_name": "ERCİYES SAKADAT ET TAVUK DERİ GIDA İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "BAŞKARTAL",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242985470
+  },
+  {
+    "company_name": "HARPUT YEMEK FABRİKASI-MAHMUT GÜLMEZ",
+    "brand_name": "-",
+    "product_name": "LAHMACUN (PİŞMİŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242956063
+  },
+  {
+    "company_name": "SARAY YEMEKÇİLİK-FERİDUN İNCE",
+    "brand_name": "-",
+    "product_name": "KIYMA KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242940960
+  },
+  {
+    "company_name": "GÖZDE TANTUNİ-RAHİME ŞENGÜL",
+    "brand_name": "-",
+    "product_name": "ET TANTUNİ (PİŞMİŞ KIRMIZI ET)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242926403
+  },
+  {
+    "company_name": "BUHARA LAHMACUN-MUSTAFA BAĞLAN",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242905406
+  },
+  {
+    "company_name": "YUSUF CAN ŞARVAN-YCŞ MAKARNA",
+    "brand_name": "UĞUR ŞARVAN KAYSERİ",
+    "product_name": "EL YAPIMI KAYSERİ MANTISI (500 GR)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Soya Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242885946
+  },
+  {
+    "company_name": "GÖRGÜNEROĞLU GIDA MADDELERİ İMALATI ZAHİRECİLİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KIZILCIKDERE GÖRGÜNEROĞLU ISIL İŞLEM GÖRMÜŞ SIĞIR SUCUK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ SIĞIR SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Dil) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242849266
+  },
+  {
+    "company_name": "SAFFET ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KOCAAĞA ÇİFTLİĞİ ISIL İŞLEM GÖRMÜŞ SUCUK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242823870
+  },
+  {
+    "company_name": "SAFFET ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SALİH KOCAAĞA ÇİFTLİĞİ ISIL İŞLEM GÖRMÜŞ SUCUK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242812086
+  },
+  {
+    "company_name": "SAFFET ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SALİH KOCAAĞA ÇİFTLİĞİ ISIL İŞLEM GÖRMÜŞ BATON SUCUK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ BATON SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242799773
+  },
+  {
+    "company_name": "SAFFET ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SALİH KOCAAĞA ÇİFTLİĞİ ISIL İŞLEM GÖRMÜŞ KANGAL SUCUK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ KANGAL SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242729190
+  },
+  {
+    "company_name": "SARIYER BÖREKÇİSİ-HAYRETTİN KAYA",
+    "brand_name": "-",
+    "product_name": "KIYMALI PİDE (PİŞMİŞ İÇ HARÇ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242678143
+  },
+  {
+    "company_name": "HÜSEYİN USTA MENEKŞE-TUNCAY ZOR",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242639053
+  },
+  {
+    "company_name": "SERDİVAN YEMEKÇİLİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ-CİĞERCİ BAHATTİN",
+    "brand_name": "-",
+    "product_name": "DANA-KUZU ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242615470
+  },
+  {
+    "company_name": "SAYAR PİDE-SULTAN SAYAR",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242585426
+  },
+  {
+    "company_name": "MURAT GÖBEKÇİ MEHMET ASLAN ORTAKLIĞI-BİR EYLÜL LOKANTASI",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI KARNIYARIK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242560843
+  },
+  {
+    "company_name": "HALK ETLİEKMEK VE PİDE FIRINI-İSMAİL GONCA",
+    "brand_name": "-",
+    "product_name": "ETLİ EKMEK İÇ HARCİ (DANA ETİ-KIYMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1787242546780
+  },
+  {
+    "company_name": "ZEYNARE GIDA TARIM İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "AYVALIK BİRLİK TAŞBASKI NATUREL SIZMA ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1787242453270
+  },
+  {
+    "company_name": "BİOCLASS BİTKİSEL ÜRÜNLER-MEHMET EMİN KAYA",
+    "brand_name": "HONEY PALACE",
+    "product_name": "EPİMEDYUMLU MACUN (15GR)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1787242440493
+  },
+  {
+    "company_name": "EL SURİ TEA-MİKAİL GÜNÇİÇEĞİ",
+    "brand_name": "PETEK SİYAH ÇAY",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1787242405890
+  },
+  {
+    "company_name": "KAYAR BAHARATLARI-HALİL KAYAR",
+    "brand_name": "KAYAR BAHARAT",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1787239986116
+  },
+  {
+    "company_name": "ARARBEY BAHARAT-SALİHA ARAR",
+    "brand_name": "-",
+    "product_name": "SUMAK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1787239810183
+  },
+  {
+    "company_name": "ÇUKUROVA BAHARAT-TUĞRUL DOLGUN",
+    "brand_name": "KEKİK OREGANO",
+    "product_name": "KEKİK (İŞLENMİŞ BÜTÜN VE PARÇA) 1000 GR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Yabancı Madde Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1787239769330
+  },
+  {
+    "company_name": "BALCILAR-HACER BALCI",
+    "brand_name": "ŞİFACIZADE",
+    "product_name": "SUCUKLUK BAHARAT KARIŞIMI",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1787239576260
+  },
+  {
+    "company_name": "HASTÜRK GIDA OTOMOTİV İNŞAAT EMLAK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ABALI",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1787233168006
+  },
+  {
+    "company_name": "VAHİT YILDIZ BALSU-VAHİT YILDIZ",
+    "brand_name": "ABALI",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1787233149820
+  },
+  {
+    "company_name": "SARIYER BÖREKÇİSİ-HATİCE DOĞDU",
+    "brand_name": "-",
+    "product_name": "KIYMALI BÖREK İÇ HARCI (PİŞMİŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785431374333
+  },
+  {
+    "company_name": "ATAÇINAR İNKAYA SÜT MAMÜLLERİ VE GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "İNKAYA",
+    "product_name": "YOĞURT 500 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Jelatin Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431340373
+  },
+  {
+    "company_name": "KIRSÜT SÜT VE SÜT ÜRÜNLERİ-BESTAMİ POLAT",
+    "brand_name": "SEMA SÜT",
+    "product_name": "KAHVALTILIK TOST PEYNİRİ-AZ YAĞLI ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431306610
+  },
+  {
+    "company_name": "ZEKİ KULOĞLU SÜT VE SÜT MAMÜLLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ-ZEKİ KULOĞLU SÜT VE SÜT MAMULLERİ",
+    "brand_name": "ZEKİ KULOĞLU",
+    "product_name": "AYRAN 170ML",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Protein Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431288633
+  },
+  {
+    "company_name": "ZEKİ KULOĞLU SÜT VE SÜT MAMÜLLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ-ZEKİ KULOĞLU SÜT VE SÜT MAMÜLLERİ",
+    "brand_name": "NİFUMA DEĞİRMENCİ",
+    "product_name": "AYRAN 180ML",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Protein Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431279686
+  },
+  {
+    "company_name": "ZEKİ KULOĞLU SÜT VE SÜT MAMÜLLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ-ZEKİ KULOĞLU SÜT VE SÜT MAMÜLLERİ",
+    "brand_name": "ZEKİ KULOĞLU",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ 1000G",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431272493
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LTD. ŞTİ.",
+    "product_name": "İLAYDA ÇİFTLİĞİ KAŞAR PEYNİRİ 1KG",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431240270
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "ECEBAT YARIM YAĞLI TAZE PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431231116
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LTD. ŞTİ.",
+    "product_name": "DERVİŞ BABA KAŞAR PEYNİRİ 1000",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431222546
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LTD. ŞTİ.",
+    "product_name": "İLAYDA ÇİFTLİĞİ KAŞAR PEYNİRİ 1000G",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431212720
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LTD. ŞTİ.",
+    "product_name": "İLAYDA ÇİFTLİĞİ TAZE KAŞAR PEYNİRİ 2000G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] % Yağ Oranının Düşük Olması,</br></br>Bitkisel Yağ Tespiti,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431189120
+  },
+  {
+    "company_name": "TASF.HAL.AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LTD. ŞTİ.",
+    "product_name": "İLAYDA ÇİFTLİĞİ TAZE KAŞAR PEYNİRİ 1000G",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431178980
+  },
+  {
+    "company_name": "BİLGEN HAYVANCILIK TARIM ÜRÜNLERİ GIDA İNŞAAT VE SANAYİ TİCARET LİMİTED ŞİRKETİ-HEWLER SÜT VE SÜT ÜRÜNLERİ",
+    "brand_name": "HEWLER TAM YAĞLI YOĞURT",
+    "product_name": "TAM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431083356
+  },
+  {
+    "company_name": "BOZCAN GIDA TEMİZLİK HAYVANCILIK YEM VE İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ-KOÇ SÜT VE SÜT ÜRÜNLERİ",
+    "brand_name": "BİLAL KOÇ SÜT VE SÜT ÜRÜNLERİ",
+    "product_name": "TUZLU TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431052520
+  },
+  {
+    "company_name": "TAMKAR MANDIRACILIK TARIM GIDA MÜTEAHHİTLİK NAKLİYE PAZARLAMA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TAMKAR",
+    "product_name": "TAM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785431038240
+  },
+  {
+    "company_name": "AK-PA ŞAVAK İNŞAAT GIDA İMALAT PAZARLAMA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AKPA ŞAVAK",
+    "product_name": "TUZLU TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430982776
+  },
+  {
+    "company_name": "BEYAŞ GIDA İNŞAAT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "MİSAŞ",
+    "product_name": "TUZLU TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430925526
+  },
+  {
+    "company_name": "ENVER ÖZBAY SÜT VE SÜT ÜRÜNLERİ HAYVANCILIK ZİRAAT GIDA TURİZM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "FATİH BEY",
+    "product_name": "BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430803993
+  },
+  {
+    "company_name": "CENGİZ TEMEL SÜT ÜRÜNLERİ-CENGİZ TEMEL",
+    "brand_name": "CENGİZ TEMEL SÜT VE SÜT ÜRÜNLERİ",
+    "product_name": "TAM YAĞLI TAZE SALAMURA PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430751433
+  },
+  {
+    "company_name": "RASİM ACAR-TALHA ACAR SÜT ÜRÜNLERİ",
+    "brand_name": "GÜÇLER",
+    "product_name": "TUZSUZ TEREYAĞI (500GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430730566
+  },
+  {
+    "company_name": "MUTLU MANDIRA GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "PAKPEY",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430687016
+  },
+  {
+    "company_name": "ÖZ-KAR SÜT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÖYDAĞ",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430621093
+  },
+  {
+    "company_name": "METİNBEY SÜT VE SÜT ÜRÜNLERİ-YEŞİM LATİFOĞLU",
+    "brand_name": "KRS METİNBEY",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430222860
+  },
+  {
+    "company_name": "OKAN KARS SÜT ÜRÜNLERİ-İLKNUR SADİOĞLU",
+    "brand_name": "ERDEMİR SÜT VE SÜT ÜRÜNLERİ",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785430114203
+  },
+  {
+    "company_name": "KAFAOĞLU SÜT VE GIDA MAMÜLLERİ SANAYİİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "OKTA",
+    "product_name": "TAM YAĞLI TAZE ERİTME PEYNİRİ",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Natamisin Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429776043
+  },
+  {
+    "company_name": "BİRSÜT SÜT VE GIDA MAMÜLLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ROYAL",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429765936
+  },
+  {
+    "company_name": "BİRSÜT SÜT VE GIDA MAMÜLLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ROYAL",
+    "product_name": "TAM YAĞLI KLASİK BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429375646
+  },
+  {
+    "company_name": "EREĞLİ İVRİZ PETROL GIDA VE MARKETÇİLİK SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "FAZIL ÖZKAN",
+    "product_name": "TAZE TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429313596
+  },
+  {
+    "company_name": "KAYSERİ İLİ DAMIZLIKSIĞIR YETİŞTİRİCİLERİKTİSADİİŞLETMESİ",
+    "brand_name": "HUNAT",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429215150
+  },
+  {
+    "company_name": "ERCİYES SÜT ÜRÜNLERİ LİMİTED ŞİRKETİ",
+    "brand_name": "NARLITEPE DOĞANIN SEVGİSİ",
+    "product_name": "TAM YAĞLI AYÇEKİRDEĞİ MISIR ÇEŞNİLİ ERİTME PEYNİRİ (500 GR)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429177273
+  },
+  {
+    "company_name": "BEYDE SÜT SANAYİ ANONİM ŞİRKETİ",
+    "brand_name": "BEYDE",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785429108136
+  },
+  {
+    "company_name": "DOĞUŞ ET VE SÜT MAMÜLLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ-GEDİZ ŞUBESİ",
+    "brand_name": "DOĞUŞ",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785428907476
+  },
+  {
+    "company_name": "ÇATALPINAR SÜT ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÇATALPINAR TAZE BEYAZ PEYNİR",
+    "product_name": "ÇATALPINAR TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785428782636
+  },
+  {
+    "company_name": "ADAPEY SÜT ÜRÜNLERİ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TURKUAZ SÜT ÜRÜNLERİ",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785428682466
+  },
+  {
+    "company_name": "SAMTAT SÜT ÜRÜNLERİ İMALATI VE PAZARLAMA-HATİCE BAY",
+    "brand_name": "SAMTAT",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785428061603
+  },
+  {
+    "company_name": "SÜRSÜRÜ KÖY ÜRÜNLERİ-KEMAL GÜR",
+    "brand_name": "SÜRSÜRÜ KÖY ÜRÜNLERİ",
+    "product_name": "%1.5 YAĞLI YAYIK AYRAN",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1785427534960
+  },
+  {
+    "company_name": "NURS LOKMAN HEKİM GIDA, TARIM, BİTKİ VE BOTANİK MEDİKAL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ADAVİTAL",
+    "product_name": "PANAX GİNGSENG & ÇOBAN ÇÖKERTEN & YULAF İÇEREN TAKVİYE EDİCİ GIDA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1785427307756
+  },
+  {
+    "company_name": "HALİL ÇEVİK",
+    "brand_name": "-",
+    "product_name": "TATLI BİBER SALÇASI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1785426804333
+  },
+  {
+    "company_name": "NURETTİN SAYĞILI",
+    "brand_name": "-",
+    "product_name": "DONDURULMUŞ KARACİĞER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426762613
+  },
+  {
+    "company_name": "NURETTİN SAYĞILI",
+    "brand_name": "-",
+    "product_name": "DONDURULMUŞ KUŞBAŞI KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426751890
+  },
+  {
+    "company_name": "NURETTİN SAYĞILI",
+    "brand_name": "-",
+    "product_name": "KIRMIZI PARÇA ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426739833
+  },
+  {
+    "company_name": "MEHMET ÇİFTÇİ",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426657103
+  },
+  {
+    "company_name": "ÖZDERİNALP KASABI-CEM DERİNALP",
+    "brand_name": "DERİNALP KARDEŞLER",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426584620
+  },
+  {
+    "company_name": "HİRA ET VE ET ÜRÜNLERİ-MEHMET AVCI",
+    "brand_name": "POZANTI YÖRESEL",
+    "product_name": "DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426569853
+  },
+  {
+    "company_name": "MAB ET ÜRÜNLERİ-MEHMET BIRAKOĞLU",
+    "brand_name": "TESKİNOĞLU",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426529813
+  },
+  {
+    "company_name": "YNS ET MAMÜLLERİ GIDA MADDELERİ PAZARLAMA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÜNSELİZADEM",
+    "product_name": "KASAP PİLİÇ KÖFTE (ISIL İŞLEM UYGULANMIŞ PİLİÇ ETİ ÜRÜNÜ-PİŞMİŞ&DONDURULMUŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426514636
+  },
+  {
+    "company_name": "MEGA ÇINAR GRUP-HAYDAR AŞILIOĞLU",
+    "brand_name": "MEGA ÇINAR",
+    "product_name": "PİLİÇ KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426497143
+  },
+  {
+    "company_name": "ULU HÜNKAR KÖŞKÜ KAFE RESTORAN LİMİTED ŞİRKETİ-ULU HÜNKAR",
+    "brand_name": "-",
+    "product_name": "İSKENDER ET DÖNER (PİŞMİŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426262930
+  },
+  {
+    "company_name": "EROĞLU YEMEKÇİLİK GIDA İNŞAAT TAAHHÜT OTOMOTİV SANAYİ VE TİCARET LİMİTED ŞİRKETİ-EROĞLU YEMEK FABRİKASI",
+    "brand_name": "-",
+    "product_name": "DANA ETLİ KADINBUDU KÖFTE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426227773
+  },
+  {
+    "company_name": "İSTANBULKAPI ÇORBACISI-MUHAMMED EMİR AYLANÇ",
+    "brand_name": "-",
+    "product_name": "KIYMALI PİDE İÇ HARCI(DANA ETLİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785426197496
+  },
+  {
+    "company_name": "MİNİK TANTUNİ-DÖNER SALONU-EYÜP GÜNER",
+    "brand_name": "-",
+    "product_name": "ET TANTUNİ (PİŞMİŞ DANA ETİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425943040
+  },
+  {
+    "company_name": "TANEM YEMEKÇİLİK-MERRUŞE FİLİK",
+    "brand_name": "-",
+    "product_name": "DANA KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425917286
+  },
+  {
+    "company_name": "GAZİANTEP SOFRASI BEYRANCI AHMET-AHMET ÇELİK",
+    "brand_name": "-",
+    "product_name": "ET TANTUNİ (PİŞMİŞ DANA ETİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425861073
+  },
+  {
+    "company_name": "ENES TANTUNİ VE DÖNER-SERDAR ÇEKİŞ",
+    "brand_name": "-",
+    "product_name": "ET TANTUNİ (DANA ETİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425737776
+  },
+  {
+    "company_name": "GAZİANTEP SOFRASI-BEYRANCI AHMET-AHMET ÇELİK",
+    "brand_name": "-",
+    "product_name": "ETLİ BEYRAN YEMEĞİ",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425723826
+  },
+  {
+    "company_name": "BİNGÖL LOKANTASI-ORHAN BİNGÖL",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBAP HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Deri Dokusu Tespiti,</br></br>Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1785425689866
+  },
+  {
+    "company_name": "VLKN TARIM GIDA TURİZM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "AYVALIK NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1785425584310
+  },
+  {
+    "company_name": "BALÇİFTLİĞİ GURME ŞARKÜTERİ-AHMET KAMİL EYNALLI",
+    "brand_name": "BAL ÇİFTLİĞİ GURME",
+    "product_name": "SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1785425504003
+  },
+  {
+    "company_name": "PEG GIDA PAZARLAMA VE LOJİSTİK TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ALİN",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (1 L)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1785425482620
+  },
+  {
+    "company_name": "SAMOCAK GIDA İNŞAAT TURİZM TARIM VE HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GİMSAŞ",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1785425420443
+  },
+  {
+    "company_name": "ENFA GIDA-MUSTAFA ENÇETİN",
+    "brand_name": "ZARAKÖY",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1785425394483
+  },
+  {
+    "company_name": "İFLAS HAL. DEMİRAY SÜT ÜRÜNLERİ GIDA SANAYİ VE DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÖKYURT",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740634450
+  },
+  {
+    "company_name": "TALHA ACAR SÜT ÜRÜNLERİ-RASİM ACAR",
+    "brand_name": "RASİM USTA MUTLU",
+    "product_name": "TUZSUZ TEREYAĞI (500GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740610950
+  },
+  {
+    "company_name": "SOLPA GIDA İNŞAAT TURİZM PAZ. İTHALAT İHRACAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SOLPA HAZAR",
+    "product_name": "YARIM YAĞLI AYRAN",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740583720
+  },
+  {
+    "company_name": "TEMBA DAYANIKLI TÜKETİM KIRTASİYE İNŞAAT ELEKTRİK ELEKTRONİK GIDA TARIM ÜRN.HAY.SAN.VE TİC.LTD.ŞTİ.-ŞİRİN TATVAN SÜT VE SÜT ÜRÜNLERİ",
+    "brand_name": "ŞİRİN",
+    "product_name": "TAM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740572213
+  },
+  {
+    "company_name": "ANAMAS GIDA-ABDULLAH YILMAZ",
+    "brand_name": "ANAMAS PİKNİK",
+    "product_name": "TEREYAĞI-10 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740545460
+  },
+  {
+    "company_name": "MUTUM SÜT ÜRÜNLERİ TARIM HAYVANCILIK İNŞAAT GIDA NAKLİYE TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DOY HOREKA",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740412696
+  },
+  {
+    "company_name": "MUTUM SÜT ÜRÜNLERİ TARIM HAYVANCILIK İNŞAAT GIDA NAKLİYE TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DOY HOREKA",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740397526
+  },
+  {
+    "company_name": "MUTUM SÜT ÜRÜNLERİ TARIM HAYVANCILIK İNŞAAT GIDA NAKLİYE TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DOY HOREKA",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740386120
+  },
+  {
+    "company_name": "HERKÜL ÇİFTLİĞİ SÜT VE SÜT ÜRÜNLERİ LİMİTED ŞİRKETİ",
+    "brand_name": "YAYLACIK ÇİFTLİĞİ",
+    "product_name": "KOYUN YOĞURDU",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] İnek Sütü Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740356880
+  },
+  {
+    "company_name": "TEK AR GIDA SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "TEKAR SÜT ÜRÜNLERİ",
+    "product_name": "YARIM YAĞLI TAZE KAŞAR PEYNİRİ-2000 GR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740334196
+  },
+  {
+    "company_name": "MİRAS SÜT ÜRÜNLERİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MİRSAN AKŞEHİR",
+    "product_name": "YARIM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740247310
+  },
+  {
+    "company_name": "MİRAS SÜT ÜRÜNLERİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MİRSAN AKŞEHİR",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740207603
+  },
+  {
+    "company_name": "MİRAS SÜT ÜRÜNLERİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AL SÜT",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740199083
+  },
+  {
+    "company_name": "MİRAS SÜT ÜRÜNLERİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MİRSAN",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740190120
+  },
+  {
+    "company_name": "ERBALCILAR GIDA TARIM HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "BERENER",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740178253
+  },
+  {
+    "company_name": "İFLAS HAL. ERKON SÜT ÜRÜNLERİ GIDA TARIM VE AMBALAJ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ERKON",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740155976
+  },
+  {
+    "company_name": "ÖZEMEK TEREYAĞI SÜT ÜRÜNLERİ LİMİTED ŞİRKETİ",
+    "brand_name": "EBRAR ALYA",
+    "product_name": "AYÇEKİRDEĞİ MISIR ÇÖREKOTU ÇEŞNİLİ TAM YAĞLI TAZE ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740065030
+  },
+  {
+    "company_name": "ÖZEMEK TEREYAĞI SÜT ÜRÜNLERİ LİMİTED ŞİRKETİ",
+    "brand_name": "EBRAR ALYA",
+    "product_name": "YARIM YAĞLI TAZE ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784740022456
+  },
+  {
+    "company_name": "İFLAS HAL.TAKIŞ GIDA SANAYİİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TAKIŞOĞLU",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739958706
+  },
+  {
+    "company_name": "İFLAS HAL.TAKIŞ GIDA SANAYİİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MORA ÇİFTLİK",
+    "product_name": "DİLİMLİ KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739950696
+  },
+  {
+    "company_name": "ÖZERLER SÜT ÜRÜNLERİ VE MARKETÇİLİK ANONİM ŞİRKETİ",
+    "brand_name": "FORMİA (PİZZALIK PEYNİR)",
+    "product_name": "TAM YAĞLI TAZE ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739937050
+  },
+  {
+    "company_name": "HAMM SÜT ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HAMM SÜT",
+    "product_name": "YARIM YAĞLI ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739898823
+  },
+  {
+    "company_name": "TEVFİK ÖRSELOĞLU-TRABZON G.U.K. SÜT ÜRÜNLERİ İMALATI",
+    "brand_name": "TURNALAR ÇİFTLİĞİ SÜT ÜRÜNLERİ",
+    "product_name": "TEREYAĞI %80 SÜT YAĞLI (1000 G)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739849593
+  },
+  {
+    "company_name": "KORKMAZ SÜT BESİ GIDA NAKLİYAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TATBURÇ",
+    "product_name": "AYRAN",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Protein Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739771793
+  },
+  {
+    "company_name": "MEHMET TOPRAK",
+    "brand_name": "OSMANOĞLU",
+    "product_name": "SADEYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1784739756116
+  },
+  {
+    "company_name": "ER ET ERCİYES ET VE ET ÜRÜNLERİ GIDA TİCARET VE SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "product_name": "YILDIZ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739727346
+  },
+  {
+    "company_name": "SERBESTLER MADENCİLİK GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÇİRİŞLİ",
+    "product_name": "DANA KAVURMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739702900
+  },
+  {
+    "company_name": "KUMRAS TEKSTİL İÇ VE DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "LAHMACUN İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739656506
+  },
+  {
+    "company_name": "ÇAM ETLİ PİDE SALONU-İMDAT BOZKIR",
+    "brand_name": "-",
+    "product_name": "KIYMALI PİDE HARCI (DANA ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739639320
+  },
+  {
+    "company_name": "CESİM ÖZALP ÖZEL SAĞLIK EĞİTİM DEKORASYON İNŞAAT TURİZM GIDA İLETİŞİM SANAYİ VE TİCARET LTD.ŞTİ.-SEFA ET",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739627273
+  },
+  {
+    "company_name": "PİDE'NEM HAKAN USTA-KADER AYDIN",
+    "brand_name": "-",
+    "product_name": "LAHMACUN HARCI (DANA KIYMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739614270
+  },
+  {
+    "company_name": "CİĞERCİ DİYADİN USTA-MEKKİYE ASANA",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBABI (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739598523
+  },
+  {
+    "company_name": "HÜSNÜ AMCA LAHMACUN-MUSTAFA DİKEN",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KUŞBAŞI PİDE HARCI (DANA+KUZU)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739582306
+  },
+  {
+    "company_name": "M GOLD ET ÜRÜNLERİ GIDA TEKSTİL SANAYİ VE TİCARET LİMİTED ŞİRKETİ-M.CEYLANLAR KASABI",
+    "brand_name": "-",
+    "product_name": "ÇİĞ DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739567216
+  },
+  {
+    "company_name": "ÖZ URFA-MEHMET ALTUNOVA",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739549526
+  },
+  {
+    "company_name": "SİNAN CHEF DÖNERİUM RESTORAN ANONİM ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "DANA ETİNDEN HAZIRLANMIŞ ÇİĞ ET KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1784739526956
+  },
+  {
+    "company_name": "ŞİFADAN EMİN BAHARAT-ENGİN GÖKTEKİN",
+    "brand_name": "MPLUS",
+    "product_name": "EPİMEDİUMLU BİTKİSEL MACUN-240 GR",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1784739406263
+  },
+  {
+    "company_name": "FİTO FARMA İLAÇ İÇECEK KOZMETİK VE KİMYA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "İ COLLAGEN",
+    "product_name": "HİDROLİZE KOLLAJEN PREBİYOTİK LİF BİTKİ EKSTRELERİ İÇEREN TABLET TAKVİYE EDİCİ GIDA 60 TABLET",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Beyan Edilen Etken Maddenin Tespit Edilmemesi",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1784739366510
+  },
+  {
+    "company_name": "VKB TARIM ÜRÜNLERİ-SEZGİN ÇETİN",
+    "brand_name": "-",
+    "product_name": "AYVALIK VAKIF BİRLİK NATUREL SIZMA ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1784739274480
+  },
+  {
+    "company_name": "EAT TARIM ÜRÜNLERİ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "AYVALIK BİRLİK TAŞ BASKI ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1784739225640
+  },
+  {
+    "company_name": "EAT TARIM ÜRÜNLERİ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "AYVALIK DOĞAL NATUREL SIZMA ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1784739206570
+  },
+  {
+    "company_name": "EAT TARIM ÜRÜNLERİ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "EGE HİSAR NATUREL SIZMA ZYTİNYAĞI 16L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1784739192450
+  },
+  {
+    "company_name": "ASİL GIDA İMALAT TİCARET TEDARİK TAAHHÜT-AHMET TALŞIK",
+    "brand_name": "BİNBİR PETEK",
+    "product_name": "PETEKLİ ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1784739110286
+  },
+  {
+    "company_name": "AKAR BAL-GÖKDAĞ KARAYAKA",
+    "brand_name": "PELİT",
+    "product_name": "SÜZME ÇİÇEK BALI-20 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1784739084890
+  },
+  {
+    "company_name": "ENFA GIDA-MUSTAFA ENÇETİN",
+    "brand_name": "ERTUĞRUL",
+    "product_name": "SÜZME ÇİÇEK BALI (1 KG)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1784738567760
+  },
+  {
+    "company_name": "ERGÜN ET VE ET ÜRÜNLERİ- ERGÜN SUCUK İMALATHANESİ-METİN ERGÜN",
+    "brand_name": "ERGÜN SUCUKLARI",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673206630
+  },
+  {
+    "company_name": "ÖZLÜCE ET ÜRÜNLERİ-HASAN BUZLUK",
+    "brand_name": "KASAP",
+    "product_name": "DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Deri Dokusu Tespiti,</br></br>Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673192956
+  },
+  {
+    "company_name": "ÜZER GIDA TARIM İNŞAAT LOJİSTİK ÖZEL SAĞLIK HİZMETLERİ İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "YÖRE",
+    "product_name": "DANA SUCUK (900 GR)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673177006
+  },
+  {
+    "company_name": "TEPE ET ÜRÜNLERİ PAZARLAMA GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KAYRA",
+    "product_name": "DANA SUCUK 400 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673162670
+  },
+  {
+    "company_name": "KAYSERİ MERCAN GIDA ÜRETİM PAZARLAMA SANAYİ DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MERCAN ÇİFTLİĞİ",
+    "product_name": "BÜFE PİLİÇ SALAM 400 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673145163
+  },
+  {
+    "company_name": "DAMAK TADI LOKANTA-ÖZNUR YOKUŞ",
+    "brand_name": "-",
+    "product_name": "KURU KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673109096
+  },
+  {
+    "company_name": "ZEYNEP ET TAVUK DÜNYASI-MERYEM SUBAŞI",
+    "brand_name": "-",
+    "product_name": "ÇİĞ DANA KIYMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673089880
+  },
+  {
+    "company_name": "LİNA ET GURME-LINA AL ALİ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ DANA KIYMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673070220
+  },
+  {
+    "company_name": "YÖREMİZ 3 LAHMACUN PİDE SALONU-ŞEYHMUS PARLAK",
+    "brand_name": "-",
+    "product_name": "LAHMACUN İÇ HARCI (DANA ETLİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673051560
+  },
+  {
+    "company_name": "DENLİ ET VE ET ÜRÜNLERİ HAYVANCILIK TOPTAN VE PERAKENDE GIDA LİMİTED ŞİRKETİ-KASAP SALİM",
+    "brand_name": "-",
+    "product_name": "KASAP KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783673036940
+  },
+  {
+    "company_name": "COŞKAR YAĞ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK GURME",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783672955726
+  },
+  {
+    "company_name": "KASIRGA GIDA PAZARLAMA İNŞAAT NAKLİYAT VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DEDEDEN TORUNA SİNCE 1994",
+    "product_name": "NEW AYVALIK NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783672937513
+  },
+  {
+    "company_name": "İSAR GIDA SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "NURÇAY FİLİZ",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1783672907100
+  },
+  {
+    "company_name": "İSAR GIDA SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "NURÇAY ALTIN BAŞAK",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1783672890010
+  },
+  {
+    "company_name": "MUSTAFA ÖZTÜRK",
+    "brand_name": "MEVSİMSEL BAHARAT",
+    "product_name": "KEKİK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Yabancı Madde Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1783672872283
+  },
+  {
+    "company_name": "İFLAS HAL.CEVİZDEN GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ-EKLERİSTAN",
+    "brand_name": "-",
+    "product_name": "ANTEP FISTIKLI EKLER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Ay Çekirdeği Tespiti",
+    "category": "Pastacılık Ürünleri ve Tatlılar",
+    "announced_at": 1783015070913
+  },
+  {
+    "company_name": "PROSES İLAÇ VE KİMYA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "APB BALANCE MİNİVİT KİDS",
+    "product_name": "MULTİVİAMİN MULTİ MİNERAL VE KARAR MÜRVER İÇEREN TAKVİYE EDİCİ GIDA",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Beyan Edilen Etken Maddenin Tespit Edilmemesi",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1783015055803
+  },
+  {
+    "company_name": "HALİL ÇEVİK",
+    "brand_name": "-",
+    "product_name": "ÜZÜM PEKMEZİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Şeker İlavesi Tespiti",
+    "category": "Şekerli Mamuller",
+    "announced_at": 1783015037770
+  },
+  {
+    "company_name": "MUSTAFA FIRIN KALE ET VE ET ÜRÜNLERİ-MUSTAFA FIRIN",
+    "brand_name": "KALE ET MUSTAFA FIRIN",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783015001973
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "YUSUF BEYOĞLU AFYONKARAHİSAR",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014987583
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR CEYTÜRK SUCUKLARI",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014976350
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR AKİT",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014964663
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR DOĞAŞ",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014953113
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "YUSUF BEYOĞLU",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014942020
+  },
+  {
+    "company_name": "ŞİMAL ET ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR EFEM SUCUKLARI",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014930316
+  },
+  {
+    "company_name": "KULE SUCUKLARI VE ET ÜRÜNLERİ HAYVANCILIK DAĞITIM VE PAZARLAMA İTHALAT İHRACAT SAN.VE TİC.LTD.ŞTİ.",
+    "brand_name": "KULE AFYONKARAHİSAR",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Baş Eti) Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014875600
+  },
+  {
+    "company_name": "KULE SUCUKLARI VE ET ÜRÜNLERİ HAYVANCILIK DAĞITIM VE PAZARLAMA İTHALAT İHRACAT SAN.VE TİC.LTD.ŞTİ.",
+    "brand_name": "KULE AFYONKARAHİSAR",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014864973
+  },
+  {
+    "company_name": "KULE SUCUKLARI VE ET ÜRÜNLERİ HAYVANCILIK DAĞITIM VE PAZARLAMA İTHALAT İHRACAT SAN.VE TİC.LTD.ŞTİ.",
+    "brand_name": "AFYONKARAHİSAR KULE",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014851943
+  },
+  {
+    "company_name": "BAYRAKOĞLU ET ÜRÜNLERİ-ALİ BAYRAK\r\n-ALİ BAYRAK",
+    "brand_name": "ÖZLÜM",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014834786
+  },
+  {
+    "company_name": "TABRIZ ISRAFILOV",
+    "brand_name": "VARNALI KAVURMA",
+    "product_name": "KAVURMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti,</br></br>Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014799520
+  },
+  {
+    "company_name": "EGE CANET PAZARLAMA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TİRE-EGE GÖÇMENOĞLU",
+    "product_name": "IŞIL İŞLEM GÖRMÜŞ SUCUK (DİLİMLİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014709490
+  },
+  {
+    "company_name": "ETBİRSAN GIDA HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HALİL AĞA",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014602223
+  },
+  {
+    "company_name": "ALADAĞ ETLİEKMEK-MUSTAFA ALADAĞ",
+    "brand_name": "-",
+    "product_name": "LAHMACUN İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014537350
+  },
+  {
+    "company_name": "NECMETTİN ERBAKAN ÜNİV. E BLOK LOKANTA KAFETERYA-ŞEFİK KILIÇASLAN",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014522723
+  },
+  {
+    "company_name": "ÖZKAN DEMİRBACAK ET LİMİTED ŞİRKETİ-ÖZ İKRAM KASABI (KADINLAR PAZARI)",
+    "brand_name": "-",
+    "product_name": "KIYMA (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014380960
+  },
+  {
+    "company_name": "GÜRKAN PİDE SALONU-GÜRKAN FİLİZ",
+    "brand_name": "-",
+    "product_name": "PİDE İÇ HARCI (DANA KIYMA,DOMATES, BİBER, MAYDONOZ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1783014359676
+  },
+  {
+    "company_name": "EMRE ÇULHA",
+    "brand_name": "MUDANYA KÖY-KOOP",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783014309240
+  },
+  {
+    "company_name": "MUSTAFA GENÇ",
+    "brand_name": "-",
+    "product_name": "ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783014282066
+  },
+  {
+    "company_name": "HALİL ÇEVİK",
+    "brand_name": "-",
+    "product_name": "NATUREL BİRİNCİ ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783014269896
+  },
+  {
+    "company_name": "DGL GIDA-ENES ÇELİK",
+    "brand_name": "DGL GIDA",
+    "product_name": "ZEYTİVA DOĞAL ZEYTİNYAĞI NATUREL",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1783014256723
+  },
+  {
+    "company_name": "SAKAOĞLU GRUP PAZARLAMA-FAHRETTİN SAKA",
+    "brand_name": "KRAVATLI ÇAY",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1783014211506
+  },
+  {
+    "company_name": "AKBAR ÇAY GIDA TEKSTİL NAKLİYAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "VİCTORİA",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1783014199630
+  },
+  {
+    "company_name": "BAŞ KÖYLÜ BAHARAT-TAHSİN BOZKURT",
+    "brand_name": "BAŞKÖYLÜ BAHARAT",
+    "product_name": "BAŞKÖYLÜ BAHARAT KIRMIZI TOZ BİBER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1783014124693
+  },
+  {
+    "company_name": "HALİL ÇEVİK",
+    "brand_name": "-",
+    "product_name": "ÇAM BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1783013967863
+  },
+  {
+    "company_name": "HEKİMZADE İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "HEKİMZADE",
+    "product_name": "HEKİMZADE AFROMEN ÇAKŞIROTU İÇEREN TAKVİYE EDİCİ GIDA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1782370856210
+  },
+  {
+    "company_name": "HEKİMZADE İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "HEKİMZADE",
+    "product_name": "HEKİMZADE AFROMEN ÇAKŞIROTU İÇEREN TAKVİYE EDİCİ GIDA 750MG*30KAPSÜL",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1782370843273
+  },
+  {
+    "company_name": "HEKİMZADE İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "HEKİMZADE",
+    "product_name": "AFROMEN BİTKİSEL-750MG-30KAPSÜL",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1782370827553
+  },
+  {
+    "company_name": "HEKİMZADE İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "HEKİMZADE",
+    "product_name": "HEKİMZADE AFROMEN BİTKİSEL 750MG 30KAPSÜL",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1782370810023
+  },
+  {
+    "company_name": "BİLALOĞLU SÜT VE ÜRÜNLERİ GIDA HAYVANCILIK SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KÖY PARK",
+    "product_name": "TAM YAĞLI KREMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1782370764116
+  },
+  {
+    "company_name": "TEZCANLAR SÜT ÜRÜNLERİ SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ARSLAN",
+    "product_name": "ARSLAN HOMOJENİZE YARIM YAĞLI YOĞURT 500 GRAM",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1782370743540
+  },
+  {
+    "company_name": "POLAT UYSAL",
+    "brand_name": "-",
+    "product_name": "ÜRETİM ALANINDAN ALINAN %100 PİLİÇ ETİ OLDUĞU BEYAN EDİLEN KÖFTE ÜRÜNÜ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1782370709226
+  },
+  {
+    "company_name": "MKABASAKAL İNŞAAT LOJİSTİK GIDA SAN. TİC. LTD. ŞT.İ",
+    "brand_name": "MKABASAKAL HARİKA SUCUKLARI",
+    "product_name": "DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Dil) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1782370694523
+  },
+  {
+    "company_name": "ÖZSULTAN ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ-ÖZSULTAN ET DÜNYASI",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1782370681663
+  },
+  {
+    "company_name": "BİCEN MAĞAZACILIK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "DANA-KUZU KÖFTE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1782370664366
+  },
+  {
+    "company_name": "CENEVİZ GIDA VE KİMYA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "CENEVİZ",
+    "product_name": "DOĞAL KIRMIZI %10 SU BAZLI NATUREL RED (RENKLENDİRİCİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Gıda Katkı Maddeleri",
+    "announced_at": 1781800865133
+  },
+  {
+    "company_name": "YUGA DIŞ TİCARET-YUNUS GAZİOĞLU",
+    "brand_name": "POLYFOODİNG",
+    "product_name": "HİBİSCUS (RENKLENDİRİCİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Gıda Katkı Maddeleri",
+    "announced_at": 1781800811853
+  },
+  {
+    "company_name": "YÜSRA KUYUMCULUK HAYVANCILIK İNŞAAT TAAHHÜT GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ŞAVAK GENÇOĞLU",
+    "product_name": "TAZE TAM YAĞLI KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800788680
+  },
+  {
+    "company_name": "AK-PA ŞAVAK İNŞAAT GIDA İMALAT PAZARLAMA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AKPA ŞAVAK",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800732290
+  },
+  {
+    "company_name": "YOĞURTÇU İDRİS-MURAT USTURUMCALI",
+    "brand_name": "YOĞURTÇU İDRİS",
+    "product_name": "TAM YAĞLI KAYMAKLI YOĞURT 500 G",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Koyun Sütü Tespit Edilmemesi",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800715820
+  },
+  {
+    "company_name": "MUTUM SÜT ÜRÜNLERİ TARIM HAYVANCILIK İNŞAAT GIDA NAKLİYE TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ELA MUTLU",
+    "product_name": "TAM YAĞLI ERİTME PEYNİRİ (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800620383
+  },
+  {
+    "company_name": "MERSİNLİ HANIMAĞA SÜT VE SÜT ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "BAŞ KALESÜT",
+    "product_name": "TAM YAĞLI AYRAN (360 ML)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800508446
+  },
+  {
+    "company_name": "ÖZ-KAR SÜT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KARSBEYİ",
+    "product_name": "KARS GÖBEK KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800475710
+  },
+  {
+    "company_name": "EŞME YEM SÜT VE SÜT ÜRÜNLERİ TARIM HAYVANCILIK NAKLİYE İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "ÇAMOLUK",
+    "product_name": "KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1781800419663
+  },
+  {
+    "company_name": "SERVİN SENA ESLİK-CANKURT ET VE ET MAMULLERİ TİCARETİ",
+    "brand_name": "MANDIRA ŞEFİ",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800254586
+  },
+  {
+    "company_name": "YAKUPAĞA ET VE ET ÜRÜNLERİ HAYVANCILIK TARIM ÜRÜNLERİ GIDA PAZARLAMA İTHALAT İHR.TİC.VE SAN.LTD.ŞTİ.",
+    "brand_name": "YAKUPAĞA SUCUKLARI",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800225603
+  },
+  {
+    "company_name": "GÖKHAN KAYAR ET VE ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÖKHAN KAYAR",
+    "product_name": "KASAP KANGAL DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800171133
+  },
+  {
+    "company_name": "RATU BURGER-RAMİZ SERHAT ÖZTÜRK",
+    "brand_name": "-",
+    "product_name": "HAMBURGER KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Soya Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800142540
+  },
+  {
+    "company_name": "İNCİRALTI KEBAP EVİ-MEHMET TEKDAL",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800130256
+  },
+  {
+    "company_name": "07 EMİR ET-ZEHRA SÖYÜÇEN",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800113210
+  },
+  {
+    "company_name": "KARDEŞLER KEBAP SALONU YENİ-YUSUF KAYA",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800100853
+  },
+  {
+    "company_name": "CİĞERCİ CANO-İBRAHİM ÖNDER",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBABI (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800087056
+  },
+  {
+    "company_name": "LÖP LÖP GIDA-NİLGÜN BİLDİRİCİ",
+    "brand_name": "LÖP LÖP",
+    "product_name": "İÇLİ KÖFTE",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800047180
+  },
+  {
+    "company_name": "ÖZ ŞAMEDAN YEMEKÇİLİK CATERING-SÜLEYMAN DAĞ",
+    "brand_name": "-",
+    "product_name": "DANA ETİ KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781800008806
+  },
+  {
+    "company_name": "DÜRÜMCÜ İZZET-MİTHAT DEMİR",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781799965056
+  },
+  {
+    "company_name": "SEZGİNLER OCAKBAŞI-BEŞİR SEZGİN",
+    "brand_name": "-",
+    "product_name": "DANA VE KUZU ETLİ ADANA KEBAP (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1781799950400
+  },
+  {
+    "company_name": "OKKAS GIDA KOZMETİK ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DİBLONG",
+    "product_name": "GİNSENG CHOCOLATE FOR MEN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Çikolata ve Kakao Ürünleri",
+    "announced_at": 1781799833743
+  },
+  {
+    "company_name": "COŞKAR YAĞ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ZEYTİNOVAM AYVALIK SERİSİ",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1781799757070
+  },
+  {
+    "company_name": "SİDRA GIDA VE İNŞAAT TAAHHÜT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MYSEM LİFE",
+    "product_name": "BİTKİSEL KARIŞIM MACUN (240 G)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1781799733650
+  },
+  {
+    "company_name": "ADA ÇAY SANAYİ PAZARLAMA VE DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "BEHİÇ ÇAY EXPORT SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1781799714320
+  },
+  {
+    "company_name": "TİREBOLU ÇAYSAN ÇAY SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ELMAS",
+    "product_name": "DEMLİK POŞET SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1781799686866
+  },
+  {
+    "company_name": "ELHAYER GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ALADEEP",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1781799543836
+  },
+  {
+    "company_name": "ERBALCI TİCARET-YUSUF ERBALCI",
+    "brand_name": "ERBALCI BAHARAT",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1781799532023
+  },
+  {
+    "company_name": "ÇOBANOĞLU GIDA-ÖZAL ÇOBAN",
+    "brand_name": "NUR CEYLAN ERZİNCAN",
+    "product_name": "ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1781799287680
+  },
+  {
+    "company_name": "CEYSAN PAKETLEME VE AMBALAJ ÜRETİM SANAYİ ANONİM ŞİRKETİ",
+    "brand_name": "BAL CENNETİ ERZİNCAN",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1781799271243
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "-",
+    "product_name": "GÜL SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331169073
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "ANANAS SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331160380
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "NAR SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331152486
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "LİMON, SARIMSAK, ZENCEFİLLİ BAL SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331145393
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "MAKBUL",
+    "product_name": "LİMONLU, SARIMSAKLI, ZENCEFİLLİ BAL SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331136686
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "ENGİNAR SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331076490
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "MAKBUL",
+    "product_name": "ALIÇ SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780331005383
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "ELMA SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780330998163
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "GÜL SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780330990346
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "ALIÇ SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780330977766
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "-",
+    "product_name": "ALIÇ SİRKESİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Meyve ve Sebze İşleme",
+    "announced_at": 1780330961513
+  },
+  {
+    "company_name": "FİTO FARMA İLAÇ İÇECEK KOZMETİK VE KİMYA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "YAĞIZ",
+    "product_name": "BİTKİSEL ACIBADEM,KARAMÜRVER,ÇAM KOZALAĞI,KARA ZENCEFİLLİ KARIŞIK BİTKİSEL MACUN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1780330881340
+  },
+  {
+    "company_name": "PELMUR GIDA KOZMETİK İNŞAAT TURİZM TEKSTİL TEMİZLİK BİLGİSAYAR İTHALAT İHRACAT SAN. VE TİC. LTD.ŞTİ",
+    "brand_name": "BOTAMA",
+    "product_name": "KARADUT PEKMEZİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Şekerli Mamuller",
+    "announced_at": 1780330828753
+  },
+  {
+    "company_name": "TALHA ACAR SÜT ÜRÜNLERİ-RASİM ACAR",
+    "brand_name": "MUTLU RASİM USTA",
+    "product_name": "TAM YAĞLI YOĞURT (2000 GR)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Natamisin Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1780330629206
+  },
+  {
+    "company_name": "SAFİ SÜT VE SÜT ÜRÜNLERİ GIDA TARIM HAYVANCILIK SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AHLAS",
+    "product_name": "ERİTME TAZE ÇEÇİL PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1780330611073
+  },
+  {
+    "company_name": "FİDAN SÜT ÜRÜNLERİ ÜRETİM VE PAZARLAMA SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "FİDAN",
+    "product_name": "GÖBEK KAŞARI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1780330335663
+  },
+  {
+    "company_name": "KAYA SÜT ÜRÜNLERİ-MEHMET KAYA",
+    "brand_name": "BAŞAK YAYLASI",
+    "product_name": "TAM YAĞLI KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1780330319753
+  },
+  {
+    "company_name": "GÖLE ET VE ET ÜRÜNLERİ GIDA SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "PİLİÇ GOLD PARMAK KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330241950
+  },
+  {
+    "company_name": "GÖLE ET VE ET ÜRÜNLERİ GIDA SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "PİLİÇ KASAP GOLD KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330220570
+  },
+  {
+    "company_name": "GÖLE ET VE ET ÜRÜNLERİ GIDA SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "PİLİÇ KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330187113
+  },
+  {
+    "company_name": "ABDULLAH BAYKARA",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI PİDE İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330144883
+  },
+  {
+    "company_name": "ERCAN USTA ET TANZİM-HATİCE ÖZAL",
+    "brand_name": "ERCAN USTA ET TANZİM",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330131643
+  },
+  {
+    "company_name": "TACETTİN KÜSMÜŞ",
+    "brand_name": "ET GROSS MARKET",
+    "product_name": "DANA-KOYUN YAĞLI KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330111596
+  },
+  {
+    "company_name": "EFEOĞLU PİDE LAHMACUN SALONU-AHMET TARSUSLU",
+    "brand_name": "-",
+    "product_name": "ETLİ EKMEK İÇ HARCI (DANA+ KUZU ETİ KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330092286
+  },
+  {
+    "company_name": "MERSİN LAHMACUN KARŞIYAKA-KEZBAN AŞKAN",
+    "brand_name": "-",
+    "product_name": "ETLİ EKMEK İÇ HARCI (DANA+ KUZU ETİ KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330076173
+  },
+  {
+    "company_name": "ANIL GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "KIYMALI BÖREK HARCI (DANA ETLİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330053413
+  },
+  {
+    "company_name": "HARBİYE DC FUARCILIK ORGANİZASYON EĞİTİM DANIŞMANLIK TİCARET LİMİTED ŞİRKETİ-SEYYAR TEZGAH (ESKİ ÜNVANI: HARBİYE DC GIDA TEKS. KOZ. OTO TAŞ. SAN. TİC. LTD. ŞTİ.)",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ CAĞ KEBABI (KIRMIZI ETTEN)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330032083
+  },
+  {
+    "company_name": "SANAYİ DÖNERCİSİ-NECMETTİN GÜNDÜZ",
+    "brand_name": "-",
+    "product_name": "DANA KÖFTE (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780330014273
+  },
+  {
+    "company_name": "KOÇLAR GIDA MADDELERİ SERVİS HİZMETLERİ OTOMOTİV İNŞAAT MAKİNE SANAYİ VE TİCARET LİMİTED ŞİRKETİ-KOÇLAR",
+    "brand_name": "-",
+    "product_name": "KIR PİDESİ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329982916
+  },
+  {
+    "company_name": "LEZZET ETLİ EKMEK SALONU-MEHMET ÇÜRÜK-MEHMET ÇÜRÜK",
+    "brand_name": "-",
+    "product_name": "ETLİ EKMEK İÇ HARCI (DANA+ KUZU ETİ KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329965780
+  },
+  {
+    "company_name": "GAZİANTEP ÇITIR PİŞİRİM  FIRINI-FATMA ÇELİK-FATMA DEMİR",
+    "brand_name": "-",
+    "product_name": "LAHMACUN HARCI (DANA-KUZU KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329945306
+  },
+  {
+    "company_name": "ROMADO HAZIR YEMEK-AYŞE NUR GÖREN",
+    "brand_name": "EHL-İ ET",
+    "product_name": "DANA KAVURMA (2500 GR)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Soya Tespiti,</br></br>Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329923756
+  },
+  {
+    "company_name": "MEŞHUR SARIYER BÖREKÇİSİ-ÖMER ÇİTANAK",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ DANA KIYMALI PİDE İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329887156
+  },
+  {
+    "company_name": "BİRLİK ET-CİHAN KİYAT",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329873453
+  },
+  {
+    "company_name": "DURAK LOKANTASI-RAMAZAN KOCABIYIK",
+    "brand_name": "-",
+    "product_name": "EKŞİLİ TAVUK KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329853846
+  },
+  {
+    "company_name": "ERKOÇ ET VE ET ÜRÜNLERİ-HÜSEYİN ERKOCA",
+    "brand_name": "BEYDANA",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329824696
+  },
+  {
+    "company_name": "AFAMİS GIDA İNŞAAT TURİZM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "KIYMALI KARAKÖY BÖREĞİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329742296
+  },
+  {
+    "company_name": "ÇAĞRI SÜT ÇEŞMESİ-ALİ RIZA AKYILDIZ",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ET KIYMASI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329711276
+  },
+  {
+    "company_name": "MURATLAR ET ÜRÜNLERİ HAYVANCILIK GIDA VE TARIM İMALAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ERTAŞ DAMAK",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329684526
+  },
+  {
+    "company_name": "KEBAPÇI NİYAZİ USTA-NİYAZİ CENGİZ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBAP HARCI(DANA ETİ VE KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329614703
+  },
+  {
+    "company_name": "SY GROUP OTOMOTİV İNŞAAT GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ-STAR ET",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KUŞBAŞI ET (DANA-KUZU KARIŞIK)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329582113
+  },
+  {
+    "company_name": "MASTEK YEMEK HİZMETLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "KÖFTE HARCI (DANA-ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329546783
+  },
+  {
+    "company_name": "KARADENİZ PİDE SALONU-SELMA YAVAŞCI",
+    "brand_name": "-",
+    "product_name": "PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329500666
+  },
+  {
+    "company_name": "E.S.Ü. ET&SÜT ÜRÜNLERİ (YALUR ET VE ET ÜRÜNLERİ-SULTAN YALUR)-SULTAN BOZO",
+    "brand_name": "-",
+    "product_name": "KUZU KÜLBASTI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329451246
+  },
+  {
+    "company_name": "ANGARA GECE GAVURMACISI-HÜSEYİN BAYATLI",
+    "brand_name": "-",
+    "product_name": "TÜKETİME HAZIR PİŞMİŞ DANA KAVURMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti,</br></br>Sakatat (Dil) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329382810
+  },
+  {
+    "company_name": "HAMMURABİ GRUP GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HAMMURBEY",
+    "product_name": "HAMMURBEY LAHMACUN İÇ HARCI ACISIZ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329339043
+  },
+  {
+    "company_name": "ŞANLI GIDA DONDURULMUŞ ÜRÜNLERİ-ALİME KARAHAN-ALİME ŞANLI",
+    "brand_name": "AKDENİZ ŞANLI GIDA EL YAPIMI CEVİZLİ İÇLİ KÖFTE LÜX",
+    "product_name": "İÇLİ KÖFTE (5 KG)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Soya Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329269360
+  },
+  {
+    "company_name": "ESER BÜFE-HAYATİ ESER",
+    "brand_name": "-",
+    "product_name": "KÖFTE (DANA-KOYUN ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329211656
+  },
+  {
+    "company_name": "VEYSEL ET MANGAL-MERYEM TİTİZ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBAP HARCI (DANA+KUZU ETİ KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329183013
+  },
+  {
+    "company_name": "DARIK'S STEAKHOUSE-MUSTAFA AYAZ",
+    "brand_name": "-",
+    "product_name": "KIYMA(HAMBURGER)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Kalp) Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1780329097370
+  },
+  {
+    "company_name": "GURMESAN YAĞ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GURME MARMARA NATUREL SIZMA ZEYTİNYAĞI",
+    "product_name": "GURME MARMARA NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328962580
+  },
+  {
+    "company_name": "VKB TARIM ÜRÜNLERİ-SEZGİN ÇETİN",
+    "brand_name": "-",
+    "product_name": "ASIR TARIM KÖYBİRLİK NATUREL SIZMA ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328946386
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "GERÇEK GEMLİK NATUREL SIZMA ERKEN HASAT ZEYTİNYAĞI 5L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328928693
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "ZEYTİNDERESİ NATUREL SIZMA ZEYTİNYAĞI 5000ML",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328911416
+  },
+  {
+    "company_name": "COŞKAR YAĞ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK ZEY-MAR",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328891740
+  },
+  {
+    "company_name": "ÖDEMİŞ YÖRESEL-MUAMMER PEHLİVAN",
+    "brand_name": "-",
+    "product_name": "NATÜREL SIZMA ZEYTİNYAĞI-1 LT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1780328873483
+  },
+  {
+    "company_name": "DİMSAM ÇAY GIDA-MEHMET GÜVEN",
+    "brand_name": "DİMSAM",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1780328583410
+  },
+  {
+    "company_name": "ZENGİN ÇAY TİCARET-ALİ ERKAN ZENGİN",
+    "brand_name": "AYDER TİMYA",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1780328514950
+  },
+  {
+    "company_name": "ZENGİN ÇAY TİCARET-ALİ ERKAN ZENGİN",
+    "brand_name": "ÇAY ZAMANI",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1780328400513
+  },
+  {
+    "company_name": "19 PİDE KEBAP SALONU-RAMAZAN BÖLÜKBAŞ",
+    "brand_name": "MARAŞIM BİBER VE BAHARAT",
+    "product_name": "PUL BİBER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1780328327860
+  },
+  {
+    "company_name": "HEKİMHAN BİTKİSEL SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "HARREM",
+    "product_name": "GÜL SİRKESİ (500ML)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1780328302690
+  },
+  {
+    "company_name": "OSMAN TERLİK",
+    "brand_name": "KARBİ BAHARAT",
+    "product_name": "PUL KIRMIZI BİBER (ACI)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1780328281413
+  },
+  {
+    "company_name": "ENFA GIDA-MUSTAFA ENÇETİN",
+    "brand_name": "ERTUĞRUL",
+    "product_name": "SÜZME ÇİÇEK BALI (400G)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1780328098013
+  },
+  {
+    "company_name": "ENFA GIDA-MUSTAFA ENÇETİN",
+    "brand_name": "ERTUĞRUL",
+    "product_name": "SÜZME ÇİÇEK BALI (850G)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1780328082416
+  },
+  {
+    "company_name": "OMA MADEN PETROL TURİZM İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "ETİKETSİZ ÇAM BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1780328054796
+  },
+  {
+    "company_name": "BALI PINAR-GÖKDAĞ KARAYAKA",
+    "brand_name": "SAF DOĞADAN BİTLİS",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1780328002843
+  },
+  {
+    "company_name": "HASAT PAKETLEME GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KORU BAL",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1780327888540
+  },
+  {
+    "company_name": "ŞEREFOĞLU NAKLİYE YEM GIDA VE PETROL ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜHABEY",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776876599793
+  },
+  {
+    "company_name": "AHMET TOPALOĞLU-KARADAĞ SÜT ÜRÜNLERİ",
+    "brand_name": "ÖZVARLI SÜT ÜRÜNLERİ",
+    "product_name": "TEREYAĞ PASTÖRİZE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776876555100
+  },
+  {
+    "company_name": "DAMAR SÜT VE SÜT ÜRÜNLERİ HUBUBAT KUYUMCULUK TEKSTİL TAŞIMACILIK TARIM ÜRÜNLERİ SANAYİ TİC.LTD.ŞTİ.",
+    "brand_name": "DAMAR",
+    "product_name": "KAYMAKLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776876539493
+  },
+  {
+    "company_name": "BALMİO SÜT ÜRÜNLERİ TİCARET-MEHMET KARAOĞLAN",
+    "brand_name": "MUHİTTİNOĞLU",
+    "product_name": "HOMOJENİZE YOĞURT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776876499526
+  },
+  {
+    "company_name": "ÇİĞDEM KUZDERE",
+    "brand_name": "-",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776876467476
+  },
+  {
+    "company_name": "EROĞLU YEMEKÇİLİK GIDA İNŞAAT TAAHHÜT OTOMOTİV SANAYİ VE TİCARET LİMİTED ŞİRKETİ-EROĞLU GROUP",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ LAHMACUN",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776876405773
+  },
+  {
+    "company_name": "GÖKSEL YEMEKÇİLİK NARENCİYE GIDA NAKLİYE TURİZM TAAHHÜT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776876383593
+  },
+  {
+    "company_name": "ONUR TANTUNİ-MİKAİL BOZCE",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776876357216
+  },
+  {
+    "company_name": "PEKMEZ DÜNYASI GIDA PAZARLAMA SANAYİ VE DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "PEKMEZ DÜNYASI",
+    "product_name": "BİTKİSEL KARIŞIMLI MACUN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1776876302383
+  },
+  {
+    "company_name": "KAMAŞ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KAMAŞ",
+    "product_name": "SUMAK-1 KG",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1776876241476
+  },
+  {
+    "company_name": "GÜLSAN GIDA SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "BALBAZAR",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1776876196256
+  },
+  {
+    "company_name": "GÜLSAN GIDA SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "GÜLSAN",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1776876181386
+  },
+  {
+    "company_name": "ZEYTUNAOĞLU TATLI VE GIDA ÜRÜNLERİ İTHALAT İHRACAT DIŞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "FISTIKLI SARMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Pastacılık Ürünleri ve Tatlılar",
+    "announced_at": 1776357722210
+  },
+  {
+    "company_name": "GÜLSEREN KURT",
+    "brand_name": "-",
+    "product_name": "TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357580453
+  },
+  {
+    "company_name": "AYBEY SÜT ÜRÜNLERİ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "İLAYDA ÇİFTLİĞİ",
+    "product_name": "KAŞAR PEYNİR (1000GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357488796
+  },
+  {
+    "company_name": "AKDAĞ İNOVASYON GIDA İNŞAAT KUYUMCULUK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "UŞAĞUM  VAKFIKEBİR",
+    "product_name": "TUZLU TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357469233
+  },
+  {
+    "company_name": "EŞME YEM SÜT VE SÜT ÜRÜNLERİ TARIM HAYVANCILIK NAKLİYE İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "ÇAMOLUK",
+    "product_name": "KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357448933
+  },
+  {
+    "company_name": "EŞME YEM SÜT VE SÜT ÜRÜNLERİ TARIM HAYVANCILIK NAKLİYE İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "HAMİTKÖY",
+    "product_name": "YARIM YAĞLI TAZE ERİTME TOST PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357440026
+  },
+  {
+    "company_name": "EŞME YEM SÜT VE SÜT ÜRÜNLERİ TARIM HAYVANCILIK NAKLİYE İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "ÇAMOLUK",
+    "product_name": "KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1776357431573
+  },
+  {
+    "company_name": "DÖNERCİ ALİ'NİN YERİ-AYSEL YETİŞKİN",
+    "brand_name": "-",
+    "product_name": "DANA PİDE HARCI (ÇİĞ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357387180
+  },
+  {
+    "company_name": "HAS MANİSA KEBAP-SEYHAN ÖZBEKİN",
+    "brand_name": "-",
+    "product_name": "MANİSA KEBAP (ÇİĞ-DANA ETİNDEN)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357363366
+  },
+  {
+    "company_name": "HARBİYE DC FUARCILIK ORGANİZASYON EĞİTİM DANIŞMANLIK TİCARET LİMİTED ŞİRKETİ-SEYYAR TEZGAH (ESKİ ÜNVANI: HARBİYE DC GIDA TEKS. KOZ. OTO TAŞ. SAN. TİC. LTD. ŞTİ.)",
+    "brand_name": "-",
+    "product_name": "HARBİYE KEBABI (PİLİÇ BONFİLEDEN HAZIRLANMIŞ KEBAP ÇİĞ HARCI)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357333326
+  },
+  {
+    "company_name": "YNS ET MAMÜLLERİ GIDA MADDELERİ PAZARLAMA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "NEFİSSAL",
+    "product_name": "DANA ETLİ PİLİÇ KASAP KÖFTE HAZIRLANMIŞ KANATLI ETİ KARIŞIMI (DONDURULMUŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357313596
+  },
+  {
+    "company_name": "YNS ET MAMÜLLERİ GIDA MADDELERİ PAZARLAMA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "NEFİSSAL",
+    "product_name": "PARMAK PİLİÇ KÖFTE ISIL İŞLEM UYGULANMIŞ PİLİÇ ETİ ÜRÜNÜ (PİŞMİŞ&DONDURULMUŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357300570
+  },
+  {
+    "company_name": "DNC ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ-(ESKİ ÜNVANI: ARDA ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ)",
+    "brand_name": "HAKİMİYET",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ KUVEZ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357275090
+  },
+  {
+    "company_name": "ZİRVE SUCUK VE PASTIRMA-RAMAZAN HELVACI",
+    "brand_name": "ZİRVE",
+    "product_name": "PREMİUM DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357196863
+  },
+  {
+    "company_name": "KISMETOĞLU BEYTİ ET VE ET ÜRÜNLERİ-BEYTULLAH YEŞİLÇAYIR",
+    "brand_name": "LEZZETİ KEYİF",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357154686
+  },
+  {
+    "company_name": "BATI PİDE KEBAP SALONU-OSMAN ÖZKUTLU",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI PİDE İÇ HARCI (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357128093
+  },
+  {
+    "company_name": "URFA CİĞER KEBAP PİDE SALONU (PİDE VE ÖTESİ)-HİCRAN YOLAÇAN",
+    "brand_name": "-",
+    "product_name": "URFA KEBAP (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776357003396
+  },
+  {
+    "company_name": "PERİ PİDE LAHMACUN VE IZGARA SALONU-NURİYE ÇALIŞCI",
+    "brand_name": "-",
+    "product_name": "PİDE İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1776356973593
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DİBLONG",
+    "product_name": "BİTKİSEL KARIŞIMLI ÇİKOLATA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Çikolata ve Kakao Ürünleri",
+    "announced_at": 1776356925010
+  },
+  {
+    "company_name": "KAMBUROĞLU TARIM OTOMOTİV VE ENERJİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KAMBUROĞLU",
+    "product_name": "NATÜREL SIZMA ZEYTİNYAĞI-750 ML",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1776356889443
+  },
+  {
+    "company_name": "ÖZ DEDEOĞLU GRUP GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TVK TARIM",
+    "product_name": "NATURETL SIZMA ZETİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1776356862626
+  },
+  {
+    "company_name": "KİMPLUS KİMYA PLASTİK GIDA TEMİZLİK PEYZAJ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GÜNEY EGEDEN",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI 5 L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1776356731583
+  },
+  {
+    "company_name": "DGL GIDA-ENES ÇELİK",
+    "brand_name": "DGL GIDA",
+    "product_name": "DOĞADAN GELEN LEZZET NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1776356703776
+  },
+  {
+    "company_name": "DGL GIDA-ENES ÇELİK",
+    "brand_name": "DGL GIDA",
+    "product_name": "OLİVERA GOLD NATUREL SIZMA ERKEN HASAT ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1776356692826
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DİBLONG",
+    "product_name": "GİNSENG MACUN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1776356657006
+  },
+  {
+    "company_name": "KURUDERE KURBAN BAHARAT-AYŞE YERLİKAYA",
+    "brand_name": "HEYBETLİ",
+    "product_name": "BALLI ÇAKŞIR KÖKÜ MACUN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1776356421130
+  },
+  {
+    "company_name": "SANİTA TARIM ÜRÜNLERİ BAHARAT KOZMETİK SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "SANİTA",
+    "product_name": "TATLI TOZ BİBER-1000 GR (SANİTA TATLI TOZ KURHAN)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1776356302206
+  },
+  {
+    "company_name": "YAYLA BALPINARI GIDA TARIM AMBALAJ PAZARLAMA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "NATURAL SÜZME ÇİÇEK BALI-1000 GR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1776356183316
+  },
+  {
+    "company_name": "ÇATLILAR GIDA-VEHBİ YEŞİL",
+    "brand_name": "ÇATLILAR",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1776355703236
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DİBLONG",
+    "product_name": "GİNSENGLİ TUTTİ FRUTTİ AROMALI GAZLI İÇECEK 150 ML",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Alkolsüz İçecekler",
+    "announced_at": 1776355680756
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "THE JESTEA CAPSUL",
+    "product_name": "L-CARNİTİNE İÇEREN TAKVİYE EDİCİ GIDA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Takviye Edici Gıda Niteliğindeki Ürünler",
+    "announced_at": 1775146790950
+  },
+  {
+    "company_name": "ÖZIŞIK SÜT ÜRÜNLERİ YEM GIDA TARIM HAYVANCILIK İNŞAAT TİCARET VE SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "ÖZIŞIK",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1775146738830
+  },
+  {
+    "company_name": "EKER SÜT ÜRÜNLERİ GIDA SANAYİ VE TİCARET ANONİM ŞİRKETİ MUSTAFAKEMALPAŞA FABRİKASI",
+    "brand_name": "EKER",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR 1000 G",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1775146723606
+  },
+  {
+    "company_name": "EMİN KÜÇÜK",
+    "brand_name": "KÖYÜNDEN TEREYAĞI",
+    "product_name": "TEREYAĞI (1 KG)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] % Yağ Oranının Düşük Olması,</br></br>Bitkisel Yağ Tespiti,</br></br>Süt Yağı Harici Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1775146703906
+  },
+  {
+    "company_name": "BORNOVA KAPALI PAZAR YERİ YÖRESEL ÜRÜN TEZGAHI-FATİH KOÇYİĞİT",
+    "brand_name": "-",
+    "product_name": "CAĞ KEBABI (PİŞMİŞ ÜRÜN)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146562736
+  },
+  {
+    "company_name": "VOLKAN ET-VOLKAN BİLGİÇ",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146542663
+  },
+  {
+    "company_name": "MİRAN LAHMACUN-NİZAMETTİN ALDAN",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI (DANA ETİ+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Karaciğer) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146524510
+  },
+  {
+    "company_name": "LAHMACUN&PİDE SALONU-NİZAMETTİN AKYÜREK",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146509950
+  },
+  {
+    "company_name": "DÖNEN İÇECEK LOKANTA GIDA TURİZM İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ-MÜPTELA OCAKBAŞI",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIYMA (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146495853
+  },
+  {
+    "company_name": "GOŞTO IZGARA-İLYAS ORUÇLU",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBABI HARCI (DANA+KUZU ETİ KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146480843
+  },
+  {
+    "company_name": "TERTİP ET-SAİM BAYIR",
+    "brand_name": "-",
+    "product_name": "DANA KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146462230
+  },
+  {
+    "company_name": "OKYANUS LEZZET TOPLU YEMEK HİZMETİ-ŞENNUR KESKİN",
+    "brand_name": "-",
+    "product_name": "FIRINLANMIŞ KASAP KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Deri Dokusu Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146399843
+  },
+  {
+    "company_name": "GÜRMAN PİDE-GÜLER SÜRER",
+    "brand_name": "-",
+    "product_name": "DANA ETLİ LAHMACUN HARCI (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146365176
+  },
+  {
+    "company_name": "KERVAN KIR PİDESİ BÖREK SALONU-SEDAT ÖZENÇ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIR PİDESİ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146352566
+  },
+  {
+    "company_name": "CANDAROĞLU KIR PİDESİ VE BÖREK -TÜLAY ÖZENÇ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIR PİDESİ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146338170
+  },
+  {
+    "company_name": "CANDAROĞLU KIR PİDESİ-TÜLAY ÖZENÇ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIR PİDESİ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146325890
+  },
+  {
+    "company_name": "KÖFTECİ NİHAT-NİHAT SOLMAZ",
+    "brand_name": "-",
+    "product_name": "KÖFTE (DANA -KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1775146307490
+  },
+  {
+    "company_name": "HİSAROĞULLARI TARIM GIDA HAYVANCILIK İTHALAT İHRACAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GEMLİK",
+    "product_name": "TAŞ BASKI NATÜREL SIZMA ZEYTİNYAĞI-5 LT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146221233
+  },
+  {
+    "company_name": "BAYRAMOĞLU ZEYTİN ZEYTİNYAĞI GIDA MADDELERİ TURİZM İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "SIZMA ZEYTİNYAĞI 18 L (ETİKETSİZ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146176606
+  },
+  {
+    "company_name": "PAZAR TEZGAHI (SATICI)-YUSUF ZİYA GÖCEN",
+    "brand_name": "-",
+    "product_name": "ZEYTİNYAĞI 500 ML (ETİKETSİZ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146161200
+  },
+  {
+    "company_name": "UFUK ZEYBEK",
+    "brand_name": "-",
+    "product_name": "NATÜREL SIZMA ZEYTİNYAĞI 5 L",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146151246
+  },
+  {
+    "company_name": "BUĞRA BİTKİSEL YAĞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK KOOP",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146136236
+  },
+  {
+    "company_name": "BUĞRA BİTKİSEL YAĞ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1775146122313
+  },
+  {
+    "company_name": "ALTINCEZVE GIDA KONFEKSİYON TEKSTİL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ALTINCEZVE  EHL-İ  KEYF",
+    "product_name": "SİYAH  ÇAY (3 KG)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1775145999370
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DİBLONG GİNSENG DRİNK FOR MEN",
+    "product_name": "TUTTİ FRUTTİ AROMALI GAZLI İÇECEK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Alkolsüz İçecekler",
+    "announced_at": 1775145933276
+  },
+  {
+    "company_name": "MMİ İLAÇ GIDA KOZMETİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÖZLEX TEA",
+    "product_name": "ORMAN MEYVELİ İÇECEK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Alkolsüz İçecekler",
+    "announced_at": 1775145922450
+  },
+  {
+    "company_name": "ADNAN KARAMAN-AS KURUYEMİŞ ŞEKERLEME KURU KAHVE",
+    "brand_name": "FROPİEKİDS",
+    "product_name": "VİTAMİNLİ TOPLAR (ANTEP FISTIĞI KAPLI FINDIK EZMESİ VE HURMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bezelye Tespiti",
+    "category": "Kuruyemiş ve Çerezler",
+    "announced_at": 1773309373423
+  },
+  {
+    "company_name": "HELVACIZADE HELVA ŞEKERLEME ÇİKOLATA GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HELVACIZADE",
+    "product_name": "ÜZÜM PEKMEZİ 25 KG",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Şeker İlavesi Tespiti",
+    "category": "Şekerli Mamuller",
+    "announced_at": 1773309356126
+  },
+  {
+    "company_name": "TALHA ACAR SÜT ÜRÜNLERİ-RASİM ACAR-RASİM ACAR",
+    "brand_name": "MUTLU USTA",
+    "product_name": "KAHVALTILIK YAYIK TEREYAĞI (1000 GR)",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309212186
+  },
+  {
+    "company_name": "CEYLAN SÜT MAMÜLLERİ GIDA TEKSTİL EV ALETLERİ FOTOĞRAFCILIK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "CEYLAN",
+    "product_name": "YARIM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Nişasta Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309201813
+  },
+  {
+    "company_name": "ŞENSA SÜT ÜRÜNLERİ HAYVANCILIK TARIM İNŞAAT SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ŞENSA",
+    "product_name": "YARIM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti,</br></br>Eritme Tuzu Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309176563
+  },
+  {
+    "company_name": "KELEBEKLER HAYVANCILIK TARIM GIDA NAKLİYE OTOMOTİV TEKSTİL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYDA",
+    "product_name": "YARIM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309164580
+  },
+  {
+    "company_name": "HACI SIDDIK SUNAY SADE YAĞ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HACI SIDDIK SUNAY",
+    "product_name": "SADEYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] İnek Sütü Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309126063
+  },
+  {
+    "company_name": "İFLAS HAL.ŞEREFOĞLU NAKLİYE YEM GIDA VE PETROL ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜHABEY",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309109936
+  },
+  {
+    "company_name": "KOÇÇELİK SÜT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "EGGE",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309092156
+  },
+  {
+    "company_name": "KOÇÇELİK SÜT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "AKSARAY SELAY TOSTLUK VE KAHVALTILIK PEYNİR",
+    "product_name": "YARIM YAĞLI TAZE ERİTME PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1773309069830
+  },
+  {
+    "company_name": "CENEVİZ GIDA VE KİMYA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "NATURAL RED 50 POWDER (RENKLENDİRİCİ)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Gıda Katkı Maddeleri",
+    "announced_at": 1773309007906
+  },
+  {
+    "company_name": "ZEKİ DEMİRÖZ",
+    "brand_name": "-",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308776890
+  },
+  {
+    "company_name": "KÖSE GIDA VE ŞARKÜTERİ-ÖZCAN KÖSE",
+    "brand_name": "-",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 L)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308760923
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TAŞ BASKI LUX AYVALIK KÖRFEZİM SOGUK SIKIM",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308739813
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MAHİ ZEYTİN",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308728203
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AY KÖRFEZ GURME",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (2 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308715033
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AY KÖRFEZ GURME",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308700313
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AY KÖRFEZ GURME",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (1 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308686860
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KÖY TADIM",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308666126
+  },
+  {
+    "company_name": "SONKOZ YAĞ GIDA İNŞAAT PETROL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK KOOP.",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (18 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308650673
+  },
+  {
+    "company_name": "SSC GRUP TARIM GIDA ZEYTİNYAĞI TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MUDANYA KÖY-KOOP",
+    "product_name": "SOĞUK SIKIM NATÜREL SIZMA ZEYTİNYAĞI-5 LT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1773308634953
+  },
+  {
+    "company_name": "ADEM TOZMAN",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308189860
+  },
+  {
+    "company_name": "TOPAL ET TOPTAN-ERKAN TOPAL",
+    "brand_name": "TEKİR",
+    "product_name": "KASAP SUCUK (ISIL İŞLEM GÖRMÜŞ DANA SUCUK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308173563
+  },
+  {
+    "company_name": "MEYDAN ET VE ET ÜRÜNLERİ-İBRAHİM GÜNERHAN",
+    "brand_name": "CEYHUN GURME",
+    "product_name": "DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308159296
+  },
+  {
+    "company_name": "HİRA ET VE ET ÜRÜNLERİ-MEHMET AVCI",
+    "brand_name": "E.B.",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ SUCUK (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Deri Dokusu Tespiti,</br></br>Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308145686
+  },
+  {
+    "company_name": "ERTÜRK ET VE ET ÜRÜNLERİ GIDA VE GIDA KATKI MADDELERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR CEYLANER",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308128500
+  },
+  {
+    "company_name": "ERTÜRK ET VE ET ÜRÜNLERİ GIDA VE GIDA KATKI MADDELERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AFYONKARAHİSAR CEYLANER",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308084720
+  },
+  {
+    "company_name": "KULE SUCUKLARI VE ET ÜRÜNLERİ HAYVANCILIK DAĞITIM VE PAZARLAMA İTHALAT İHRACAT SAN.VE TİC.LTD.ŞTİ.",
+    "brand_name": "KULE AFYONKARAHİSAR KULE",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308068173
+  },
+  {
+    "company_name": "SEVİMOĞLU SUCUKLARI-MAHMUT ÜSTÜNDAĞ-MAHMUT ÜSTÜNDAĞ",
+    "brand_name": "SEVİMOĞLU",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308043140
+  },
+  {
+    "company_name": "ZÜMRÜT ET VE ET ÜRÜNLERİ GIDA NAKLİYE TARIM ÜRÜNLERİ İNŞAAT TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SİVRİHİSAR MERT DÖVME SUCUKLARI",
+    "product_name": "DÖVME SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773308017080
+  },
+  {
+    "company_name": "ÇAĞIN ET-BURAK BANAZ",
+    "brand_name": "AY GIDA",
+    "product_name": "SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307930673
+  },
+  {
+    "company_name": "COSMOS ET VE MAMULLERİ TARIM HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "COSMOS EVREN ET",
+    "product_name": "DANA SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307911843
+  },
+  {
+    "company_name": "ERCİYES SAKADAT ET TAVUK DERİ GIDA İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "KARAYAZI",
+    "product_name": "DANA KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307893703
+  },
+  {
+    "company_name": "EMBA DAĞITIM GIDA İHTİYAÇ MADDELERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ŞAHDİYAR",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307851923
+  },
+  {
+    "company_name": "KASAP ALİ ET ÜRÜNLERİ-ŞABAN ELHACALİ",
+    "brand_name": "-",
+    "product_name": "KIYMA (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307819766
+  },
+  {
+    "company_name": "YEMEKON GIDA ANONİM ŞİRKETİ-BİRBİÇER RESTAURANT (GÜZELYALI)",
+    "brand_name": "-",
+    "product_name": "DANA-KUZU KEBAP HARCI (ÇİĞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307734343
+  },
+  {
+    "company_name": "EXPRESS ET VE BALIK-YUSUF MUHAMMET KOÇAKLI",
+    "brand_name": "-",
+    "product_name": "KUZU BUT KIYMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307700046
+  },
+  {
+    "company_name": "HASAT UNLU MAMÜLLER-MAHİNUR SARI",
+    "brand_name": "-",
+    "product_name": "SİNOP MANTI (DANA KIYMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307680156
+  },
+  {
+    "company_name": "GÖZDE PİDE-BÜLENT BAKAR",
+    "brand_name": "-",
+    "product_name": "DANA-OĞLAK PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307663796
+  },
+  {
+    "company_name": "BİZİM KEBAPÇI-ZEKİ BUDAK",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBAP HARCI (DANA+KUZU)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307641173
+  },
+  {
+    "company_name": "CİĞERCİ EMİN USTA-EMİNE KILIÇ",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA KEBAP HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307624686
+  },
+  {
+    "company_name": "HAS MANGAL-İPEK POLAT",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KIYMA (DANA+KUZU KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307532406
+  },
+  {
+    "company_name": "HAKAN ET MARKET-FATMA UNUTKAN",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ET",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307515673
+  },
+  {
+    "company_name": "HÜRRİYET ET MARKET-SÜLEYMAN SAY-SÜLEYMAN SAY",
+    "brand_name": "-",
+    "product_name": "ÇİĞ KUZU KIYMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307477593
+  },
+  {
+    "company_name": "ŞİRİN URFA SOFRASI-MEHMET AYDOĞDU",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307450283
+  },
+  {
+    "company_name": "BOŞNAK FIRIN-ASLI KOÇ",
+    "brand_name": "-",
+    "product_name": "BOŞNAK BÖREĞİ KIYMALI İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307283936
+  },
+  {
+    "company_name": "BARIŞ PİDE KEBAP SALONU-BARIŞ AHILIK",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI ÇİĞ PİDE HARCI",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307257470
+  },
+  {
+    "company_name": "LEZZET PARK-ALİ GARİP",
+    "brand_name": "-",
+    "product_name": "KIYMALI PİDE HARCI",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307243546
+  },
+  {
+    "company_name": "ÜMİT PİDE-HANEFİ TAŞKESEN",
+    "brand_name": "-",
+    "product_name": "ÇİĞ PİDE HARCI (DANA ETİNDEN)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Baş Eti) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307206470
+  },
+  {
+    "company_name": "İMREN KASAP (ET GALERİSİ)-SERKAN NAZLI",
+    "brand_name": "-",
+    "product_name": "DANA KÖFTE",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307188500
+  },
+  {
+    "company_name": "DOĞANLAR PİDE-MURAT BİLECEN",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ETTEN HAZIRLANAN ÇİĞ PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307168376
+  },
+  {
+    "company_name": "KÖŞEM PİDE-ERHAN BİLİCİ",
+    "brand_name": "-",
+    "product_name": "KIYMALI PİDE HARCI (DANA KIYMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307148203
+  },
+  {
+    "company_name": "MANGAL CİTY-MUSTAFA ÇİNBAŞI",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP (DANA VE KUZU ETİ KARIŞIMI)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773307127593
+  },
+  {
+    "company_name": "ARPA DÖNER ET PİŞİRİCİSİ-KUZEY ET-GÖKHAN PLANA",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ ET DÖNER (DANA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306990313
+  },
+  {
+    "company_name": "ÖZ SANCAKTUTAN SANAYİ LOKANTASI-NECİP SANCAKTUTAN",
+    "brand_name": "-",
+    "product_name": "DANA KÖFTE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306970843
+  },
+  {
+    "company_name": "ÇITIR LAHMACUN-EDANUR PALA",
+    "brand_name": "-",
+    "product_name": "LAHMACUN HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306818313
+  },
+  {
+    "company_name": "AMSTERDAM KIYMALI PİDE SALONU 2-İCLAL KAPLAN",
+    "brand_name": "-",
+    "product_name": "ETLİEKMEK İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306778843
+  },
+  {
+    "company_name": "YAY ET GIDA İNŞAAT GİYİM TEMİZLİK NAKLİYE YEMEK ÜRETİM HİZMETİ İTHALAT İHRACAT SAN. VE TİC.LTD.ŞTİ.-KİLİS KIZ YURDU YEMEKHANESİ",
+    "brand_name": "-",
+    "product_name": "KİLİS TAVA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306754593
+  },
+  {
+    "company_name": "KARDEŞLER LOKANTA VE PİDE SALONU-HALİL İBRAHİM ERİKCİ",
+    "brand_name": "-",
+    "product_name": "DANA PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306736656
+  },
+  {
+    "company_name": "MERSİN BÜYÜKŞEHİR BELEDİYESİ BAŞKANLIĞI-MERSİN BÜYÜKŞEHİR BELEDİYESİ BAŞKANLIĞI AŞHANESİ",
+    "brand_name": "-",
+    "product_name": "ET KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306375343
+  },
+  {
+    "company_name": "MERSİN BÜYÜKŞEHİR BELEDİYESİ BAŞKANLIĞI-MERSİN BÜYÜKŞEHİR BELEDİYESİ AŞHANESİ",
+    "brand_name": "-",
+    "product_name": "ET KAVURMA",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1773306347423
+  },
+  {
+    "company_name": "TİREBOLU ÇAYSAN ÇAY SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ELMAS GOLD",
+    "product_name": "SİYAH ÇAY",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitki, Çay ve Kahve Ürünleri",
+    "announced_at": 1773306306783
+  },
+  {
+    "company_name": "BULDUMLAR BAHARAT BAKLİYAT GIDA TARIM ZİRAİ ÜRÜNLER TAŞ.OTO.İNŞ.YAZ.TUR.METAL MAK.SAN.TİC.LTD.ŞTİ.",
+    "brand_name": "BULDUMLAR BAHARAT",
+    "product_name": "ÇOK ACI PUL BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1773306283080
+  },
+  {
+    "company_name": "TUFAN FOOD BAHARAT TARIM ÜRÜNLERİ SANAYİ İÇ VE DIŞ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "VAFİ",
+    "product_name": "ACI TOZ BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1773306270063
+  },
+  {
+    "company_name": "GOLDEN LİFE GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ANADOLU",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1773306249923
+  },
+  {
+    "company_name": "BALDAĞ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "BALDAĞI",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1773306149890
+  },
+  {
+    "company_name": "BALDAĞ GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "CANPETEK ERZİNCAN",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1773306134296
+  },
+  {
+    "company_name": "GALANTE FARM GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "GALANTE",
+    "product_name": "GALANTE FARM MANDA TEREYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] İnek Sütü Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1771344626693
+  },
+  {
+    "company_name": "UYB BAKLAVALARI GIDA İNŞAAT PETROL TİCARET VE SANAYİ LİMİTED ŞİRKETİ-URFA YÖREM BAKLAVALARI",
+    "brand_name": "-",
+    "product_name": "ANTEP FISTIKLI BAKLAVA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Yer Fıstığı Tespiti",
+    "category": "Pastacılık Ürünleri ve Tatlılar",
+    "announced_at": 1771344472820
+  },
+  {
+    "company_name": "AKDENİZ SÜT ÜRÜNLERİ VE GIDA SANAYİ TİCARET TURİZM LİMİTED ŞİRKETİ",
+    "brand_name": "CHEESEMAN",
+    "product_name": "YARIM YAĞLI TAZE ÇERKEZ PEYNİRİ/ERİTME PEYNİRİ-500G",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1771344443983
+  },
+  {
+    "company_name": "4 MEVSİM SÜT VE SÜT ÜRÜNLERİ-ENGÜR SÜSLÜ",
+    "brand_name": "4 MEVSİM",
+    "product_name": "YOĞURT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1771344253606
+  },
+  {
+    "company_name": "DOĞASAN İNŞ. OTOM. TUR. DANIŞMANLIK VE REKLAMCILIK-OSMAN TAVŞAN",
+    "brand_name": "-",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ SUCUK (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771344047976
+  },
+  {
+    "company_name": "ANKARA KÖFTE-NUH TOSUN",
+    "brand_name": "-",
+    "product_name": "ÜRETİM ALANINDAN ALINAN PİLİÇ KÖFTE OLDUĞU BEYAN EDİLEN ÜRÜN",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343994600
+  },
+  {
+    "company_name": "ANKARA KÖFTE-NUH TOSUN",
+    "brand_name": "-",
+    "product_name": "PİLİÇ KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343982150
+  },
+  {
+    "company_name": "ANKARA KÖFTE-NUH TOSUN",
+    "brand_name": "-",
+    "product_name": "ÜRETİM ALANINDAN ALINAN TAVUKLU KIYMA OLDUĞU BEYAN EDİLEN ÜRÜN",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343959490
+  },
+  {
+    "company_name": "TOSUN KÖFTE ET ÜRÜNLERİ BESİCİLİK GIDA İNŞAAT EMLAK İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "-",
+    "product_name": "PİLİÇ KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343856546
+  },
+  {
+    "company_name": "TOSUN KÖFTE ET ÜRÜNLERİ BESİCİLİK GIDA İNŞAAT EMLAK İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "-",
+    "product_name": "EKO M YAZILI %40 DANA %60 PİLİÇ ETİ OLDUĞU BEYAN EDİLEN KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343845983
+  },
+  {
+    "company_name": "TOSUN KÖFTE ET ÜRÜNLERİ BESİCİLİK GIDA İNŞAAT EMLAK İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "-",
+    "product_name": "ADANA YAZILI %40 KUZU %60 PİLİÇ ETİ OLDUĞU BEYAN EDİLEN KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343831343
+  },
+  {
+    "company_name": "TOSUN KÖFTE ET ÜRÜNLERİ BESİCİLİK GIDA İNŞAAT EMLAK İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "-",
+    "product_name": "GOLD İZMİR İNEGÖL KÖFTE OLDUĞU BEYAN EDİLEN %10 DANA VE %90 TAVUK OLDUĞU BEYAN EDİLEN KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343793830
+  },
+  {
+    "company_name": "TOSUN KÖFTE ET ÜRÜNLERİ BESİCİLİK GIDA İNŞAAT EMLAK İTHALAT İHRACAT SANAYİ VE TİCARET LTD.ŞTİ.",
+    "brand_name": "-",
+    "product_name": "EKO 30 YAZILI %40 DANA %60 TAVUK ETİ OLDUĞU BEYAN EDİLEN KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343777026
+  },
+  {
+    "company_name": "YAKUPAĞA ET VE ET ÜRÜNLERİ HAYVANCILIK TARIM ÜRÜNLERİ GIDA PAZARLAMA İTHALAT İHR.TİC.VE SAN.LTD.ŞTİ.",
+    "brand_name": "YAKUPBABA SUCUKLARI",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343543773
+  },
+  {
+    "company_name": "YAKUPAĞA ET VE ET ÜRÜNLERİ HAYVANCILIK TARIM ÜRÜNLERİ GIDA PAZARLAMA İTHALAT İHR.TİC.VE SAN.LTD.ŞTİ.",
+    "brand_name": "YAKUPAĞA SUCUKLARI TOSTCUM",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ DİLİMLİ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343531246
+  },
+  {
+    "company_name": "KARAKOÇLAR ET ET ÜRÜNLERİ GIDA İMALATI İTHALAT İHRACAT TİCARET SANAYİ LİMİTED ŞİRKETİ.-KARAKOÇLAR ET ET ÜRÜNLERİ GIDA İMALATI İTHALAT İHRACAT TİCARET SANAYİ LİMİTED ŞİRKETİ.",
+    "brand_name": "25 E.L. ERZURUM LEZZET",
+    "product_name": "KAVURMA",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Kalp) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343500040
+  },
+  {
+    "company_name": "ÇELİKEL SUCUK-MAHMUT ÇELİKEL",
+    "brand_name": "KASABIM",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343344753
+  },
+  {
+    "company_name": "KISMETOĞLU BEYTİ ET VE ET ÜRÜNLERİ-BEYTULLAH YEŞİLÇAYIR",
+    "brand_name": "KISMETOĞLU BEYTİ",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343332363
+  },
+  {
+    "company_name": "AKSAMET ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AKSAMET",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Gıda Boyası Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343317676
+  },
+  {
+    "company_name": "AKSAMET ET ÜRÜNLERİ SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AKSAM",
+    "product_name": "ISIL İŞLEM GÖRMÜŞ PİLİÇ SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Mekanik Ayrılmış Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343304990
+  },
+  {
+    "company_name": "ÖZ KEBAP PİDE VE LAHMACUN SALONU-NECATİ CEM DÜLEK",
+    "brand_name": "-",
+    "product_name": "LAHMACUN İÇ HARCI (DANA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343289626
+  },
+  {
+    "company_name": "DEMİRLİBAHÇE PİDE KEBAP-FEYYAZ YALÇIN",
+    "brand_name": "-",
+    "product_name": "LAHMACUN HARCI (DANA KIYMA)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771343000643
+  },
+  {
+    "company_name": "YILDIZ KASAP-CANSU AGHAMALIYEV",
+    "brand_name": "-",
+    "product_name": "KASAP KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342975526
+  },
+  {
+    "company_name": "ÖZEN ALIŞ VERİŞ HİZMETLERİ ANONİM ŞİRKETİ-ONUR MARKET",
+    "brand_name": "-",
+    "product_name": "KIRMIZI ET KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342958230
+  },
+  {
+    "company_name": "ÜNLÜ SARIYER BÖREKÇİSİ-HAKAN AYGÜN",
+    "brand_name": "-",
+    "product_name": "DANA KIYMALI GÜVEÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342930366
+  },
+  {
+    "company_name": "BAŞAK SARIYER BÖREKÇİSİ-MEHMET NACİ ŞAHİN",
+    "brand_name": "-",
+    "product_name": "ÇİĞ PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342909000
+  },
+  {
+    "company_name": "HAKAN PİDE-HAKAN KİP",
+    "brand_name": "-",
+    "product_name": "PİDE HARCI (PİŞMEMİŞ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342879906
+  },
+  {
+    "company_name": "AVŞAR TARIMCILIK BESİCİLİK İNŞAAT SANAYİ VE TİCARET ANONİM ŞİRKETİ-HANEDAN PİDE",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342859300
+  },
+  {
+    "company_name": "YAVUZ ET VE PİLİÇ ÜRÜNLERİ-KADINLAR PAZARI-RESUL YAVUZ",
+    "brand_name": "-",
+    "product_name": "KIYMA (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342835253
+  },
+  {
+    "company_name": "OSMANLI ET VE PİLİÇ-KADINLAR PAZARI-HASAN YİĞİT",
+    "brand_name": "-",
+    "product_name": "KIYMA (KIRMIZI ET)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342820876
+  },
+  {
+    "company_name": "ANIL ET LOKANTASI-ESMA ERTÜRK",
+    "brand_name": "-",
+    "product_name": "ŞİŞ KÖFTE (KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342805170
+  },
+  {
+    "company_name": "ANIL ET LOKANTASI-ESMA ERTÜRK",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP (KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342790233
+  },
+  {
+    "company_name": "MURAT ET-HABİBE ESİN ŞİMŞEK",
+    "brand_name": "-",
+    "product_name": "DANA SUCUK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342776113
+  },
+  {
+    "company_name": "ÖZAYDIN 3 ETLİEKMEK SALONU-ADNAN AYDIN",
+    "brand_name": "-",
+    "product_name": "ETLİEKMEK İÇ HARCI (KUZU-DANA ETİ, ET YAĞI, DOMATES , BİBER, SOĞAN)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342762456
+  },
+  {
+    "company_name": "KEBAPÇI ÖMER USTA\r\n-ÖMER SEVİNDİK",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1771342745586
+  },
+  {
+    "company_name": "EMİNE KILIÇ",
+    "brand_name": "-",
+    "product_name": "ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1771342494596
+  },
+  {
+    "company_name": "MERCAN KURU GIDA",
+    "brand_name": "-",
+    "product_name": "ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1771342480783
+  },
+  {
+    "company_name": "COŞKAR YAĞ GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "OLİVAE",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1771342470760
+  },
+  {
+    "company_name": "ERKSAN İLAÇ KOZMETİK TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ERKEXİN",
+    "product_name": "EPİMEDYUMLU BİTKİSEL MACUN",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1771342432000
+  },
+  {
+    "company_name": "SİDRA GIDA VE İNŞAAT TAAHHÜT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SİDRA",
+    "product_name": "ÖZEL BİTKİSEL KARIŞIMLI GİNSENGLİ MACUN (12G*10)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1771342419466
+  },
+  {
+    "company_name": "SİDRA GIDA VE İNŞAAT TAAHHÜT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MYSEM LİFE",
+    "product_name": "BİTKİSEL KARIŞIM MACUN (40 G)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1771342407716
+  },
+  {
+    "company_name": "SİDRA GIDA VE İNŞAAT TAAHHÜT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SİDRA",
+    "product_name": "ÖZEL BİTKİSEL KARIŞIMLI GİNSENGLİ MACUN (240 G)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1771342386380
+  },
+  {
+    "company_name": "SİDRA GIDA VE İNŞAAT TAAHHÜT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MYSEM LİFE",
+    "product_name": "BİTKİSEL KARIŞIM MACUN (230 G)",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] İlaç Etken Maddesi Tespiti",
+    "category": "Bitkisel Macun vb. Ürünler",
+    "announced_at": 1771342374836
+  },
+  {
+    "company_name": "MAKSİMUM BAHARAT VE TOPTAN GIDA ÜRÜNLERİ ÜRETİM PAZARLAMA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MAKSİMUM BAHARAT",
+    "product_name": "KEKİK",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Yabancı Madde Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1771342277793
+  },
+  {
+    "company_name": "DND KURUMSAL GIDA SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "BİR BAHARAT",
+    "product_name": "PUL BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti,</br></br>Taklit/Tağşiş Gösteren Nişasta Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1771342215526
+  },
+  {
+    "company_name": "IŞIK İSOT GIDA İNŞAAT NAKLİYE TARIM HAYVANCILIK SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "URFA IŞIK İSOT",
+    "product_name": "PUL BİBER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1771342087570
+  },
+  {
+    "company_name": "AKAR BAL-GÖKDAĞ KARAYAKA",
+    "brand_name": "AKAR NATURAL BAL",
+    "product_name": "SÜZME ÇİÇEK BALI-25 KG",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1771341721073
+  },
+  {
+    "company_name": "AKAR BAL-GÖKDAĞ KARAYAKA",
+    "brand_name": "PELİT NATURAL",
+    "product_name": "SÜZME ÇİÇEK BALI-850 GR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1771341695456
+  },
+  {
+    "company_name": "AĞAÇCI TİCARET-HÜSEYİN AĞAÇCI",
+    "brand_name": "AĞAÇCI HASBAL",
+    "product_name": "SÜZME SALGI BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1771341544846
+  },
+  {
+    "company_name": "ŞİRİN BAL GIDA SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1771341501556
+  },
+  {
+    "company_name": "HARUN ÇAKIROĞLU",
+    "brand_name": "-",
+    "product_name": "TEREYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701703096
+  },
+  {
+    "company_name": "NAMIK ÜLGEN",
+    "brand_name": "-",
+    "product_name": "TEREYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701694333
+  },
+  {
+    "company_name": "FATMA BEŞLİ",
+    "brand_name": "-",
+    "product_name": "TEREYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701687753
+  },
+  {
+    "company_name": "UFUK KÜÇÜK-KÜÇÜKBEY SÜT VE SÜT ÜRÜNLERİ",
+    "brand_name": "EJDER YAYLASI",
+    "product_name": "TEREYAĞ",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701678410
+  },
+  {
+    "company_name": "EMİNOĞLU SÜT VE SÜT ÜRÜNLERİ-CUMA GÜLTEKİN",
+    "brand_name": "YÖRELİ YÖRESEL",
+    "product_name": "PEYNİR",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Bitkisel Yağ Tespiti",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701660633
+  },
+  {
+    "company_name": "KELEBEKLER HAYVANCILIK TARIM GIDA NAKLİYE OTOMOTİV TEKSTİL SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AYDA",
+    "product_name": "TAM YAĞLI PASTÖRİZE SÜTTEN ÜRETİLMİŞ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701575870
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜTTANESİ",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701566696
+  },
+  {
+    "company_name": "AKSARAY ÜÇLER SÜT VE YEM SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÜÇLER",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701553670
+  },
+  {
+    "company_name": "ORTAKÖY YEM SANAYİ TURİZM VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "EREN",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701536393
+  },
+  {
+    "company_name": "AKSEL SÜT ÜRÜNLERİ KATI YAKIT TARIM ÜRÜNLERİ NAKLİYE İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ALKIŞBEY",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701515720
+  },
+  {
+    "company_name": "AKSEL SÜT ÜRÜNLERİ KATI YAKIT TARIM ÜRÜNLERİ NAKLİYE İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "AKSES",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701506063
+  },
+  {
+    "company_name": "AKSEL SÜT ÜRÜNLERİ KATI YAKIT TARIM ÜRÜNLERİ NAKLİYE İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "DOĞUKAN",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701464160
+  },
+  {
+    "company_name": "AKSEL SÜT ÜRÜNLERİ KATI YAKIT TARIM ÜRÜNLERİ NAKLİYE İNŞAAT SANAYİ TİCARET LİMİTED ŞİRKETİ-",
+    "brand_name": "AKSES",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701445850
+  },
+  {
+    "company_name": "İFLAS HAL.ŞEREFOĞLU NAKLİYE YEM GIDA VE PETROL ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜHABEY",
+    "product_name": "YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701439060
+  },
+  {
+    "company_name": "İFLAS HAL.ŞEREFOĞLU NAKLİYE YEM GIDA VE PETROL ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜHABEY",
+    "product_name": "TAM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701429790
+  },
+  {
+    "company_name": "İFLAS HAL.ŞEREFOĞLU NAKLİYE YEM GIDA VE PETROL ÜRÜNLERİ SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SÜHABEY",
+    "product_name": "YARIM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701423423
+  },
+  {
+    "company_name": "ERAY SÜT ET YEM NAKLİYECİLİK VE KÖMÜR SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "TUĞÇEM",
+    "product_name": "YARIM YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701400156
+  },
+  {
+    "company_name": "ERAY SÜT ET YEM NAKLİYECİLİK VE KÖMÜR SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ERTAT",
+    "product_name": "YAĞLI BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701376816
+  },
+  {
+    "company_name": "AYLAÇ SÜT VE YEM ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "ÇİĞDEMLİ",
+    "product_name": "YARIM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701367096
+  },
+  {
+    "company_name": "AYLAÇ SÜT VE YEM ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "UFUKBEY",
+    "product_name": "TAM YAĞLI TAZE KAŞAR PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701359540
+  },
+  {
+    "company_name": "AYLAÇ SÜT VE YEM ÜRETİM SANAYİ TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "SABIR",
+    "product_name": "TAM YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701351823
+  },
+  {
+    "company_name": "KOÇÇELİK SÜT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ORTAT",
+    "product_name": "AZ YAĞLI TAZE BEYAZ PEYNİR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701332620
+  },
+  {
+    "company_name": "KOÇÇELİK SÜT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "EGGE",
+    "product_name": "YARIM YAĞLI TAZE ERİTME TOST PEYNİRİ",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701324296
+  },
+  {
+    "company_name": "KOÇÇELİK SÜT SANAYİ TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "EGGE",
+    "product_name": "TAM YAĞLI TAZE KAŞAR",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701315890
+  },
+  {
+    "company_name": "İSA ŞAHİN İNOVASYON GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "MANDIRELLA",
+    "product_name": "TAM YAĞLI YOĞURT",
+    "reason": "[Taklit/Tağşiş - İçerik Eksikliği] % Yağ Oranının Düşük Olması",
+    "category": "Süt ve Süt Ürünleri",
+    "announced_at": 1769701301080
+  },
+  {
+    "company_name": "ÖZ AS PİDE SALONU-ZAFER ÖZNALCI",
+    "brand_name": "-",
+    "product_name": "ÇİĞ LAHMACUN HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769701090183
+  },
+  {
+    "company_name": "SARAY PİDE       -DİNAR POLAT",
+    "brand_name": "-",
+    "product_name": "ÇİĞ PİDE HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769701070226
+  },
+  {
+    "company_name": "ALTIN KASAP ET VE TAVUK DÜNYASI-EDANUR ÖZMEN",
+    "brand_name": "-",
+    "product_name": "PİŞMEMİŞ DANA ADANA KEBAP",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769701053850
+  },
+  {
+    "company_name": "ALTIN KASAP ET VE TAVUK DÜNYASI-EDANUR ÖZMEN",
+    "brand_name": "-",
+    "product_name": "PİŞMEMİŞ DANA KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769701038106
+  },
+  {
+    "company_name": "ANKSAN BESİCİLİK GIDA TARIM ÜRÜNLERİ TAŞIMACILIK İNŞAAT TURİZM SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "ANKET",
+    "product_name": "PİŞMİŞ DANA DÖNER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769701009573
+  },
+  {
+    "company_name": "KARTAL ET VE ET MAMÜLLERİ-BURHAN KARTAL",
+    "brand_name": "BURHAN GÜVENAL",
+    "product_name": "DANA SUCUK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Tek Tırnaklı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700929443
+  },
+  {
+    "company_name": "SAR KEBAP RESTORAN İŞLETMECİLİĞİ TİCARET LİMİTED ŞİRKETİ-SAR KEBAP PLUS",
+    "brand_name": "-",
+    "product_name": "LAHMACUN (PİŞMİŞ) (DANA-KUZU KARIŞIK)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700906300
+  },
+  {
+    "company_name": "SABRİ ZEYBEK",
+    "brand_name": "MS KEBAP",
+    "product_name": "ET DÖNER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700887580
+  },
+  {
+    "company_name": "MEZOPOTAMYA KEBAP EVİ-ŞEFİK KANAR",
+    "brand_name": "-",
+    "product_name": "ÇİĞ ADANA HARCI (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700833243
+  },
+  {
+    "company_name": "DİM-PA MEŞRUBAT GIDA PAZARLAMA İTHALAT İHRACAT TİCARET VE SANAYİ LİMİTED ŞİRKETİ",
+    "brand_name": "-",
+    "product_name": "PİŞMİŞ HAMBURGER (DANA+KUZU ETİ)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700820056
+  },
+  {
+    "company_name": "KOÇLAR GIDA MADDELERİ SERVİS HİZMETLERİ OTOMOTİV İNŞAAT MAKİNE SANAYİ VE TİCARET LİMİTED ŞİRKETİ-KOÇLAR RESTAURANT",
+    "brand_name": "-",
+    "product_name": "DANA ETİ KIYMA HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti,</br></br>Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700791290
+  },
+  {
+    "company_name": "CUMHURİYET GÜVEÇ BÖREK SALONU-EMİNEMERYEM GÜNEL",
+    "brand_name": "-",
+    "product_name": "DANA GÜVEÇ İÇ HARCI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700777010
+  },
+  {
+    "company_name": "DÜRÜMCÜ SEDAT-MEHMET DENİZHAN",
+    "brand_name": "-",
+    "product_name": "ADANA KEBAP (DANA KIYMALI)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Sakatat (Taşlık) Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700764750
+  },
+  {
+    "company_name": "DİSA ET GRUP-SUDENAZ BİRDAL",
+    "brand_name": "-",
+    "product_name": "DANA KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700721013
+  },
+  {
+    "company_name": "BOYBEY ET DÜNYASI-ERDİNÇ YAMAN-ERDİNÇ YAMAN",
+    "brand_name": "-",
+    "product_name": "KASAP KÖFTE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Kanatlı Eti Tespiti",
+    "category": "Et ve Et Ürünleri",
+    "announced_at": 1769700704520
+  },
+  {
+    "company_name": "MEHMET NAR",
+    "brand_name": "NARTAŞIM BAHARAT",
+    "product_name": "PUL KIRMIZI BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769699781563
+  },
+  {
+    "company_name": "KAHRAMAN MARAŞ BAHARAT GIDA-ADEM TERLİK",
+    "brand_name": "ST BAHARATÇIM",
+    "product_name": "PUL KIRMIZI BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti,</br></br>Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769699762356
+  },
+  {
+    "company_name": "KAHRAMAN MARAŞ BAHARAT GIDA-ADEM TERLİK",
+    "brand_name": "ST BAHARATÇIM",
+    "product_name": "TOZ KIRMIZIBİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769699733456
+  },
+  {
+    "company_name": "HERTAT GIDA SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+    "brand_name": "HERTAT",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698651596
+  },
+  {
+    "company_name": "BULDUMLAR BAHARAT BAKLİYAT GIDA TARIM ZİRAİ ÜRÜNLER TAŞ.OTO.İNŞ.YAZ.TUR.METAL MAK.SAN.TİC.LTD.ŞTİ.",
+    "brand_name": "BULDUMLAR",
+    "product_name": "PUL KIRMIZI BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698634353
+  },
+  {
+    "company_name": "ÖZ KOZANOĞLU -KEMAL NAR",
+    "brand_name": "KOZANOĞLU ÖZ BİBER VE BAHARATLARI",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698611513
+  },
+  {
+    "company_name": "SADULLAH NAR",
+    "brand_name": "NARBİ",
+    "product_name": "PUL KIRMIZI BİBER",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Domates Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698440723
+  },
+  {
+    "company_name": "ÖMER KORKMAZ",
+    "brand_name": "KORKMAZ BAHARATLARI",
+    "product_name": "KIRMIZI PUL BİBER",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698382706
+  },
+  {
+    "company_name": "CAFER SAYAR",
+    "brand_name": "SAYAR GIDA",
+    "product_name": "SUMAK",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Baharatlar, Çeşni Vericiler ve Soslar",
+    "announced_at": 1769698353260
+  },
+  {
+    "company_name": "YILMAZ CAN",
+    "brand_name": "-",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI 1 LİTRE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698227010
+  },
+  {
+    "company_name": "YILMAZ CAN",
+    "brand_name": "-",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI 5 LİTRE",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698203403
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "-",
+    "product_name": "SIZMA ZEYTİNYAĞI (1,5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698183350
+  },
+  {
+    "company_name": "SEZGİN ÇETİN-VKB TARIM ÜRÜNLERİ",
+    "brand_name": "ASIR TARIM KÖYBİRLİK",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Daha Düşük Kaliteli Zeytinyağı Karıştırılması Tespiti,</br></br>Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698166783
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "-",
+    "product_name": "SIZMA ZEYTİNYAĞI (18 LT)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698142353
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "EFE TV ORGANİC EGEDEN KAPINIZA GELEN LEZZET",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698127050
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "EFE TV ORGANİC",
+    "product_name": "NATUREL SIZMA ZEYTİNYAĞI (5 LİTRE)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698114616
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "-",
+    "product_name": "SIZMA ZEYTİNYAĞI (5 LT)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698099280
+  },
+  {
+    "company_name": "AKA ÇİFTLİĞİ MANDIRA&ŞARKÜTERİ-SERKAN AKA",
+    "brand_name": "KUZEY EGE AYVALIK",
+    "product_name": "SOĞUK SIKIM TAŞ BASKI NATÜREL SIZMA ZEYTİNYAĞI-5 LT",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698082693
+  },
+  {
+    "company_name": "HİLAL HAYVANSAL ÜRÜNLER YEM SÜT VE SÜT ÜRÜNLERİ TOPTAN TİCARETİ LİMİTED ŞİRKETİ",
+    "brand_name": "AYVALIK",
+    "product_name": "NATÜREL SIZMA ZEYTİNYAĞI-1000 ML",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769698042610
+  },
+  {
+    "company_name": "ÖZGÜR CERENAY OZAN ZEYTİNCİLİK-ÖZGÜR AY",
+    "brand_name": "CERENAY",
+    "product_name": "NATÜREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769697984050
+  },
+  {
+    "company_name": "KARASU TİCARET-CEMAL KARASU",
+    "brand_name": "ŞİRİNCE TAT",
+    "product_name": "SOĞUK SIKIM NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Sağlığı Tehlikeye Düşürecek Gıdalar] Gıdada Kullanımına İzin Verilmeyen Boya Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769697953086
+  },
+  {
+    "company_name": "KARASU TİCARET-CEMAL KARASU",
+    "brand_name": "ŞİRİNCE TAT",
+    "product_name": "SOĞUK SIKIM NATUREL SIZMA ZEYTİNYAĞI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Tohum Yağları Karıştırılması Tespiti",
+    "category": "Bitkisel Yağlar",
+    "announced_at": 1769697936486
+  },
+  {
+    "company_name": "EFE TV ORGANİC DOĞAL ÜRÜNLER-SERHAN SEYHAN",
+    "brand_name": "-",
+    "product_name": "BAL (900 GR)",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1769697666380
+  },
+  {
+    "company_name": "HASTÜRK GIDA OTOMOTİV İNŞAAT EMLAK SANAYİ VE TİCARET ANONİM ŞİRKETİ",
+    "brand_name": "VİTAMEL",
+    "product_name": "SÜZME ÇİÇEK BALI",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] Taklit veya Tağşiş Tespiti",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1769697545153
+  },
+  {
+    "company_name": "T.C. Ankara 15. İdare Mahkemesinin 2026/123 Esas nolu Kararı gereği dava konusu işlemin yürütmesinin durdurulmasına karar verilmiştir.",
+    "brand_name": "-",
+    "product_name": "-",
+    "reason": "[Taklit/Tağşiş - Madde Eklenmesi] -",
+    "category": "Arıcılık Ürünleri",
+    "announced_at": 1769697527680
+  }
+]

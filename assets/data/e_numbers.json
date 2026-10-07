@@ -1,0 +1,98 @@
+[
+  {
+    "code": "E102",
+    "name": "Tartrazin (Tartrazine)",
+    "risk_level": "HIGH",
+    "category": "Sentetik Renklendirici",
+    "description": "Sarı sentetik azo boyası. Çocuklarda hiperaktivite ve astım tetikleyici.",
+    "health_hazards": "Hiperaktivite, alerjik reaksiyonlar, ürtiker, astım krizleri"
+  },
+  {
+    "code": "E110",
+    "name": "Sunset Yellow FCF",
+    "risk_level": "HIGH",
+    "category": "Sentetik Renklendirici",
+    "description": "Turuncu sentetik azo renklendirici.",
+    "health_hazards": "Çocuklarda dikkat eksikliği, alerji, mide bulantısı"
+  },
+  {
+    "code": "E120",
+    "name": "Karmin (Cochineal/Carminic Acid)",
+    "risk_level": "MODERATE",
+    "category": "Doğal/Hayvansal Renklendirici",
+    "description": "Ezilmiş böceklerden elde edilen kırmızı renklendirici.",
+    "health_hazards": "Anafilaksi riski, vejetaryen/helal uygunsuzluğu"
+  },
+  {
+    "code": "E133",
+    "name": "Brilliant Blue FCF",
+    "risk_level": "HIGH",
+    "category": "Sentetik Renklendirici",
+    "description": "Mavi sentetik boya.",
+    "health_hazards": "Hücre düzeyinde toksisite, astım riski"
+  },
+  {
+    "code": "E171",
+    "name": "Titanium Dioxide (Titanyum Dioksit)",
+    "risk_level": "TOXIC",
+    "category": "Renklendirici / Opaklaştırıcı",
+    "description": "Beyaz nano-partikül pigment. AB'de gıdalarda yasaklanmıştır.",
+    "health_hazards": "Genotoksisite, DNA hasarı, bağırsak iltihabı"
+  },
+  {
+    "code": "E211",
+    "name": "Sodyum Benzoat (Sodium Benzoate)",
+    "risk_level": "HIGH",
+    "category": "Koruyucu",
+    "description": "Asitli içecekler ve soslarda kullanılan sentetik koruyucu.",
+    "health_hazards": "C vitamini ile birleştiğinde kanserojen Benzen oluşturur"
+  },
+  {
+    "code": "E250",
+    "name": "Sodyum Nitrit (Sodium Nitrite)",
+    "risk_level": "TOXIC",
+    "category": "Koruyucu / Renk Sabitleyici",
+    "description": "İşlenmiş et ürünlerinde (sosis, salam) kullanılır.",
+    "health_hazards": "Kanserojen Nitrozamin oluşumu, mide-bağırsak kanseri riski"
+  },
+  {
+    "code": "E320",
+    "name": "BHA (Butylated Hydroxyanisole)",
+    "risk_level": "TOXIC",
+    "category": "Antioksidan",
+    "description": "Yağlı gıdalarda acılaşmayı önleyen sentetik koruyucu.",
+    "health_hazards": "Hormon bozucu (Endokrin), olası insan kanserojeni"
+  },
+  {
+    "code": "E330",
+    "name": "Sitrik Asit (Citric Acid)",
+    "risk_level": "LOW",
+    "category": "Asitlik Düzenleyici",
+    "description": "Limon tuzu / doğal meyve asidi veya mantar fermantasyonu.",
+    "health_hazards": "Aşırı tüketimde diş minesi hassasiyeti"
+  },
+  {
+    "code": "E621",
+    "name": "MSG (Mono Sodyum Glutamat)",
+    "risk_level": "HIGH",
+    "category": "Lezzet Arttırıcı",
+    "description": "Çin tuzu. Nörotoksik iştah uyarısı yapar.",
+    "health_hazards": "Bağımlılık, Çin Restoranı Sendromu, nöronal eksitotoksisite"
+  },
+  {
+    "code": "E951",
+    "name": "Aspartam (Aspartame)",
+    "risk_level": "TOXIC",
+    "category": "Yapay Tatlandırıcı",
+    "description": "Diyet içeceklerde kullanılan kalorisiz sentetik tatlandırıcı.",
+    "health_hazards": "DSÖ uyarısı: Olası kanserojen (Group 2B), baş ağrısı, nörolojik etkiler"
+  },
+  {
+    "code": "E955",
+    "name": "Sukraloz (Sucralose)",
+    "risk_level": "MODERATE",
+    "category": "Yapay Tatlandırıcı",
+    "description": "Klorlanmış şeker türevi yapay tatlandırıcı.",
+    "health_hazards": "Bağırsak mikrobiyota bozulması, insülin direnci tetikleme"
+  }
+]

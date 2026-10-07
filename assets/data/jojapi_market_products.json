@@ -1,0 +1,171 @@
+[
+  {
+    "barcode": "8690504008782",
+    "product_name": "Ülker Çikolatalı Gofret 36g",
+    "brand": "Ülker",
+    "ai_summary_json": {
+      "organic_score": 38,
+      "nova_group": 4,
+      "verdict": "Aşırı İşlenmiş Gıda (NOVA 4)",
+      "summary": "Ülker üreticisine ait Ülker Çikolatalı Gofret. İçindekiler: Şeker, buğday unu, bitkisel yağ (palm), fındık ezmesi (%9,5), tam yağlı süt tozu, kakao yağı, kakao kitlesi, emülgatör (soya lesitini), kabartıcılar.",
+      "warnings": [
+        "İçeriğinde 'Palm Yağı' bulundu.",
+        "Katkı maddesi: 'Emülgatör (Soya Lesitini)' içermektedir.",
+        "Yüksek oranda rafine şeker içerir."
+      ],
+      "alternatives": [
+        {
+          "name": "Züber Fındıklı Meyve Barı",
+          "brand": "Züber",
+          "reason": "Şekersiz, %100 doğal meyve ve kuruyemiş içeriği"
+        },
+        {
+          "name": "Torku Banada Fındık Kremalı Gofret",
+          "brand": "Torku",
+          "reason": "Pancardan üretilen doğal şeker kullanımı"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690526069500",
+    "product_name": "Eti Lifalif Yulaf Ezmesi 500g",
+    "brand": "Eti",
+    "ai_summary_json": {
+      "organic_score": 96,
+      "nova_group": 1,
+      "verdict": "İşlenmemiş / Organik (NOVA 1)",
+      "summary": "Eti üreticisine ait Lifalif Yulaf Ezmesi. İçindekiler: %100 Yulaf ezmesi. Tam tahıl kaynağı ve yüksek lif içerir.",
+      "warnings": [],
+      "alternatives": [
+        {
+          "name": "Organik Yulaf Ezmesi",
+          "brand": "Raya Organik",
+          "reason": "Sertifikalı organik tarım ürünü"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8691381000486",
+    "product_name": "Beypazarı Doğal Maden Suyu 200ml",
+    "brand": "Beypazarı",
+    "ai_summary_json": {
+      "organic_score": 92,
+      "nova_group": 1,
+      "verdict": "İşlenmemiş / Organik (NOVA 1)",
+      "summary": "Beypazarı üreticisine ait Doğal Maden Suyu. İçindekiler: Yeraltı kaynaklı doğal mineralli maden suyu, karbondioksit.",
+      "warnings": [],
+      "alternatives": [
+        {
+          "name": "Kızılay Doğal Maden Suyu",
+          "brand": "Kızılay",
+          "reason": "Zengin mineral içerikli yerli maden suyu"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690504017301",
+    "product_name": "Ülker Çubuk Kraker 40g",
+    "brand": "Ülker",
+    "ai_summary_json": {
+      "organic_score": 62,
+      "nova_group": 3,
+      "verdict": "İşlenmiş Gıda (NOVA 3)",
+      "summary": "Ülker üreticisine ait Çubuk Kraker. İçindekiler: Buğday unu, bitkisel yağ (palm), tuz (%3,5), emülgatör (soya lesitini), asitlik düzenleyici (sodyum hidroksit).",
+      "warnings": [
+        "İçeriğinde 'Palm Yağı' bulundu.",
+        "Yüksek sodyum (tuz) oranı içerir."
+      ],
+      "alternatives": [
+        {
+          "name": "Torku Çubuk Kraker",
+          "brand": "Torku",
+          "reason": "Katkısız fırınlanmış kraker tercihi"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690533000015",
+    "product_name": "Sütaş Doğal Yoğurt 1000g",
+    "brand": "Sütaş",
+    "ai_summary_json": {
+      "organic_score": 90,
+      "nova_group": 1,
+      "verdict": "İşlenmemiş / Organik (NOVA 1)",
+      "summary": "Sütaş üreticisine ait Doğal Yoğurt. İçindekiler: Pastörize inek sütü, yoğurt mayası.",
+      "warnings": [],
+      "alternatives": [
+        {
+          "name": "Torku Doğal Süzme Yoğurt",
+          "brand": "Torku",
+          "reason": "Katkısız %100 doğal maya içerir"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690504031505",
+    "product_name": "Eti Negro Kakaolu Bisküvi 110g",
+    "brand": "Eti",
+    "ai_summary_json": {
+      "organic_score": 35,
+      "nova_group": 4,
+      "verdict": "Aşırı İşlenmiş Gıda (NOVA 4)",
+      "summary": "Eti üreticisine ait Negro Kakaolu Bisküvi. İçindekiler: Buğday unu, şeker, bitkisel yağ (palm), kakao tozu (%6,5), kabartıcılar, emülgatör, aroma vericiler.",
+      "warnings": [
+        "İçeriğinde 'Palm Yağı' bulundu.",
+        "Katkı maddesi: 'Aroma Verici' içermektedir."
+      ],
+      "alternatives": [
+        {
+          "name": "Züber Kakaolu Fındık Barı",
+          "brand": "Züber",
+          "reason": "Hurma özlü katkısız atıştırmalık"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690504190100",
+    "product_name": "Torku Banada Fındık Kreması 400g",
+    "brand": "Torku",
+    "ai_summary_json": {
+      "organic_score": 58,
+      "nova_group": 3,
+      "verdict": "İşlenmiş Gıda (NOVA 3)",
+      "summary": "Torku üreticisine ait Banada Fındık Kreması. İçindekiler: Şeker (pancar şekeri), fındık (%13), bitkisel yağ, yağsız süt tozu, kakao tozu.",
+      "warnings": [
+        "Şeker içeriği yüksektir."
+      ],
+      "alternatives": [
+        {
+          "name": "Züber %100 Fındık Ezmesi",
+          "brand": "Züber",
+          "reason": "%100 fındıktan oluşan şekersiz doğal ezme"
+        }
+      ]
+    }
+  },
+  {
+    "barcode": "8690637000102",
+    "product_name": "Dimes %100 Sıkma Portakal Suyu 1L",
+    "brand": "Dimes",
+    "ai_summary_json": {
+      "organic_score": 88,
+      "nova_group": 1,
+      "verdict": "İşlenmemiş / Organik (NOVA 1)",
+      "summary": "Dimes üreticisine ait %100 Sıkma Portakal Suyu. İçindekiler: %100 Portakal suyu. İlave şeker, su ve koruyucu içermez.",
+      "warnings": [],
+      "alternatives": [
+        {
+          "name": "Taze Sıkılmış Ev Yapımı Portakal Suyu",
+          "brand": "Temiz Tarif",
+          "reason": "Dalından taze meyve sıkımı"
+        }
+      ]
+    }
+  }
+]
