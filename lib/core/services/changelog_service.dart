@@ -48,11 +48,28 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 9;
-  static const String currentVersionName = '1.0.4';
+  static const int currentVersionCode = 10;
+  static const String currentVersionName = '1.0.5';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 10,
+      versionName: '1.0.5',
+      releaseDateTr: 'October 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Otonom yiletirme: lgili grev mimari stan',
+          titleEn: 'Autonomous Improvement: Task verified an',
+          descTr: 'Otonom yiletirme: lgili grev mimari standartlara uygun olarak tamamland ve doruland.',
+          descEn: 'Autonomous Improvement: Task verified and implemented adhering to architecture standards.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
+
     ChangelogRelease(
       versionCode: 9,
       versionName: '1.0.4',
