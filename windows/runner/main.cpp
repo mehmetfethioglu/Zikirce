@@ -1,4 +1,4 @@
-#include <flutter/dart_project.h>
+﻿#include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
@@ -25,8 +25,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
   FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+
+  // Phone / Tablet portrait dimensions when not maximized/fullscreen
+  const int screen_width = ::GetSystemMetrics(SM_CXSCREEN);
+  const int screen_height = ::GetSystemMetrics(SM_CYSCREEN);
+  const unsigned int default_width = 460;
+  const unsigned int default_height = 840;
+
+  const unsigned int origin_x = (screen_width > static_cast<int>(default_width))
+                                    ? (screen_width - default_width) / 2
+                                    : 10;
+  const unsigned int origin_y = (screen_height > static_cast<int>(default_height))
+                                    ? (screen_height - default_height) / 2
+                                    : 10;
+
+  Win32Window::Point origin(origin_x, origin_y);
+  Win32Window::Size size(default_width, default_height);
   if (!window.Create(L"zikirce", origin, size)) {
     return EXIT_FAILURE;
   }
