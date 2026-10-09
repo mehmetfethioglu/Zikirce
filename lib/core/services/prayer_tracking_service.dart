@@ -208,7 +208,7 @@ class PrayerTrackingService {
           // If previously marked as missed (Hayır), decrement kaza debt
           await adjustKazaCount(db, prayerName, -1);
         }
-        await LocalNotificationService.cancelTodayQuestionNotification(prayerName);
+        try { await LocalNotificationService.cancelTodayQuestionNotification(prayerName); } catch (_) {}
       } else {
         if (previousAnswer != false) {
           await logPrayerAnswer(db, dateStr, prayerName, false);
@@ -244,7 +244,7 @@ class PrayerTrackingService {
         if (previousAnswer == false) {
           await adjustKazaCount(db, prayerName, -1);
         }
-        await LocalNotificationService.cancelTodayQuestionNotification(prayerName);
+        try { await LocalNotificationService.cancelTodayQuestionNotification(prayerName); } catch (_) {}
       }
 
       await _syncHomeWidgets(db);

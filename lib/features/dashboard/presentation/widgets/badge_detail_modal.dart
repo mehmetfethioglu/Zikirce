@@ -52,6 +52,21 @@ class BadgeDetailModal extends ConsumerWidget {
         targetSurah = SurahDataProvider.getSurahById(112);
         streakKey = 'Streak_Sleep';
         break;
+      case 'surah_yasin':
+        targetPage = 440;
+        targetSurah = SurahDataProvider.getSurahById(36);
+        streakKey = 'Streak_Yasin';
+        break;
+      default:
+        if (badge.id.startsWith('quran_juz_')) {
+          final juzNum = int.tryParse(badge.id.replaceAll('quran_juz_', ''));
+          if (juzNum != null && juzNum >= 1 && juzNum <= 30) {
+            targetPage = juzNum == 1 ? 1 : ((juzNum - 1) * 20) + 2;
+          }
+        } else {
+          targetPage = 1;
+        }
+        break;
     }
 
     Navigator.of(context).pop();
@@ -74,7 +89,10 @@ class BadgeDetailModal extends ConsumerWidget {
     final isSpecialQuran = badge.id == 'waqiah_40' ||
         badge.id == 'mulk_40' ||
         badge.id == 'naba_40' ||
-        badge.id == 'sleep_protection';
+        badge.id == 'sleep_protection' ||
+        badge.id == 'surah_yasin' ||
+        badge.category == 'Kur\'an' ||
+        badge.category == 'Kuran';
 
     final diamondAsync = ref.watch(diamondCountProvider);
     final diamonds = diamondAsync.valueOrNull ?? 0;
@@ -318,7 +336,7 @@ class BadgeDetailModal extends ConsumerWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 icon: const Icon(Icons.menu_book_rounded, size: 18),
-                label: Text(l10n.isTurkish ? 'Kur\'an\'da Oku' : 'Read in Quran', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                label: Text(l10n.isTurkish ? 'Kur\'an\'da Okumaya Devam Et' : 'Continue Reading in Quran', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
                 onPressed: () => _readInQuran(context),
               ),
             ),

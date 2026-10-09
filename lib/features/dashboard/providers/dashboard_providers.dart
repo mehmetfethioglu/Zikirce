@@ -216,7 +216,7 @@ final quickStatsProvider = StreamProvider<QuickStatsData>((ref) {
     int rawToday = prefs.getInt(todayKey) ?? prefs.getInt('TodayReadPages_$todayStr') ?? 0;
 
     // Self-healing: Eski hayalet +5 bug'ı ile şişirilmiş veriyi düzelt ve kaydet
-    if (rawToday == todayHatimPages + 5 || (todayHatimPages == 0 && rawToday == 5)) {
+    if (todayHatimPages > 0 && rawToday == todayHatimPages + 5) {
       rawToday = todayHatimPages;
       await prefs.setInt(todayKey, todayHatimPages);
       if (!isDefault) {

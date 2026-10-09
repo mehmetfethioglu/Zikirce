@@ -99,7 +99,7 @@ class SessionManagerService {
     final sessions = await loadSessions();
     final newId = (id != null && id.isNotEmpty)
         ? id
-        : 'usr_${DateTime.now().millisecondsSinceEpoch}';
+        : 'usr_${DateTime.now().microsecondsSinceEpoch}';
     final dbName = 'zikirce_user_$newId.sqlite';
 
     final hasPin = pin != null && pin.trim().length == 4;
@@ -135,7 +135,7 @@ class SessionManagerService {
     final sessions = await loadSessions();
     final newId = (id != null && id.isNotEmpty)
         ? id
-        : 'usr_${DateTime.now().millisecondsSinceEpoch}';
+        : 'usr_${DateTime.now().microsecondsSinceEpoch}';
     final dbName = 'zikirce_user_$newId.sqlite';
 
     final hasPin = pin != null && pin.trim().length == 4;

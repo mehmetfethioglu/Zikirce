@@ -151,10 +151,12 @@ void main() {
       expect(notifier.state.currentCount, 33);
       expect(notifier.state.lap, 1);
       expect(notifier.state.totalCount, 33);
-      // Verify no celebration animation triggered in infinite mode
-      expect(container.read(celebrationProvider), isNull);
+      // Verify celebration animation triggered on lap completion in infinite mode
+      expect(container.read(celebrationProvider), isNotNull);
+      expect(container.read(celebrationProvider)!.type, CelebrationType.zikirTarget);
 
       // Next tap in infinite mode -> continues to 34
+      container.read(celebrationProvider.notifier).clear();
       notifier.increment(isInfinite: true);
 
       expect(notifier.state.currentCount, 34);

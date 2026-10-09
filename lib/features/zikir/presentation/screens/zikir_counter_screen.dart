@@ -84,10 +84,7 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
   void _flushCurrentZikir() {
     Future.microtask(() {
       try {
-        if (!mounted) {
-          CloudSyncEngine.instance.triggerDebouncedSync(null, delay: const Duration(milliseconds: 500));
-          return;
-        }
+        if (!mounted) return;
         final currentZikir = ref.read(currentZikirProvider);
         if (currentZikir != null) {
           ref.read(zikirCounterNotifierProvider(currentZikir.id).notifier).flushPending();

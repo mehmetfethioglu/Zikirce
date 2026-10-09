@@ -7,6 +7,8 @@ import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/services/custom_badge_service.dart';
 import '../../../kuran/presentation/widgets/add_custom_quran_badge_sheet.dart';
 import 'badge_detail_modal.dart';
+import '../../../../core/constants/surah_data_provider.dart';
+import '../../../kuran/presentation/screens/mushaf_screen.dart';
 
 class BadgeGalleryCards extends ConsumerWidget {
   final VoidCallback? onAddQuranBadge;
@@ -15,6 +17,41 @@ class BadgeGalleryCards extends ConsumerWidget {
     super.key,
     this.onAddQuranBadge,
   });
+
+  void _openCustomBadgeInMushaf(BuildContext context, CustomQuranBadge badge) {
+    int targetPage = 1;
+    SureItem? targetSurah;
+
+    if (badge.scope == 'Surah') {
+      final surahId = int.tryParse(badge.scopeValue);
+      if (surahId != null) {
+        targetSurah = SurahDataProvider.getSurahById(surahId);
+        if (targetSurah != null) {
+          targetPage = targetSurah.startPage;
+        }
+      }
+    } else if (badge.scope == 'Juz') {
+      final juzNo = int.tryParse(badge.scopeValue);
+      if (juzNo != null && juzNo >= 1 && juzNo <= 30) {
+        targetPage = juzNo == 1 ? 1 : ((juzNo - 1) * 20) + 2;
+      }
+    } else if (badge.scope == 'Page') {
+      final pageNo = int.tryParse(badge.scopeValue);
+      if (pageNo != null && pageNo >= 1 && pageNo <= 604) {
+        targetPage = pageNo;
+      }
+    }
+
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => MushafScreen(
+          initialPage: targetPage,
+          targetSurah: targetSurah,
+          streakKey: 'CustomBadge_${badge.id}',
+        ),
+      ),
+    );
+  }
 
   void _showCustomBadgeDialog(BuildContext context, WidgetRef ref, CustomQuranBadge badge) {
     showDialog(
@@ -59,14 +96,25 @@ class BadgeGalleryCards extends ConsumerWidget {
               },
               child: const Text('Sil', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
-            ElevatedButton(
+            ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: colors.accent,
+                backgroundColor: badge.glowColor,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
+              icon: const Icon(Icons.menu_book_rounded, size: 16),
+              label: Text(
+                badge.totalReadCount > 0 || badge.currentStreak > 0 ? 'Okumaya Devam Et' : 'Okumaya Başla',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _openCustomBadgeInMushaf(context, badge);
+              },
+            ),
+            TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Tamam'),
+              child: const Text('Kapat'),
             ),
           ],
         );

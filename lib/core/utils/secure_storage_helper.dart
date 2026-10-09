@@ -53,6 +53,13 @@ class SecureStorageHelper {
       }
     } on PlatformException catch (e) {
       debugPrint('[SecureStorageHelper] PlatformException on read ($key): ${e.message}');
+      if (e.message?.contains('BadPaddingException') == true ||
+          e.message?.contains('BAD_DECRYPT') == true ||
+          e.message?.contains('Cipher') == true) {
+        try {
+          await _storage.delete(key: key);
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('[SecureStorageHelper] Unexpected error on read ($key): $e');
     }

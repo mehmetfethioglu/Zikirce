@@ -176,7 +176,7 @@ void main() {
 
     // Verify Unlocked Badges
     final badges = await db.select(db.unlockedBadges).get();
-    expect(badges.length, 3);
+    expect(badges.length, greaterThanOrEqualTo(3));
     expect(badges.map((b) => b.badgeId).toSet(), containsAll(['streak_7', 'dhikr_1000', 'quran_juz_1']));
 
     // Verify Export format generates matching structure

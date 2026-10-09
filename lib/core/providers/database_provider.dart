@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
 import '../database/zikir_seed_data.dart';
@@ -9,11 +10,10 @@ import '../session/session_providers.dart';
 final databaseProvider = Provider<AppDatabase>((ref) {
   final activeSession = ref.watch(activeSessionProvider);
   final db = AppDatabase(null, activeSession.dbFileName);
-  ref.onDispose(() => db.close());
 
   // Non-blocking deferred dispatch to allow UI isolate to render initial frame
   // and satisfy OS watchdog deadlines before background reconciliation
-  Future.delayed(const Duration(milliseconds: 1500), () async {
+  final timer = Timer(const Duration(milliseconds: 1500), () async {
     try {
       await ZikirSeedData.ensureAllDefaultZikirsExist(db);
       await DataReconciliationService.reconcileAll(db, activeSession.id);
@@ -22,6 +22,11 @@ final databaseProvider = Provider<AppDatabase>((ref) {
         GoogleDriveBackupService.triggerAutoBackupBackground(db, force: false, sessionId: activeSession.id);
       }
     } catch (_) {}
+  });
+
+  ref.onDispose(() {
+    timer.cancel();
+    db.close();
   });
 
   return db;

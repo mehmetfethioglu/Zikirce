@@ -163,7 +163,7 @@ void main() {
       expect(arabicWidget.style?.fontWeight, equals(FontWeight.normal));
 
       await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 1000));
     });
 
     testWidgets('ZikirCounterScreen renders Arabic text with FontWeight.bold when isBoldArabic is true', (tester) async {
@@ -206,7 +206,7 @@ void main() {
       expect(arabicWidget.style?.fontWeight, equals(FontWeight.bold));
 
       await tester.pumpWidget(const SizedBox());
-      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 1000));
     });
   });
 }
