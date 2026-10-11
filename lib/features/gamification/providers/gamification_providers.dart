@@ -903,16 +903,37 @@ final surahStreaksProvider = FutureProvider<SurahStreaksData>((ref) async {
   final sfx = isDefault ? '' : '_${activeSession.id}';
   final prefs = await SharedPreferences.getInstance();
 
+  final now = DateTime.now();
+  final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  final yesterday = now.subtract(const Duration(days: 1));
+  final yesterdayStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+
   int getVal(String key) => prefs.getInt('$key$sfx') ?? (isDefault ? prefs.getInt(key) ?? 0 : 0);
 
-  final wStreak = getVal('Streak_Waqiah');
-  final mStreak = getVal('Streak_Mulk');
-  final nStreak = getVal('Streak_Naba');
-  final yStreak = getVal('Streak_Yasin');
-  final fStreak = getVal('Streak_Fetih');
-  final rStreak = getVal('Streak_Rahman');
-  final kStreak = getVal('Streak_Kehf');
-  final sStreak = getVal('Streak_Sleep');
+  int getActiveStreak(String baseKey) {
+    final lastDateKey = 'LastDate_Streak_$baseKey$sfx';
+    final lastDate = prefs.getString(lastDateKey) ?? (isDefault ? prefs.getString('LastDate_Streak_$baseKey') : null);
+    if (lastDate == todayStr || lastDate == yesterdayStr) {
+      return getVal('Streak_$baseKey');
+    }
+    return 0; // Gün atlanmışsa aktif seri 0
+  }
+
+  int getRealReadCount(String baseKey) {
+    final rawCount = getVal('ReadCount_$baseKey');
+    final curStreak = getVal('Streak_$baseKey');
+    final bestStreak = getVal('BestStreak_$baseKey');
+    return max(rawCount, max(curStreak, bestStreak));
+  }
+
+  final wStreak = getActiveStreak('Waqiah');
+  final mStreak = getActiveStreak('Mulk');
+  final nStreak = getActiveStreak('Naba');
+  final yStreak = getActiveStreak('Yasin');
+  final fStreak = getActiveStreak('Fetih');
+  final rStreak = getActiveStreak('Rahman');
+  final kStreak = getActiveStreak('Kehf');
+  final sStreak = getActiveStreak('Sleep');
 
   return SurahStreaksData(
     waqiahStreak: wStreak,
@@ -923,14 +944,14 @@ final surahStreaksProvider = FutureProvider<SurahStreaksData>((ref) async {
     rahmanStreak: rStreak,
     kehfStreak: kStreak,
     sleepStreak: sStreak,
-    waqiahReadCount: max(getVal('ReadCount_Waqiah'), wStreak),
-    mulkReadCount: max(getVal('ReadCount_Mulk'), mStreak),
-    nabaReadCount: max(getVal('ReadCount_Naba'), nStreak),
-    yasinReadCount: max(getVal('ReadCount_Yasin'), yStreak),
-    fetihReadCount: max(getVal('ReadCount_Fetih'), fStreak),
-    rahmanReadCount: max(getVal('ReadCount_Rahman'), rStreak),
-    kehfReadCount: max(getVal('ReadCount_Kehf'), kStreak),
-    sleepReadCount: max(getVal('ReadCount_Sleep'), sStreak),
+    waqiahReadCount: getRealReadCount('Waqiah'),
+    mulkReadCount: getRealReadCount('Mulk'),
+    nabaReadCount: getRealReadCount('Naba'),
+    yasinReadCount: getRealReadCount('Yasin'),
+    fetihReadCount: getRealReadCount('Fetih'),
+    rahmanReadCount: getRealReadCount('Rahman'),
+    kehfReadCount: getRealReadCount('Kehf'),
+    sleepReadCount: getRealReadCount('Sleep'),
   );
 });
 

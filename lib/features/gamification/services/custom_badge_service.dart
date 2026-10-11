@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,7 +22,19 @@ class CustomBadgeService {
       if (jsonStr.trim().isEmpty) return [];
 
       final List<dynamic> decoded = jsonDecode(jsonStr);
-      return decoded.map((item) => CustomQuranBadge.fromJson(item as Map<String, dynamic>)).toList();
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final yesterday = now.subtract(const Duration(days: 1));
+      final yesterdayStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+
+      final list = decoded.map((item) => CustomQuranBadge.fromJson(item as Map<String, dynamic>)).toList();
+      for (final b in list) {
+        if (b.lastReadDate.isNotEmpty && b.lastReadDate != todayStr && b.lastReadDate != yesterdayStr) {
+          b.currentStreak = 0;
+        }
+        b.totalReadCount = max(b.totalReadCount, b.bestStreak);
+      }
+      return list;
     } catch (e) {
       debugPrint('[CustomBadgeService] getCustomBadges Error: $e');
       return [];

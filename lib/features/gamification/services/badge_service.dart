@@ -339,22 +339,28 @@ class BadgeService {
         (badgeId: 'sleep_protection', key: 'Sleep'),
       ];
 
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final yesterday = now.subtract(const Duration(days: 1));
+      final yesterdayStr = '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+
       for (final cfg in surahBadgeConfigs) {
-        final streak = max(
-          getSessionInt('Streak_${cfg.key}'),
-          getSessionInt('BestStreak_${cfg.key}'),
-        );
+        final isDefault = sessionId == null || sessionId.isEmpty || sessionId == 'default_user';
+        final sfx = isDefault ? '' : '_$sessionId';
+        final lastDate = prefs.getString('LastDate_Streak_${cfg.key}$sfx') ?? (isDefault ? prefs.getString('LastDate_Streak_${cfg.key}') : null);
+        final rawStreak = getSessionInt('Streak_${cfg.key}');
+        final activeStreak = (lastDate == todayStr || lastDate == yesterdayStr) ? rawStreak : 0;
+        final bestStreak = getSessionInt('BestStreak_${cfg.key}');
         final readCountRaw = getSessionInt('ReadCount_${cfg.key}');
-        // Migration: If readCount is 0 but streak exists, use streak as readCount
-        final readCount = max(readCountRaw, streak);
+        final readCount = max(readCountRaw, max(rawStreak, bestStreak));
 
         final badge = badges.firstWhere((b) => b.id == cfg.badgeId);
         badge.targetReadCount = 40;
         badge.targetDays = 40;
         badge.totalReadCount = readCount;
-        badge.currentStreak = streak;
+        badge.currentStreak = activeStreak;
 
-        if (readCount >= 40 || streak >= 40 || dbUnlockedSet.contains(cfg.badgeId)) {
+        if (readCount >= 40 || bestStreak >= 40 || dbUnlockedSet.contains(cfg.badgeId)) {
           await markUnlocked(badge, earliestDate, 'Kuran');
         }
       }

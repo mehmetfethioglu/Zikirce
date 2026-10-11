@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -60,6 +61,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   bool _dismissedBannerForCurrentPage = false;
   int? _lastBannerPage;
   bool _showDebtReminderBanner = false;
+  bool _hideReadBanner = false;
+  Timer? _hideReadBannerTimer;
 
   @override
   void initState() {
@@ -102,6 +105,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   @override
   void dispose() {
+    _hideReadBannerTimer?.cancel();
     _focusNode.dispose();
     _pageController.dispose();
     CloudSyncEngine.instance
@@ -512,7 +516,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     if (!mounted) return;
 
     // Show celebration modal
-    showModalBottomSheet(
+    await showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
@@ -736,6 +740,17 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
         );
       },
     );
+
+    if (mounted) {
+      _hideReadBannerTimer?.cancel();
+      _hideReadBannerTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _hideReadBanner = true;
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -893,6 +908,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 itemCount: 605,
                 onPageChanged: (pageIndex) {
                   final newPage = pageIndex + 1;
+                  if (_hideReadBanner) {
+                    _hideReadBanner = false;
+                  }
                   ref.read(currentMushafPageProvider.notifier).state = newPage;
                   if (TilavetSecdesiData.isSecdePage(newPage)) {
                     _encounteredSecdePages.add(newPage);
@@ -1023,7 +1041,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
               // Floating "Sureyi Okudum" Action Button (at the end of the surah)
               // Hatim ve Mukabele modlarında genel hedef hatim tamamlamak olduğu için sûre okundu butonu gösterilmez
-              if (widget.activeHatim == null && effectiveSurah != null && isSurahEnd)
+              if (widget.activeHatim == null && effectiveSurah != null && isSurahEnd && (!isMarkedAsRead || !_hideReadBanner))
                 Positioned(
                   left: 20,
                   right: 20,

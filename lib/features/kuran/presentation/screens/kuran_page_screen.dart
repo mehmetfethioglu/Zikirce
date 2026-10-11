@@ -7,6 +7,7 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../gamification/providers/gamification_providers.dart';
+import '../../../gamification/models/badge_models.dart';
 import '../../../hatim/presentation/screens/mukabele_hatim_screen.dart';
 import '../../../hatim/presentation/widgets/hatim_sync_gate.dart';
 import '../../../hatim/providers/hatim_providers.dart';
@@ -700,6 +701,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     required Color accentGreen,
   }) {
     final cardState = ref.watch(quickAccessCardsProvider);
+    final customBadgesAsync = ref.watch(customBadgesProvider);
+    final customBadges = customBadgesAsync.valueOrNull ?? [];
 
     // List of card entries: (id, title, icon, isHatim, hatimId, widget)
     final List<({String id, String title, String icon, bool isHatim, String? hatimId, Widget widget})> allEntries = [];
@@ -939,6 +942,18 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
         streakKey: 'kehf',
       ),
     ));
+
+    // 6. Custom Quran Badges (Kullanıcının Oluşturduğu Özel Rozet Kartları)
+    for (final b in customBadges) {
+      allEntries.add((
+        id: 'custom_badge_${b.id}',
+        title: b.title,
+        icon: b.iconEmoji,
+        isHatim: false,
+        hatimId: null,
+        widget: _buildCustomBadgeStreakCard(b),
+      ));
+    }
 
     // Filter out hidden cards
     final visibleEntries = allEntries.where((e) => !cardState.isHidden(e.id)).toList();
@@ -2077,6 +2092,54 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCustomBadgeStreakCard(CustomQuranBadge badge) {
+    int targetPage = 1;
+    SureItem? targetSurah;
+
+    if (badge.scope == 'Surah') {
+      final surahId = int.tryParse(badge.scopeValue);
+      if (surahId != null) {
+        targetSurah = SurahDataProvider.getSurahById(surahId);
+        if (targetSurah != null) {
+          targetPage = targetSurah.startPage;
+        }
+      }
+    } else if (badge.scope == 'Juz') {
+      final juzNo = int.tryParse(badge.scopeValue);
+      if (juzNo != null && juzNo >= 1 && juzNo <= 30) {
+        targetPage = juzNo == 1 ? 1 : ((juzNo - 1) * 20) + 2;
+      }
+    } else if (badge.scope == 'Page') {
+      final pageNo = int.tryParse(badge.scopeValue);
+      if (pageNo != null && pageNo >= 1 && pageNo <= 604) {
+        targetPage = pageNo;
+      }
+    }
+
+    final glow = badge.glowColor;
+    final bgGradient = [
+      glow.withValues(alpha: 0.85),
+      Color.lerp(glow, Colors.black, 0.45) ?? const Color(0xFF064E3B),
+    ];
+    final displayReads = badge.totalReadCount > 0 ? badge.totalReadCount : badge.currentStreak;
+    final subtitle = badge.currentStreak > 1
+        ? '🔥 ${badge.currentStreak} Günlük Seri'
+        : (badge.targetDays > 0 ? '$displayReads/${badge.targetDays} Okuma' : '$displayReads Okuma');
+
+    return _buildStreakCard(
+      title: badge.title,
+      subtitle: subtitle,
+      icon: badge.iconEmoji,
+      badgeText: badge.scopeDisplayName,
+      bgGradient: bgGradient,
+      readCount: badge.totalReadCount,
+      streakDays: badge.currentStreak,
+      startPage: targetPage,
+      surahId: targetSurah?.id,
+      streakKey: 'CustomBadge_${badge.id}',
     );
   }
 
