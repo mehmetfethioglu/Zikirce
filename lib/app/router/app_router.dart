@@ -28,7 +28,7 @@ final appRouter = GoRouter(
   observers: [
     SentryNavigatorObserver(),
   ],
-  initialLocation: '/',
+  initialLocation: '/zikir',
   redirect: (context, state) async {
     if (state.uri.path == '/onboarding' || state.uri.path == '/privacy') {
       return null;
@@ -37,6 +37,9 @@ final appRouter = GoRouter(
     final isCompleted = prefs.getBool('IsOnboardingCompleted') ?? false;
     if (!isCompleted) {
       return '/onboarding';
+    }
+    if (state.uri.path == '/') {
+      return '/zikir';
     }
     return null;
   },
