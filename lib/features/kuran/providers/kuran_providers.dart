@@ -137,6 +137,7 @@ class KuranAudioState {
   final int currentAyahId;
   final int currentWordOrder;
   final double playbackProgress;
+  final bool isBarVisible;
 
   KuranAudioState({
     this.isPlaying = false,
@@ -145,6 +146,7 @@ class KuranAudioState {
     this.currentAyahId = 1,
     this.currentWordOrder = 0,
     this.playbackProgress = 0.0,
+    this.isBarVisible = false,
   });
 
   KuranAudioState copyWith({
@@ -154,6 +156,7 @@ class KuranAudioState {
     int? currentAyahId,
     int? currentWordOrder,
     double? playbackProgress,
+    bool? isBarVisible,
   }) {
     return KuranAudioState(
       isPlaying: isPlaying ?? this.isPlaying,
@@ -162,6 +165,7 @@ class KuranAudioState {
       currentAyahId: currentAyahId ?? this.currentAyahId,
       currentWordOrder: currentWordOrder ?? this.currentWordOrder,
       playbackProgress: playbackProgress ?? this.playbackProgress,
+      isBarVisible: isBarVisible ?? this.isBarVisible,
     );
   }
 }
@@ -213,6 +217,7 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
       currentAyahId: ayahId,
       isLoading: true,
       currentWordOrder: 0,
+      isBarVisible: true,
     );
 
     try {
@@ -249,13 +254,31 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   }
 
   void syncExternalState(KuranAudioState newState) {
-    state = newState;
+    // Harici oynatıcılar (ör. Mukabele) Mushaf kelime renklendirmesi için durumu günceller.
+    // Mushaf altındaki bağımsız oynatıcı barı kesinlikle kapalı kalmalıdır.
+    state = newState.copyWith(isBarVisible: false);
   }
 
   Future<void> stop() async {
-    await _player.pause();
-    await _player.seek(Duration.zero);
-    state = state.copyWith(isPlaying: false, currentWordOrder: 0);
+    try {
+      await _player.pause();
+      await _player.seek(Duration.zero);
+    } catch (_) {}
+    state = state.copyWith(
+      isPlaying: false,
+      isLoading: false,
+      currentWordOrder: 0,
+      playbackProgress: 0.0,
+      isBarVisible: false,
+    );
+  }
+
+  void reset() {
+    try {
+      _player.pause();
+      _player.seek(Duration.zero);
+    } catch (_) {}
+    state = KuranAudioState();
   }
 
   @override

@@ -110,6 +110,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     _pageController.dispose();
     CloudSyncEngine.instance
         .triggerDebouncedSync(null, delay: const Duration(seconds: 1));
+    try {
+      ref.read(kuranAudioNotifierProvider.notifier).stop();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -768,10 +771,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final goldColor = isDark ? AppColors.gold400 : const Color(0xFFB57D15);
 
     final audioState = ref.watch(kuranAudioNotifierProvider);
-    final isAudioActive = audioState.isPlaying ||
-        audioState.isLoading ||
-        audioState.currentAyahId > 1 ||
-        audioState.playbackProgress > 0;
+    final isAudioActive = audioState.isBarVisible;
 
     // Detect effective surah ending on this page
     SureItem? detectedSurah;

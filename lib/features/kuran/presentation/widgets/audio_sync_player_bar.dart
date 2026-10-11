@@ -11,17 +11,14 @@ class AudioSyncPlayerBar extends ConsumerWidget {
     final audioState = ref.watch(kuranAudioNotifierProvider);
     final audioNotifier = ref.read(kuranAudioNotifierProvider.notifier);
 
-    if (!audioState.isPlaying &&
-        !audioState.isLoading &&
-        audioState.currentAyahId == 1 &&
-        audioState.playbackProgress == 0) {
+    if (!audioState.isBarVisible) {
       return const SizedBox.shrink();
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final barBg = isDark ? const Color(0xFF121418).withOpacity(0.96) : const Color(0xFFFFFDF8).withOpacity(0.97);
+    final barBg = isDark ? const Color(0xFF121418).withValues(alpha: 0.96) : const Color(0xFFFFFDF8).withValues(alpha: 0.97);
     final titleColor = isDark ? Colors.white : const Color(0xFF1E2B27);
-    final borderColor = isDark ? AppColors.gold500.withOpacity(0.4) : const Color(0xFFC5A358);
+    final borderColor = isDark ? AppColors.gold500.withValues(alpha: 0.4) : const Color(0xFFC5A358);
     final trackColor = isDark ? const Color(0xFF1C222A) : const Color(0xFFE5DFC9);
     final progressColor = isDark ? AppColors.gold500 : const Color(0xFF165241);
 
@@ -34,7 +31,7 @@ class AudioSyncPlayerBar extends ConsumerWidget {
         border: Border.all(color: borderColor, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.1),
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),

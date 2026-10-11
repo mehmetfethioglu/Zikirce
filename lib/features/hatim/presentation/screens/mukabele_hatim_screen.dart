@@ -111,6 +111,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     ScreenAwakeService.setKeepAwake(false);
     CloudSyncEngine.instance
         .triggerDebouncedSync(null, delay: const Duration(seconds: 1));
+    try {
+      ref.read(kuranAudioNotifierProvider.notifier).reset();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -1045,6 +1048,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       }
       _encounteredSecdePages.clear();
     }
+    try {
+      ref.read(kuranAudioNotifierProvider.notifier).reset();
+    } catch (_) {}
     if (mounted) {
       Navigator.of(context).pop();
     }
