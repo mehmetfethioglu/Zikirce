@@ -38,9 +38,6 @@ final appRouter = GoRouter(
     if (!isCompleted) {
       return '/onboarding';
     }
-    if (state.uri.path == '/') {
-      return '/zikir';
-    }
     return null;
   },
   routes: [
