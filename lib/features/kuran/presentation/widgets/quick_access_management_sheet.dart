@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../hatim/providers/hatim_providers.dart';
 import '../../providers/quick_access_cards_provider.dart';
+import '../../../gamification/providers/gamification_providers.dart';
 
 class QuickAccessManagementSheet extends ConsumerWidget {
   const QuickAccessManagementSheet({super.key});
@@ -25,6 +26,8 @@ class QuickAccessManagementSheet extends ConsumerWidget {
     final cardState = ref.watch(quickAccessCardsProvider);
     final hatimsAsync = ref.watch(hatimListStreamProvider);
     final activeMukabeleAsync = ref.watch(activeMukabeleHatimProvider);
+    final customBadgesAsync = ref.watch(customBadgesProvider);
+    final customBadges = customBadgesAsync.valueOrNull ?? [];
 
     final sheetBg = isDark ? const Color(0xFF181B20) : const Color(0xFFF9FBF9);
     final cardBg = isDark ? const Color(0xFF22262E) : Colors.white;
@@ -65,6 +68,16 @@ class QuickAccessManagementSheet extends ConsumerWidget {
     allCards.add((id: 'card_streak_fetih', title: 'Fetih Sûresi (40 Okuma)', icon: '🗡️', isHatim: false));
     allCards.add((id: 'card_streak_rahman', title: 'Rahmân Sûresi (40 Okuma)', icon: '🌸', isHatim: false));
     allCards.add((id: 'card_streak_kehf', title: 'Kehf Sûresi (40 Okuma)', icon: '⛰️', isHatim: false));
+
+    // 4. Custom Quran Badges (Kullanıcının Özel Rozetleri)
+    for (final b in customBadges) {
+      allCards.add((
+        id: 'custom_badge_${b.id}',
+        title: '${b.title} (${b.scopeDisplayName})',
+        icon: b.iconEmoji,
+        isHatim: false,
+      ));
+    }
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.75,
