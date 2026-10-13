@@ -82,12 +82,32 @@ class BadgeGalleryCards extends ConsumerWidget {
             children: [
               Text('Kapsam: ${badge.scopeDisplayName}', style: TextStyle(fontSize: 13, color: colors.primaryText)),
               const SizedBox(height: 4),
-              Text('Hedef: ${badge.targetDays} Okuma', style: TextStyle(fontSize: 13, color: colors.primaryText)),
+              Text(
+                'Hedef: ${badge.targetDays <= 0 ? 'Sonsuz Vird (Sürekli)' : '${badge.targetDays} Okuma'}',
+                style: TextStyle(fontSize: 13, color: colors.primaryText),
+              ),
+              if (badge.dailyTarget > 1) ...[
+                const SizedBox(height: 4),
+                Text('Günlük Hedef: ${badge.dailyTarget} Okuma', style: TextStyle(fontSize: 13, color: colors.primaryText)),
+              ],
               const SizedBox(height: 4),
               Text(status, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: badge.glowColor)),
             ],
           ),
           actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                AddCustomQuranBadgeSheet.show(
+                  context,
+                  badgeToEdit: badge,
+                  onBadgeCreated: () {
+                    ref.read(badgeRefreshTriggerProvider.notifier).state++;
+                  },
+                );
+              },
+              child: Text('Hedefi Düzenle', style: TextStyle(color: badge.glowColor, fontWeight: FontWeight.bold)),
+            ),
             TextButton(
               onPressed: () async {
                 Navigator.of(ctx).pop();

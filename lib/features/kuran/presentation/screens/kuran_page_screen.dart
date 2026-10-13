@@ -2124,10 +2124,18 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
       glow.withValues(alpha: 0.85),
       Color.lerp(glow, Colors.black, 0.45) ?? const Color(0xFF064E3B),
     ];
+    final isInfinite = badge.targetDays <= 0;
     final displayReads = badge.totalReadCount > 0 ? badge.totalReadCount : badge.currentStreak;
-    final subtitle = badge.currentStreak > 1
-        ? '🔥 ${badge.currentStreak} Günlük Seri'
-        : (badge.targetDays > 0 ? '$displayReads/${badge.targetDays} Okuma' : '$displayReads Okuma');
+    final String subtitle;
+    if (badge.dailyTarget > 1) {
+      subtitle = 'Bugün: ${badge.todayReadCount}/${badge.dailyTarget} • 🔥 ${badge.currentStreak} Gün';
+    } else if (badge.currentStreak > 1) {
+      subtitle = '🔥 ${badge.currentStreak} Günlük Seri';
+    } else if (isInfinite) {
+      subtitle = 'Sonsuz Vird';
+    } else {
+      subtitle = '$displayReads/${badge.targetDays} Okuma';
+    }
 
     return _buildStreakCard(
       title: badge.title,
@@ -2140,6 +2148,10 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
       startPage: targetPage,
       surahId: targetSurah?.id,
       streakKey: 'CustomBadge_${badge.id}',
+      targetDays: badge.targetDays,
+      dailyTarget: badge.dailyTarget,
+      todayReadCount: badge.todayReadCount,
+      customBadge: badge,
     );
   }
 
@@ -2154,8 +2166,13 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     required int startPage,
     int? surahId,
     String? streakKey,
+    int targetDays = 40,
+    int dailyTarget = 1,
+    int todayReadCount = 0,
+    CustomQuranBadge? customBadge,
   }) {
     final displayCount = readCount > 0 ? readCount : streakDays;
+    final isInfinite = targetDays <= 0;
 
     return Material(
       color: Colors.transparent,
@@ -2169,6 +2186,11 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           bgGradient: bgGradient,
           readCount: displayCount,
           streakDays: streakDays,
+          targetDays: targetDays,
+          dailyTarget: dailyTarget,
+          todayReadCount: todayReadCount,
+          customBadge: customBadge,
+          onBadgeUpdated: () => ref.read(badgeRefreshTriggerProvider.notifier).state++,
           onStartReading: () => _openMushafPage(
             startPage,
             targetSurah: surahId != null
@@ -2190,7 +2212,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: bgGradient.first.withOpacity(0.3),
+                color: bgGradient.first.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -2223,7 +2245,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$title • $displayCount/40 Okuma',
+                    isInfinite
+                        ? '$title • $displayCount Okuma'
+                        : '$title • $displayCount/$targetDays Okuma',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -2271,7 +2295,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(2),
                       child: LinearProgressIndicator(
-                        value: (displayCount / 40.0).clamp(0.0, 1.0),
+                        value: isInfinite
+                            ? (dailyTarget > 1 ? (todayReadCount / dailyTarget.toDouble()).clamp(0.0, 1.0) : 1.0)
+                            : (displayCount / targetDays.toDouble()).clamp(0.0, 1.0),
                         minHeight: 4,
                         backgroundColor: Colors.white24,
                         valueColor:

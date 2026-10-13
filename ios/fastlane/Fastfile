@@ -135,11 +135,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Zikirce v2.1.1 Yenilikleri:
-      • Sure Rozetleri & Kümülatif Okuma: Mülk, Vâkıa, Yâsîn, Fetih, Rahmân, Kehf ve özel sureler için sayaçlar aktif! Her okuma kümülatif (+1) artar, 40 okumada rozet açılır.
-      • Kelime Takipli Dinleme & Talim: Sure tamamlandığında okuma kaydı ve rozet ilerlemesi otomatik işlenir.
-      • Mushaf Son Sayfa & Rozet Teklifi: Sure son sayfasında tek tıkla okundu kaydı ve olmayan sureler için anında rozet oluşturma.
-      • Kararlılık & Senkronizasyon: Oturum duyarlı rozet senkronizasyonu ve genel optimizasyonlar.
+      Zikirce v2.1.3 Yenilikleri:
+      • Akıcı ve Hızlı Açılış: Açılış performansı baştan sona optimize edildi, bekleme süresi en aza indirilerek çok daha akıcı bir deneyim sağlandı.
+      • Zarif Görünüm & Tema Uyumu: Açılış görseli, açık ve koyu tema tercihlerinize kusursuz uyum sağlayacak şekilde yenilendi.
+      • Kararlılık & İyileştirmeler: Zikir sayacı ve ibadet takiplerinde genel performans artışları ve kullanım kolaylıkları yapıldı.
+
+      What's New in v2.1.3:
+      • Smoother & Faster Launch: App startup has been thoroughly refined to minimize waiting time for an effortless experience.
+      • Seamless Theme Harmony: Launch appearance updated to gracefully match light and dark system settings.
+      • Stability & Polish: General usability refinements across daily dhikrs and prayer companion features.
     CHANGELOG
 
     upload_to_testflight(

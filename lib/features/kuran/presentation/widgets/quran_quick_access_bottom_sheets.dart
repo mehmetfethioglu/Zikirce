@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/haptic_service.dart';
+import '../../../gamification/models/badge_models.dart';
+import 'add_custom_quran_badge_sheet.dart';
 
 /// Hatim ve Mukabele Detay & İstatistik Bottom Sheet'i
 class HatimDetailBottomSheet extends StatelessWidget {
@@ -833,7 +835,7 @@ class DynamicSurahDetailBottomSheet extends StatelessWidget {
   }
 }
 
-/// 40 Günlük Sure Streaks Detay Bottom Sheet'i
+/// Dinamik Kur'an Okuma Rozetleri & Sure Streaks Detay Bottom Sheet'i
 class SurahStreakDetailBottomSheet extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -843,6 +845,10 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
   final int readCount;
   final int streakDays;
   final int targetDays;
+  final int dailyTarget;
+  final int todayReadCount;
+  final CustomQuranBadge? customBadge;
+  final VoidCallback? onBadgeUpdated;
   final VoidCallback onStartReading;
 
   const SurahStreakDetailBottomSheet({
@@ -855,6 +861,10 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     this.readCount = 0,
     required this.streakDays,
     this.targetDays = 40,
+    this.dailyTarget = 1,
+    this.todayReadCount = 0,
+    this.customBadge,
+    this.onBadgeUpdated,
     required this.onStartReading,
   });
 
@@ -868,6 +878,10 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     int readCount = 0,
     required int streakDays,
     int targetDays = 40,
+    int dailyTarget = 1,
+    int todayReadCount = 0,
+    CustomQuranBadge? customBadge,
+    VoidCallback? onBadgeUpdated,
     required VoidCallback onStartReading,
   }) {
     HapticService.selectionClick();
@@ -886,6 +900,10 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
         readCount: readCount,
         streakDays: streakDays,
         targetDays: targetDays,
+        dailyTarget: dailyTarget,
+        todayReadCount: todayReadCount,
+        customBadge: customBadge,
+        onBadgeUpdated: onBadgeUpdated,
         onStartReading: onStartReading,
       ),
     );
@@ -903,8 +921,11 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
     final accentColor = bgGradient.first;
 
     final displayCount = readCount > 0 ? readCount : streakDays;
-    final progressPct = ((displayCount / targetDays) * 100).clamp(0, 100).toInt();
-    final remainingDays = (targetDays - displayCount).clamp(0, targetDays);
+    final isInfinite = targetDays <= 0;
+    final progressPct = isInfinite
+        ? (dailyTarget > 1 ? ((todayReadCount / dailyTarget) * 100).clamp(0, 100).toInt() : 100)
+        : ((displayCount / targetDays) * 100).clamp(0, 100).toInt();
+    final remainingDays = isInfinite ? 0 : (targetDays - displayCount).clamp(0, targetDays);
 
     return Container(
       constraints: BoxConstraints(
@@ -985,8 +1006,44 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                               ),
                             ),
                             const Spacer(),
+                            if (customBadge != null)
+                              InkWell(
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  AddCustomQuranBadgeSheet.show(
+                                    context,
+                                    badgeToEdit: customBadge,
+                                    onBadgeCreated: onBadgeUpdated,
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: accentColor.withValues(alpha: 0.25)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 12, color: accentColor),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Hedefi Düzenle',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: accentColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             Text(
-                              '%$progressPct',
+                              isInfinite ? '∞ Sonsuz' : '%$progressPct',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
@@ -1022,22 +1079,29 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildStatColumn('Toplam Okuma', '$displayCount/$targetDays', accentColor),
+                    _buildStatColumn('Toplam Okuma', isInfinite ? '$displayCount' : '$displayCount/$targetDays', accentColor),
                     Container(width: 1, height: 28, color: borderStroke),
                     _buildStatColumn('Günlük Seri', streakDays > 0 ? '🔥 $streakDays Gün' : '0 Gün', const Color(0xFFEF6C00)),
                     Container(width: 1, height: 28, color: borderStroke),
-                    _buildStatColumn('Kalan', '$remainingDays', secondaryTextColor),
+                    if (isInfinite || dailyTarget > 1)
+                      _buildStatColumn('Bugünkü Hedef', dailyTarget > 1 ? '$todayReadCount/$dailyTarget' : 'Serbest', const Color(0xFF2E7D32))
+                    else
+                      _buildStatColumn('Kalan', '$remainingDays', secondaryTextColor),
                   ],
                 ),
               ),
               const SizedBox(height: 18),
 
-              // 4. 40 Okuma Görsel İlerleme Izgarası (5x8)
+              // 4. Görsel İlerleme Bölümü (Izgara / Kilometre Taşı)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '40 Okuma İlerleme Tablosu',
+                    isInfinite
+                        ? 'Sonsuz Vird & Manevi Eşikler'
+                        : (targetDays <= 100
+                            ? '$targetDays Okuma İlerleme Tablosu'
+                            : '$targetDays Okuma Kilometre Taşları'),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
@@ -1045,7 +1109,11 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    displayCount >= targetDays ? '🎉 Hedef Tamamlandı!' : '$displayCount/$targetDays Okuma',
+                    isInfinite
+                        ? '$displayCount Okuma Yapıldı'
+                        : (displayCount >= targetDays
+                            ? '🎉 Hedef Tamamlandı!'
+                            : '$displayCount/$targetDays Okuma'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -1055,65 +1123,201 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surfaceBg,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: borderStroke),
-                ),
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 8,
-                    crossAxisSpacing: 5,
-                    mainAxisSpacing: 5,
-                    childAspectRatio: 1.1,
+
+              if (!isInfinite && targetDays <= 100) ...[
+                // Izgara tablosu (7, 14, 21, 33, 40, 70, 99, 100 vb.)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: surfaceBg,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: borderStroke),
                   ),
-                  itemCount: targetDays,
-                  itemBuilder: (context, index) {
-                    final day = index + 1;
-                    final isDone = day <= displayCount;
-                    final isCurrent = day == displayCount + 1;
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: targetDays <= 21 ? 7 : (targetDays <= 40 ? 8 : 10),
+                      crossAxisSpacing: 5,
+                      mainAxisSpacing: 5,
+                      childAspectRatio: targetDays <= 40 ? 1.1 : 1.0,
+                    ),
+                    itemCount: targetDays,
+                    itemBuilder: (context, index) {
+                      final day = index + 1;
+                      final isDone = day <= displayCount;
+                      final isCurrent = day == displayCount + 1;
 
-                    Color bg;
-                    Color border;
-                    Color textCol;
+                      Color bg;
+                      Color border;
+                      Color textCol;
 
-                    if (isDone) {
-                      bg = accentColor;
-                      border = accentColor;
-                      textCol = Colors.white;
-                    } else if (isCurrent) {
-                      bg = accentColor.withValues(alpha: 0.18);
-                      border = accentColor;
-                      textCol = accentColor;
-                    } else {
-                      bg = cardBg;
-                      border = borderStroke;
-                      textCol = secondaryTextColor.withValues(alpha: 0.6);
-                    }
+                      if (isDone) {
+                        bg = accentColor;
+                        border = accentColor;
+                        textCol = Colors.white;
+                      } else if (isCurrent) {
+                        bg = accentColor.withValues(alpha: 0.18);
+                        border = accentColor;
+                        textCol = accentColor;
+                      } else {
+                        bg = cardBg;
+                        border = borderStroke;
+                        textCol = secondaryTextColor.withValues(alpha: 0.6);
+                      }
 
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: bg,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: border, width: isCurrent ? 1.5 : 1),
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: bg,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: border, width: isCurrent ? 1.5 : 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          isDone ? '✓' : '$day',
+                          style: TextStyle(
+                            fontSize: targetDays <= 40 ? 9.5 : 8.5,
+                            fontWeight: isDone || isCurrent ? FontWeight.bold : FontWeight.normal,
+                            color: textCol,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ] else if (!isInfinite && targetDays > 100) ...[
+                // 100+ Hedefler için Kilometre Taşı Çubuğu
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: surfaceBg,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: borderStroke),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Toplam İlerleme',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryTextColor),
+                          ),
+                          Text(
+                            '%$progressPct ($displayCount/$targetDays)',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: accentColor),
+                          ),
+                        ],
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        isDone ? '✓' : '$day',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: isDone || isCurrent ? FontWeight.bold : FontWeight.normal,
-                          color: textCol,
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: LinearProgressIndicator(
+                          value: (displayCount / targetDays.toDouble()).clamp(0.0, 1.0),
+                          minHeight: 10,
+                          backgroundColor: borderStroke,
+                          valueColor: AlwaysStoppedAnimation<Color>(accentColor),
                         ),
                       ),
-                    );
-                  },
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildMilestonePill('Başla', 0, displayCount, accentColor, borderStroke),
+                          _buildMilestonePill('%25', (targetDays * 0.25).round(), displayCount, accentColor, borderStroke),
+                          _buildMilestonePill('%50', (targetDays * 0.50).round(), displayCount, accentColor, borderStroke),
+                          _buildMilestonePill('%75', (targetDays * 0.75).round(), displayCount, accentColor, borderStroke),
+                          _buildMilestonePill('Hedef', targetDays, displayCount, accentColor, borderStroke),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ] else ...[
+                // Sonsuz Hedef için Manevi Eşikler (Milestones)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: surfaceBg,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: borderStroke),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Manevi Fazilet Menzilleri',
+                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: primaryTextColor),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildInfiniteMilestoneCard('40 Okuma', 'Muhafız', displayCount >= 40, accentColor, borderStroke, surfaceBg),
+                          _buildInfiniteMilestoneCard('100 Okuma', 'Dost', displayCount >= 100, accentColor, borderStroke, surfaceBg),
+                          _buildInfiniteMilestoneCard('313 Okuma', 'Bedir', displayCount >= 313, accentColor, borderStroke, surfaceBg),
+                          _buildInfiniteMilestoneCard('1000 Okuma', 'Büyük Vird', displayCount >= 1000, accentColor, borderStroke, surfaceBg),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              if (dailyTarget > 1) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text('🎯', style: TextStyle(fontSize: 18)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Bugünkü Hedef ($dailyTarget Okuma)',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: accentColor),
+                                ),
+                                Text(
+                                  todayReadCount >= dailyTarget ? '✓ Tamamlandı' : '$todayReadCount/$dailyTarget Okundu',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: todayReadCount >= dailyTarget ? const Color(0xFF2E7D32) : accentColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: (todayReadCount / dailyTarget.toDouble()).clamp(0.0, 1.0),
+                                minHeight: 6,
+                                backgroundColor: accentColor.withValues(alpha: 0.2),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  todayReadCount >= dailyTarget ? const Color(0xFF2E7D32) : accentColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
 
               // 5. Vird Fazileti & Tavsiye
@@ -1197,6 +1401,72 @@ class SurahStreakDetailBottomSheet extends StatelessWidget {
           style: const TextStyle(fontSize: 10, color: Colors.grey),
         ),
       ],
+    );
+  }
+
+  Widget _buildMilestonePill(String label, int targetValue, int currentValue, Color accentColor, Color borderStroke) {
+    final reached = currentValue >= targetValue;
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+          decoration: BoxDecoration(
+            color: reached ? accentColor : borderStroke,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            reached ? '✓ $label' : label,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.bold,
+              color: reached ? Colors.white : Colors.grey,
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$targetValue',
+          style: TextStyle(fontSize: 9, color: reached ? accentColor : Colors.grey),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfiniteMilestoneCard(String countText, String title, bool isDone, Color accentColor, Color borderStroke, Color surfaceBg) {
+    return Container(
+      width: 72,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      decoration: BoxDecoration(
+        color: isDone ? accentColor.withValues(alpha: 0.15) : surfaceBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDone ? accentColor : borderStroke),
+      ),
+      child: Column(
+        children: [
+          Text(
+            isDone ? '✨' : '🔒',
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isDone ? accentColor : Colors.grey,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            countText,
+            style: TextStyle(
+              fontSize: 8.5,
+              color: isDone ? accentColor.withValues(alpha: 0.8) : Colors.grey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

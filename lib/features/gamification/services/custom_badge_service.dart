@@ -91,25 +91,42 @@ class CustomBadgeService {
           // 1. Kümülatif toplam okuma her okumada artar
           b.totalReadCount += count;
 
-          // 2. Günlük seri kontrolü (günde 1 kez seri ilerletilir)
-          if (b.lastReadDate != todayStr) {
-            if (b.lastReadDate.isNotEmpty && b.lastReadDate == yesterdayStr) {
-              b.currentStreak++;
-            } else if (b.currentStreak == 0 || b.lastReadDate.isEmpty) {
-              b.currentStreak = 1;
-            } else {
-              b.currentStreak = 1; // Gün atlandıysa seriyi 1'den başlat
-            }
-            b.lastReadDate = todayStr;
-            if (b.currentStreak > b.bestStreak) {
-              b.bestStreak = b.currentStreak;
+          // 2. Bugünün okuma sayısını güncelle
+          if (b.todayDate != todayStr) {
+            b.todayDate = todayStr;
+            b.todayReadCount = count;
+          } else {
+            b.todayReadCount += count;
+          }
+
+          // 3. Günlük seri (Streak) kontrolü:
+          // Günlük hedef tamamlandığında (örn. günde 3/3 okunduğunda) o günün serisi artsın
+          final requiredDaily = b.dailyTarget > 0 ? b.dailyTarget : 1;
+          if (b.todayReadCount >= requiredDaily) {
+            if (b.lastReadDate != todayStr) {
+              if (b.lastReadDate.isNotEmpty && b.lastReadDate == yesterdayStr) {
+                b.currentStreak++;
+              } else if (b.currentStreak == 0 || b.lastReadDate.isEmpty) {
+                b.currentStreak = 1;
+              } else {
+                b.currentStreak = 1; // Gün atlandıysa seriyi 1'den başlat
+              }
+              b.lastReadDate = todayStr;
+              if (b.currentStreak > b.bestStreak) {
+                b.bestStreak = b.currentStreak;
+              }
             }
           }
 
-          // 3. Kilit açma kontrolü (Toplam okuma veya seri hedefe ulaştığında)
-          if ((b.totalReadCount >= b.targetDays || b.currentStreak >= b.targetDays) && !b.isUnlocked) {
+          // 4. Kilit açma kontrolü (Toplam okuma veya seri hedefe ulaştığında)
+          if (b.targetDays > 0) {
+            if ((b.totalReadCount >= b.targetDays || b.currentStreak >= b.targetDays) && !b.isUnlocked) {
+              b.isUnlocked = true;
+              b.unlockedDate = DateTime.now();
+            }
+          } else {
+            // Sonsuz hedef: Baştan itibaren aktif vird olarak açık
             b.isUnlocked = true;
-            b.unlockedDate = DateTime.now();
           }
 
           modified = true;

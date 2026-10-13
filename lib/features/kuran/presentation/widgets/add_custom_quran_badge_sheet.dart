@@ -11,17 +11,32 @@ import '../../../../core/session/session_providers.dart';
 class AddCustomQuranBadgeSheet extends ConsumerStatefulWidget {
   final VoidCallback? onBadgeCreated;
   final int? initialSurahId;
+  final CustomQuranBadge? badgeToEdit;
 
-  const AddCustomQuranBadgeSheet({super.key, this.onBadgeCreated, this.initialSurahId});
+  const AddCustomQuranBadgeSheet({
+    super.key,
+    this.onBadgeCreated,
+    this.initialSurahId,
+    this.badgeToEdit,
+  });
 
-  static Future<void> show(BuildContext context, {VoidCallback? onBadgeCreated, int? initialSurahId}) {
+  static Future<void> show(
+    BuildContext context, {
+    VoidCallback? onBadgeCreated,
+    int? initialSurahId,
+    CustomQuranBadge? badgeToEdit,
+  }) {
     return showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => AddCustomQuranBadgeSheet(onBadgeCreated: onBadgeCreated, initialSurahId: initialSurahId),
+      builder: (_) => AddCustomQuranBadgeSheet(
+        onBadgeCreated: onBadgeCreated,
+        initialSurahId: initialSurahId,
+        badgeToEdit: badgeToEdit,
+      ),
     );
   }
 
@@ -36,18 +51,63 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
   int _selectedJuzIndex = 28; // Default 29. Cüz (index 28 -> Juz 29)
   String _selectedPageOption = '5 Sayfa/Gün';
   int _selectedTargetDays = 40;
+  int _selectedDailyTarget = 1;
   String _selectedEmoji = '📖';
   final String _selectedColorHex = '#FF5252';
 
   final List<String> _scopes = ['Sure Okuma', 'Cüz Okuma', 'Sayfa Okuma', 'Hatim Takibi'];
   final List<String> _pageOptions = ['1 Sayfa/Gün', '3 Sayfa/Gün', '5 Sayfa/Gün', '10 Sayfa/Gün', '20 Sayfa/Gün'];
-  final List<int> _targetDaysList = [7, 14, 21, 40, 100];
+  final List<int> _targetDaysPresets = [0, 7, 14, 21, 33, 40, 70, 99, 100, 313, 500, 1000, -1];
+  final List<int> _dailyTargetPresets = [1, 2, 3, 5, 7, 10, 21, 33, 40, 0, -1];
   final List<String> _emojis = ['📖', '✨', '🕌', '🌟', '📜', '🕊️'];
+
+  List<int> get _targetDaysOptions {
+    if (_targetDaysPresets.contains(_selectedTargetDays)) {
+      return _targetDaysPresets;
+    }
+    final list = List<int>.from(_targetDaysPresets);
+    list.insert(list.length - 1, _selectedTargetDays);
+    return list;
+  }
+
+  List<int> get _dailyTargetOptions {
+    if (_dailyTargetPresets.contains(_selectedDailyTarget)) {
+      return _dailyTargetPresets;
+    }
+    final list = List<int>.from(_dailyTargetPresets);
+    list.insert(list.length - 1, _selectedDailyTarget);
+    return list;
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialSurahId != null) {
+    if (widget.badgeToEdit != null) {
+      final b = widget.badgeToEdit!;
+      _titleController.text = b.title;
+      _selectedEmoji = b.iconEmoji;
+      _selectedTargetDays = b.targetDays;
+      _selectedDailyTarget = b.dailyTarget;
+      _selectedScope = b.scope == 'Surah'
+          ? 'Sure Okuma'
+          : (b.scope == 'Juz'
+              ? 'Cüz Okuma'
+              : (b.scope == 'Page' ? 'Sayfa Okuma' : 'Hatim Takibi'));
+      if (b.scope == 'Surah') {
+        final sid = int.tryParse(b.scopeValue);
+        if (sid != null) {
+          final idx = SurahDataProvider.surahs.indexWhere((s) => s.id == sid);
+          if (idx >= 0) _selectedSurahIndex = idx;
+        }
+      } else if (b.scope == 'Juz') {
+        final jid = int.tryParse(b.scopeValue);
+        if (jid != null && jid >= 1 && jid <= 30) {
+          _selectedJuzIndex = jid - 1;
+        }
+      } else if (b.scope == 'Page') {
+        _selectedPageOption = b.scopeValue;
+      }
+    } else if (widget.initialSurahId != null) {
       _selectedScope = 'Sure Okuma';
       final idx = SurahDataProvider.surahs.indexWhere((s) => s.id == widget.initialSurahId);
       if (idx >= 0) {
@@ -66,25 +126,127 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
 
   String _getTargetDayLabel(int days) {
     switch (days) {
+      case 0:
+        return 'Sonsuz (∞ - Sürekli Vird)';
       case 7:
-        return '7 Gün';
+        return '7 Okuma / Gün';
       case 14:
-        return '14 Gün';
+        return '14 Okuma / Gün';
       case 21:
-        return '21 Gün';
+        return '21 Okuma / Gün';
+      case 33:
+        return '33 Okuma (Tesbihat)';
       case 40:
-        return '40 Gün (Muhafız)';
+        return '40 Okuma (Muhafız Sırrı)';
+      case 70:
+        return '70 Okuma (İstiğfar Eşiği)';
+      case 99:
+        return '99 Okuma (Esma Mertebesi)';
       case 100:
-        return '100 Gün (Dost)';
+        return '100 Okuma (Dost Menzili)';
+      case 313:
+        return '313 Okuma (Bedir Ashabı)';
+      case 500:
+        return '500 Okuma';
+      case 1000:
+        return '1000 Okuma (Büyük Vird)';
+      case -1:
+        return '✏️ Özel Hedef Sayısı Gir...';
       default:
-        return '$days Gün';
+        return '$days Okuma Hedefi';
+    }
+  }
+
+  String _getDailyTargetLabel(int count) {
+    switch (count) {
+      case 0:
+        return 'Serbest (Hedefsiz Okuma)';
+      case 1:
+        return 'Günde 1 Kez (Standart)';
+      case 2:
+        return 'Günde 2 Kez';
+      case 3:
+        return 'Günde 3 Kez (Sünnet)';
+      case 5:
+        return 'Günde 5 Kez (Vakit Başı)';
+      case 7:
+        return 'Günde 7 Kez';
+      case 10:
+        return 'Günde 10 Kez';
+      case 21:
+        return 'Günde 21 Kez';
+      case 33:
+        return 'Günde 33 Kez';
+      case 40:
+        return 'Günde 40 Kez';
+      case -1:
+        return '✏️ Özel Günlük Sayı Gir...';
+      default:
+        return 'Günde $count Kez';
+    }
+  }
+
+  Future<void> _showCustomNumberDialog({
+    required String title,
+    required String hintText,
+    required int initialValue,
+    required ValueChanged<int> onConfirm,
+  }) async {
+    final controller = TextEditingController(text: initialValue > 0 ? initialValue.toString() : '');
+    final colors = context.colors;
+
+    final result = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.cardBackground,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          title,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.primaryText),
+        ),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: TextStyle(fontSize: 16, color: colors.primaryText),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: TextStyle(color: colors.secondaryTextAlt),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('İptal', style: TextStyle(color: colors.secondaryTextAlt)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5252),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final val = int.tryParse(controller.text.trim());
+              if (val != null && val >= 0) {
+                Navigator.of(ctx).pop(val);
+              }
+            },
+            child: const Text('Kaydet'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      onConfirm(result);
     }
   }
 
   Future<void> _saveBadge() async {
     String title = _titleController.text.trim();
     if (title.isEmpty) {
-      title = 'Özel Kur\'an Rozetim';
+      title = widget.badgeToEdit?.title ?? 'Özel Kur\'an Rozetim';
     }
 
     String scope = 'Surah';
@@ -116,6 +278,32 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
       scopeDisplayName = 'Hatim Okuma';
     }
 
+    final activeSession = ref.read(activeSessionProvider);
+
+    if (widget.badgeToEdit != null) {
+      final existing = widget.badgeToEdit!;
+      existing.title = title;
+      existing.targetDays = _selectedTargetDays;
+      existing.dailyTarget = _selectedDailyTarget;
+      if (existing.targetDays <= 0) {
+        existing.isUnlocked = true;
+      }
+      await CustomBadgeService.saveCustomBadge(existing, activeSession.id);
+      ref.read(badgeRefreshTriggerProvider.notifier).state++;
+      widget.onBadgeCreated?.call();
+
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✨ "$title" rozeti güncellendi!'),
+            backgroundColor: const Color(0xFF2E7D32),
+          ),
+        );
+      }
+      return;
+    }
+
     final isFromImmediateReading = widget.initialSurahId != null;
 
     final newBadge = CustomQuranBadge(
@@ -125,15 +313,18 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
       scopeValue: scopeValue,
       scopeDisplayName: scopeDisplayName,
       targetDays: _selectedTargetDays,
+      dailyTarget: _selectedDailyTarget,
+      todayReadCount: isFromImmediateReading ? 1 : 0,
+      todayDate: GoldenDayService.getTodayStr(),
       totalReadCount: isFromImmediateReading ? 1 : 0,
       currentStreak: isFromImmediateReading ? 1 : 0,
       bestStreak: isFromImmediateReading ? 1 : 0,
       lastReadDate: isFromImmediateReading ? GoldenDayService.getTodayStr() : '',
       iconEmoji: _selectedEmoji,
       glowColorHex: _selectedColorHex,
+      isUnlocked: _selectedTargetDays <= 0,
     );
 
-    final activeSession = ref.read(activeSessionProvider);
     await CustomBadgeService.saveCustomBadge(newBadge, activeSession.id);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
     widget.onBadgeCreated?.call();
@@ -148,6 +339,7 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +382,7 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
                     const Text('✨', style: TextStyle(fontSize: 20)),
                     const SizedBox(width: 8),
                     Text(
-                      'Özel Kur\'an Rozeti Oluştur',
+                      widget.badgeToEdit != null ? 'Rozet Hedefini Düzenle' : 'Özel Kur\'an Rozeti Oluştur',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -369,9 +561,9 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
               const SizedBox(height: 14),
             ],
 
-            // 4. Hedef Gün Sayısı
+            // 4. Hedef Okuma Sayısı (Toplam Hedef)
             Text(
-              'Hedef Okuma Süresi (Gün)',
+              'Hedef Okuma Sayısı (Toplam Hedef)',
               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: colors.primaryText),
             ),
             const SizedBox(height: 6),
@@ -388,18 +580,70 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
                   isExpanded: true,
                   dropdownColor: colors.cardBackground,
                   style: TextStyle(fontSize: 13.5, color: colors.primaryText),
-                  items: _targetDaysList
+                  items: _targetDaysOptions
                       .map((d) => DropdownMenuItem(value: d, child: Text(_getTargetDayLabel(d))))
                       .toList(),
                   onChanged: (val) {
-                    if (val != null) setState(() => _selectedTargetDays = val);
+                    if (val == -1) {
+                      _showCustomNumberDialog(
+                        title: 'Özel Hedef Sayısı',
+                        hintText: 'Örn: 50, 77, 500, 1000...',
+                        initialValue: _selectedTargetDays > 0 ? _selectedTargetDays : 100,
+                        onConfirm: (customVal) {
+                          setState(() => _selectedTargetDays = customVal);
+                        },
+                      );
+                    } else if (val != null) {
+                      setState(() => _selectedTargetDays = val);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // 5. Günlük Okuma Hedefi
+            Text(
+              'Günlük Okuma Hedefi (Günde Kaç Adet?)',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: colors.primaryText),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: colors.cardBackgroundAlt,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colors.borderStroke),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _selectedDailyTarget,
+                  isExpanded: true,
+                  dropdownColor: colors.cardBackground,
+                  style: TextStyle(fontSize: 13.5, color: colors.primaryText),
+                  items: _dailyTargetOptions
+                      .map((d) => DropdownMenuItem(value: d, child: Text(_getDailyTargetLabel(d))))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val == -1) {
+                      _showCustomNumberDialog(
+                        title: 'Özel Günlük Okuma Hedefi',
+                        hintText: 'Örn: 3, 5, 10, 50...',
+                        initialValue: _selectedDailyTarget > 0 ? _selectedDailyTarget : 3,
+                        onConfirm: (customVal) {
+                          setState(() => _selectedDailyTarget = customVal);
+                        },
+                      );
+                    } else if (val != null) {
+                      setState(() => _selectedDailyTarget = val);
+                    }
                   },
                 ),
               ),
             ),
             const SizedBox(height: 16),
 
-            // 5. Rozet Simgesi
+            // 6. Rozet Simgesi
             Text(
               'Rozet Simgesi',
               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: colors.primaryText),
@@ -442,9 +686,9 @@ class _AddCustomQuranBadgeSheetState extends ConsumerState<AddCustomQuranBadgeSh
                   elevation: 2,
                 ),
                 onPressed: _saveBadge,
-                child: const Text(
-                  'Rozeti Oluştur ✨',
-                  style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
+                child: Text(
+                  widget.badgeToEdit != null ? 'Değişiklikleri Kaydet ✨' : 'Rozeti Oluştur ✨',
+                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold),
                 ),
               ),
             ),

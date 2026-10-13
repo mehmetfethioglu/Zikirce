@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 57;
-  static const String currentVersionName = '2.1.2';
+  static const int currentVersionCode = 58;
+  static const String currentVersionName = '2.1.3';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 58,
+      versionName: '2.1.3',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Akıcı ve Hızlı Açılış Deneyimi',
+          titleEn: 'Smoother & Faster Launch Experience',
+          descTr: 'Uygulamanın açılış performansı baştan sona optimize edildi. Bekleme süreleri en aza indirilerek zikir ve ibadetlerinize çok daha hızlı ve akıcı şekilde ulaşmanız sağlandı.',
+          descEn: 'App startup performance has been thoroughly optimized to minimize waiting time, welcoming you to your daily dhikrs and prayers faster and smoother than ever.',
+          icon: Icons.flash_on_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Zarif Tema Uyumu',
+          titleEn: 'Refined Theme Harmony',
+          descTr: 'Açılış ekranı, cihazınızın açık ve koyu görünüm tercihlerine kusursuz uyum sağlayacak şekilde yenilendi.',
+          descEn: 'The launch presentation now seamlessly harmonizes with your device light and dark appearance settings.',
+          icon: Icons.palette_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kararlılık ve Kullanım Kolaylığı',
+          titleEn: 'Performance & Usability Polish',
+          descTr: 'Zikir sayacı, Kur\'an okuma hedefleri ve namaz vakitleri genelinde kullanıcı deneyimini daha pürüzsüz hale getiren iyileştirmeler yapıldı.',
+          descEn: 'Subtle usability refinements and stability enhancements across the dhikr counter, Quran reading goals, and prayer companion.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 57,
       versionName: '2.1.2',

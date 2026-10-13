@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zikirce - Gizlilik Politikası & Destek (Privacy Policy & Support)</title>
-    <meta name="description" content="Zikirce iOS & Android uygulaması resmi Gizlilik Politikası ve Destek sayfasıdır. Official Privacy Policy and Support page for Zikirce app.">
+    <meta name="description"
+        content="Zikirce iOS & Android uygulaması resmi Gizlilik Politikası ve Destek sayfasıdır. Official Privacy Policy and Support page for Zikirce app.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --primary: #D4A574;
@@ -344,265 +347,368 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         @media (max-width: 600px) {
-            .container { padding: 25px 16px 60px; }
-            .hero h1 { font-size: 26px; }
-            .card { padding: 24px 18px; }
-            .tabs-header { flex-direction: column; gap: 6px; }
+            .container {
+                padding: 25px 16px 60px;
+            }
+
+            .hero h1 {
+                font-size: 26px;
+            }
+
+            .card {
+                padding: 24px 18px;
+            }
+
+            .tabs-header {
+                flex-direction: column;
+                gap: 6px;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <!-- Top Bar -->
-    <nav class="top-nav">
-        <a href="#" class="brand-badge">
-            <div class="app-logo">Z</div>
-            <span class="brand-title">Zikirce</span>
-        </a>
-        <div class="lang-switch">
-            <button class="lang-btn active" id="btn-tr" onclick="setLanguage('tr')">TR</button>
-            <button class="lang-btn" id="btn-en" onclick="setLanguage('en')">EN</button>
-        </div>
-    </nav>
-
-    <!-- Main Navigation Tabs -->
-    <div class="tabs-header">
-        <button class="tab-btn active" id="tab-btn-privacy" onclick="switchTab('privacy')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik Politikası</span>
-        </button>
-        <button class="tab-btn" id="tab-btn-support" onclick="switchTab('support')">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <span class="lang-text" data-tr="Destek & İletişim" data-en="Support & Help">Destek & İletişim</span>
-        </button>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 1: PRIVACY POLICY (GİZLİLİK POLİTİKASI) -->
-    <!-- ========================================== -->
-    <div id="tab-privacy" class="tab-content active">
-        <div class="hero">
-            <h1 class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik Politikası</h1>
-            <p class="lang-text" data-tr="Zikirce iOS & Android Resmi Yasal Bilgilendirmesi" data-en="Official Legal Notice for Zikirce iOS & Android">Zikirce iOS & Android Resmi Yasal Bilgilendirmesi</p>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="1. Giriş ve Genel İlkeler" data-en="1. Introduction & General Principles">1. Giriş ve Genel İlkeler</h2>
-            <p class="lang-text" 
-               data-tr="Akarworks (Mehmet Akar) tarafından geliştirilen Zikirce, ibadet ve günlük dualarınızı takip etmenize olanak tanıyan bağımsız bir yaşam asistanıdır. Kullanıcı gizliliği temel ilkemizdir. Uygulamamız reklam içermez, kullanıcıları profillemez ve hiçbir analitik/izleme (tracking) SDK'sı barındırmaz."
-               data-en="Zikirce, developed by Akarworks (Mehmet Akar), is an independent life assistant allowing you to track daily prayers and remembrance. User privacy is our core foundation. Our app contains NO advertisements, does not profile users, and embeds NO analytics/tracking SDKs.">
-                Akarworks (Mehmet Akar) tarafından geliştirilen Zikirce, ibadet ve günlük dualarınızı takip etmenize olanak tanıyan bağımsız bir yaşam asistanıdır. Kullanıcı gizliliği temel ilkemizdir. Uygulamamız reklam içermez, kullanıcıları profillemez ve hiçbir analitik/izleme (tracking) SDK'sı barındırmaz.
-            </p>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="2. Toplanan ve Cihazda Saklanan Veriler" data-en="2. Data Stored Locally on Your Device">2. Toplanan ve Cihazda Saklanan Veriler</h2>
-            <p class="lang-text"
-               data-tr="Zikirce, kişisel verilerinizi merkezi bir sunucuya göndermez. Aşağıdaki tüm veriler yalnızca cihazınızın yerel depolama alanında (SQLite / Keychain) saklanır:"
-               data-en="Zikirce does not transmit personal data to central servers. All of the following data is strictly kept within your device's local storage (SQLite / Keychain):">
-                Zikirce, kişisel verilerinizi merkezi bir sunucuya göndermez. Aşağıdaki tüm veriler yalnızca cihazınızın yerel depolama alanında (SQLite / Keychain) saklanır:
-            </p>
-            <ul class="check-list">
-                <li class="lang-text" data-tr="Zikir sayaçları, kayıtları ve istatistiksel geçmiş." data-en="Dhikr counters, personal history logs, and statistics.">Zikir sayaçları, kayıtları ve istatistiksel geçmiş.</li>
-                <li class="lang-text" data-tr="Hatim takibi, okunan Kur'an-ı Kerim sayfa ve cüz işaretleri." data-en="Quran recitation tracking, read pages, and juz bookmarks.">Hatim takibi, okunan Kur'an-ı Kerim sayfa ve cüz işaretleri.</li>
-                <li class="lang-text" data-tr="Kullanıcı arayüzü tercihleri (tema, ses, haptik dokunsal titreşim ayarları)." data-en="User interface preferences (theme, audio, haptic tactile vibration).">Kullanıcı arayüzü tercihleri (tema, ses, haptik dokunsal titreşim ayarları).</li>
-                <li class="lang-text" data-tr="Yerel profil ismi ve isteğe bağlı yerel profil fotoğrafı." data-en="Local display name and optional local profile image.">Yerel profil ismi ve isteğe bağlı yerel profil fotoğrafı.</li>
-            </ul>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="3. Cihaz İzinleri (Apple iOS & Android)" data-en="3. Device Permissions (Apple iOS & Android)">3. Cihaz İzinleri (Apple iOS & Android)</h2>
-            <p class="lang-text"
-               data-tr="Uygulamamız, işlevlerini yerine getirmek üzere işletim sisteminden aşağıdaki izinleri talep edebilir. Hiçbir izin gizli veya amacı dışında kullanılmaz:"
-               data-en="Our application may request the following system permissions exclusively to perform user-requested features. No permission is used covertly:">
-                Uygulamamız, işlevlerini yerine getirmek üzere işletim sisteminden aşağıdaki izinleri talep edebilir. Hiçbir izin gizli veya amacı dışında kullanılmaz:
-            </p>
-            <div class="permission-grid">
-                <div class="permission-item">
-                    <div class="permission-item-title">📷 <span class="lang-text" data-tr="Kamera İzni" data-en="Camera Permission">Kamera İzni</span></div>
-                    <div class="permission-item-desc lang-text"
-                         data-tr="Zikir halkası davetleri ve profil karekodlarını (QR) tarayabilmeniz için anlık kullanılır. Görüntüler kaydedilmez."
-                         data-en="Used in real-time solely to scan QR codes for dhikr circles and profile sharing. Video or images are never saved.">
-                        Zikir halkası davetleri ve profil karekodlarını (QR) tarayabilmeniz için anlık kullanılır. Görüntüler kaydedilmez.
-                    </div>
-                </div>
-                <div class="permission-item">
-                    <div class="permission-item-title">🎙️ <span class="lang-text" data-tr="Mikrofon İzni" data-en="Microphone Permission">Mikrofon İzni</span></div>
-                    <div class="permission-item-desc lang-text"
-                         data-tr="Kur'an-ı Kerim ezber ve talim modülünde telaffuz analizi yapmak için kullanılır. Sesler harici sunucuya iletilmez."
-                         data-en="Used exclusively in Quran memorization & pronunciation mode. Voice recordings are processed on-device and never sent to servers.">
-                        Kur'an-ı Kerim ezber ve talim modülünde telaffuz analizi yapmak için kullanılır. Sesler harici sunucuya iletilmez.
-                    </div>
-                </div>
-                <div class="permission-item">
-                    <div class="permission-item-title">🔔 <span class="lang-text" data-tr="Bildirimler" data-en="Notifications">Bildirimler</span></div>
-                    <div class="permission-item-desc lang-text"
-                         data-tr="Namaz vakitleri ezan hatırlatıcıları ve zikir uyarılarını zamanında iletebilmek için kullanılır."
-                         data-en="Used to send timely prayer time reminders, adhan notifications, and custom dhikr alerts.">
-                        Namaz vakitleri ezan hatırlatıcıları ve zikir uyarılarını zamanında iletebilmek için kullanılır.
-                    </div>
-                </div>
-                <div class="permission-item">
-                    <div class="permission-item-title">📍 <span class="lang-text" data-tr="Konum (İsteğe Bağlı)" data-en="Location (Optional)">Konum (İsteğe Bağlı)</span></div>
-                    <div class="permission-item-desc lang-text"
-                         data-tr="Bulunduğunuz şehre göre namaz vakitlerini doğru hesaplamak için kullanılır. Konum geçmişi tutulmaz."
-                         data-en="Used optionally to detect your city for precise prayer schedule calculation. Location history is never tracked.">
-                        Bulunduğunuz şehre göre namaz vakitlerini doğru hesaplamak için kullanılır. Konum geçmişi tutulmaz.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="4. İsteğe Bağlı Bulut Yedekleme (Google Drive)" data-en="4. Optional Cloud Backup (Google Drive)">4. İsteğe Bağlı Bulut Yedekleme (Google Drive)</h2>
-            <p class="lang-text"
-               data-tr="Verilerinizi cihaz değişikliğinde korumanız için Google Drive yedekleme seçeneği sunulur. Giriş yaptığınızda uygulama yalnızca kendi oluşturduğu özel uygulama klasöründeki yedek dosyasına erişebilir. Kişisel Drive dosyalarınıza erişilemez."
-               data-en="To safeguard your data across device upgrades, an optional Google Drive backup is provided. The app only accesses its own dedicated backup file within App Data. Your personal Drive documents remain completely inaccessible.">
-                Verilerinizi cihaz değişikliğinde korumanız için Google Drive yedekleme seçeneği sunulur. Giriş yaptığınızda uygulama yalnızca kendi oluşturduğu özel uygulama klasöründeki yedek dosyasına erişebilir. Kişisel Drive dosyalarınıza erişilemez.
-            </p>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="5. Veri Silme ve Kullanıcı Hakları" data-en="5. Data Deletion & User Rights">5. Veri Silme ve Kullanıcı Hakları</h2>
-            <p class="lang-text"
-               data-tr="Kullanıcılarımızın kendi verileri üzerindeki tam kontrolünü destekliyoruz:"
-               data-en="We fully support user data sovereignty and deletion rights:">
-                Kullanıcılarımızın kendi verileri üzerindeki tam kontrolünü destekliyoruz:
-            </p>
-            <ul class="check-list">
-                <li class="lang-text" data-tr="Cihazdaki tüm verileri Zikirce > Ayarlar > 'Verileri Sıfırla' butonuna dokunarak tek tıkla silebilirsiniz." data-en="You can delete all local records instantly via Zikirce > Settings > 'Reset All Data'.">Cihazdaki tüm verileri Zikirce > Ayarlar > 'Verileri Sıfırla' butonuna dokunarak tek tıkla silebilirsiniz.</li>
-                <li class="lang-text" data-tr="Uygulamayı telefonunuzdan sildiğinizde yerel tüm veritabanı anında silinir." data-en="Uninstalling the app immediately wipes all local database caches from your hardware.">Uygulamayı telefonunuzdan sildiğinizde yerel tüm veritabanı anında silinir.</li>
-                <li class="lang-text" data-tr="Google Drive yedeğinizi dilediğiniz an Google Hesap İzinleri > Uygulama Verilerini Sil alanından kaldırabilirsiniz." data-en="Cloud backups can be deleted at any time through Google Account Security > Manage Third-Party Access.">Google Drive yedeğinizi dilediğiniz an Google Hesap İzinleri > Uygulama Verilerini Sil alanından kaldırabilirsiniz.</li>
-            </ul>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="6. Çocukların Gizliliği (COPPA Uyumu)" data-en="6. Children's Privacy (COPPA Compliance)">6. Çocukların Gizliliği (COPPA Uyumu)</h2>
-            <p class="lang-text"
-               data-tr="Zikirce, 13 yaşın altındaki çocuklar da dahil olmak üzere hiçbir kullanıcıdan kişisel kimlik verisi talep etmez veya toplamaz. Uygulamamız ailece güvenle kullanılabilecek niteliktedir."
-               data-en="Zikirce does not solicit or collect personally identifiable data from any user, including children under 13. Our application is safe for whole-family usage.">
-                Zikirce, 13 yaşın altındaki çocuklar da dahil olmak üzere hiçbir kullanıcıdan kişisel kimlik verisi talep etmez veya toplamaz. Uygulamamız ailece güvenle kullanılabilecek niteliktedir.
-            </p>
-        </div>
-    </div>
-
-    <!-- ========================================== -->
-    <!-- TAB 2: SUPPORT & HELP (DESTEK & İLETİŞİM)  -->
-    <!-- ========================================== -->
-    <div id="tab-support" class="tab-content">
-        <div class="hero">
-            <h1 class="lang-text" data-tr="Destek & Yardım Merkezi" data-en="Support & Help Center">Destek & Yardım Merkezi</h1>
-            <p class="lang-text" data-tr="Zikirce kullanıcıları için teknik rehber, SSS ve iletişim kanalları" data-en="Technical guidance, FAQ, and developer support for Zikirce users">Zikirce kullanıcıları için teknik rehber, SSS ve iletişim kanalları</p>
-        </div>
-
-        <div class="card">
-            <h2 class="lang-text" data-tr="Sıkça Sorulan Sorular" data-en="Frequently Asked Questions">Sıkça Sorulan Sorular</h2>
-            
-            <div class="faq-item">
-                <div class="faq-question">❓ <span class="lang-text" data-tr="Zikirlerimi yeni iPhone'uma nasıl aktarabilirim?" data-en="How do I transfer my records to a new iPhone?">Zikirlerimi yeni iPhone'uma nasıl aktarabilirim?</span></div>
-                <div class="faq-answer lang-text"
-                     data-tr="Ayarlar > 'Yedekleme & Geri Yükleme' menüsünden verilerinizi Google Drive'a yedekleyebilir veya '.zikirback' uzantılı yerel dosya olarak dışa aktarıp yeni cihazınızda 'Geri Yükle' diyebilirsiniz."
-                     data-en="Navigate to Settings > 'Backup & Restore'. You can sync via Google Drive or export a '.zikirback' backup archive and restore it on your new iPhone.">
-                    Ayarlar > 'Yedekleme & Geri Yükleme' menüsünden verilerinizi Google Drive'a yedekleyebilir veya '.zikirback' uzantılı yerel dosya olarak dışa aktarıp yeni cihazınızda 'Geri Yükle' diyebilirsiniz.
-                </div>
-            </div>
-
-            <div class="faq-item">
-                <div class="faq-question">❓ <span class="lang-text" data-tr="Kur'an-ı Kerim ve mealleri internetsiz (çevrimdışı) çalışır mı?" data-en="Does the Quran and translation work offline without internet?">Kur'an-ı Kerim ve mealleri internetsiz (çevrimdışı) çalışır mı?</span></div>
-                <div class="faq-answer lang-text"
-                     data-tr="Evet. Zikirce Kur'an-ı Kerim metinleri, mealler ve tefsirler cihaz içi yerel veritabanında saklanır. İnternet bağlantınız olmasa dahi kesintisiz okuyabilirsiniz."
-                     data-en="Yes. Complete Quran Arabic scripts, translations, and commentaries reside within the on-device database, functional 100% offline.">
-                    Evet. Zikirce Kur'an-ı Kerim metinleri, mealler ve tefsirler cihaz içi yerel veritabanında saklanır. İnternet bağlantınız olmasa dahi kesintisiz okuyabilirsiniz.
-                </div>
-            </div>
-
-            <div class="faq-item">
-                <div class="faq-question">❓ <span class="lang-text" data-tr="Namaz vakitleri ve ezan bildirimleri çalmıyor, ne yapmalıyım?" data-en="Prayer notifications or adhan alerts are not ringing?">Namaz vakitleri ve ezan bildirimleri çalmıyor, ne yapmalıyım?</span></div>
-                <div class="faq-answer lang-text"
-                     data-tr="iOS Ayarlar > Zikirce > Bildirimler sekmesinden 'Sesler' ve 'Kritik Uyarılar' izinlerinin açık olduğundan ve telefonunuzun Odak/Rahatsız Etmeyin modunda Zikirce'ye izin verildiğinden emin olunuz."
-                     data-en="Check iOS Settings > Zikirce > Notifications. Ensure 'Sounds', 'Banners', and background activity permissions are active, and whitelist Zikirce in Focus mode.">
-                    iOS Ayarlar > Zikirce > Bildirimler sekmesinden 'Sesler' ve 'Kritik Uyarılar' izinlerinin açık olduğundan ve telefonunuzun Odak/Rahatsız Etmeyin modunda Zikirce'ye izin verildiğinden emin olunuz.
-                </div>
-            </div>
-
-            <div class="faq-item">
-                <div class="faq-question">❓ <span class="lang-text" data-tr="Uygulamada hata (bug) fark ettim veya önerim var." data-en="I found a bug or want to suggest a new feature.">Uygulamada hata (bug) fark ettim veya önerim var.</span></div>
-                <div class="faq-answer lang-text"
-                     data-tr="Geri bildirimleriniz bizim için çok kıymetlidir. Aşağıdaki iletişim butonunu kullanarak cihaz modeliniz ve iOS sürümünüzle birlikte doğrudan geliştirici ekibimize yazabilirsiniz."
-                     data-en="We welcome all feedback. Please use the contact button below with your iOS device model and version details to report to our engineering team.">
-                    Geri bildirimleriniz bizim için çok kıymetlidir. Aşağıdaki iletişim butonunu kullanarak cihaz modeliniz ve iOS sürümünüzle birlikte doğrudan geliştirici ekibimize yazabilirsiniz.
-                </div>
-            </div>
-        </div>
-
-        <div class="contact-box">
-            <h3 class="lang-text" data-tr="Doğrudan Geliştirici Desteği" data-en="Direct Developer Support">Doğrudan Geliştirici Desteği</h3>
-            <p class="lang-text"
-               data-tr="Sorularınız, teknik destek talepleriniz veya önerileriniz için 24 saat içinde yanıt veriyoruz."
-               data-en="We respond to technical inquiries, support issues, and feature requests within 24 hours.">
-                Sorularınız, teknik destek talepleriniz veya önerileriniz için 24 saat içinde yanıt veriyoruz.
-            </p>
-            <a href="mailto:akarbilisimteknolojileri@gmail.com?subject=Zikirce%20iOS%20Destek%20Talebi" class="contact-btn">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                <span class="lang-text" data-tr="E-posta ile İletişime Geçin" data-en="Contact via Email">E-posta ile İletişime Geçin</span>
+    <div class="container">
+        <!-- Top Bar -->
+        <nav class="top-nav">
+            <a href="#" class="brand-badge">
+                <div class="app-logo">Z</div>
+                <span class="brand-title">Zikirce</span>
             </a>
-            <div style="margin-top: 14px; font-size: 13px; color: var(--text-muted);">
-                akarbilisimteknolojileri@gmail.com &bull; theakar@windowslive.com
+            <div class="lang-switch">
+                <button class="lang-btn active" id="btn-tr" onclick="setLanguage('tr')">TR</button>
+                <button class="lang-btn" id="btn-en" onclick="setLanguage('en')">EN</button>
+            </div>
+        </nav>
+
+        <!-- Main Navigation Tabs -->
+        <div class="tabs-header">
+            <button class="tab-btn active" id="tab-btn-privacy" onclick="switchTab('privacy')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+                <span class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik
+                    Politikası</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-support" onclick="switchTab('support')">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span class="lang-text" data-tr="Destek & İletişim" data-en="Support & Help">Destek & İletişim</span>
+            </button>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 1: PRIVACY POLICY (GİZLİLİK POLİTİKASI) -->
+        <!-- ========================================== -->
+        <div id="tab-privacy" class="tab-content active">
+            <div class="hero">
+                <h1 class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik Politikası</h1>
+                <p class="lang-text" data-tr="Zikirce iOS & Android Resmi Yasal Bilgilendirmesi"
+                    data-en="Official Legal Notice for Zikirce iOS & Android">Zikirce iOS & Android Resmi Yasal
+                    Bilgilendirmesi</p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="1. Giriş ve Genel İlkeler"
+                    data-en="1. Introduction & General Principles">1. Giriş ve Genel İlkeler</h2>
+                <p class="lang-text"
+                    data-tr="Akarworks (Mehmet Akar) tarafından geliştirilen Zikirce, ibadet ve günlük dualarınızı takip etmenize olanak tanıyan bağımsız bir yaşam asistanıdır. Kullanıcı gizliliği temel ilkemizdir. Uygulamamız reklam içermez, kullanıcıları profillemez ve hiçbir analitik/izleme (tracking) SDK'sı barındırmaz."
+                    data-en="Zikirce, developed by Akarworks (Mehmet Akar), is an independent life assistant allowing you to track daily prayers and remembrance. User privacy is our core foundation. Our app contains NO advertisements, does not profile users, and embeds NO analytics/tracking SDKs.">
+                    Akarworks (Mehmet Akar) tarafından geliştirilen Zikirce, ibadet ve günlük dualarınızı takip etmenize
+                    olanak tanıyan bağımsız bir yaşam asistanıdır. Kullanıcı gizliliği temel ilkemizdir. Uygulamamız
+                    reklam içermez, kullanıcıları profillemez ve hiçbir analitik/izleme (tracking) SDK'sı barındırmaz.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="2. Toplanan ve Cihazda Saklanan Veriler"
+                    data-en="2. Data Stored Locally on Your Device">2. Toplanan ve Cihazda Saklanan Veriler</h2>
+                <p class="lang-text"
+                    data-tr="Zikirce, kişisel verilerinizi merkezi bir sunucuya göndermez. Aşağıdaki tüm veriler yalnızca cihazınızın yerel depolama alanında (SQLite / Keychain) saklanır:"
+                    data-en="Zikirce does not transmit personal data to central servers. All of the following data is strictly kept within your device's local storage (SQLite / Keychain):">
+                    Zikirce, kişisel verilerinizi merkezi bir sunucuya göndermez. Aşağıdaki tüm veriler yalnızca
+                    cihazınızın yerel depolama alanında (SQLite / Keychain) saklanır:
+                </p>
+                <ul class="check-list">
+                    <li class="lang-text" data-tr="Zikir sayaçları, kayıtları ve istatistiksel geçmiş."
+                        data-en="Dhikr counters, personal history logs, and statistics.">Zikir sayaçları, kayıtları ve
+                        istatistiksel geçmiş.</li>
+                    <li class="lang-text" data-tr="Hatim takibi, okunan Kur'an-ı Kerim sayfa ve cüz işaretleri."
+                        data-en="Quran recitation tracking, read pages, and juz bookmarks.">Hatim takibi, okunan
+                        Kur'an-ı Kerim sayfa ve cüz işaretleri.</li>
+                    <li class="lang-text"
+                        data-tr="Kullanıcı arayüzü tercihleri (tema, ses, haptik dokunsal titreşim ayarları)."
+                        data-en="User interface preferences (theme, audio, haptic tactile vibration).">Kullanıcı arayüzü
+                        tercihleri (tema, ses, haptik dokunsal titreşim ayarları).</li>
+                    <li class="lang-text" data-tr="Yerel profil ismi ve isteğe bağlı yerel profil fotoğrafı."
+                        data-en="Local display name and optional local profile image.">Yerel profil ismi ve isteğe bağlı
+                        yerel profil fotoğrafı.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="3. Cihaz İzinleri (Apple iOS & Android)"
+                    data-en="3. Device Permissions (Apple iOS & Android)">3. Cihaz İzinleri (Apple iOS & Android)</h2>
+                <p class="lang-text"
+                    data-tr="Uygulamamız, işlevlerini yerine getirmek üzere işletim sisteminden aşağıdaki izinleri talep edebilir. Hiçbir izin gizli veya amacı dışında kullanılmaz:"
+                    data-en="Our application may request the following system permissions exclusively to perform user-requested features. No permission is used covertly:">
+                    Uygulamamız, işlevlerini yerine getirmek üzere işletim sisteminden aşağıdaki izinleri talep
+                    edebilir. Hiçbir izin gizli veya amacı dışında kullanılmaz:
+                </p>
+                <div class="permission-grid">
+                    <div class="permission-item">
+                        <div class="permission-item-title">📷 <span class="lang-text" data-tr="Kamera İzni"
+                                data-en="Camera Permission">Kamera İzni</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Zikir halkası davetleri ve profil karekodlarını (QR) tarayabilmeniz için anlık kullanılır. Görüntüler kaydedilmez."
+                            data-en="Used in real-time solely to scan QR codes for dhikr circles and profile sharing. Video or images are never saved.">
+                            Zikir halkası davetleri ve profil karekodlarını (QR) tarayabilmeniz için anlık kullanılır.
+                            Görüntüler kaydedilmez.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">🎙️ <span class="lang-text" data-tr="Mikrofon İzni"
+                                data-en="Microphone Permission">Mikrofon İzni</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Kur'an-ı Kerim ezber ve talim modülünde telaffuz analizi yapmak için kullanılır. Sesler harici sunucuya iletilmez."
+                            data-en="Used exclusively in Quran memorization & pronunciation mode. Voice recordings are processed on-device and never sent to servers.">
+                            Kur'an-ı Kerim ezber ve talim modülünde telaffuz analizi yapmak için kullanılır. Sesler
+                            harici sunucuya iletilmez.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">🔔 <span class="lang-text" data-tr="Bildirimler"
+                                data-en="Notifications">Bildirimler</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Namaz vakitleri ezan hatırlatıcıları ve zikir uyarılarını zamanında iletebilmek için kullanılır."
+                            data-en="Used to send timely prayer time reminders, adhan notifications, and custom dhikr alerts.">
+                            Namaz vakitleri ezan hatırlatıcıları ve zikir uyarılarını zamanında iletebilmek için
+                            kullanılır.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">📍 <span class="lang-text" data-tr="Konum (İsteğe Bağlı)"
+                                data-en="Location (Optional)">Konum (İsteğe Bağlı)</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Bulunduğunuz şehre göre namaz vakitlerini doğru hesaplamak için kullanılır. Konum geçmişi tutulmaz."
+                            data-en="Used optionally to detect your city for precise prayer schedule calculation. Location history is never tracked.">
+                            Bulunduğunuz şehre göre namaz vakitlerini doğru hesaplamak için kullanılır. Konum geçmişi
+                            tutulmaz.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="4. İsteğe Bağlı Bulut Yedekleme (Google Drive)"
+                    data-en="4. Optional Cloud Backup (Google Drive)">4. İsteğe Bağlı Bulut Yedekleme (Google Drive)
+                </h2>
+                <p class="lang-text"
+                    data-tr="Verilerinizi cihaz değişikliğinde korumanız için Google Drive yedekleme seçeneği sunulur. Giriş yaptığınızda uygulama yalnızca kendi oluşturduğu özel uygulama klasöründeki yedek dosyasına erişebilir. Kişisel Drive dosyalarınıza erişilemez."
+                    data-en="To safeguard your data across device upgrades, an optional Google Drive backup is provided. The app only accesses its own dedicated backup file within App Data. Your personal Drive documents remain completely inaccessible.">
+                    Verilerinizi cihaz değişikliğinde korumanız için Google Drive yedekleme seçeneği sunulur. Giriş
+                    yaptığınızda uygulama yalnızca kendi oluşturduğu özel uygulama klasöründeki yedek dosyasına
+                    erişebilir. Kişisel Drive dosyalarınıza erişilemez.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="5. Veri Silme ve Kullanıcı Hakları"
+                    data-en="5. Data Deletion & User Rights">5. Veri Silme ve Kullanıcı Hakları</h2>
+                <p class="lang-text"
+                    data-tr="Kullanıcılarımızın kendi verileri üzerindeki tam kontrolünü destekliyoruz:"
+                    data-en="We fully support user data sovereignty and deletion rights:">
+                    Kullanıcılarımızın kendi verileri üzerindeki tam kontrolünü destekliyoruz:
+                </p>
+                <ul class="check-list">
+                    <li class="lang-text"
+                        data-tr="Cihazdaki tüm verileri Zikirce > Ayarlar > 'Verileri Sıfırla' butonuna dokunarak tek tıkla silebilirsiniz."
+                        data-en="You can delete all local records instantly via Zikirce > Settings > 'Reset All Data'.">
+                        Cihazdaki tüm verileri Zikirce > Ayarlar > 'Verileri Sıfırla' butonuna dokunarak tek tıkla
+                        silebilirsiniz.</li>
+                    <li class="lang-text"
+                        data-tr="Uygulamayı telefonunuzdan sildiğinizde yerel tüm veritabanı anında silinir."
+                        data-en="Uninstalling the app immediately wipes all local database caches from your hardware.">
+                        Uygulamayı telefonunuzdan sildiğinizde yerel tüm veritabanı anında silinir.</li>
+                    <li class="lang-text"
+                        data-tr="Google Drive yedeğinizi dilediğiniz an Google Hesap İzinleri > Uygulama Verilerini Sil alanından kaldırabilirsiniz."
+                        data-en="Cloud backups can be deleted at any time through Google Account Security > Manage Third-Party Access.">
+                        Google Drive yedeğinizi dilediğiniz an Google Hesap İzinleri > Uygulama Verilerini Sil alanından
+                        kaldırabilirsiniz.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="6. Çocukların Gizliliği (COPPA Uyumu)"
+                    data-en="6. Children's Privacy (COPPA Compliance)">6. Çocukların Gizliliği (COPPA Uyumu)</h2>
+                <p class="lang-text"
+                    data-tr="Zikirce, 13 yaşın altındaki çocuklar da dahil olmak üzere hiçbir kullanıcıdan kişisel kimlik verisi talep etmez veya toplamaz. Uygulamamız ailece güvenle kullanılabilecek niteliktedir."
+                    data-en="Zikirce does not solicit or collect personally identifiable data from any user, including children under 13. Our application is safe for whole-family usage.">
+                    Zikirce, 13 yaşın altındaki çocuklar da dahil olmak üzere hiçbir kullanıcıdan kişisel kimlik verisi
+                    talep etmez veya toplamaz. Uygulamamız ailece güvenle kullanılabilecek niteliktedir.
+                </p>
             </div>
         </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: SUPPORT & HELP (DESTEK & İLETİŞİM)  -->
+        <!-- ========================================== -->
+        <div id="tab-support" class="tab-content">
+            <div class="hero">
+                <h1 class="lang-text" data-tr="Destek & Yardım Merkezi" data-en="Support & Help Center">Destek & Yardım
+                    Merkezi</h1>
+                <p class="lang-text" data-tr="Zikirce kullanıcıları için teknik rehber, SSS ve iletişim kanalları"
+                    data-en="Technical guidance, FAQ, and developer support for Zikirce users">Zikirce kullanıcıları
+                    için teknik rehber, SSS ve iletişim kanalları</p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="Sıkça Sorulan Sorular" data-en="Frequently Asked Questions">Sıkça Sorulan
+                    Sorular</h2>
+
+                <div class="faq-item">
+                    <div class="faq-question">❓ <span class="lang-text"
+                            data-tr="Zikirlerimi yeni iPhone'uma nasıl aktarabilirim?"
+                            data-en="How do I transfer my records to a new iPhone?">Zikirlerimi yeni iPhone'uma nasıl
+                            aktarabilirim?</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="Ayarlar > 'Yedekleme & Geri Yükleme' menüsünden verilerinizi Google Drive'a yedekleyebilir veya '.zikirback' uzantılı yerel dosya olarak dışa aktarıp yeni cihazınızda 'Geri Yükle' diyebilirsiniz."
+                        data-en="Navigate to Settings > 'Backup & Restore'. You can sync via Google Drive or export a '.zikirback' backup archive and restore it on your new iPhone.">
+                        Ayarlar > 'Yedekleme & Geri Yükleme' menüsünden verilerinizi Google Drive'a yedekleyebilir veya
+                        '.zikirback' uzantılı yerel dosya olarak dışa aktarıp yeni cihazınızda 'Geri Yükle'
+                        diyebilirsiniz.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">❓ <span class="lang-text"
+                            data-tr="Kur'an-ı Kerim ve mealleri internetsiz (çevrimdışı) çalışır mı?"
+                            data-en="Does the Quran and translation work offline without internet?">Kur'an-ı Kerim ve
+                            mealleri internetsiz (çevrimdışı) çalışır mı?</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="Evet. Zikirce Kur'an-ı Kerim metinleri, mealler ve tefsirler cihaz içi yerel veritabanında saklanır. İnternet bağlantınız olmasa dahi kesintisiz okuyabilirsiniz."
+                        data-en="Yes. Complete Quran Arabic scripts, translations, and commentaries reside within the on-device database, functional 100% offline.">
+                        Evet. Zikirce Kur'an-ı Kerim metinleri, mealler ve tefsirler cihaz içi yerel veritabanında
+                        saklanır. İnternet bağlantınız olmasa dahi kesintisiz okuyabilirsiniz.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">❓ <span class="lang-text"
+                            data-tr="Namaz vakitleri ve ezan bildirimleri çalmıyor, ne yapmalıyım?"
+                            data-en="Prayer notifications or adhan alerts are not ringing?">Namaz vakitleri ve ezan
+                            bildirimleri çalmıyor, ne yapmalıyım?</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="iOS Ayarlar > Zikirce > Bildirimler sekmesinden 'Sesler' ve 'Kritik Uyarılar' izinlerinin açık olduğundan ve telefonunuzun Odak/Rahatsız Etmeyin modunda Zikirce'ye izin verildiğinden emin olunuz."
+                        data-en="Check iOS Settings > Zikirce > Notifications. Ensure 'Sounds', 'Banners', and background activity permissions are active, and whitelist Zikirce in Focus mode.">
+                        iOS Ayarlar > Zikirce > Bildirimler sekmesinden 'Sesler' ve 'Kritik Uyarılar' izinlerinin açık
+                        olduğundan ve telefonunuzun Odak/Rahatsız Etmeyin modunda Zikirce'ye izin verildiğinden emin
+                        olunuz.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">❓ <span class="lang-text"
+                            data-tr="Uygulamada hata (bug) fark ettim veya önerim var."
+                            data-en="I found a bug or want to suggest a new feature.">Uygulamada hata (bug) fark ettim
+                            veya önerim var.</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="Geri bildirimleriniz bizim için çok kıymetlidir. Aşağıdaki iletişim butonunu kullanarak cihaz modeliniz ve iOS sürümünüzle birlikte doğrudan geliştirici ekibimize yazabilirsiniz."
+                        data-en="We welcome all feedback. Please use the contact button below with your iOS device model and version details to report to our engineering team.">
+                        Geri bildirimleriniz bizim için çok kıymetlidir. Aşağıdaki iletişim butonunu kullanarak cihaz
+                        modeliniz ve iOS sürümünüzle birlikte doğrudan geliştirici ekibimize yazabilirsiniz.
+                    </div>
+                </div>
+            </div>
+
+            <div class="contact-box">
+                <h3 class="lang-text" data-tr="Doğrudan Geliştirici Desteği" data-en="Direct Developer Support">Doğrudan
+                    Geliştirici Desteği</h3>
+                <p class="lang-text"
+                    data-tr="Sorularınız, teknik destek talepleriniz veya önerileriniz için 24 saat içinde yanıt veriyoruz."
+                    data-en="We respond to technical inquiries, support issues, and feature requests within 24 hours.">
+                    Sorularınız, teknik destek talepleriniz veya önerileriniz için 24 saat içinde yanıt veriyoruz.
+                </p>
+                <a href="mailto:akarbilisimteknolojileri@gmail.com?subject=Zikirce%20iOS%20Destek%20Talebi"
+                    class="contact-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                        <polyline points="22,6 12,13 2,6" />
+                    </svg>
+                    <span class="lang-text" data-tr="E-posta ile İletişime Geçin" data-en="Contact via Email">E-posta
+                        ile İletişime Geçin</span>
+                </a>
+                <div style="margin-top: 14px; font-size: 13px; color: var(--text-muted);">
+                    akarbilisimteknolojileri@gmail.com &bull; theakar@windowslive.com
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 Akarworks (Mehmet Akar). <span class="lang-text" data-tr="Tüm hakları saklıdır."
+                    data-en="All rights reserved.">Tüm hakları saklıdır.</span></p>
+            <p><span class="lang-text" data-tr="Son Güncelleme:" data-en="Last Updated:">Son Güncelleme:</span> 27 Eylül
+                2026 &bull; Sürüm 2.0</p>
+        </footer>
     </div>
 
-    <!-- Footer -->
-    <footer>
-        <p>&copy; 2026 Akarworks (Mehmet Akar). <span class="lang-text" data-tr="Tüm hakları saklıdır." data-en="All rights reserved.">Tüm hakları saklıdır.</span></p>
-        <p><span class="lang-text" data-tr="Son Güncelleme:" data-en="Last Updated:">Son Güncelleme:</span> 27 Eylül 2026 &bull; Sürüm 2.0</p>
-    </footer>
-</div>
+    <script>
+        // Tab Switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-<script>
-    // Tab Switching
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-btn-' + tabName).classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
 
-        document.getElementById('tab-btn-' + tabName).classList.add('active');
-        document.getElementById('tab-' + tabName).classList.add('active');
-        
-        // Update URL hash
-        window.location.hash = tabName;
-    }
+            // Update URL hash
+            window.location.hash = tabName;
+        }
 
-    // Language Toggle
-    function setLanguage(lang) {
-        document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-        document.getElementById('btn-' + lang).classList.add('active');
+        // Language Toggle
+        function setLanguage(lang) {
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + lang).classList.add('active');
 
-        document.querySelectorAll('.lang-text').forEach(el => {
-            const translation = el.getAttribute('data-' + lang);
-            if (translation) {
-                el.textContent = translation;
+            document.querySelectorAll('.lang-text').forEach(el => {
+                const translation = el.getAttribute('data-' + lang);
+                if (translation) {
+                    el.textContent = translation;
+                }
+            });
+
+            document.documentElement.lang = lang;
+        }
+
+        // Hash deep-linking
+        window.addEventListener('DOMContentLoaded', () => {
+            const hash = window.location.hash.replace('#', '');
+            if (hash === 'support') {
+                switchTab('support');
+            } else {
+                switchTab('privacy');
             }
         });
-
-        document.documentElement.lang = lang;
-    }
-
-    // Hash deep-linking
-    window.addEventListener('DOMContentLoaded', () => {
-        const hash = window.location.hash.replace('#', '');
-        if (hash === 'support') {
-            switchTab('support');
-        } else {
-            switchTab('privacy');
-        }
-    });
-</script>
+    </script>
 
 </body>
+
 </html>

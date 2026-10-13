@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:desktop_webview_window/desktop_webview_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/database/app_database.dart';
 import 'core/database/migration/maui_migration_service.dart';
@@ -26,7 +27,8 @@ import 'core/services/cloud_sync_engine.dart';
 import 'app/app.dart';
 
 void main(List<String> args) async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   if (runWebViewTitleBarWidget(args)) {
     return;
   }
@@ -77,8 +79,6 @@ void main(List<String> args) async {
   final db = AppDatabase(null, currentSession.dbFileName);
 
   await Future.wait([
-    AudioSyncService.initialize(),
-    TafseerService.initialize(),
     NotificationDbService.initialize(),
     SoundPoolService.initialize(),
     LocalNotificationService.initialize(),
@@ -117,24 +117,6 @@ void main(List<String> args) async {
   final savedLightSubTheme = await ThemeNotifier.loadSavedLightSubTheme(activeSessionId);
   final savedCity = await CityNotifier.loadSavedCity(activeSessionId);
 
-  // Pre-schedule 6 prayer entries, 5 questions, and Quran reminder for next 24-48 hours (Mobile only)
-  if (Platform.isAndroid || Platform.isIOS) {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
-      await LocalNotificationService.scheduleAllPrayerNotifications(timings);
-
-      final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
-      final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
-      await LocalNotificationService.scheduleQuranDailyReminder(
-        timeHhmm: quranTime,
-        isEnabled: isQuranReminder,
-      );
-    } catch (e) {
-      debugPrint('[Main] Pre-scheduling notifications notice: $e');
-    }
-  }
-
   // Close the initial startup DB instance so Riverpod's databaseProvider manages the single active connection
   try {
     await db.close();
@@ -151,6 +133,31 @@ void main(List<String> args) async {
       options.beforeSend = SentryConfig.beforeSend;
     },
     appRunner: () {
+      // Remove native splash as core DB and session state are ready
+      FlutterNativeSplash.remove();
+
+      // Defer non-critical background services until after the first frame renders
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        AudioSyncService.initialize();
+        TafseerService.initialize();
+        if (Platform.isAndroid || Platform.isIOS) {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
+            await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+
+            final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
+            final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
+            await LocalNotificationService.scheduleQuranDailyReminder(
+              timeHhmm: quranTime,
+              isEnabled: isQuranReminder,
+            );
+          } catch (e) {
+            debugPrint('[Main] Deferred background tasks notice: $e');
+          }
+        }
+      });
+
       final container = ProviderContainer(
         overrides: [
           initialSessionStateProvider.overrideWithValue(
