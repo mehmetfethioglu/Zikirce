@@ -50,6 +50,8 @@ class _RawPageAnalysis {
 
 /// Görsel Öncelikli Hibrit Akıllı Okuma (Smart Reflow + Interactive Snippets) Orkestratör Pipeline'ı
 class SmartReflowPipeline {
+  static final Map<String, Uint8List> _pdfBytesCache = {};
+
   final PdfSnippetCropper? snippetCropper;
   final ScannedPdfOcrService scannedOcrService;
 
@@ -57,6 +59,20 @@ class SmartReflowPipeline {
     this.snippetCropper,
     this.scannedOcrService = const ScannedPdfOcrService(),
   });
+
+  static Future<Uint8List> _getPdfBytes(File file, String filePath) async {
+    final cached = _pdfBytesCache.remove(filePath);
+    if (cached != null) {
+      _pdfBytesCache[filePath] = cached;
+      return cached;
+    }
+    final bytes = await file.readAsBytes();
+    if (_pdfBytesCache.length >= 3) {
+      _pdfBytesCache.remove(_pdfBytesCache.keys.first);
+    }
+    _pdfBytesCache[filePath] = bytes;
+    return bytes;
+  }
 
   /// PDF sayfasını analiz eder ve blok listesi ile Latin dışı uyarı bayrağını döndürür.
   Future<PipelinePageResult> processPageDetailed({
@@ -69,7 +85,7 @@ class SmartReflowPipeline {
     }
 
     try {
-      final bytes = await file.readAsBytes();
+      final bytes = await _getPdfBytes(file, filePath);
 
       // 1. ADIM: Isolate içinde PDF dijital metin ve koordinat çıkarımı
       final analysis = await compute(
@@ -101,7 +117,7 @@ class SmartReflowPipeline {
 
       // 3. ADIM: Metin Temizleme, Kodlama Onarımı (EncodingNormalizer) & De-hyphenation
       final rawExtractedText = orderedLines.isNotEmpty
-          ? orderedLines.map((l) => l.text).join('\n')
+          ? _joinOrderedLinesWithParagraphBreaks(orderedLines, analysis.pageWidth)
           : analysis.rawText;
 
       final mappedGlifs = GlyphReverseMapper.reverseMap(rawExtractedText);
@@ -142,6 +158,52 @@ class SmartReflowPipeline {
       debugPrint('SmartReflowPipeline error: $e');
       return PipelinePageResult(blocks: _generateSampleBlocks(filePath, pageIndex));
     }
+  }
+
+  /// Ardışık satırlar arasındaki dikey boşluk, satır başı girintisi, erken satır sonu noktalaması
+  /// ve punto farklarını analiz ederek paragraf ayrımlarını (`\n\n`) veya satır içi devamı (`\n`) belirler.
+  static String _joinOrderedLinesWithParagraphBreaks(
+    List<PositionedTextLine> orderedLines,
+    double pageWidth,
+  ) {
+    if (orderedLines.isEmpty) return '';
+    final buffer = StringBuffer(orderedLines.first.text);
+
+    for (int i = 1; i < orderedLines.length; i++) {
+      final prev = orderedLines[i - 1];
+      final curr = orderedLines[i];
+
+      final prevHeight = prev.bounds.height > 0 ? prev.bounds.height : 14.0;
+      final verticalGap = curr.bounds.top - prev.bounds.bottom;
+      final hasLargeVerticalGap = verticalGap > prevHeight * 0.65;
+      final hasParagraphIndent = (curr.bounds.left - prev.bounds.left) > 14.0;
+
+      final prevTrimmed = prev.text.trimRight();
+      final endsWithTerminalPunct = prevTrimmed.isNotEmpty &&
+          (prevTrimmed.endsWith('.') ||
+              prevTrimmed.endsWith('!') ||
+              prevTrimmed.endsWith('?') ||
+              prevTrimmed.endsWith(':') ||
+              prevTrimmed.endsWith('”') ||
+              prevTrimmed.endsWith('"'));
+      final isShortLineEnd = pageWidth > 0 && prev.bounds.right < pageWidth * 0.72;
+      final hasEarlySentenceBreak = endsWithTerminalPunct && isShortLineEnd;
+
+      final hasFontSizeJump =
+          prev.bounds.height > 0 && curr.bounds.height > prev.bounds.height * 1.22;
+
+      if (hasLargeVerticalGap ||
+          hasParagraphIndent ||
+          hasEarlySentenceBreak ||
+          hasFontSizeJump) {
+        buffer.write('\n\n');
+      } else {
+        buffer.write('\n');
+      }
+      buffer.write(curr.text);
+    }
+
+    return buffer.toString();
   }
 
   /// PDF dosyasından belirtilen sayfayı analiz eder ve UI'ın doğrudan tüketebileceği
@@ -185,7 +247,7 @@ class SmartReflowPipeline {
           extractedLines.add(PositionedTextLine(
             text: l.text,
             bounds: Rect.fromLTWH(bounds.left, bounds.top, bounds.width, bounds.height),
-            fontSize: 12.0,
+            fontSize: bounds.height > 0 ? bounds.height : 12.0,
           ));
         }
       } catch (_) {}

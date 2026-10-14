@@ -4,6 +4,25 @@ Bu doküman, **Tahrir** uygulamasının sürüm geçmişini, her versiyonda ekle
 
 ---
 
+## 🏆 [1.0.0+3] - 14 Ekim 2026 (Mağaza Amiral Gemisi Sürümü / Store Flagship Release)
+*Hezarfen Piyasa Boşluk Analizi & 7 Sensei Tam Spektrum Mavi Okyanus Yükseltmesi*
+
+### 🌊 1. Piyasa Boşluklarını Kapatan Mavi Okyanus Özellikleri
+* **Y-Koordinat & Girinti Duyarlı PDF Smart Reflow:** PDF sayfalarındaki dikey satır boşluklarını (`bounds.top - prev.bounds.bottom`), paragraf başı girintilerini (`bounds.left`) ve başlık puntolarını analiz ederek gerçek paragraf mimarisini koruyan yeniden akış motoru + LRU bellek önbelleği ile 0ms sayfa geçişi.
+* **Orijinal PDF Akıllı Gece/Parşömen Filtresi & Auto-Crop:** Orijinal PDF görünümünde göz kamaştıran beyaz arka planı aktif temaya (*Tahrir Parşömeni, İs Mürekkebi AMOLED, Gece Safiri, Zeytin & Orman*) uyarlayan akıllı renk matrisi ve tek tıkla kenar boşluğu kırpma (`Auto-Crop 1.18x`) modu.
+* **Tam Kapsamlı EPUB, Markdown (`.md`) ve `.txt` DOM Motoru:** Alt bölümleri (`SubChapters`) rekürsif tarayan, paragraf/başlık hiyerarşisini koruyan ve gerçek kitap/yazar/bölüm üstverisini çıkaran birleşik çok formatlı motor + İçindekiler (TOC) Gezgini.
+* **%100 Çevrimdışı Prosedürel WAV Akustik Sentezleyici & Audio Ducking:** İnternet bağlantısına veya harici sunucuya ihtiyaç duymadan bellekte gerçek zamanlı PCM/WAV ses üreten 5 ambiyans modu (*Hafif Yağmur, Şömine Çıtırtısı, Kütüphane Ambiyansı, Kafe Lo-Fi, Klasik Ney & Huzur*) + TTS sesli okuma konuşurken ambiyansı otomatik %25'e kısan **Audio Ducking**.
+* **Canlı TTS Karaoke Kelime Vurgulama:** Sesli dinleme sırasında okunan kelimenin metin üzerinde canlı olarak aydınlatılması.
+* **130+ Kelimelik Klasik, Osmanlıca & Etimolojik Türkçe Lügat + Morfolojik Kök Çözümleyici:** Çekimli kelimelerin (*-ları, -dan, -nın, -dır* ve ünsüz yumuşaması) eklerini soyarak kök maddeyi bulan, canlı arama çubuğu ve ilişkili kavram önerileri sunan çevrimdışı lügat.
+* **İnteraktif Haşiye / Derkenar (Marginalia) & Gerçek 3.0x PNG Export:**
+  * Metin seçildiğinde 4 kategori (*Düşünce, Alıntı, Soru, Eleştiri*), 5 mürekkep rengi ve kişisel şerh notu ekleme modalı + paragraf altı derkenar kartları.
+  * **Alıntı Stüdyosu (`QuoteStudioSheet`)** içinde 4 şablon (*Parşömen, Story 9:16, Kare 1:1, İs Mürekkebi AMOLED*) ve `RepaintBoundary` (`3.0x` piksel oranı) ile **gerçek yüksek çözünürlüklü PNG görsel paylaşımı**.
+  * **Tahrir Okuma Beratı (`CompletionSealDialog`)** sertifikasını gerçek PNG görseli olarak dışa aktarma ve kitap bitişinde otomatik kutlama.
+* **TextRank Cihaz İçi AI Katip & Sokratik Çalışma Soruları:** Cümle merkeziliği (Lexical Centrality / TF-IDF) algoritmasıyla en önemli 3 cümleyi seçen ve sayfa içeriğinden otomatik **Sokratik Tefekkür & Çalışma Soruları** üreten yerel analiz motoru.
+* **Poka-Yoke & Yalın Mühendislik (Riverpod `select` & Deterministik `dispose`):** Sıfır sahte veri (gerçek günlük okuma dakikası, gerçek ısı haritası, kümülatif olmayan delta oturum kaydı), QR tarayıcı tekil okuma kilidi (debounce) ve Zikirce_ standardında çift dilli (`TR`/`EN`) uygulama içi sürüm notları (`ChangelogService`).
+
+---
+
 ## 🚀 [0.9.0] - 27 Ağustos 2026
 *İlk Fonksiyonel Ön Sürüm (Beta / Temel Mimari, Çok Formatlı Okuma, Bilişsel Modlar & Şerh Ekosistemi)*
 

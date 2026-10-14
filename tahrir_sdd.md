@@ -2,10 +2,10 @@
 ## Kapsamlı Yazılım Tasarım Belgesi (Software Design Document - SDD)
 
 **Proje Adı:** Tahrir (Zarif, Akıcı ve Bilişsel Odaklı Okuma Deneyimi)  
-**Doküman Sürümü:** 0.9.0  
-**Tarih:** 27 Ağustos 2026  
+**Doküman Sürümü:** 1.0.0 (Mağaza Amiral Gemisi Sürümü / Store Flagship)  
+**Tarih:** 14 Ekim 2026  
 **Hedef Platform:** Mobil (Android & iOS) - Öncelikli Optimizasyon: Kompakt Ekranlı Akıllı Telefonlar ve Katlanabilir Cihazlar  
-**Mimari / Framework:** Flutter 3.x+ (Dart 3.x) & Yerel C++ FFI (Pdfium) + Rust/Native Ayrıştırıcılar  
+**Mimari / Framework:** Flutter 3.x+ (Dart 3.x) & Yerel C++ FFI (Pdfium) + On-Device OCR & TextRank  
 
 ---
 
@@ -22,6 +22,15 @@ Geleneksel e-kitap okuyucuların hantal dosya yapısını ve PDF'lerin küçük 
 3. **Format Dağınıklığı:** Kullanıcılar PDF için ayrı, EPUB için ayrı, web makaleleri ve markdown notları için ayrı uygulamalar kullanmak zorunda kalır.
 4. **Bilişsel Sürtünme ve Dikkat Dağınıklığı:** Yoğun metinlerde göz satır kaybeder, odak çabuk dağılır ve okuma alışkanlığı sürdürülemez hale gelir.
 5. **Kuru ve Ruhsuz Arayüzler:** Mevcut okuyucular kütüphane hissi vermekten uzak, gri ve mekanik listelerden ibarettir.
+
+### 1.3. Küresel Piyasa Analizi ve Tahrir'in Kapattığı 7 Mavi Okyanus Boşluğu
+| Piyasadaki Rakip Sınıfı | Örnek Uygulamalar | En Büyük Kullanıcı Şikayetleri (1-Yıldız Kök Nedenleri) | Tahrir v1.0.0 Mavi Okyanus Çözümü |
+| :--- | :--- | :--- | :--- |
+| **Klasik Mobil Okuyucular** | ReadEra (50M+), Moon+ Reader Pro | Akademik/çift sütunlu PDF reflow çökmesi, dipnotların cümle içine karışması, karmaşık ayar menüleri, demode tasarım. | Y-koordinat, girinti ve çift sütun duyarlı **PDF Smart Reflow** + tıklanabilir **İnteraktif Dipnot Baloncukları** + sade edebi arayüz. |
+| **Akademik Şerh Araçları** | LiquidText, MarginNote ($80-$175/yıl) | Yalnızca iPad/büyük ekranda kullanılabilir olması, cep telefonunda kullanılamaz tuval, fahiş yıllık abonelik. | Kompakt telefon ekranlarına özel **Derkenar / Haşiye (Marginalia) Kartları**, 4 şerh kategorisi, 5 mürekkep rengi ve sıfır abonelik. |
+| **Sesli Okuma (TTS) Uygulamaları** | Speechify, NaturalReader ($139/yıl) | Agresif abonelik tuzakları, internet kesilince bozulan ses, PDF üstbilgi/sayfa numaralarını cümlenin ortasında okuma. | Üstbilgi/altbilgi filtrelenmiş **Canlı Karaoke Vurgulu TTS** + **%100 Çevrimdışı Prosedürel WAV Ambiyans Sentezleyici** (Ney, Yağmur, Şömine, Kütüphane, Kafe) + **Audio Ducking**. |
+| **Kapalı Ekosistemler** | Kindle, Apple Books, Kobo | Dışarıdan yüklenen PDF'lerde kötü deneyim, notları Obsidian/Markdown olarak dışa aktarma engeli, klasik Türkçe/Osmanlıca kelimelerde yetersiz sözlük. | **130+ Kelimelik Klasik & Etimolojik Türkçe Lügat** (Morfolojik Kök Çözümleyici ile) + tek tıkla **Obsidian `.md` Export** + **İnternetsiz QR P2P Şerh Takası**. |
+| **Kurumsal PDF Araçları** | Adobe Acrobat, Xodo ($120+/yıl) | Aşırı şişkin (bloatware), okuma motivasyonu sıfır, gece modunda görselleri negatif röntgene çevirme. | Orijinal PDF'te **Akıllı Parşömen/Gece/AMOLED Renk Matrisi**, **Auto-Crop (1.18x)**, **Gerçek 3.0x PNG Alıntı Stüdyosu** ve **Mühürlü Okuma Beratı**. |
 
 ---
 
@@ -313,9 +322,20 @@ class UserHabitProfile {
 - [x] **6.5.** Ana Ekran Widget Entegrasyonu ve Veri Köprüsü (`HomeWidgetService`).
 
 ### Faz 7: Testler, Doğrulama & Performans Optimizasyonu (QA & Polish)
-- [x] **7.1.** Birim ve Entegrasyon Testleri (`flutter test` - 4/4 Başarılı Geçti).
+- [x] **7.1.** Birim ve Entegrasyon Testleri (`flutter test` - %100 Yeşil).
 - [x] **7.2.** 120Hz Pürüzsüz Scroll ve Bellek (Virtual Windowing) Optimizasyonu.
 - [x] **7.3.** Mimari İnceleme ve Final Doğrulaması.
+
+### Faz 8: Mağaza Amiral Gemisi Yükseltmesi (v1.0.0 Store Flagship & Mavi Okyanus)
+- [x] **8.1.** Y-Koordinat, Girinti ve Punto Duyarlı PDF Paragraf/Başlık Reflow Motoru + LRU PDF Byte Önbelleği (`SmartReflowPipeline`).
+- [x] **8.2.** Orijinal PDF Görünümünde Akıllı Gece/Parşömen/AMOLED Renk Matrisi ve Tek Tıkla Auto-Crop (`1.18x` Kenar Kırpma).
+- [x] **8.3.** Rekürsif Alt Bölüm (`SubChapters`) Destekli EPUB, Markdown (`.md`) ve `.txt` DOM Motoru + İçindekiler (TOC) Gezgini.
+- [x] **8.4.** %100 Çevrimdışı Prosedürel PCM/WAV Akustik Sentezleyici (Yağmur, Şömine, Kütüphane, Kafe, Klasik Ney) + TTS Audio Ducking (`AmbientAudioService`).
+- [x] **8.5.** Canlı TTS Karaoke Kelime Vurgulama + Paragraf Altı Derkenar / Haşiye Kartları (`TextBlockWidget`).
+- [x] **8.6.** 130+ Kelimelik Klasik, Osmanlıca & Etimolojik Türkçe Lügat + Türkçe Morfolojik Kök Çözümleyici (`DictionaryService` & Canlı Lügat Arama).
+- [x] **8.7.** Alıntı Stüdyosu (`QuoteStudioSheet` - 4 Şablon) ve Mühürlü Okuma Beratı (`CompletionSealDialog`) için `RepaintBoundary` Tabanlı **Gerçek 3.0x Yüksek Çözünürlüklü PNG Export**.
+- [x] **8.8.** TextRank Cümle Merkeziliği (Lexical Centrality) Cihaz İçi AI Katip + Sokratik Tefekkür & Çalışma Soruları (`OfflineAiService`).
+- [x] **8.9.** Riverpod `.select()` İzolasyonu, Deterministik `dispose()`, Sıfır Sahte Veri ve Zikirce_ Standardında Çift Dilli Sürüm Notları (`ChangelogService`).
 
 ---
 *Bu doküman TAHRİR uygulamasının eksiksiz mimari, tasarımsal ve fonksiyonel geliştirme şartnamesidir.*

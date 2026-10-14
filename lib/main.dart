@@ -31,14 +31,16 @@ class TahrirApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeState = ref.watch(readerThemeProvider);
+    final (preset, themeMode) = ref.watch(
+      readerThemeProvider.select((s) => (s.preset, s.themeMode)),
+    );
 
     return MaterialApp(
       title: 'Tahrir',
       debugShowCheckedModeBanner: false,
-      themeMode: themeState.themeMode,
-      theme: TahrirTheme.getThemeForPreset(themeState.preset, isDark: false),
-      darkTheme: TahrirTheme.getThemeForPreset(themeState.preset, isDark: true),
+      themeMode: themeMode,
+      theme: TahrirTheme.getThemeForPreset(preset, isDark: false),
+      darkTheme: TahrirTheme.getThemeForPreset(preset, isDark: true),
       home: const MainNavigationShell(),
     );
   }

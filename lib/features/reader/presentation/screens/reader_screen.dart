@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../../../core/providers/repository_providers.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../domain/entities/book_entity.dart';
 import '../../../../domain/entities/highlight_entity.dart';
+import '../../../analytics_and_habits/presentation/widgets/completion_seal_dialog.dart';
 import '../../../marginalia/presentation/widgets/dictionary_sheet.dart';
 import '../../../marginalia/presentation/widgets/quote_studio_sheet.dart';
 import '../../domain/content_block.dart';
@@ -77,11 +79,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final readerState = ref.watch(readerProvider);
-    final themeState = ref.watch(readerThemeProvider);
+    final readerState = ref.watch(readerProvider.select((s) => s));
+    final themeState = ref.watch(readerThemeProvider.select((s) => s));
+    final showCelebration = ref.watch(
+      readerProvider.select((s) => s.showCompletionCelebration),
+    );
     final theme = Theme.of(context);
 
-    if (readerState.isLoading && readerState.currentReflowData == null && readerState.epubChapters.isEmpty) {
+    if (showCelebration) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final activeBook = readerState.currentBook ?? widget.book;
+        ref.read(readerProvider.notifier).clearCompletionCelebration();
+        CompletionSealDialog.show(
+          context,
+          bookTitle: activeBook.title,
+          author: activeBook.author,
+          totalPages: activeBook.totalPages > 0 ? activeBook.totalPages : 1,
+          readingMinutes: (activeBook.totalReadingTimeSeconds / 60).round().clamp(1, 99999),
+        );
+      });
+    }
+
+    if (readerState.isLoading &&
+        readerState.currentReflowData == null &&
+        readerState.epubChapters.isEmpty) {
       return Scaffold(
         body: Center(
           child: Column(
@@ -98,6 +120,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ),
       );
     }
+
+    final totalPages = (readerState.currentBook?.totalPages ?? widget.book.totalPages) > 0
+        ? (readerState.currentBook?.totalPages ?? widget.book.totalPages)
+        : 1;
 
     return Scaffold(
       body: LineFocusOverlay(
@@ -131,7 +157,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 },
                 child: SizedBox.expand(
                   child: readerState.isOriginalPdfView
-                      ? _buildOriginalPdfView(readerState)
+                      ? _buildOriginalPdfView(readerState, themeState, theme)
                       : _buildSmartReflowContent(readerState, themeState, theme),
                 ),
               ),
@@ -155,7 +181,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: theme.scaffoldBackgroundColor.withOpacity(0.96),
                       border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
@@ -187,7 +213,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 ),
                               ),
                               Text(
-                                'Sayfa ${readerState.currentPage} / ${widget.book.totalPages}',
+                                'Sayfa ${readerState.currentPage} / $totalPages',
                                 style: GoogleFonts.inter(
                                   fontSize: 11,
                                   color: theme.colorScheme.onSurface.withOpacity(0.6),
@@ -195,6 +221,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               ),
                             ],
                           ),
+                        ),
+                        IconButton(
+                          tooltip: 'İçindekiler & Sayfa Gezgini',
+                          icon: const Icon(Icons.format_list_bulleted, size: 20),
+                          onPressed: () => _showTableOfContentsSheet(context, readerState),
                         ),
                         IconButton(
                           tooltip: 'Bilişsel Özet (Yerel AI)',
@@ -249,7 +280,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             IconButton(
                               tooltip: 'Sesli Dinle (TTS)',
                               icon: Icon(
-                                readerState.isTtsPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                                readerState.isTtsPlaying
+                                    ? Icons.pause_circle_filled
+                                    : Icons.play_circle_filled,
                                 color: theme.colorScheme.primary,
                                 size: 28,
                               ),
@@ -258,18 +291,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             IconButton(
                               tooltip: 'Odak Cetveli',
                               icon: Icon(
-                                readerState.isLineFocusEnabled ? Icons.line_weight : Icons.crop_free,
-                                color: readerState.isLineFocusEnabled ? theme.colorScheme.primary : null,
+                                readerState.isLineFocusEnabled
+                                    ? Icons.line_weight
+                                    : Icons.crop_free,
+                                color: readerState.isLineFocusEnabled
+                                    ? theme.colorScheme.primary
+                                    : null,
                               ),
-                              onPressed: () => ref.read(readerProvider.notifier).toggleLineFocus(),
+                              onPressed: () =>
+                                  ref.read(readerProvider.notifier).toggleLineFocus(),
                             ),
                             IconButton(
-                              tooltip: readerState.isOriginalPdfView ? 'Akıllı Akış Moduna Geç' : 'Orijinal PDF Görünümüne Geç',
+                              tooltip: readerState.isOriginalPdfView
+                                  ? 'Akıllı Akış Moduna Geç'
+                                  : 'Orijinal PDF Görünümüne Geç',
                               icon: Icon(
-                                readerState.isOriginalPdfView ? Icons.view_headline : Icons.picture_as_pdf,
-                                color: readerState.isOriginalPdfView ? theme.colorScheme.primary : null,
+                                readerState.isOriginalPdfView
+                                    ? Icons.view_headline
+                                    : Icons.picture_as_pdf,
+                                color: readerState.isOriginalPdfView
+                                    ? theme.colorScheme.primary
+                                    : null,
                               ),
-                              onPressed: () => ref.read(readerProvider.notifier).toggleDualView(),
+                              onPressed: () =>
+                                  ref.read(readerProvider.notifier).toggleDualView(),
                             ),
                             IconButton(
                               tooltip: 'Tipografi & Temalar',
@@ -295,7 +340,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _buildPageSlider(ReaderState readerState, ThemeData theme) {
-    final total = widget.book.totalPages > 0 ? widget.book.totalPages : 1;
+    final rawTotal = readerState.currentBook?.totalPages ?? widget.book.totalPages;
+    final total = rawTotal > 0 ? rawTotal : 1;
     final current = readerState.currentPage.clamp(1, total).toDouble();
 
     return Padding(
@@ -347,8 +393,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final showWarning = reflowData?.hasNonLatinOrVisualWarning ?? false;
 
     // If page contains no text (e.g. cover page, illustration, or scanned PDF)
-    if ((contentBlocks.isEmpty && (reflowData?.paragraphs.isEmpty ?? true)) ||
-        (reflowData != null && !reflowData.hasTextContent)) {
+    if ((contentBlocks.isEmpty &&
+            (reflowData?.paragraphs.isEmpty ?? true) &&
+            readerState.epubChapters.isEmpty) ||
+        (reflowData != null && !reflowData.hasTextContent && readerState.epubChapters.isEmpty)) {
       return _buildEmptyOrCoverPage(readerState, themeState, theme);
     }
 
@@ -356,7 +404,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final warningOffset = showWarning ? 1 : 0;
     final totalItems = contentBlocks.isNotEmpty
         ? (contentBlocks.length + (hasFootnotes ? 1 : 0) + warningOffset)
-        : ((reflowData?.paragraphs.length ?? 0) + (hasFootnotes ? 1 : 0) + warningOffset);
+        : ((reflowData?.paragraphs.length ??
+                (readerState.epubChapters.isNotEmpty
+                    ? readerState.epubChapters[readerState.currentEpubChapterIndex]
+                        .paragraphs
+                        .length
+                    : 0)) +
+            (hasFootnotes ? 1 : 0) +
+            warningOffset);
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
@@ -388,6 +443,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 return TextBlockWidget(
                   block: block,
                   themeState: themeState,
+                  activeTtsWord: readerState.activeTtsWord,
+                  blockHighlights: readerState.currentPageHighlights,
                   onPlayTts: () => ref.read(readerProvider.notifier).toggleTts(),
                   onOpenDictionary: (selected) => DictionarySheet.show(context, selected),
                   onOpenQuoteStudio: (selected) => QuoteStudioSheet.show(
@@ -396,21 +453,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     bookTitle: widget.book.title,
                     author: widget.book.author,
                   ),
-                  onAddHighlight: (selected) async {
-                    final repo = ref.read(highlightRepositoryProvider);
-                    await repo.insertHighlight(HighlightEntity(
-                      bookId: widget.book.id ?? 1,
-                      pageNumber: readerState.currentPage,
-                      selectedText: selected,
-                      userNote: 'Tahrir Şerhi',
-                      createdAt: DateTime.now(),
-                    ));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('✨ Şerh kaydedildi!')),
-                      );
-                    }
-                  },
+                  onAddHighlight: (selected) => _showAddHighlightDialog(
+                    context,
+                    selectedText: selected,
+                    pageNumber: readerState.currentPage,
+                  ),
                 );
               case InteractiveSnippetBlock():
                 return InteractiveSnippetBadgeWidget(snippet: block);
@@ -455,6 +502,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               footnoteAnchors: segment.footnoteAnchors,
             ),
             themeState: themeState,
+            activeTtsWord: readerState.activeTtsWord,
+            blockHighlights: readerState.currentPageHighlights,
             onPlayTts: () => ref.read(readerProvider.notifier).toggleTts(),
             onOpenDictionary: (selected) => DictionarySheet.show(context, selected),
             onOpenQuoteStudio: (selected) => QuoteStudioSheet.show(
@@ -463,21 +512,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               bookTitle: widget.book.title,
               author: widget.book.author,
             ),
-            onAddHighlight: (selected) async {
-              final repo = ref.read(highlightRepositoryProvider);
-              await repo.insertHighlight(HighlightEntity(
-                bookId: widget.book.id ?? 1,
-                pageNumber: readerState.currentPage,
-                selectedText: selected,
-                userNote: 'Tahrir Şerhi',
-                createdAt: DateTime.now(),
-              ));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✨ Şerh kaydedildi!')),
-                );
-              }
-            },
+            onAddHighlight: (selected) => _showAddHighlightDialog(
+              context,
+              selectedText: selected,
+              pageNumber: readerState.currentPage,
+            ),
           );
         }
 
@@ -490,7 +529,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     return InlineCropCard(
       imageBytes: segment.imageBytes,
       imagePath: segment.imagePath,
-      caption: segment.rawText.isNotEmpty ? segment.rawText : '📜 Asıl Hat / Kaligrafi (Orijinal Sayfa Kesiti)',
+      caption: segment.rawText.isNotEmpty
+          ? segment.rawText
+          : '📜 Asıl Hat / Kaligrafi (Orijinal Sayfa Kesiti)',
       onSwitchToOriginalPdf: () => ref.read(readerProvider.notifier).toggleDualView(),
     );
   }
@@ -662,7 +703,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   FilledButton.icon(
                     icon: const Icon(Icons.picture_as_pdf, size: 18),
                     label: const Text('Orijinal PDF Görünümü'),
-                    onPressed: () => ref.read(readerProvider.notifier).setOriginalPdfView(true),
+                    onPressed: () =>
+                        ref.read(readerProvider.notifier).setOriginalPdfView(true),
                   ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.arrow_forward, size: 18),
@@ -693,23 +735,114 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  Widget _buildOriginalPdfView(ReaderState readerState) {
+  ColorFilter _resolvePdfColorFilter(ReaderThemeState themeState, Brightness brightness) {
+    final isDark = brightness == Brightness.dark ||
+        themeState.preset == TahrirThemePreset.amoled ||
+        themeState.preset == TahrirThemePreset.sapphire ||
+        themeState.preset == TahrirThemePreset.forest;
+
+    if (isDark) {
+      return const ColorFilter.matrix(<double>[
+        -0.85, 0.0, 0.0, 0.0, 235.0,
+        0.0, -0.85, 0.0, 0.0, 235.0,
+        0.0, 0.0, -0.82, 0.0, 235.0,
+        0.0, 0.0, 0.0, 1.0, 0.0,
+      ]);
+    }
+
+    if (themeState.preset == TahrirThemePreset.parchment) {
+      return const ColorFilter.matrix(<double>[
+        0.96, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.93, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.85, 0.0, 0.0,
+        0.0, 0.0, 0.0, 1.0, 0.0,
+      ]);
+    }
+
+    // paperWhite (doğal kağıt tonu)
+    return const ColorFilter.matrix(<double>[
+      0.98, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.975, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.96, 0.0, 0.0,
+      0.0, 0.0, 0.0, 1.0, 0.0,
+    ]);
+  }
+
+  Widget _buildOriginalPdfView(
+    ReaderState readerState,
+    ReaderThemeState themeState,
+    ThemeData theme,
+  ) {
     final file = File(widget.book.filePath);
     if (file.existsSync()) {
-      return Container(
-        color: Colors.white,
-        child: SfPdfViewer.file(
-          file,
-          controller: _pdfViewerController,
-          canShowScrollHead: false,
-          canShowScrollStatus: false,
-          enableDoubleTapZooming: true,
-          pageLayoutMode: PdfPageLayoutMode.single,
-          onPageChanged: (PdfPageChangedDetails details) {
-            ref.read(readerProvider.notifier).syncPdfPage(details.newPageNumber);
-          },
-          initialPageNumber: readerState.currentPage,
-        ),
+      final colorFilter = _resolvePdfColorFilter(themeState, theme.brightness);
+
+      return Stack(
+        children: [
+          Positioned.fill(
+            child: ColorFiltered(
+              colorFilter: colorFilter,
+              child: Container(
+                color: Colors.white,
+                child: SfPdfViewer.file(
+                  file,
+                  controller: _pdfViewerController,
+                  canShowScrollHead: false,
+                  canShowScrollStatus: false,
+                  enableDoubleTapZooming: true,
+                  pageLayoutMode: PdfPageLayoutMode.single,
+                  onPageChanged: (PdfPageChangedDetails details) {
+                    ref.read(readerProvider.notifier).syncPdfPage(details.newPageNumber);
+                  },
+                  initialPageNumber: readerState.currentPage,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: _showControls ? 116 : 24,
+            child: Material(
+              color: theme.colorScheme.surface.withOpacity(0.92),
+              elevation: 4,
+              borderRadius: BorderRadius.circular(24),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () {
+                  final nextCrop = !readerState.isPdfAutoCrop;
+                  ref.read(readerProvider.notifier).togglePdfAutoCrop();
+                  _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        readerState.isPdfAutoCrop ? Icons.crop : Icons.crop_free,
+                        size: 16,
+                        color: readerState.isPdfAutoCrop
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurface,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        readerState.isPdfAutoCrop ? 'Auto-Crop 1.18x' : 'Auto-Crop 1.0x',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: readerState.isPdfAutoCrop
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -719,8 +852,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         margin: const EdgeInsets.all(24),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.colorScheme.outline),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.06),
@@ -742,15 +876,214 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             Text(
               'Bu örnek eser için dijital reflow modu önerilmektedir.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.inter(color: Colors.black54, fontSize: 13),
+              style: GoogleFonts.inter(
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
               icon: const Icon(Icons.auto_stories, size: 18),
               label: const Text('Akıllı Akış Moduna Geç'),
-              onPressed: () => ref.read(readerProvider.notifier).setOriginalPdfView(false),
+              onPressed: () =>
+                  ref.read(readerProvider.notifier).setOriginalPdfView(false),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddHighlightDialog(
+    BuildContext context, {
+    required String selectedText,
+    required int pageNumber,
+  }) {
+    final trimmed = selectedText.trim();
+    if (trimmed.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _AddHighlightBottomSheet(
+        selectedText: trimmed,
+        onSave: (category, colorHex, note) async {
+          final repo = ref.read(highlightRepositoryProvider);
+          final habitRepo = ref.read(habitRepositoryProvider);
+          final bookId = widget.book.id ?? 1;
+          await repo.insertHighlight(HighlightEntity(
+            bookId: bookId,
+            pageNumber: pageNumber,
+            selectedText: trimmed,
+            userNote: note.trim().isEmpty ? null : note.trim(),
+            category: category,
+            colorHex: colorHex,
+            createdAt: DateTime.now(),
+          ));
+          await ref.read(readerProvider.notifier).loadCurrentPageHighlights();
+          final allRes = await repo.getAllHighlights();
+          if ((allRes.dataOrNull?.length ?? 0) >= 10) {
+            await habitRepo.addEarnedSeal('seal_scholar');
+          }
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✨ Şerh ve vurgu derkenara kaydedildi!')),
+            );
+          }
+        },
+      ),
+    );
+  }
+
+  void _showTableOfContentsSheet(BuildContext context, ReaderState readerState) {
+    final theme = Theme.of(context);
+    final chapters = readerState.epubChapters;
+    final totalPages = (readerState.currentBook?.totalPages ?? widget.book.totalPages) > 0
+        ? (readerState.currentBook?.totalPages ?? widget.book.totalPages)
+        : 1;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.format_list_bulleted, color: theme.colorScheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      chapters.isNotEmpty
+                          ? 'İçindekiler & Bölümler (${chapters.length})'
+                          : 'Sayfa Gezgini ($totalPages Sayfa)',
+                      style: GoogleFonts.literata(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: chapters.isNotEmpty
+                    ? ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: chapters.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, idx) {
+                          final ch = chapters[idx];
+                          final isCurrent = idx == readerState.currentEpubChapterIndex;
+                          return ListTile(
+                            dense: true,
+                            leading: CircleAvatar(
+                              radius: 14,
+                              backgroundColor: isCurrent
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.primary.withOpacity(0.12),
+                              child: Text(
+                                '${idx + 1}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isCurrent
+                                      ? theme.colorScheme.onPrimary
+                                      : theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              ch.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.literata(
+                                fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w500,
+                                color: isCurrent
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface,
+                              ),
+                            ),
+                            trailing: isCurrent
+                                ? Icon(Icons.check_circle, size: 18, color: theme.colorScheme.primary)
+                                : null,
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _jumpToPage(idx + 1);
+                            },
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        shrinkWrap: true,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 5,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 1.35,
+                        ),
+                        itemCount: totalPages,
+                        itemBuilder: (_, idx) {
+                          final pageNum = idx + 1;
+                          final isCurrent = pageNum == readerState.currentPage;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              _jumpToPage(pageNum);
+                            },
+                            child: Container(
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: isCurrent
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.outline,
+                                ),
+                              ),
+                              child: Text(
+                                '$pageNum',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: isCurrent
+                                      ? theme.colorScheme.onPrimary
+                                      : theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -759,6 +1092,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void _showAiInsightsDialog(BuildContext context) {
     final insights = ref.read(readerProvider.notifier).getPageInsights();
     final theme = Theme.of(context);
+    final estMins = (insights.estimatedReadTimeSeconds / 60).ceil().clamp(1, 120);
 
     showDialog(
       context: context,
@@ -768,33 +1102,337 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           children: [
             const Icon(Icons.auto_awesome, color: Colors.amber),
             const SizedBox(width: 8),
-            Text('Çevrimdışı Akıllı Katip', style: GoogleFonts.literata(fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(
+              child: Text(
+                'Çevrimdışı Akıllı Katip',
+                style: GoogleFonts.literata(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Kilit Kavramlar:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: insights.keyConcepts.map((k) => Chip(label: Text(k, style: const TextStyle(fontSize: 11)))).toList(),
-            ),
-            const SizedBox(height: 12),
-            Text('3 Maddelik Hızlı Özet:', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 6),
-            ...insights.summaryBulletPoints.map((b) => Padding(
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '📊 ${insights.complexityLevel}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '⏱️ ~$estMins dk okuma (${insights.estimatedReadTimeSeconds} sn)',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Kilit Kavramlar:',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: insights.keyConcepts
+                    .map((k) => Chip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(k, style: const TextStyle(fontSize: 11)),
+                        ))
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '3 Maddelik Hızlı Özet:',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              ...insights.summaryBulletPoints.map(
+                (b) => Padding(
                   padding: const EdgeInsets.only(bottom: 4),
-                  child: Text('• $b', style: GoogleFonts.literata(fontSize: 13, height: 1.4)),
-                )),
-          ],
+                  child: Text(
+                    '• $b',
+                    style: GoogleFonts.literata(fontSize: 13, height: 1.4),
+                  ),
+                ),
+              ),
+              if (insights.studyQuestions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  '🤔 Sokratik Tefekkür & Çalışma Soruları:',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...insights.studyQuestions.map(
+                  (q) => Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withOpacity(0.25),
+                      ),
+                    ),
+                    child: Text(
+                      '❓ $q',
+                      style: GoogleFonts.literata(
+                        fontSize: 12.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Anladım')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Anladım'),
+          ),
         ],
       ),
     );
   }
 }
+
+class _AddHighlightBottomSheet extends StatefulWidget {
+  final String selectedText;
+  final Future<void> Function(
+    HighlightCategory category,
+    String colorHex,
+    String note,
+  ) onSave;
+
+  const _AddHighlightBottomSheet({
+    required this.selectedText,
+    required this.onSave,
+  });
+
+  @override
+  State<_AddHighlightBottomSheet> createState() => _AddHighlightBottomSheetState();
+}
+
+class _AddHighlightBottomSheetState extends State<_AddHighlightBottomSheet> {
+  late final TextEditingController _noteController;
+  HighlightCategory _selectedCategory = HighlightCategory.thought;
+  String _selectedColorHex = '#F59E0B';
+
+  static const List<(String, String, Color)> _colorOptions = [
+    ('#F59E0B', 'Kehribar', Color(0xFFF59E0B)),
+    ('#10B981', 'Zümrüt', Color(0xFF10B981)),
+    ('#EF4444', 'Lal', Color(0xFFEF4444)),
+    ('#3B82F6', 'Safir', Color(0xFF3B82F6)),
+    ('#8B5CF6', 'Mor', Color(0xFF8B5CF6)),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _noteController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  String _categoryEmoji(HighlightCategory cat) => switch (cat) {
+        HighlightCategory.thought => '💡',
+        HighlightCategory.quote => '✨',
+        HighlightCategory.question => '❓',
+        HighlightCategory.critical => '⚡',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomInset),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '✍️ Derkenar Şerhi & Vurgu Ekle',
+                style: GoogleFonts.literata(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.primary.withOpacity(0.25),
+                  ),
+                ),
+                child: Text(
+                  '“${widget.selectedText}”',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.literata(
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Kategori Seçin',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: HighlightCategory.values.map((cat) {
+                  final isSelected = _selectedCategory == cat;
+                  return ChoiceChip(
+                    label: Text('${_categoryEmoji(cat)} ${cat.displayName}'),
+                    selected: isSelected,
+                    onSelected: (_) => setState(() => _selectedCategory = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Vurgu Rengi',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: _colorOptions.map((opt) {
+                  final (hex, name, color) = opt;
+                  final isSelected = _selectedColorHex == hex;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => setState(() => _selectedColorHex = hex),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(isSelected ? 0.25 : 0.10),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isSelected ? color : color.withOpacity(0.4),
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            name,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _noteController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Haşiye / Şerh Notunuz (İsteğe Bağlı)',
+                  hintText: 'Bu ibare hakkındaki tefekkür, sual veya şerhinizi yazın...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                  label: const Text('Şerhi Kaydet'),
+                  onPressed: () async {
+                    final note = _noteController.text;
+                    Navigator.pop(context);
+                    await widget.onSave(
+                      _selectedCategory,
+                      _selectedColorHex,
+                      note,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 

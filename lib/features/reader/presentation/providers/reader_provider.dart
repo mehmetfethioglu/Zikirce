@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/repository_providers.dart';
 import '../../../../domain/entities/book_entity.dart';
 import '../../../../domain/entities/footnote_entity.dart';
+import '../../../../domain/entities/highlight_entity.dart';
 import '../../../../domain/entities/reading_session_entity.dart';
+import '../../domain/content_block.dart';
 import '../../engine/epub_parser_engine.dart';
 import '../../engine/pdf_reflow_engine.dart';
 import '../../services/ambient_audio_service.dart';
@@ -24,6 +26,10 @@ class ReaderState {
   final int ttsWordEnd;
   final bool isTtsPlaying;
   final List<InlineFootnoteEntity> footnotes;
+  final List<HighlightEntity> currentPageHighlights;
+  final bool isPdfAutoCrop;
+  final bool isZenMode;
+  final bool showCompletionCelebration;
 
   const ReaderState({
     this.currentBook,
@@ -39,6 +45,10 @@ class ReaderState {
     this.ttsWordEnd = 0,
     this.isTtsPlaying = false,
     this.footnotes = const [],
+    this.currentPageHighlights = const [],
+    this.isPdfAutoCrop = false,
+    this.isZenMode = false,
+    this.showCompletionCelebration = false,
   });
 
   ReaderState copyWith({
@@ -55,6 +65,10 @@ class ReaderState {
     int? ttsWordEnd,
     bool? isTtsPlaying,
     List<InlineFootnoteEntity>? footnotes,
+    List<HighlightEntity>? currentPageHighlights,
+    bool? isPdfAutoCrop,
+    bool? isZenMode,
+    bool? showCompletionCelebration,
   }) {
     return ReaderState(
       currentBook: currentBook ?? this.currentBook,
@@ -70,6 +84,10 @@ class ReaderState {
       ttsWordEnd: ttsWordEnd ?? this.ttsWordEnd,
       isTtsPlaying: isTtsPlaying ?? this.isTtsPlaying,
       footnotes: footnotes ?? this.footnotes,
+      currentPageHighlights: currentPageHighlights ?? this.currentPageHighlights,
+      isPdfAutoCrop: isPdfAutoCrop ?? this.isPdfAutoCrop,
+      isZenMode: isZenMode ?? this.isZenMode,
+      showCompletionCelebration: showCompletionCelebration ?? this.showCompletionCelebration,
     );
   }
 }
@@ -84,6 +102,8 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
 
   Timer? _sessionTimer;
   int _sessionSeconds = 0;
+  int _lastSavedSessionSeconds = 0;
+  int _unsavedStreakSeconds = 0;
 
   ReaderNotifier(this._ref) : super(const ReaderState()) {
     ttsService.onWordProgress = (progress) {
@@ -95,8 +115,50 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     };
 
     ttsService.onStateChanged = (ttsState) {
-      state = state.copyWith(isTtsPlaying: ttsState == TtsState.playing);
+      final isPlaying = ttsState == TtsState.playing;
+      state = state.copyWith(
+        isTtsPlaying: isPlaying,
+        activeTtsWord: isPlaying ? state.activeTtsWord : null,
+      );
+      unawaited(ambientService.setTtsDucking(isPlaying));
     };
+  }
+
+  bool _isChapterBasedFormat(BookFormat format) {
+    return format == BookFormat.epub ||
+        format == BookFormat.markdown ||
+        format == BookFormat.txt;
+  }
+
+  ReflowPageData _buildReflowDataFromChapter(EpubParsedChapter chapter, int pageNumber) {
+    final hasTitleInParagraphs = chapter.paragraphs.isNotEmpty &&
+        chapter.paragraphs.first.rawText.trim().toLowerCase() ==
+            chapter.title.trim().toLowerCase();
+
+    final blocks = <ContentBlock>[
+      if (chapter.title.trim().isNotEmpty && !hasTitleInParagraphs)
+        TextBlock(
+          text: chapter.title.trim(),
+          isHeading: true,
+        ),
+      ...chapter.paragraphs.map(
+        (p) => TextBlock(
+          text: p.rawText,
+          isHeading: p.isHeading,
+          isArabic: p.isArabic,
+          footnoteAnchors: p.footnoteAnchors,
+        ),
+      ),
+    ];
+
+    return ReflowPageData(
+      pageNumber: pageNumber,
+      rawText: chapter.content,
+      paragraphs: chapter.paragraphs,
+      contentBlocks: blocks,
+      hasTextContent: blocks.isNotEmpty || chapter.content.trim().isNotEmpty,
+      isCoverOrImagePage: false,
+    );
   }
 
   Future<void> openBook(BookEntity book) async {
@@ -105,15 +167,34 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
       currentBook: book,
       currentPage: book.currentPage,
       isLoading: true,
+      showCompletionCelebration: false,
     );
 
-    if (book.format == BookFormat.epub) {
-      final chapters = await _epubEngine.parseEpub(book.filePath);
+    if (_isChapterBasedFormat(book.format)) {
+      final chapters = book.format == BookFormat.epub
+          ? await _epubEngine.parseEpub(book.filePath)
+          : await _epubEngine.parseMarkdownOrTxt(book.filePath);
+
+      final targetIndex = chapters.isEmpty
+          ? 0
+          : (book.currentPage - 1).clamp(0, chapters.length - 1);
+      final pageNum = targetIndex + 1;
+      final updatedBook = chapters.isNotEmpty
+          ? book.copyWith(totalPages: chapters.length)
+          : book;
+      final reflow = chapters.isNotEmpty
+          ? _buildReflowDataFromChapter(chapters[targetIndex], pageNum)
+          : null;
+
       state = state.copyWith(
+        currentBook: updatedBook,
         epubChapters: chapters,
-        currentEpubChapterIndex: (book.currentPage - 1).clamp(0, chapters.length - 1),
+        currentEpubChapterIndex: targetIndex,
+        currentPage: pageNum,
+        currentReflowData: reflow,
         isLoading: false,
       );
+      await loadCurrentPageHighlights();
     } else {
       await _loadPdfPage(book.currentPage);
     }
@@ -134,7 +215,8 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
       isLoading: false,
     );
 
-    _saveProgress();
+    await loadCurrentPageHighlights();
+    unawaited(_saveProgress());
 
     // Arka Planda Sonraki 1 Sayfayı Prefetch Et (JIT + 0ms Sayfa Geçişi)
     _prefetchNextPage(validPage, total);
@@ -164,15 +246,32 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     }
   }
 
+  Future<void> loadCurrentPageHighlights() async {
+    final bookId = state.currentBook?.id;
+    if (bookId == null) return;
+    final repo = _ref.read(highlightRepositoryProvider);
+    final res = await repo.getHighlightsForBook(bookId);
+    if (res.isSuccess) {
+      final all = res.dataOrNull ?? const <HighlightEntity>[];
+      final filtered = all.where((h) => h.pageNumber == state.currentPage).toList();
+      state = state.copyWith(currentPageHighlights: filtered);
+    }
+  }
+
   Future<void> jumpToPage(int pageNumber) async {
     if (state.currentBook == null) return;
-    if (state.currentBook!.format == BookFormat.epub) {
+    if (_isChapterBasedFormat(state.currentBook!.format)) {
+      if (state.epubChapters.isEmpty) return;
       final targetIndex = (pageNumber - 1).clamp(0, state.epubChapters.length - 1);
+      final pageNum = targetIndex + 1;
+      final reflow = _buildReflowDataFromChapter(state.epubChapters[targetIndex], pageNum);
       state = state.copyWith(
         currentEpubChapterIndex: targetIndex,
-        currentPage: targetIndex + 1,
+        currentPage: pageNum,
+        currentReflowData: reflow,
       );
-      _saveProgress();
+      await loadCurrentPageHighlights();
+      unawaited(_saveProgress());
     } else {
       await _loadPdfPage(pageNumber);
     }
@@ -181,19 +280,25 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   void syncPdfPage(int pageNumber) {
     if (state.currentPage != pageNumber) {
       state = state.copyWith(currentPage: pageNumber);
-      _saveProgress();
+      unawaited(loadCurrentPageHighlights());
+      unawaited(_saveProgress());
     }
   }
 
   Future<void> nextPage() async {
     if (state.currentBook == null) return;
-    if (state.currentBook!.format == BookFormat.epub) {
+    if (_isChapterBasedFormat(state.currentBook!.format)) {
       if (state.currentEpubChapterIndex < state.epubChapters.length - 1) {
+        final nextIdx = state.currentEpubChapterIndex + 1;
+        final pageNum = nextIdx + 1;
+        final reflow = _buildReflowDataFromChapter(state.epubChapters[nextIdx], pageNum);
         state = state.copyWith(
-          currentEpubChapterIndex: state.currentEpubChapterIndex + 1,
-          currentPage: state.currentEpubChapterIndex + 2,
+          currentEpubChapterIndex: nextIdx,
+          currentPage: pageNum,
+          currentReflowData: reflow,
         );
-        _saveProgress();
+        await loadCurrentPageHighlights();
+        unawaited(_saveProgress());
       }
     } else {
       if (state.currentPage < state.currentBook!.totalPages) {
@@ -204,13 +309,18 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
 
   Future<void> previousPage() async {
     if (state.currentBook == null) return;
-    if (state.currentBook!.format == BookFormat.epub) {
+    if (_isChapterBasedFormat(state.currentBook!.format)) {
       if (state.currentEpubChapterIndex > 0) {
+        final prevIdx = state.currentEpubChapterIndex - 1;
+        final pageNum = prevIdx + 1;
+        final reflow = _buildReflowDataFromChapter(state.epubChapters[prevIdx], pageNum);
         state = state.copyWith(
-          currentEpubChapterIndex: state.currentEpubChapterIndex - 1,
-          currentPage: state.currentEpubChapterIndex,
+          currentEpubChapterIndex: prevIdx,
+          currentPage: pageNum,
+          currentReflowData: reflow,
         );
-        _saveProgress();
+        await loadCurrentPageHighlights();
+        unawaited(_saveProgress());
       }
     } else {
       if (state.currentPage > 1) {
@@ -229,6 +339,18 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
 
   void toggleLineFocus() {
     state = state.copyWith(isLineFocusEnabled: !state.isLineFocusEnabled);
+  }
+
+  void togglePdfAutoCrop() {
+    state = state.copyWith(isPdfAutoCrop: !state.isPdfAutoCrop);
+  }
+
+  void toggleZenMode() {
+    state = state.copyWith(isZenMode: !state.isZenMode);
+  }
+
+  void clearCompletionCelebration() {
+    state = state.copyWith(showCompletionCelebration: false);
   }
 
   Future<void> toggleTts() async {
@@ -254,6 +376,8 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   void _startSessionTimer() {
     _sessionTimer?.cancel();
     _sessionSeconds = 0;
+    _lastSavedSessionSeconds = 0;
+    _unsavedStreakSeconds = 0;
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _sessionSeconds++;
     });
@@ -268,24 +392,42 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     final current = state.currentPage;
     final progress = (current / totalPages).clamp(0.0, 1.0);
 
+    final delta = (_sessionSeconds - _lastSavedSessionSeconds).clamp(0, 86400);
+    _lastSavedSessionSeconds = _sessionSeconds;
+    _unsavedStreakSeconds += delta;
+
     await bookRepo.updateBookProgress(
       bookId: state.currentBook!.id!,
       currentPage: current,
       progressPercentage: progress,
-      additionalReadingTimeSeconds: _sessionSeconds,
+      additionalReadingTimeSeconds: delta,
     );
 
     if (progress >= 1.0) {
+      final wasAlreadyCompleted = state.currentBook!.isCompleted;
       await bookRepo.markBookCompleted(state.currentBook!.id!);
+      await habitRepo.addEarnedSeal('seal_first_book');
       await habitRepo.addEarnedSeal('seal_completed_${state.currentBook!.id}');
+      if (!wasAlreadyCompleted) {
+        state = state.copyWith(
+          currentBook: state.currentBook!.copyWith(
+            isCompleted: true,
+            progressPercentage: 1.0,
+            totalReadingTimeSeconds: state.currentBook!.totalReadingTimeSeconds + delta,
+          ),
+          showCompletionCelebration: true,
+        );
+      }
     }
 
-    if (_sessionSeconds >= 60) {
-      await habitRepo.updateStreak((_sessionSeconds / 60).round());
+    if (_unsavedStreakSeconds >= 60) {
+      final sessionDuration = _unsavedStreakSeconds;
+      _unsavedStreakSeconds = 0;
+      await habitRepo.updateStreak((sessionDuration / 60).round());
       await bookRepo.recordReadingSession(ReadingSessionEntity(
         bookId: state.currentBook!.id!,
         sessionDate: DateTime.now(),
-        durationSeconds: _sessionSeconds,
+        durationSeconds: sessionDuration,
         pagesRead: 1,
         wordsRead: 250,
       ));
@@ -305,3 +447,4 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
 final readerProvider = StateNotifierProvider<ReaderNotifier, ReaderState>((ref) {
   return ReaderNotifier(ref);
 });
+

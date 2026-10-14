@@ -78,6 +78,33 @@ class _AmbientSoundSheetState extends State<AmbientSoundSheet> {
               ],
             ),
             const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withOpacity(0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.graphic_eq_outlined, size: 16, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'TTS Konuşurken Otomatik Kısma (Audio Ducking) Aktif',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -85,7 +112,9 @@ class _AmbientSoundSheetState extends State<AmbientSoundSheet> {
                 final isSelected = _selected == type;
                 return ChoiceChip(
                   avatar: Text(type.icon, style: const TextStyle(fontSize: 16)),
-                  label: Text(type.title),
+                  label: Text(
+                    type == AmbientSoundType.ney ? '${type.title} ✨' : type.title,
+                  ),
                   selected: isSelected,
                   onSelected: (_) {
                     setState(() => _selected = type);

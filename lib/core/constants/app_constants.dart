@@ -4,7 +4,7 @@ class AppConstants {
 
   static const String appName = 'Tahrir';
   static const String appTagline = 'Zarif, Akıcı ve Bilişsel Okuma Ekosistemi';
-  static const String appVersion = '0.9.0';
+  static const String appVersion = '1.0.0';
 
   // Storage Keys
   static const String keyActiveTheme = 'tahrir_active_theme';

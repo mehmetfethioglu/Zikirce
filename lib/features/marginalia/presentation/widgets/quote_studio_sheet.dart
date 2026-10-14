@@ -1,9 +1,13 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 
-enum QuoteTemplate { story, square, parchment }
+enum QuoteTemplate { story, square, parchment, amoled }
 
 class QuoteStudioSheet extends StatefulWidget {
   final String quoteText;
@@ -43,7 +47,58 @@ class QuoteStudioSheet extends StatefulWidget {
 }
 
 class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
+  final GlobalKey _cardBoundaryKey = GlobalKey();
   QuoteTemplate _selectedTemplate = QuoteTemplate.parchment;
+  bool _isExporting = false;
+
+  Future<void> _exportAndSharePng() async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final boundaryContext = _cardBoundaryKey.currentContext;
+      final boundary = boundaryContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) {
+        await Share.share(
+          '“${widget.quoteText}” — ${widget.author}, ${widget.bookTitle}',
+        );
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+
+      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw Exception('PNG verisi üretilemedi.');
+      }
+
+      final pngBytes = byteData.buffer.asUint8List();
+      final tempDir = await getTemporaryDirectory();
+      final file = File(
+        '${tempDir.path}/tahrir_quote_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await file.writeAsBytes(pngBytes, flush: true);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'image/png')],
+        text: '“${widget.quoteText}” — ${widget.author}, ${widget.bookTitle}',
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Görsel paylaşılırken hata oluştu: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +115,7 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.outline.withOpacity(0.5),
+                  color: theme.colorScheme.outline.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -76,19 +131,39 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
               const SizedBox(height: 16),
 
               // Template Selector
-              SegmentedButton<QuoteTemplate>(
-                segments: const [
-                  ButtonSegment(value: QuoteTemplate.parchment, label: Text('Parşömen')),
-                  ButtonSegment(value: QuoteTemplate.story, label: Text('Story (9:16)')),
-                  ButtonSegment(value: QuoteTemplate.square, label: Text('Kare (1:1)')),
-                ],
-                selected: {_selectedTemplate},
-                onSelectionChanged: (set) => setState(() => _selectedTemplate = set.first),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<QuoteTemplate>(
+                  segments: const [
+                    ButtonSegment(
+                      value: QuoteTemplate.parchment,
+                      label: Text('Parşömen'),
+                    ),
+                    ButtonSegment(
+                      value: QuoteTemplate.amoled,
+                      label: Text('İs Mürekkebi'),
+                    ),
+                    ButtonSegment(
+                      value: QuoteTemplate.story,
+                      label: Text('Story (9:16)'),
+                    ),
+                    ButtonSegment(
+                      value: QuoteTemplate.square,
+                      label: Text('Kare (1:1)'),
+                    ),
+                  ],
+                  selected: {_selectedTemplate},
+                  onSelectionChanged: (set) =>
+                      setState(() => _selectedTemplate = set.first),
+                ),
               ),
               const SizedBox(height: 20),
 
-              // Live Preview Card
-              _buildPreviewCard(),
+              // Live Preview Card inside RepaintBoundary for High-Res PNG Export
+              RepaintBoundary(
+                key: _cardBoundaryKey,
+                child: _buildPreviewCard(),
+              ),
               const SizedBox(height: 20),
 
               // Action Buttons
@@ -96,23 +171,34 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.copy),
-                      label: const Text('Metni Kopyala'),
+                      icon: const Icon(Icons.notes_rounded, size: 18),
+                      label: const Text('Metni Paylaş'),
                       onPressed: () {
-                        Share.share('"${widget.quoteText}"\n— ${widget.author}, ${widget.bookTitle} (Tahrir ile)');
+                        Share.share(
+                          '“${widget.quoteText}”\n\n— ${widget.author}, ${widget.bookTitle}\n📜 Tahrir Okuma Ekosistemi',
+                        );
                         Navigator.pop(context);
                       },
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    flex: 2,
                     child: FilledButton.icon(
-                      icon: const Icon(Icons.share),
-                      label: const Text('Paylaş'),
-                      onPressed: () {
-                        Share.share('"${widget.quoteText}"\n\n— ${widget.author}, ${widget.bookTitle}\n📜 Tahrir Okuma Ekosistemi');
-                        Navigator.pop(context);
-                      },
+                      icon: _isExporting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.image_outlined, size: 18),
+                      label: Text(
+                        _isExporting ? 'Hazırlanıyor...' : 'Görsel Olarak Paylaş (PNG)',
+                      ),
+                      onPressed: _isExporting ? null : _exportAndSharePng,
                     ),
                   ),
                 ],
@@ -134,7 +220,11 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.parchmentBorder, width: 2),
             boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4)),
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
             ],
           ),
           child: Column(
@@ -158,7 +248,11 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              Container(width: 40, height: 1, color: AppColors.parchmentAccent.withOpacity(0.5)),
+              Container(
+                width: 40,
+                height: 1,
+                color: AppColors.parchmentAccent.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 12),
               Text(
                 widget.author,
@@ -178,7 +272,79 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
             ],
           ),
         ),
-
+      QuoteTemplate.amoled => Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.amoledBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.amberGold.withValues(alpha: 0.65),
+              width: 1.5,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black54,
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('🖋️', style: TextStyle(fontSize: 14)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'TAHRİR İS MÜREKKEBİ',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.8,
+                      color: AppColors.amberGold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '“${widget.quoteText}”',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.literata(
+                  fontSize: 16,
+                  height: 1.6,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.amoledText,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 48,
+                height: 1,
+                color: AppColors.amberGold.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.author,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.amberGold,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.bookTitle,
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: AppColors.amoledSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
       QuoteTemplate.story => Container(
           width: 220,
           height: 330,
@@ -241,7 +407,6 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
             ],
           ),
         ),
-
       QuoteTemplate.square => Container(
           width: 250,
           height: 250,
@@ -272,6 +437,17 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.bookTitle,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: Colors.black54,
                 ),
               ),
             ],

@@ -105,19 +105,15 @@ class HeatmapWidget extends StatelessWidget {
   }
 
   int _getMinutesForDate(DateTime date) {
+    int total = 0;
     for (final entry in sessionMinutes.entries) {
-      if (entry.key.year == date.year && entry.key.month == date.month && entry.key.day == date.day) {
-        return entry.value;
+      if (entry.key.year == date.year &&
+          entry.key.month == date.month &&
+          entry.key.day == date.day) {
+        total += entry.value;
       }
     }
-    // Pseudo-activity for rich visual preview on active streak days
-    final diff = DateTime.now().difference(date).inDays;
-    if (diff == 0) return 25;
-    if (diff == 1) return 15;
-    if (diff == 2) return 30;
-    if (diff == 4) return 10;
-    if (diff == 7) return 40;
-    return 0;
+    return total;
   }
 
   Color _getColorForMinutes(int minutes, Color primary) {
