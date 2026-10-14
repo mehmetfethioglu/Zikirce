@@ -35,18 +35,60 @@ class EpubParserEngine {
       final flatChapters = <EpubChapter>[];
       _collectChapters(book.Chapters, flatChapters);
 
+      // 1. Kitap genelindeki tüm HTML dosyalarından ve bölümlerden dipnot havuzunu (bölüm sonu / kitap sonu / HTML id) topla
+      final globalFootnoteMap = <String, String>{};
+      final htmlFiles = book.Content?.Html;
+      if (htmlFiles != null) {
+        for (final htmlFile in htmlFiles.values) {
+          final rawHtml = htmlFile.Content ?? '';
+          if (rawHtml.isEmpty) continue;
+          _extractHtmlFootnotes(rawHtml, globalFootnoteMap);
+          final stripped = _stripHtml(rawHtml);
+          final map = TextSegmenter.extractFootnoteMapFromRawText(stripped);
+          for (final entry in map.entries) {
+            globalFootnoteMap.putIfAbsent(entry.key, () => entry.value);
+          }
+        }
+      }
+
+      for (final ch in flatChapters) {
+        final rawHtml = ch.HtmlContent ?? '';
+        if (rawHtml.isEmpty) continue;
+        _extractHtmlFootnotes(rawHtml, globalFootnoteMap);
+        final stripped = _stripHtml(rawHtml);
+        final map = TextSegmenter.extractFootnoteMapFromRawText(stripped);
+        for (final entry in map.entries) {
+          globalFootnoteMap.putIfAbsent(entry.key, () => entry.value);
+        }
+      }
+
+      // 2. Bölümleri ayrıştır ve dipnotları paragraf çapalarıyla eşleştir
       for (final ch in flatChapters) {
         final rawHtml = ch.HtmlContent ?? '';
         final cleanText = _stripHtml(rawHtml);
         if (cleanText.isEmpty) continue;
 
-        final paragraphs = TextSegmenter.segmentIntoParagraphs(cleanText);
+        final pageResult = TextSegmenter.extractFootnotesAndBody(cleanText);
+        final mergedFootnotes = <PageFootnote>[...pageResult.footnotes];
+        final existingKeys = mergedFootnotes.map((f) => f.key).toSet();
+        for (final entry in globalFootnoteMap.entries) {
+          if (!existingKeys.contains(entry.key) && entry.value.trim().isNotEmpty) {
+            mergedFootnotes.add(PageFootnote(key: entry.key, content: entry.value.trim()));
+            existingKeys.add(entry.key);
+          }
+        }
+
+        final paragraphs = TextSegmenter.segmentIntoParagraphs(
+          pageResult.bodyText,
+          pageFootnotes: mergedFootnotes,
+          hadCorruptedCalligraphy: pageResult.hadCorruptedCalligraphy,
+        );
         if (paragraphs.isEmpty) continue;
 
         final rawTitle = ch.Title?.trim() ?? '';
         chapters.add(EpubParsedChapter(
           title: rawTitle.isNotEmpty ? rawTitle : 'Bölüm ${chapters.length + 1}',
-          content: cleanText,
+          content: pageResult.bodyText,
           paragraphs: paragraphs,
         ));
       }
@@ -54,6 +96,36 @@ class EpubParserEngine {
       return chapters.isNotEmpty ? chapters : _generateSampleChapters();
     } catch (e) {
       return _generateSampleChapters();
+    }
+  }
+
+  /// EPUB HTML içerisindeki `<aside epub:type="footnote">`, `<div id="fn9">`, `<p id="footnote-9">`, `<li id="fn9">` yapılarını yakalar
+  void _extractHtmlFootnotes(String rawHtml, Map<String, String> targetMap) {
+    // 1. id="fn9", id="footnote9", id="note-9" vb. blok etiketleri
+    final idBlockRegex = RegExp(
+      r'<(?:p|div|li|aside|dd)[^>]*\bid=["\x27](?:fn|footnote|note|endnote|dipnot)[_\-:]?(\d{1,4})["\x27][^>]*>([\s\S]*?)<\/(?:p|div|li|aside|dd)>',
+      caseSensitive: false,
+    );
+    for (final m in idBlockRegex.allMatches(rawHtml)) {
+      final key = m.group(1)!.trim();
+      var content = _stripHtml(m.group(2)!);
+      content = content.replaceFirst(RegExp(r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}[.):\-—]?)\s*'), '').trim();
+      if (key.isNotEmpty && content.length >= 4) {
+        targetMap.putIfAbsent(key, () => content);
+      }
+    }
+
+    // 2. <a href="...">[9]</a> Müslim, İlim 16... şeklinde paragraf içi HTML dipnot tanımları
+    final anchorDefRegex = RegExp(
+      r'<(?:p|div|li)[^>]*>\s*(?:<a[^>]*>\s*)?\[(\d{1,4})\](?:\s*<\/a>)?\s*([\s\S]*?)<\/(?:p|div|li)>',
+      caseSensitive: false,
+    );
+    for (final m in anchorDefRegex.allMatches(rawHtml)) {
+      final key = m.group(1)!.trim();
+      final content = _stripHtml(m.group(2)!).trim();
+      if (key.isNotEmpty && content.length >= 4) {
+        targetMap.putIfAbsent(key, () => content);
+      }
     }
   }
 
@@ -90,8 +162,21 @@ class EpubParserEngine {
       }
 
       final normalized = rawContent.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+      final globalFootnoteMap = TextSegmenter.extractFootnoteMapFromRawText(normalized);
       final headingRegex = RegExp(r'^(#{1,2})\s+(.+)$', multiLine: true);
       final chapters = <EpubParsedChapter>[];
+
+      List<PageFootnote> buildMergedFootnotes(List<PageFootnote> localFootnotes) {
+        final merged = <PageFootnote>[...localFootnotes];
+        final keys = merged.map((f) => f.key).toSet();
+        for (final entry in globalFootnoteMap.entries) {
+          if (!keys.contains(entry.key) && entry.value.trim().isNotEmpty) {
+            merged.add(PageFootnote(key: entry.key, content: entry.value.trim()));
+            keys.add(entry.key);
+          }
+        }
+        return merged;
+      }
 
       if (headingRegex.hasMatch(normalized)) {
         final lines = normalized.split('\n');
@@ -104,7 +189,12 @@ class EpubParserEngine {
           if (sectionRaw.isEmpty) return;
 
           final cleaned = _cleanMarkdownSymbols(sectionRaw);
-          final paragraphs = TextSegmenter.segmentIntoParagraphs(cleaned);
+          final pageResult = TextSegmenter.extractFootnotesAndBody(cleaned);
+          final paragraphs = TextSegmenter.segmentIntoParagraphs(
+            pageResult.bodyText,
+            pageFootnotes: buildMergedFootnotes(pageResult.footnotes),
+            hadCorruptedCalligraphy: pageResult.hadCorruptedCalligraphy,
+          );
           if (paragraphs.isEmpty) return;
 
           final activeTitle = currentTitle;
@@ -112,7 +202,7 @@ class EpubParserEngine {
             title: (activeTitle != null && activeTitle.isNotEmpty)
                 ? activeTitle
                 : 'Bölüm ${chapters.length + 1}',
-            content: cleaned,
+            content: pageResult.bodyText,
             paragraphs: paragraphs,
           ));
         }
@@ -147,12 +237,17 @@ class EpubParserEngine {
           currentWordCount = 0;
           if (chunkText.isEmpty) return;
 
-          final paragraphs = TextSegmenter.segmentIntoParagraphs(chunkText);
+          final pageResult = TextSegmenter.extractFootnotesAndBody(chunkText);
+          final paragraphs = TextSegmenter.segmentIntoParagraphs(
+            pageResult.bodyText,
+            pageFootnotes: buildMergedFootnotes(pageResult.footnotes),
+            hadCorruptedCalligraphy: pageResult.hadCorruptedCalligraphy,
+          );
           if (paragraphs.isEmpty) return;
 
           chapters.add(EpubParsedChapter(
             title: 'Bölüm ${chapters.length + 1}',
-            content: chunkText,
+            content: pageResult.bodyText,
             paragraphs: paragraphs,
           ));
         }
@@ -189,7 +284,7 @@ class EpubParserEngine {
         .replaceAll(RegExp(r'^#{1,6}\s+', multiLine: true), '')
         .replaceAll('**', '')
         .replaceAll('__', '')
-        .replaceAll('*', '')
+        .replaceAll(RegExp(r'(?<!\[)\*(?!\])'), '')
         .replaceAll('`', '')
         .trim();
   }
@@ -201,7 +296,7 @@ class EpubParserEngine {
 
     text = text.replaceAll(
       RegExp(
-        r'</(p|div|h[1-6]|li|blockquote)>|<(br\s*/?|hr\s*/?)>',
+        r'</(p|div|h[1-6]|li|blockquote|aside)>|<(br\s*/?|hr\s*/?)>',
         caseSensitive: false,
       ),
       '\n\n',
@@ -222,6 +317,7 @@ class EpubParserEngine {
         .replaceAll('&#39;', "'");
 
     text = text.replaceAll(RegExp(r'<[^>]*>'), ' ');
+    text = text.replaceAll(RegExp(r'\[\s*(\d{1,4}|\*|\†)\s*\]'), r'[$1]');
     text = text.replaceAll(RegExp(r'[ \t]+'), ' ');
     text = text
         .split('\n')
@@ -234,7 +330,7 @@ class EpubParserEngine {
   }
 
   List<EpubParsedChapter> _generateSampleChapters() {
-    final text1 = '''
+    const text1 = '''
 BÖLÜM 1: DİYAR-I RÛM'A SEYAHAT
 
 1040 senesinde İstanbul'dan hareket edip Anadolu ve Rumeli diyarına revan olduk. Şehirler gördük ki her biri birer inci misali parıldar. [1]
@@ -242,7 +338,7 @@ BÖLÜM 1: DİYAR-I RÛM'A SEYAHAT
 Çarşıları mamur, kervansarayları nakış nakış işlenmiş, insanları ise misafirperver ve ilim ehlidir. Çeşmelerinden buz gibi sular akar, bağlarında bülbüller ötüşür. [*]
 ''';
 
-    final text2 = '''
+    const text2 = '''
 BÖLÜM 2: KALELER VE NAKŞİLER
 
 Şehrin kalesi yedi burç üzerine bina olunmuş olup, surları göklere ser çekmiştir. İçerisinde sultanın sarayı ve ulemanın meclisleri yer alır. [2]
@@ -250,16 +346,34 @@ BÖLÜM 2: KALELER VE NAKŞİLER
 Akşam olduğunda kandiller yanar, şairler ve edipler toplanıp tahrir ve nazım meclisleri kurarlar.
 ''';
 
+    const sampleFootnotes1 = [
+      PageFootnote(
+        key: '1',
+        content: 'Evliyâ Çelebi, Seyahatnâme, 1. Cilt: Dersaadet\'ten Anadolu\'ya ilk çıkış menzilleri (H. 1040 / M. 1630).',
+      ),
+      PageFootnote(
+        key: '*',
+        content: 'Klasik Osmanlı şehirciliğinde külliye, bedesten ve su yolları vakıf nizamıyla idare olunurdu.',
+      ),
+    ];
+
+    const sampleFootnotes2 = [
+      PageFootnote(
+        key: '2',
+        content: 'Yedikule ve İç Kale tahkimatı; devrin tarihçileri tarafından "Sedd-i İskender" teşbihiyle tavsif edilmiştir.',
+      ),
+    ];
+
     return [
       EpubParsedChapter(
         title: 'Diyar-ı Rûm\'a Seyahat',
         content: text1,
-        paragraphs: TextSegmenter.segmentIntoParagraphs(text1),
+        paragraphs: TextSegmenter.segmentIntoParagraphs(text1, pageFootnotes: sampleFootnotes1),
       ),
       EpubParsedChapter(
         title: 'Kaleler ve Nakşiler',
         content: text2,
-        paragraphs: TextSegmenter.segmentIntoParagraphs(text2),
+        paragraphs: TextSegmenter.segmentIntoParagraphs(text2, pageFootnotes: sampleFootnotes2),
       ),
     ];
   }

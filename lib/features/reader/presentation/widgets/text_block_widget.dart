@@ -277,8 +277,15 @@ class TextBlockWidget extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: block.footnoteAnchors.map((anchor) {
-                  final footnoteContent = anchor.content ??
-                      'Dipnot ${anchor.key}: Bu sayfadaki ilgili izahat.';
+                  final rawContent = anchor.content?.trim();
+                  final footnoteContent = (rawContent != null &&
+                          rawContent.isNotEmpty &&
+                          !rawContent.endsWith('Bu sayfadaki ilgili izahat.'))
+                      ? rawContent
+                      : TextSegmenter.resolveContextualFootnote(
+                          block.text,
+                          anchorKey: anchor.key,
+                        );
                   return ActionChip(
                     avatar: const Icon(Icons.bookmark_outline, size: 14),
                     label: Text(

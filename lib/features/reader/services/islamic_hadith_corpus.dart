@@ -6,6 +6,7 @@ class HadithCorpusEntry {
   final String id;
   final String title;
   final String arabicText;
+  final String? citation;
   final List<String> narrators;
   final List<String> sources;
   final List<String> hadithNumbers;
@@ -15,6 +16,7 @@ class HadithCorpusEntry {
     required this.id,
     required this.title,
     required this.arabicText,
+    this.citation,
     this.narrators = const [],
     this.sources = const [],
     this.hadithNumbers = const [],
@@ -29,6 +31,7 @@ class IslamicHadithCorpus {
       id: 'selam_eve_giris_enes',
       title: 'Eve Girip Çıkarken Selam Vermenin Önemi',
       arabicText: 'يَا بُنَيَّ ، إِذَا دَخَلْتَ عَلَى أَهْلِكَ فَسَلِّمْ ، يَكُنْ بَرَكَةً عَلَيْكَ ، وَعَلَى أَهْلِكَ',
+      citation: 'Sünen-i Tirmizî, Kitâbü’l-İsti’zân ve’l-Âdâb, Bâb 10, Hadis No: 2698. (İmam Tirmizî: "Bu hadis hasen-sahîh-garîbdir.")',
       narrators: ['enes', 'enes b. malik', 'enes (radıyallahu'],
       sources: ['tirmizi', 'tirmizî', 'isti\'zan', 'isti’zan'],
       hadithNumbers: ['2698'],
@@ -40,6 +43,7 @@ class IslamicHadithCorpus {
       id: 'selam_meclis_giris_cikis',
       title: 'Meclise Girip Çıkarken Selam Verme',
       arabicText: 'إِذَا انْتَهَى أَحَدُكُمْ إِلَى الْمَجْلِسِ فَلْيُسَلِّمْ ، فَإِذَا أَرَادَ أَنْ يَقُومَ فَلْيُسَلِّمْ ، فَلَيْسَتِ الْأُولَى بِأَحَقَّ مِنَ الْآخِرَةِ',
+      citation: 'Sünen-i Ebî Dâvûd, Edeb 150, Hadis No: 5208; Sünen-i Tirmizî, İsti’zân 15, Hadis No: 2706.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['tirmizi', 'tirmizî', 'ebu davud', 'ebû dâvûd', 'isti\'zan'],
       hadithNumbers: ['2706', '5208'],
@@ -51,6 +55,7 @@ class IslamicHadithCorpus {
       id: 'evdekilere_gelisini_bildirme_cabir',
       title: 'Eve Geldiğini Evdekilere Bildirmenin Önemi',
       arabicText: 'إِذَا أَطَالَ أَحَدُكُمُ الْغَيْبَةَ فَلَا يَطْرُقَنَّ أَهْلَهُ لَيْلًا',
+      citation: 'Sahîh-i Buhârî, Nikâh 120, Hadis No: 5244 (Umre 16, No: 1801); Sahîh-i Müslim, İmâre 183, Hadis No: 715.',
       narrators: ['cabir', 'câbir', 'ibn mesud', 'abdullah b. mes\'ud', 'ebu ubeyde'],
       sources: ['buhari', 'buhârî', 'müslim'],
       hadithNumbers: ['1801', '715', '5244'],
@@ -62,6 +67,7 @@ class IslamicHadithCorpus {
       id: 'rifk_yumusaklik_kapi',
       title: 'Kapıyı Yavaşça Açıp Kapatmanın Önemi / Rıfk',
       arabicText: 'إِنَّ الرِّفْقَ لَا يَكُونُ فِي شَيْءٍ إِلَّا زَانَهُ، وَلَا يُنْزَعُ مِنْ شَيْءٍ إِلَّا شَانَهُ',
+      citation: 'Sahîh-i Müslim, Kitâbü’l-Birr ve’s-Sıla ve’l-Âdâb, Bâb 23 (78), c. 4, s. 2004, Hadis No: 2594; Ebû Dâvûd, Edeb 10 (4808).',
       narrators: ['ayşe', 'âişe', 'hz. aişe'],
       sources: ['müslim', 'birr'],
       hadithNumbers: ['2594'],
@@ -73,6 +79,7 @@ class IslamicHadithCorpus {
       id: 'giyim_kusama_ozen_ben_hadisi',
       title: 'Giyim ve Kuşama Özen Gösterme / Ben Hadisi',
       arabicText: 'إِنَّكُمْ قَادِمُونَ عَلَىٰ إِخْوَانِكُمْ، فَأَحْسِنُوا لِبَاسَكُمْ، وَأَصْلِحُوا رِحَالَكُمْ، حَتَّىٰ تَكُونُوا كَأَنَّكُمْ شَامَةٌ فِي النَّاسِ',
+      citation: 'Sünen-i Ebî Dâvûd, Kitâbü’l-Libâs, Bâb 25, Hadis No: 4089; Ahmed b. Hanbel, Müsned, IV, 180; Hâkim, el-Müstedrek, IV, 183.',
       narrators: ['ebu\'d-derda', 'sehl b. hanzaliyye'],
       sources: ['ebu davud', 'ebû dâvûd', 'libas'],
       hadithNumbers: ['4089'],
@@ -84,6 +91,7 @@ class IslamicHadithCorpus {
       id: 'selami_yayiniz_efsus_selam',
       title: 'Selâmı Aranızda Yayınız',
       arabicText: 'أَفْشُوا السَّلَامَ ، وَأَطْعِمُوا الطَّعَامَ ، وَصِلُوا الْأَرْحَامَ ، وَصَلُّوا بِاللَّيْلِ وَالنَّاسُ نِيَامٌ ، تَدْخُلُوا الْجَنَّةَ بِسَلَامٍ',
+      citation: 'Sünen-i Tirmizî, Sıfatü’l-Kıyâme 42, Hadis No: 2485; İbn Mâce, Et’ime 1, Hadis No: 3251; Sahîh-i Müslim, Îmân 93, Hadis No: 54.',
       narrators: ['abdullah b. selam', 'ebu hureyre'],
       sources: ['tirmizi', 'tirmizî', 'müslim', 'ibn mace', 'kıyamet'],
       hadithNumbers: ['2485', '54', '3251'],
@@ -95,6 +103,7 @@ class IslamicHadithCorpus {
       id: 'istizan_uc_defadir',
       title: 'İzin İstemenin Üç Defa Olması',
       arabicText: 'الِاسْتِئْذَانُ ثَلَاثٌ ، فَإِنْ أُذِنَ لَكَ وَإِلَّا فَارْجِعْ',
+      citation: 'Sahîh-i Buhârî, İsti’zân 13, Hadis No: 6245; Sahîh-i Müslim, Âdâb 33–37, Hadis No: 2153.',
       narrators: ['ebu musa', 'ebû mûsâ', 'ömer b. hattab'],
       sources: ['buhari', 'buhârî', 'müslim', 'isti\'zan'],
       hadithNumbers: ['6245', '2153'],
@@ -106,6 +115,7 @@ class IslamicHadithCorpus {
       id: 'eve_giriste_zikir_seytan',
       title: 'Eve Girerken ve Yemekte Zikir',
       arabicText: 'إِذَا دَخَلَ الرَّجُلُ بَيْتَهُ فَذَكَرَ اللَّهَ عِنْدَ دُخُولِهِ وَعِنْدَ طَعَامِهِ ، قَالَ الشَّيْطَانُ : لَا مَبِيتَ لَكُمْ وَلَا عَشَاءَ',
+      citation: 'Sahîh-i Müslim, Eşribe 103, Hadis No: 2018; Ebû Dâvûd, Et’ime 15, Hadis No: 3765.',
       narrators: ['cabir', 'câbir'],
       sources: ['müslim', 'eşribe'],
       hadithNumbers: ['2018'],
@@ -117,6 +127,7 @@ class IslamicHadithCorpus {
       id: 'yeme_icme_sag_el_besmele',
       title: 'Yeme İçme Edebi ve Sağ Elle Yeme',
       arabicText: 'يَا غُلَامُ ، سَمِّ اللَّهَ ، وَكُلْ بِيَمِينِكَ ، وَكُلْ مِمَّا يَلِيكَ',
+      citation: 'Sahîh-i Buhârî, Et’ime 2, Hadis No: 5376; Sahîh-i Müslim, Eşribe 108, Hadis No: 2022.',
       narrators: ['ömer b. ebi seleme', 'ömer b. ebî seleme'],
       sources: ['buhari', 'buhârî', 'müslim', 'et\'ime'],
       hadithNumbers: ['5376', '2022'],
@@ -128,6 +139,7 @@ class IslamicHadithCorpus {
       id: 'selamlasma_dereceleri',
       title: 'Kim Kime Selam Verir',
       arabicText: 'يُسَلِّمُ الرَّاكِبُ عَلَى الْمَاشِي ، وَالْمَاشِي عَلَى الْقَاعِدِ ، وَالْقَلِيلُ عَلَى الْكَثِيرِ ، وَالصَّغِيرُ عَلَى الْكَبِيرِ',
+      citation: 'Sahîh-i Buhârî, İsti’zân 4–7, Hadis No: 6231; Sahîh-i Müslim, Selâm 1, Hadis No: 2160.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['buhari', 'buhârî', 'müslim', 'isti\'zan'],
       hadithNumbers: ['6231', '2160'],
@@ -139,6 +151,7 @@ class IslamicHadithCorpus {
       id: 'aksirma_tesmit_duasi',
       title: 'Aksırma Edebi ve Teşmît',
       arabicText: 'إِذَا عَطَسَ أَحَدُكُمْ فَلْيَقُلِ : الْحَمْدُ لِلَّهِ ، وَلْيَقُلْ لَهُ أَخُوهُ : يَرْحَمُكَ اللَّهُ ، فَإِذَا قَالَ لَهُ : يَرْحَمُكَ اللَّهُ ، فَلْيَقُلْ : يَهْدِيكُمُ اللَّهُ وَيُصْلِحُ بَالَكُمْ',
+      citation: 'Sahîh-i Buhârî, Edeb 126, Hadis No: 6224; Ebû Dâvûd, Edeb 98, Hadis No: 5033.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['buhari', 'buhârî', 'edeb'],
       hadithNumbers: ['6224'],
@@ -150,6 +163,7 @@ class IslamicHadithCorpus {
       id: 'esneme_edebi_seytan',
       title: 'Esneme Edebi',
       arabicText: 'التَّثَاؤُبُ مِنَ الشَّيْطَانِ ، فَإِذَا تَثَاءَبَ أَحَدُكُمْ فَلْيَرُدَّهُ مَا اسْتَطَاعَ',
+      citation: 'Sahîh-i Buhârî, Edeb 128, Hadis No: 6226; Sahîh-i Müslim, Zühd 56, Hadis No: 2994.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['buhari', 'müslim'],
       hadithNumbers: ['6226', '2994'],
@@ -161,6 +175,7 @@ class IslamicHadithCorpus {
       id: 'mecliste_yer_acma_edebi',
       title: 'Mecliste Yer Açma ve Kimseyi Yerinden Kaldırmama',
       arabicText: 'لَا يُقِيمَنَّ أَحَدُكُمْ رَجُلًا مِنْ مَجْلِسِهِ ثُمَّ يَجْلِسُ فِيهِ ، وَلَكِنْ تَوَسَّعُوا وَتَفَسَّحُوا',
+      citation: 'Sahîh-i Buhârî, İsti’zân 31, Hadis No: 6269; Sahîh-i Müslim, Selâm 27, Hadis No: 2177.',
       narrators: ['ibn ömer', 'abdullah b. ömer'],
       sources: ['buhari', 'buhârî', 'müslim', 'isti\'zan'],
       hadithNumbers: ['6269', '2177'],
@@ -172,6 +187,7 @@ class IslamicHadithCorpus {
       id: 'uc_kisi_fisildasma_edebi',
       title: 'Üç Kişi Varken İkisinin Fısıldaşması',
       arabicText: 'إِذَا كُنْتُمْ ثَلَاثَةً فَلَا يَتَنَاجَى اثْنَانِ دُونَ الْآخَرِ حَتَّى تَخْتَلِطُوا بِالنَّاسِ ، مِنْ أَجْلِ أَنْ يُحْزِنَهُ',
+      citation: 'Sahîh-i Buhârî, İsti’zân 47, Hadis No: 6290; Sahîh-i Müslim, Selâm 37, Hadis No: 2184.',
       narrators: ['ibn mesud', 'abdullah b. mes\'ud'],
       sources: ['buhari', 'buhârî', 'müslim', 'isti\'zan'],
       hadithNumbers: ['6290', '2184'],
@@ -183,6 +199,7 @@ class IslamicHadithCorpus {
       id: 'tebessum_ve_tatli_soz',
       title: 'Tebessüm ve Tatlı Söz Sadakadır',
       arabicText: 'تَبَسُّمُكَ فِي وَجْهِ أَخِيكَ لَكَ صَدَقَةٌ',
+      citation: 'Sünen-i Tirmizî, Birr 36, Hadis No: 1956; Sahîh-i Buhârî, Cihâd 128, Hadis No: 2989.',
       narrators: ['ebu zer', 'ebû zerr'],
       sources: ['tirmizi', 'tirmizî', 'birr'],
       hadithNumbers: ['1956'],
@@ -194,6 +211,7 @@ class IslamicHadithCorpus {
       id: 'hediyelesme_tehadew_tehabbu',
       title: 'Hediyeleşiniz ki Birbirinizi Sevesiniz',
       arabicText: 'تَهَادَوْا تَحَابُّوا',
+      citation: 'Buhârî, el-Edebü’l-Müfred, Hadis No: 594; Muvatta, Hüsnü’l-Huluk 16; Beyhakî, es-Sünenü’l-Kübrâ, VI, 169.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['edebul mufred', 'edebü\'l-müfred', 'beyhaki'],
       hadithNumbers: ['594'],
@@ -205,6 +223,7 @@ class IslamicHadithCorpus {
       id: 'yessiru_vela_tuassiru',
       title: 'Kolaylaştırınız, Zorlaştırmayınız',
       arabicText: 'يَسِّرُوا وَلَا تُعَسِّرُوا ، وَبَشِّرُوا وَلَا تُنَفِّرُوا',
+      citation: 'Sahîh-i Buhârî, İlim 11, Hadis No: 69; Sahîh-i Müslim, Cihâd 6, Hadis No: 1734.',
       narrators: ['enes', 'enes b. malik'],
       sources: ['buhari', 'buhârî', 'müslim', 'ilim'],
       hadithNumbers: ['69', '1734'],
@@ -216,6 +235,7 @@ class IslamicHadithCorpus {
       id: 'ameller_niyetlere_goredir',
       title: 'Ameller Niyetlere Göredir',
       arabicText: 'إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ ، وَإِنَّمَا لِكُلِّ امْرِئٍ مَا نَوَى',
+      citation: 'Sahîh-i Buhârî, Bed’ü’l-Vahy 1, Hadis No: 1; Sahîh-i Müslim, İmâre 155, Hadis No: 1907.',
       narrators: ['ömer', 'ömer b. hattab'],
       sources: ['buhari', 'buhârî', 'müslim', 'bed\'ul vahy'],
       hadithNumbers: ['1', '1907'],
@@ -227,6 +247,7 @@ class IslamicHadithCorpus {
       id: 'komsu_hakki_cebrail',
       title: 'Komşu Hakkı ve Cebrail\'in Tavsiyesi',
       arabicText: 'مَا زَالَ جِبْرِيلُ يُوصِينِي بِالْجَارِ حَتَّى ظَنَنْتُ أَنَّهُ سَيُوَرِّثُهُ',
+      citation: 'Sahîh-i Buhârî, Edeb 28, Hadis No: 6014; Sahîh-i Müslim, Birr 140, Hadis No: 2624.',
       narrators: ['ayşe', 'âişe', 'ibn ömer'],
       sources: ['buhari', 'buhârî', 'müslim', 'edeb'],
       hadithNumbers: ['6014', '2624'],
@@ -238,6 +259,7 @@ class IslamicHadithCorpus {
       id: 'guzel_ahlak_kadinlara_muamele',
       title: 'Ahlakı En Güzel Olan ve Kadınlara İyilik',
       arabicText: 'أَكْمَلُ الْمُؤْمِنِينَ إِيمَانًا أَحْسَنُهُمْ خُلُقًا ، وَخِيَارُكُمْ خِيَارُكُمْ لِنِسَائِهِمْ',
+      citation: 'Sünen-i Tirmizî, Radâ’ 11, Hadis No: 1162 (Birr 62, No: 2003); Ebû Dâvûd, Sünnet 15, Hadis No: 4682.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['tirmizi', 'tirmizî', 'rıda'],
       hadithNumbers: ['2003', '3895'],
@@ -249,6 +271,7 @@ class IslamicHadithCorpus {
       id: 'yoldan_eziyeti_kadirma_sadaka',
       title: 'Yoldan Eziyet Verici Şeyi Kaldırmak Sadakadır',
       arabicText: 'إِمَاطَةُ الْأَذَى عَنِ الطَّرِيقِ صَدَقَةٌ',
+      citation: 'Sahîh-i Buhârî, Cihâd 128, Hadis No: 2989; Sahîh-i Müslim, Îmân 58, Hadis No: 35 (Zekât 56, No: 1009).',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['müslim', 'iman'],
       hadithNumbers: ['1914'],
@@ -260,6 +283,7 @@ class IslamicHadithCorpus {
       id: 'dilin_muhafazasi_hayir_soyle_veya_sus',
       title: 'Ya Hayır Söyle Ya Sus',
       arabicText: 'مَنْ كَانَ يُؤْمِنُ بِاللَّهِ وَالْيَوْمِ الْآخِرِ فَلْيَقُلْ خَيْرًا أَوْ لِيَصْمُتْ',
+      citation: 'Sahîh-i Buhârî, Edeb 31, Hadis No: 6018; Sahîh-i Müslim, Îmân 74, Hadis No: 47.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['buhari', 'buhârî', 'müslim', 'edeb'],
       hadithNumbers: ['6018', '47'],
@@ -271,6 +295,7 @@ class IslamicHadithCorpus {
       id: 'muslumanin_musluman_uzerindeki_alti_hakki',
       title: 'Müslümanın Müslüman Üzerindeki Altı Hakkı',
       arabicText: 'حَقُّ الْمُسْلِمِ عَلَى الْمُسْلِمِ سِتٌّ : إِذَا لَقِيتَهُ فَسَلِّمْ عَلَيْهِ ، وَإِذَا دَعَاكَ فَأَجِبْهُ ، وَإِذَا اسْتَنْصَحَكَ فَانْصَحْ لَهُ ، وَإِذَا عَطَسَ فَحَمِدَ اللَّهَ فَشَمِّتْهُ ، وَإِذَا مَرِضَ فَعُدْهُ ، وَإِذَا مَاتَ فَاتَّبِعْهُ',
+      citation: 'Sahîh-i Müslim, Selâm 5, Hadis No: 2162; Sahîh-i Buhârî, Cenâiz 2, Hadis No: 1240.',
       narrators: ['ebu hureyre', 'ebû hüreyre'],
       sources: ['müslim', 'selam'],
       hadithNumbers: ['2162'],
@@ -282,47 +307,144 @@ class IslamicHadithCorpus {
       id: 'hayra_vesile_olan_yapan_gibidir',
       title: 'Hayra Vesile Olan Yapan Gibidir',
       arabicText: 'مَنْ دَلَّ عَلَى خَيْرٍ فَلَهُ مِثْلُ أَجْرِ فَاعِلِهِ',
+      citation: 'Sahîh-i Müslim, İmâre 133, Hadis No: 1893; Ebû Dâvûd, Edeb 115, Hadis No: 5129; Tirmizî, İlim 14, Hadis No: 2671.',
       narrators: ['ebu mesud', 'ebû mes\'ûd'],
       sources: ['müslim', 'imare'],
       hadithNumbers: ['1893'],
       keywords: ['hayra vesile olan', 'yapan gibidir', 'yapan kimse gibi ecir', 'yol gösteren'],
     ),
 
-    // 25. Nur Suresi 27. Ayet (İsti'zân)
+    // 25. İnsanları Doğru Yola (Hidâyete) Çağıran Kimse (El-Ezkâr Mukaddime [9] / Müslim 2674)
+    HadithCorpusEntry(
+      id: 'hidayete_cagiran_kimseye_sevap_muslim_2674',
+      title: 'İnsanları Doğru Yola (Hidâyete) Çağıranın Sevabı',
+      arabicText: 'مَنْ دَعَا إِلَى هُدًى كَانَ لَهُ مِنَ الْأَجْرِ مِثْلُ أُجُورِ مَنْ تَبِعَهُ لَا يَنْقُصُ ذَلِكَ مِنْ أُجُورِهِمْ شَيْئًا',
+      citation: 'Müslim, İlim 16, nr. 2674; Ebû Dâvûd, Sünnet 6, nr. 4609; Tirmizî, İlim 15, nr. 2674; İbn Mâce, Mukaddime 14, nr. 206. (El-Ezkâr: Bu hadisin daha uzun bir rivâyeti 925 numara ile gelecektir.)',
+      narrators: ['ebu hureyre', 'ebû hüreyre'],
+      sources: ['müslim', 'ilim', 'el-ezkar', 'el-ezkâr'],
+      hadithNumbers: ['2674', '925'],
+      keywords: [
+        'insanları doğru yola',
+        'doğru yola (hidâyete) çağıran',
+        'hidayete çağıran',
+        'kendisine uyanların sevabı kadar',
+        'sevaplarından bir şey azaltmaz',
+      ],
+    ),
+
+    // 26. Bakara 2/152 - Beni Anın ki Ben de Sizi Anayım (El-Ezkâr Mukaddime)
+    HadithCorpusEntry(
+      id: 'ayet_bakara_152_zikir',
+      title: 'Bakara Sûresi 152. Âyet-i Kerîme',
+      arabicText: 'فَاذْكُرُونِي أَذْكُرْكُمْ وَاشْكُرُوا لِي وَلَا تَكْفُرُونِ',
+      citation: 'Kur’ân-ı Kerîm, Bakara Sûresi, 2/152. Âyet-i Kerîme: "Öyleyse siz beni anın (zikredin) ki ben de sizi anayım. Bana şükredin, sakın bana nankörlük etmeyin." (Ayrıca dua emri için bkz. Mü’min Sûresi, 40/60).',
+      sources: ['bakara', 'bakara suresi'],
+      hadithNumbers: ['152'],
+      keywords: [
+        'siz beni anın ki ben de sizi anayım',
+        'beni anın ki ben de sizi',
+        'kendisini zikretmemizi',
+        'yüce zâtına duâ etmemizi istemekte',
+      ],
+    ),
+
+    // 27. Zâriyât 51/56 - Cinleri ve İnsanları Yalnız Kulluk İçin Yarattım (El-Ezkâr Mukaddime)
+    HadithCorpusEntry(
+      id: 'ayet_zariyat_56_kulluk',
+      title: 'Zâriyât Sûresi 56. Âyet-i Kerîme',
+      arabicText: 'وَمَا خَلَقْتُ الْجِنَّ وَالْإِنْسَ إِلَّا لِيَعْبُدُونِ',
+      citation: 'Kur’ân-ı Kerîm, Zâriyât Sûresi, 51/56. Âyet-i Kerîme: "Ben cinleri ve insanları, ancak bana kulluk (ibadet ve mârifet) etsinler diye yarattım."',
+      sources: ['zariyat', 'zâriyât'],
+      hadithNumbers: ['56'],
+      keywords: [
+        'cinleri ve insanları yalnız bana kulluk etsinler diye',
+        'yalnız bana kulluk etsinler',
+      ],
+    ),
+
+    // 28. Ra'd 13/28 - Kalpler Ancak Allah'ı Zikretmekle Huzur Bulur (El-Ezkâr Önsöz)
+    HadithCorpusEntry(
+      id: 'ayet_rad_28_kalpler_zikirle_huzur',
+      title: 'Ra’d Sûresi 28. Âyet-i Kerîme',
+      arabicText: 'أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ',
+      citation: 'Kur’ân-ı Kerîm, Ra’d Sûresi, 13/28. Âyet-i Kerîme: "Bilesiniz ki, kalpler ancak Allah’ı anmakla (zikretmekle) huzura kavuşur."',
+      sources: ['rad', 'ra\'d'],
+      hadithNumbers: ['28'],
+      keywords: [
+        'kalplerimizin zikirle huzur bulacağını',
+        'kalpler ancak allah\'ı zikretmekle',
+        'zikirle huzur bulacağını haber vermektedir',
+      ],
+    ),
+
+    // 29. En Değerli Amel Allah'ı Zikretmektir (El-Ezkâr Önsöz / Tirmizî 3377)
+    HadithCorpusEntry(
+      id: 'en_degerli_amel_zikir_tirmizi_3377',
+      title: 'Allah Katında En Değerli Amel Zikirdir',
+      arabicText: 'أَلَا أُنَبِّئُكُمْ بِخَيْرِ أَعْمَالِكُمْ وَأَزْكَاهَا عِنْدَ مَلِيكِكُمْ وَأَرْفَعِهَا فِي دَرَجَاتِكُمْ ... ذِكْرُ اللَّهِ تَعَالَى',
+      citation: 'Sünen-i Tirmizî, Deavât 6, Hadis No: 3377; İbn Mâce, Edeb 53, Hadis No: 3790; Muvatta, Kur’ân 24; Ahmed b. Hanbel, Müsned, V, 195.',
+      narrators: ['ebu\'d-derda', 'ebü’d-derdâ'],
+      sources: ['tirmizi', 'deavat'],
+      hadithNumbers: ['3377', '3790'],
+      keywords: [
+        'en değerli amelin ve en üstün ibadetin',
+        'allah katında en değerli amelin',
+        'allah teâlâ\'yı zikretmek olduğunu bildirmektedir',
+      ],
+    ),
+
+    // 30. Münker Hadis Tanımı (El-Ezkâr Mukaddime)
+    HadithCorpusEntry(
+      id: 'munker_hadis_usulu_tanimi',
+      title: 'Hadis Usûlü: Münker Hadis',
+      arabicText: 'الْمُنْكَرُ : مَا رَوَاهُ الضَّعِيفُ مُخَالِفًا لِمَا رَوَاهُ الثِّقَةُ',
+      citation: 'Hadis Usûlü İzahı (El-Ezkâr): Münker, zayıf râvinin güvenilir (sika) râviye aykırı olarak rivâyet ettiği hadis demektir.',
+      sources: ['el-ezkar', 'hadis usulü'],
+      keywords: [
+        'sahîh, hasen, zayıf veya münker',
+        'zayıf veya münker olduğunu belirteceğim',
+      ],
+    ),
+
+    // 31. Nur Suresi 27. Ayet (İsti'zân)
     HadithCorpusEntry(
       id: 'ayet_nur_27_istizan',
       title: 'Nur Sûresi 27. Âyet-i Kerîme',
       arabicText: 'يَا أَيُّهَا الَّذِينَ آمَنُوا لَا تَدْخُلُوا بُيُوتًا غَيْرَ بُيُوتِكُمْ حَتَّىٰ تَسْتَأْنِسُوا وَتُسَلِّمُوا عَلَىٰ أَهْلِهَا ۚ ذَٰلِكُمْ خَيْرٌ لَّكُمْ لَعَلَّكُمْ تَذَكَّرُونَ',
+      citation: 'Kur’ân-ı Kerîm, Nûr Sûresi, 24/27. Âyet-i Kerîme: "Ey iman edenler! Kendi evlerinizden başka evlere, geldiğinizi fark ettirip (izin alıp) ev halkına selâm vermedikçe girmeyin."',
       sources: ['nur suresi', 'nûr sûresi'],
       hadithNumbers: ['27'],
       keywords: ['kendi evlerinizden başka evlere', 'izin alıp halkına selam vermedikçe', 'nur suresi', '27. ayet', 'isti\'zan ayeti'],
     ),
 
-    // 26. Nur Suresi 28. Ayet (Geri Dön Denildiğinde Dönme)
+    // 32. Nur Suresi 28. Ayet (Geri Dön Denildiğinde Dönme)
     HadithCorpusEntry(
       id: 'ayet_nur_28_geri_don',
       title: 'Nur Sûresi 28. Âyet-i Kerîme',
       arabicText: 'فَإِن لَّمْ تَجِدُوا فِيهَا أَحَدًا فَلَا تَدْخُلُوهَا حَتَّىٰ يُؤْذَنَ لَكُمْ ۖ وَإِن قِيلَ لَكُمُ ارْجِعُوا فَارْجِعُوا ۖ هُوَ أَزْكَىٰ لَكُمْ',
+      citation: 'Kur’ân-ı Kerîm, Nûr Sûresi, 24/28. Âyet-i Kerîme: "Orada kimseyi bulamazsanız, size izin verilinceye kadar oraya girmeyin. Eğer size \'Geri dönün!\' denilirse hemen dönün."',
       sources: ['nur suresi', 'nûr sûresi'],
       hadithNumbers: ['28'],
       keywords: ['eğer orada kimseyi bulamazsanız', 'size geri dönün denirse', 'hemen dönün', 'bu sizin için daha temizdir'],
     ),
 
-    // 27. Hucurât Suresi 12. Ayet (Gıybet ve Tecessüs Yasağı)
+    // 33. Hucurât Suresi 12. Ayet (Gıybet ve Tecessüs Yasağı)
     HadithCorpusEntry(
       id: 'ayet_hucurat_12_giybet_tecessus',
       title: 'Hucurât Sûresi 12. Âyet-i Kerîme',
       arabicText: 'يَا أَيُّهَا الَّذِينَ آمَنُوا اجْتَنِبُوا كَثِيرًا مِّنَ الظَّنِّ إِنَّ بَعْضَ الظَّنِّ إِثْمٌ ۖ وَلَا تَجَسَّسُوا وَلَا يَغْتَب بَّعْضُكُم بَعْضًا',
+      citation: 'Kur’ân-ı Kerîm, Hucurât Sûresi, 49/12. Âyet-i Kerîme: "Ey iman edenler! Zannın çoğundan sakının; çünkü zannın bir kısmı günahtır. Birbirinizin gizli hâllerini araştırmayın ve biriniz diğerini arkasından çekiştirmesin (gıybet etmesin)."',
       sources: ['hucurat suresi', 'hucurât sûresi'],
       hadithNumbers: ['12'],
       keywords: ['zannın çoğundan sakının', 'birbirinizin kusurunu araştırmayın', 'gıybetini yapmayın', 'ölü kardeşinizin eti'],
     ),
 
-    // 28. Mukaddime Hamdele ve Salvele
+    // 34. Mukaddime Hamdele ve Salvele
     HadithCorpusEntry(
       id: 'mukaddime_hamdele_salvele',
       title: 'Mukaddime Dua ve Salavat',
       arabicText: 'الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ ، وَالصَّلَاةُ وَالسَّلَامُ عَلَى سَيِّدِنَا مُحَمَّدٍ وَعَلَى آلِهِ وَصَحْبِهِ أَجْمَعِينَ',
+      citation: 'Klasik İslâm telif geleneğinde eserlerin mukaddimesinde yer alan Hamdele (Allah’a hamd) ve Salvele (Hz. Peygamber, âli ve ashâbına salât ü selâm) duası.',
       keywords: ['mukaddime', 'alemlerin rabbi', 'hamdü senalar olsun', 'salat ve selam olsun', 'salât ve selâm olsun'],
     ),
   ];
@@ -332,10 +454,9 @@ class IslamicHadithCorpus {
 class IslamicTextResolver {
   const IslamicTextResolver();
 
-  /// Resolves authentic Arabic Unicode text from the context of an extracted PDF page
-  static String? resolve(String pageBodyText) {
-    if (pageBodyText.trim().isEmpty) return null;
-    final lower = pageBodyText.toLowerCase();
+  static HadithCorpusEntry? matchEntry(String text) {
+    if (text.trim().isEmpty) return null;
+    final lower = text.toLowerCase();
 
     HadithCorpusEntry? bestMatch;
     int highestScore = 0;
@@ -343,7 +464,7 @@ class IslamicTextResolver {
     for (final entry in IslamicHadithCorpus.entries) {
       int score = 0;
 
-      // 1. Hadith number match (+40 points)
+      // 1. Hadith number match (+45 points)
       for (final num in entry.hadithNumbers) {
         if (RegExp('\\b(?:hadis\\s*(?:no)?\\s*[:\\-]?\\s*|ayet\\s*[:\\-]?\\s*|s\\.\\s*\\d+\\s*,\\s*|no\\s*[:\\-]?\\s*)$num\\b', caseSensitive: false).hasMatch(lower) ||
             lower.contains('hadis no:$num') ||
@@ -355,7 +476,7 @@ class IslamicTextResolver {
         }
       }
 
-      // 2. Keyword matches (+15 points each)
+      // 2. Keyword matches (+20 points each)
       for (final kw in entry.keywords) {
         if (lower.contains(kw.toLowerCase())) {
           score += 20;
@@ -378,13 +499,32 @@ class IslamicTextResolver {
         }
       }
 
-      // Threshold: at least 20 points (e.g. key translation phrase matched)
       if (score >= 20 && score > highestScore) {
         highestScore = score;
         bestMatch = entry;
       }
     }
 
-    return bestMatch?.arabicText;
+    return bestMatch;
+  }
+
+  /// Resolves authentic Arabic Unicode text from the context of an extracted PDF page
+  static String? resolve(String pageBodyText) {
+    return matchEntry(pageBodyText)?.arabicText;
+  }
+
+  /// Resolves authentic Hadith / Quranic tahric citation for a paragraph or page context
+  static String? resolveCitation(String paragraphText, {String? pageContext}) {
+    final direct = matchEntry(paragraphText);
+    if (direct?.citation != null) {
+      return direct!.citation;
+    }
+    if (pageContext != null && pageContext.isNotEmpty) {
+      final contextual = matchEntry(pageContext);
+      if (contextual?.citation != null) {
+        return contextual!.citation;
+      }
+    }
+    return null;
   }
 }

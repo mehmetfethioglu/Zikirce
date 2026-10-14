@@ -35,13 +35,27 @@ class LayoutColumnDetector {
   }) {
     if (rawLines.isEmpty) return rawLines;
 
-    // Sayfa üst ve alt %5.5 kırpma sınırları (Header/Footer koruma koordinatları)
-    final topMargin = pageHeight * 0.055;
-    final bottomMargin = pageHeight * 0.945;
+    // Sayfa üst ve alt marjinlerde yalnızca tekil sayfa numaralarını ayıkla;
+    // sayfa altındaki dipnot satırlarını (y <= 0.985) kesinlikle koru.
+    final topMargin = pageHeight * 0.04;
+    final bottomMargin = pageHeight * 0.965;
+    final isolatedPageNumRegex = RegExp(r'^\s*[\-–—_~•\[\(]*\s*\d{1,4}\s*[\-–—_~•\]\)]*\s*$');
+    final footnoteStartRegex = RegExp(
+      r'^\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|†|\d{1,4}[\.\):—\-])\s*\S*',
+      unicode: true,
+    );
 
     final contentLines = rawLines.where((line) {
       final y = line.bounds.top;
-      return y >= topMargin && y <= bottomMargin;
+      final trimmed = line.text.trim();
+      if (trimmed.isEmpty) return false;
+      if (footnoteStartRegex.hasMatch(trimmed)) {
+        return true;
+      }
+      if ((y < topMargin || y > bottomMargin) && isolatedPageNumRegex.hasMatch(trimmed)) {
+        return false;
+      }
+      return y >= pageHeight * 0.02 && y <= pageHeight * 0.985;
     }).toList();
 
     if (contentLines.length < 4) {

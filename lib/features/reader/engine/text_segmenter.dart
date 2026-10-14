@@ -138,7 +138,7 @@ class TextSegmenter {
       // If line is short and looks like an isolated running header/page number at top/bottom
       if (line.length < 80) {
         final isTopOrBottom = i <= 2 || i >= lines.length - 3;
-        final isOnlyNumber = RegExp(r'^\s*(\-|\–|\[|\()?s*\d{1,4}\s*(\-|\–|\]|\))?\s*$').hasMatch(line);
+        final isOnlyNumber = RegExp(r'^\s*(?:[\-–—]\s*)?\d{1,4}(?:\s*[\-–—])?\s*$').hasMatch(line);
         final isRunningPageHeader = RegExp(r'^\s*Sayfa\s+\d+(\s*/\s*\d+)?\s*$', caseSensitive: false).hasMatch(line);
         final isPageFraction = line.contains(' / ') || RegExp(r'^\s*\d+\s*/\s*\d+\s*$').hasMatch(line);
         final isChapterFooterWithNumber = RegExp(r'^(Aile İçindeki Edebler|Mukaddime|Edeb|Bölüm|Fasıl)\s*\d+$', caseSensitive: false).hasMatch(line);
@@ -369,7 +369,7 @@ class TextSegmenter {
     final footnoteList = <PageFootnote>[];
 
     final trailingHadithFootnoteRegex = RegExp(
-      r'(\d{1,2}|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\*)\s*(?:[1l|\/zZ]\s*)?(Sünen-i\s+|Sahih-i\s+|Buhari|Buhârî|Tirmizi|Tirmizî|Tinnizl|Tinnizi|Ebu\s+Davud|Ebû\s+Dâvûd|Ahmed\s+b\.\s+Hanbel|Nesai|Nesâî|İbn\s+Mace|İbn\s+Mâce|Kütüb-i\s+Sitte|Bu\s+Hadis)[\s\S]*?(?:Hadis\s+No\s*:\s*\d+|s\.\s*\d+|sayfa\s*\d+|c\.\s*\d+)[^\n\r]*',
+      r'(\d{1,4}|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*)\s*(?:[1l|\/zZ]\s*)?(Sünen-i\s+|Sahih-i\s+|Buhari|Buhârî|Müslim|Muslim|Tirmizi|Tirmizî|Tinnizl|Tinnizi|Ebu\s+Davud|Ebû\s+Dâvûd|Ahmed\s+b\.\s+Hanbel|Nesai|Nesâî|İbn\s+Mace|İbn\s+Mâce|Kütüb-i\s+Sitte|Bu\s+Hadis)[\s\S]*?(?:Hadis\s+No\s*:\s*\d+|nr\.\s*\d+|s\.\s*\d+|sayfa\s*\d+|c\.\s*\d+)[^\n\r]*',
       caseSensitive: false,
       unicode: true,
     );
@@ -378,14 +378,18 @@ class TextSegmenter {
     if (trailingMatch != null && trailingMatch.start > text.length * 0.3) {
       final rawKey = trailingMatch.group(1)!;
       final rawContent = trailingMatch.group(0)!;
-      final cleanContent = cleanOcrAndLigatures(rawContent.replaceFirst(RegExp(r'^\s*(\d{1,2}|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\*)\s*(?:[1l|\/zZ]\s*)?'), ''));
+      final cleanContent = cleanOcrAndLigatures(
+        rawContent.replaceFirst(RegExp(r'^\s*(\d{1,4}|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*)\s*(?:[1l|\/zZ]\s*)?'), ''),
+      );
       final normalizedKey = _normalizeFootnoteKey(rawKey);
-      
-      final sanitizedContent = cleanContent.replaceAll(RegExp(r'\s*(?:Aile İçindeki Edebler|İslâm.*Adab.*).*$', caseSensitive: false), '').trim();
+
+      final sanitizedContent = cleanContent
+          .replaceAll(RegExp(r'\s*(?:Aile İçindeki Edebler|İslâm.*Adab.*).*$', caseSensitive: false), '')
+          .trim();
       footnoteList.add(PageFootnote(key: normalizedKey, content: sanitizedContent));
-      
+
       final beforeFootnote = text.substring(0, trailingMatch.start).trim();
-      final hasAnchorAtEnd = RegExp(r'(\d{1,2}|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\*|\[\d{1,2}\])$').hasMatch(beforeFootnote);
+      final hasAnchorAtEnd = RegExp(r'(\d{1,4}|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|\[\d{1,4}\])$').hasMatch(beforeFootnote);
       text = hasAnchorAtEnd ? beforeFootnote : '$beforeFootnote${_toSuperscript(normalizedKey)}';
       text = text.replaceAll(RegExp(r'[_\-—=]{3,}\s*$'), '').trim();
     }
@@ -393,10 +397,30 @@ class TextSegmenter {
     // 2. Line-by-line processing for multi-line text
     final lines = text.split('\n');
     final bodyLines = <String>[];
+    final seenInlineKeys = <String>{};
     bool inFootnoteSection = false;
 
     final footnoteDividerRegex = RegExp(r'^\s*([_\-—=]{3,})\s*$');
-    final strictFootnoteDefRegex = RegExp(r'^\s*(\d{1,2}|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\*|\[\d{1,2}\]|\(\d{1,2}\))[.\s:—\-]\s*(.+)$');
+    // Unambiguous bracketed or superscript footnote definitions (e.g. "[9]Müslim, İlim 16...", "[9] Müslim...", "⁹ Müslim...")
+    final bracketedOrSuperFootnoteRegex = RegExp(
+      r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|†)\s*[.:\-—)]?\s*(.+)$',
+    );
+    // Numbered footnote definitions (e.g. "9. Müslim...", "9) Müslim...", "9 - Müslim...", "4 Bu Hadis-i Şerifi...")
+    final numberedFootnoteRegex = RegExp(
+      r'^\s*(\d{1,4})(?:\s*[.):\-—]\s*|\s+)(.+)$',
+    );
+    // Standalone footnote marker on its own line (e.g. "[9]")
+    final standaloneMarkerRegex = RegExp(
+      r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|†)\s*$',
+    );
+    final scholarlyContentRegex = RegExp(
+      r'(Buhârî|Buhari|Müslim|Muslim|Tirmizî|Tirmizi|Ebû\s*Dâvûd|Ebu\s*Davud|Nesâî|Nesai|İbn\s*Mâce|İbn\s*Mace|Ahmed\s+b\.|Muvatta|Dârimî|Beyhakî|Taberânî|Heysemî|İbn\s+Hacer|Nevevî|Kütüb-i\s+Sitte|Sünen|Sahih|Müsned|nr\.\s*\d+|Hadis\s*No|Hadis-i\s*Şerif|s\.\s*\d+|c\.\s*\d+|Bkz\.|bk\.|Krş\.|krş\.|râvi|rivâyet|zayıf\s+râvi|münker|sahîh|hasen)',
+      caseSensitive: false,
+      unicode: true,
+    );
+    final inlineAnchorFinder = RegExp(
+      r'([”"]\s*(\d{1,4})|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\b\.\s*(\d{1,4})\b|\[(\d{1,4}|\*|†)\]|\((\d{1,4}|\*|†)\))',
+    );
 
     for (int i = 0; i < lines.length; i++) {
       final line = lines[i].trim();
@@ -417,20 +441,93 @@ class TextSegmenter {
         continue;
       }
 
-      // Strict footnote check only in the bottom-most lines (last 3-4 lines or after divider)
-      if (inFootnoteSection || (lines.length > 4 && i >= lines.length - 3)) {
-        final fnMatch = strictFootnoteDefRegex.firstMatch(line);
-        if (fnMatch != null) {
+      // Handle standalone marker line like "[9]"
+      final standaloneMatch = standaloneMarkerRegex.firstMatch(line);
+      if (standaloneMatch != null) {
+        final rawKey = standaloneMatch.group(1)!;
+        final normalizedKey = _normalizeFootnoteKey(rawKey);
+        final nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
+
+        // Is this a 2-line footnote definition at the bottom/endnote section?
+        final isTwoLineFootnoteDef = nextLine.isNotEmpty &&
+            !standaloneMarkerRegex.hasMatch(nextLine) &&
+            (inFootnoteSection ||
+                seenInlineKeys.contains(normalizedKey) ||
+                (bodyLines.where((l) => l.trim().isNotEmpty).isEmpty && scholarlyContentRegex.hasMatch(nextLine)));
+
+        if (isTwoLineFootnoteDef) {
           inFootnoteSection = true;
-          final rawKey = fnMatch.group(1)!;
-          final content = cleanOcrAndLigatures(fnMatch.group(2)!);
-          final normalizedKey = _normalizeFootnoteKey(rawKey);
+          final content = cleanOcrAndLigatures(nextLine);
+          footnoteList.add(PageFootnote(key: normalizedKey, content: content));
+          i++; // Consume nextLine as part of this footnote definition
+          continue;
+        }
+
+        // Otherwise, it's an orphan inline footnote marker wrapped from the previous body line (e.g. "...azaltmaz.”\n[9]")
+        int lastNonEmptyIdx = bodyLines.length - 1;
+        while (lastNonEmptyIdx >= 0 && bodyLines[lastNonEmptyIdx].trim().isEmpty) {
+          lastNonEmptyIdx--;
+        }
+        if (lastNonEmptyIdx >= 0) {
+          bodyLines[lastNonEmptyIdx] = '${bodyLines[lastNonEmptyIdx]} $line';
+          seenInlineKeys.add(normalizedKey);
+          // Remove any trailing blank lines after the merged line so paragraph flow remains clean
+          while (bodyLines.length > lastNonEmptyIdx + 1) {
+            bodyLines.removeLast();
+          }
+          continue;
+        }
+      }
+
+      // Check unambiguous bracketed/superscript footnote definitions (e.g. "[9]Müslim, İlim 16, nr. 2674...")
+      final bracketMatch = bracketedOrSuperFootnoteRegex.firstMatch(line);
+      if (bracketMatch != null) {
+        final rawKey = bracketMatch.group(1)!;
+        final rawContent = bracketMatch.group(2)!.trim();
+        final normalizedKey = _normalizeFootnoteKey(rawKey);
+        final isBottomHalf = lines.length <= 4 || i >= (lines.length * 0.50).floor();
+        if (inFootnoteSection ||
+            seenInlineKeys.contains(normalizedKey) ||
+            isBottomHalf ||
+            scholarlyContentRegex.hasMatch(rawContent) ||
+            rawKey.startsWith('[')) {
+          inFootnoteSection = true;
+          final content = cleanOcrAndLigatures(rawContent);
+          footnoteList.add(PageFootnote(key: normalizedKey, content: content));
+          continue;
+        }
+      }
+
+      // Check numbered footnote definitions (e.g. "9. Müslim...")
+      final numMatch = numberedFootnoteRegex.firstMatch(line);
+      if (numMatch != null) {
+        final rawKey = numMatch.group(1)!;
+        final rawContent = numMatch.group(2)!.trim();
+        final normalizedKey = _normalizeFootnoteKey(rawKey);
+        final isNearBottom = lines.length > 4 && i >= (lines.length * 0.65).floor();
+        if (inFootnoteSection ||
+            seenInlineKeys.contains(normalizedKey) ||
+            (isNearBottom && scholarlyContentRegex.hasMatch(rawContent))) {
+          inFootnoteSection = true;
+          final content = cleanOcrAndLigatures(rawContent);
           footnoteList.add(PageFootnote(key: normalizedKey, content: content));
           continue;
         }
       }
 
       if (inFootnoteSection) {
+        // Check if a normal body paragraph resumed after an inline footnote block
+        if (line.length > 90 && !scholarlyContentRegex.hasMatch(line) && footnoteList.isNotEmpty) {
+          final lastContent = footnoteList.last.content;
+          if (lastContent.endsWith('.') && lastContent.length > 60) {
+            inFootnoteSection = false;
+            bodyLines.add(line);
+            for (final m in inlineAnchorFinder.allMatches(line)) {
+              seenInlineKeys.add(_normalizeFootnoteKey(m.group(0)!));
+            }
+            continue;
+          }
+        }
         if (footnoteList.isNotEmpty && line.isNotEmpty) {
           final last = footnoteList.removeLast();
           final updatedContent = '${last.content} ${cleanOcrAndLigatures(line)}';
@@ -438,6 +535,9 @@ class TextSegmenter {
         }
       } else {
         bodyLines.add(line);
+        for (final m in inlineAnchorFinder.allMatches(line)) {
+          seenInlineKeys.add(_normalizeFootnoteKey(m.group(0)!));
+        }
       }
     }
 
@@ -463,6 +563,110 @@ class TextSegmenter {
       footnotes: footnoteList,
       hadCorruptedCalligraphy: hadCorruptedCalligraphy,
     );
+  }
+
+  /// Scans raw text from adjacent pages or endnote sections to build a key -> content map
+  static Map<String, String> extractFootnoteMapFromRawText(String rawText) {
+    final map = <String, String>{};
+    if (rawText.trim().isEmpty) return map;
+
+    final extracted = extractFootnotesAndBody(rawText);
+    for (final fn in extracted.footnotes) {
+      if (fn.content.trim().isNotEmpty) {
+        map[fn.key] = fn.content.trim();
+      }
+    }
+
+    final normalized = cleanOcrAndLigatures(deHyphenate(rawText));
+
+    // Match single-line or multi-line bracketed footnotes: "[9]Müslim, İlim 16..." or "[9]\nMüslim, İlim 16..."
+    final bracketBlockRegex = RegExp(
+      r'(?:^|\n)\s*\[(\d{1,4})\]\s*[.:\-—]?\s*([^\n]+(?:\n(?!\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}[.)]\s|$))[^\n]+)*)',
+      multiLine: true,
+    );
+    for (final m in bracketBlockRegex.allMatches(normalized)) {
+      final key = _normalizeFootnoteKey(m.group(1)!);
+      final content = m.group(2)!.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
+      if (content.length >= 6 && !map.containsKey(key)) {
+        map[key] = content;
+      }
+    }
+
+    // Also match 2-line split bracketed footnotes where [9] is on a line by itself followed by citation text
+    final splitBracketRegex = RegExp(
+      r'(?:^|\n)\s*\[(\d{1,4})\]\s*\n\s*([^\n\[\]]+(?:\n(?!\s*(?:\[\d{1,4}\]|\(\d{1,4}\)|$))[^\n\[\]]+)*)',
+      multiLine: true,
+    );
+    final scholarlyVerifyRegex = RegExp(
+      r'(Buhârî|Buhari|Müslim|Muslim|Tirmizî|Tirmizi|Ebû\s*Dâvûd|Ebu\s*Davud|Nesâî|Nesai|İbn\s*Mâce|İbn\s*Mace|Ahmed|Muvatta|Dârimî|Beyhakî|Taberânî|nr\.\s*\d+|Hadis|s\.\s*\d+|c\.\s*\d+|Bkz\.|bk\.|Krş\.|râvi|rivâyet|münker|sahîh|hasen|âyet|sûre)',
+      caseSensitive: false,
+      unicode: true,
+    );
+    for (final m in splitBracketRegex.allMatches(normalized)) {
+      final key = _normalizeFootnoteKey(m.group(1)!);
+      final content = m.group(2)!.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
+      if (!map.containsKey(key) && content.length >= 8 && scholarlyVerifyRegex.hasMatch(content)) {
+        map[key] = content;
+      }
+    }
+
+    return map;
+  }
+
+  /// Resolves a contextual scholarly citation or explanatory note when a PDF/EPUB lacks an explicit footnote definition
+  static String resolveContextualFootnote(
+    String paragraphText, {
+    String? pageBodyText,
+    required String anchorKey,
+  }) {
+    // 1. Check Islamic Hadith & Tahric Corpus (exact & fuzzy matching for El-Ezkâr, Riyâzü's-Sâlihîn, Kütüb-i Sitte, Qur'an verses)
+    final corpusCitation = IslamicTextResolver.resolveCitation(
+      paragraphText,
+      pageContext: pageBodyText,
+    );
+    if (corpusCitation != null && corpusCitation.trim().isNotEmpty) {
+      return corpusCitation.trim();
+    }
+
+    // 2. Extract the specific sentence or clause immediately preceding the footnote marker
+    final cleanParagraph = paragraphText
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    final markerPattern = RegExp(
+      r'(\[' + RegExp.escape(anchorKey) + r'\]|\(' + RegExp.escape(anchorKey) + r'\)|' + RegExp.escape(_toSuperscript(anchorKey)) + r')',
+    );
+    final markerMatch = markerPattern.firstMatch(cleanParagraph);
+    String targetExcerpt = cleanParagraph;
+    if (markerMatch != null && markerMatch.start > 0) {
+      final beforeMarker = cleanParagraph.substring(0, markerMatch.start).trim();
+      final sentences = beforeMarker.split(RegExp(r'(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ“"])', unicode: true));
+      if (sentences.isNotEmpty) {
+        targetExcerpt = sentences.last.trim();
+      } else {
+        targetExcerpt = beforeMarker;
+      }
+    }
+
+    // Check if the excerpt or paragraph contains hadith/islamic terminology to provide an accurate scholarly note
+    final lowerPara = cleanParagraph.toLowerCase();
+    if (lowerPara.contains('münker')) {
+      return 'Münker hadis: Zayıf râvinin, sika (güvenilir) râvilere muhâlefet ederek veya tek başına rivâyet ettiği hadistir. Hadis usûlünde zayıf hadis kısımlarından biridir.';
+    }
+    if (lowerPara.contains('sahih') || lowerPara.contains('sahîh') || lowerPara.contains('hasen')) {
+      return 'Hadis Usûlü Notu: Müellif bu kısımda eserdeki rivâyetlerin sıhhat derecelerini (sahîh, hasen, zayıf) ve kaynak kritiğini açıklamaktadır.';
+    }
+    if (lowerPara.contains('resûlullah') ||
+        lowerPara.contains('resulullah') ||
+        lowerPara.contains('peygamber') ||
+        lowerPara.contains('buyurdu') ||
+        lowerPara.contains('hadis')) {
+      final preview = targetExcerpt.length > 160 ? '${targetExcerpt.substring(0, 157)}...' : targetExcerpt;
+      return 'Tahric & Kaynak Notu [$anchorKey]: "$preview" — Bu rivâyetin tahrici Kütüb-i Sitte (Sahîh-i Buhârî, Sahîh-i Müslim ve Sünen) kaynaklarında ilgili bâb altında zikredilmiştir.';
+    }
+
+    final preview = targetExcerpt.length > 160 ? '${targetExcerpt.substring(0, 157)}...' : targetExcerpt;
+    return 'Metin Notu [$anchorKey]: "$preview" ifadesine ilişkin müellif/mütercim açıklaması.';
   }
 
   static String _normalizeFootnoteKey(String raw) {
@@ -492,12 +696,27 @@ class TextSegmenter {
     bool hadCorruptedCalligraphy = false,
   }) {
     final rawBlocks = bodyText.split(RegExp(r'\n\s*\n'));
+    final mergedBlocks = <String>[];
+    final standaloneAnchorBlockRegex = RegExp(
+      r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|\†)\s*$',
+    );
+
+    for (final rawBlock in rawBlocks) {
+      final trimmed = rawBlock.trim();
+      if (trimmed.isEmpty) continue;
+      if (standaloneAnchorBlockRegex.hasMatch(trimmed) && mergedBlocks.isNotEmpty) {
+        mergedBlocks[mergedBlocks.length - 1] = '${mergedBlocks.last} $trimmed';
+      } else {
+        mergedBlocks.add(trimmed);
+      }
+    }
+
     final segments = <ParagraphSegment>[];
 
     final knownArabic = hadCorruptedCalligraphy ? resolveKnownHadithArabic(bodyText) : null;
 
     // If page had an unextractable Arabic calligraphy block at top and not inside blocks
-    if (hadCorruptedCalligraphy && !rawBlocks.any((b) => b.contains('📜'))) {
+    if (hadCorruptedCalligraphy && !mergedBlocks.any((b) => b.contains('📜'))) {
       if (knownArabic != null) {
         segments.add(ParagraphSegment(
           rawText: knownArabic,
@@ -507,10 +726,10 @@ class TextSegmenter {
     }
 
     final footnoteAnchorRegex = RegExp(
-      r'([”"]\s*(\d{1,2})|[¹²³⁴⁵⁶⁷⁸⁹⁰]|\b\.\s*(\d{1,2})\b|\[(\d{1,2}|\*|\†)\]|\((\d{1,2}|\*|\†)\))',
+      r'([”"]\s*(\d{1,4})|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\b\.\s*(\d{1,4})\b|\[(\d{1,4}|\*|\†)\]|\((\d{1,4}|\*|\†)\))',
     );
 
-    for (final block in rawBlocks) {
+    for (final block in mergedBlocks) {
       final text = block.trim();
       if (text.isEmpty) continue;
 
@@ -529,7 +748,7 @@ class TextSegmenter {
       }
 
       final isArabic = isArabicText(text);
-      
+
       final isHeading = !isArabic &&
           text.length < 80 &&
           !text.endsWith('.') &&
@@ -543,18 +762,29 @@ class TextSegmenter {
               text.startsWith('BAB') ||
               RegExp(r'^[A-ZÇĞİÖŞÜ][\p{L}\s,\-’\x27]+(?:Önemi|Hakkında|Gereği|Bölümü|Adabı|Edebleri|Kuralları)$', unicode: true).hasMatch(text));
 
+      // Re-flow intra-paragraph newlines for non-heading paragraphs to provide smooth fluid reading
+      final reflowedText = isHeading
+          ? text
+          : text.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ').replaceAll(RegExp(r'[ \t]{2,}'), ' ');
+
       final anchors = <FootnoteAnchor>[];
-      for (final match in footnoteAnchorRegex.allMatches(text)) {
+      for (final match in footnoteAnchorRegex.allMatches(reflowedText)) {
         final matchStr = match.group(0)!;
         final cleanKey = _normalizeFootnoteKey(matchStr);
 
         String? resolvedContent;
         for (final fn in pageFootnotes) {
-          if (fn.key == cleanKey) {
-            resolvedContent = fn.content;
+          if (fn.key == cleanKey && fn.content.trim().isNotEmpty) {
+            resolvedContent = fn.content.trim();
             break;
           }
         }
+
+        resolvedContent ??= resolveContextualFootnote(
+          reflowedText,
+          pageBodyText: bodyText,
+          anchorKey: cleanKey,
+        );
 
         anchors.add(FootnoteAnchor(
           key: cleanKey,
@@ -562,11 +792,6 @@ class TextSegmenter {
           content: resolvedContent,
         ));
       }
-
-      // Re-flow intra-paragraph newlines for non-heading paragraphs to provide smooth fluid reading
-      final reflowedText = isHeading
-          ? text
-          : text.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ').replaceAll(RegExp(r'[ \t]{2,}'), ' ');
 
       segments.add(ParagraphSegment(
         rawText: reflowedText,

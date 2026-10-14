@@ -39,12 +39,14 @@ class _RawPageAnalysis {
   final double pageWidth;
   final double pageHeight;
   final String rawText;
+  final Map<String, String> crossPageFootnotes;
 
   _RawPageAnalysis({
     required this.lines,
     required this.pageWidth,
     required this.pageHeight,
     required this.rawText,
+    this.crossPageFootnotes = const {},
   });
 }
 
@@ -126,13 +128,21 @@ class SmartReflowPipeline {
       final headerStrippedText = EncodingNormalizer.stripHeaderAndFooter(dehyphenatedText);
       final cleanText = EncodingNormalizer.cleanPunctuationSpacing(headerStrippedText);
 
-      // 4. ADIM: Dipnotları ve Gövdeyi Ayrıştır
+      // 4. ADIM: Dipnotları ve Gövdeyi Ayrıştır + Sayfalar Arası (Bölüm Sonu) Dipnotları Birleştir
       final pageResult = TextSegmenter.extractFootnotesAndBody(cleanText);
+      final mergedFootnotes = <PageFootnote>[...pageResult.footnotes];
+      final existingKeys = mergedFootnotes.map((f) => f.key).toSet();
+      for (final entry in analysis.crossPageFootnotes.entries) {
+        if (!existingKeys.contains(entry.key) && entry.value.trim().isNotEmpty) {
+          mergedFootnotes.add(PageFootnote(key: entry.key, content: entry.value.trim()));
+          existingKeys.add(entry.key);
+        }
+      }
 
       // 5. ADIM: Paragraflara Böl ve ContentBlock Listesini İnşa Et
       final paragraphs = TextSegmenter.segmentIntoParagraphs(
         pageResult.bodyText,
-        pageFootnotes: pageResult.footnotes,
+        pageFootnotes: mergedFootnotes,
         hadCorruptedCalligraphy: pageResult.hadCorruptedCalligraphy,
       );
 
@@ -168,10 +178,20 @@ class SmartReflowPipeline {
   ) {
     if (orderedLines.isEmpty) return '';
     final buffer = StringBuffer(orderedLines.first.text);
+    final isolatedMarkerRegex = RegExp(
+      r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|\†)\s*$',
+    );
 
     for (int i = 1; i < orderedLines.length; i++) {
       final prev = orderedLines[i - 1];
       final curr = orderedLines[i];
+
+      // Tek başına alt satıra düşmüş dipnot işaretini ("[9]") önceki satıra yapıştır
+      if (isolatedMarkerRegex.hasMatch(curr.text)) {
+        buffer.write(' ');
+        buffer.write(curr.text.trim());
+        continue;
+      }
 
       final prevHeight = prev.bounds.height > 0 ? prev.bounds.height : 14.0;
       final verticalGap = curr.bounds.top - prev.bounds.bottom;
@@ -216,7 +236,7 @@ class SmartReflowPipeline {
     return res.blocks;
   }
 
-  /// Isolate içinde Syncfusion ile PDF satır ve koordinat çıkarımı
+  /// Isolate içinde Syncfusion ile PDF satır, koordinat ve sayfalar arası dipnot çıkarımı
   static _RawPageAnalysis _isolateExtractPdfLines(_PdfExtractParams params) {
     try {
       final doc = PdfDocument(inputBytes: params.pdfBytes);
@@ -252,6 +272,70 @@ class SmartReflowPipeline {
         }
       } catch (_) {}
 
+      // Sayfada dipnot referansı ("[9]", "(9)", "⁹" vb.) varsa aynı sayfada ve komşu/bölüm sonu sayfalarında dipnot metnini ara
+      final crossPageFootnotes = <String, String>{};
+      try {
+        final samePageMap = TextSegmenter.extractFootnoteMapFromRawText(rawText);
+        crossPageFootnotes.addAll(samePageMap);
+
+        final neededKeys = <String>{};
+        final anchorMatches = RegExp(
+          r'\[(\d{1,4})\]|\((\d{1,4})\)|([¹²³⁴⁵⁶⁷⁸⁹⁰]+)',
+        ).allMatches(rawText);
+        for (final m in anchorMatches) {
+          final rawKey = m.group(1) ?? m.group(2) ?? m.group(3) ?? '';
+          if (rawKey.isNotEmpty) {
+            const supMap = {
+              '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5',
+              '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁰': '0',
+            };
+            var norm = rawKey;
+            for (final e in supMap.entries) {
+              norm = norm.replaceAll(e.key, e.value);
+            }
+            if (!crossPageFootnotes.containsKey(norm)) {
+              neededKeys.add(norm);
+            }
+          }
+        }
+
+        if (neededKeys.isNotEmpty) {
+          final totalPages = doc.pages.count;
+          final candidatePages = <int>[];
+          // Önce sonraki 15 sayfayı (bölüm sonu dipnotları, örn. El-Ezkâr Mukaddime sonu) ve önceki 2 sayfayı tara
+          for (int offset = 1; offset <= 15; offset++) {
+            if (params.pageIndex + offset < totalPages) {
+              candidatePages.add(params.pageIndex + offset);
+            }
+          }
+          if (params.pageIndex - 1 >= 0) {
+            candidatePages.add(params.pageIndex - 1);
+          }
+          // Kitap sonu notları için son 12 sayfayı da aday listesine ekle
+          for (int p = totalPages - 1; p >= 0 && p >= totalPages - 12; p--) {
+            if (!candidatePages.contains(p) && p != params.pageIndex) {
+              candidatePages.add(p);
+            }
+          }
+
+          for (final candidateIdx in candidatePages) {
+            if (neededKeys.isEmpty) break;
+            final candidateRaw = textExtractor.extractText(
+              startPageIndex: candidateIdx,
+              endPageIndex: candidateIdx,
+            );
+            if (candidateRaw.trim().isEmpty) continue;
+            final foundMap = TextSegmenter.extractFootnoteMapFromRawText(candidateRaw);
+            for (final entry in foundMap.entries) {
+              if (!crossPageFootnotes.containsKey(entry.key)) {
+                crossPageFootnotes[entry.key] = entry.value;
+                neededKeys.remove(entry.key);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
       doc.dispose();
 
       return _RawPageAnalysis(
@@ -259,6 +343,7 @@ class SmartReflowPipeline {
         pageWidth: pageWidth,
         pageHeight: pageHeight,
         rawText: rawText,
+        crossPageFootnotes: crossPageFootnotes,
       );
     } catch (e) {
       return _RawPageAnalysis(lines: [], pageWidth: 0, pageHeight: 0, rawText: '');

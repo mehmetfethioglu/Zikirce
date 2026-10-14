@@ -408,5 +408,50 @@ Yüce Allah Nur Suresi 27. ayetinde şöyle buyurmaktadır:
       expect(arabicSeg.rawText, contains('يَا أَيُّهَا الَّذِينَ آمَنُوا لَا تَدْخُلُوا بُيُوتًا غَيْرَ بُيُوتِكُمْ'));
       expect(arabicSeg.rawText, contains('حَتَّىٰ تَسْتَأْنِسُوا وَتُسَلِّمُوا'));
     });
+
+    test('17. El-Ezkar Sayfa 20 Dipnot [9] merges standalone [9] line and resolves real Muslim 2674 tahric footnote', () {
+      const elEzkarPage20 = '''
+Sahîh-i Müslim'de Ebû Hüreyre radıyallahu anh'den rivayet edildiğine göre Resûlullah sallallahu aleyhi ve sellem şöyle buyurdu:
+
+“İnsanları doğru yola (hidâyete) çağıran kimseye, kendisine uyanların sevabı kadar sevap verilir. Bu, onların sevaplarından bir şey azaltmaz.”
+
+[9]
+''';
+
+      final extracted = TextSegmenter.extractFootnotesAndBody(elEzkarPage20);
+      final paragraphs = TextSegmenter.segmentIntoParagraphs(
+        extracted.bodyText,
+        pageFootnotes: extracted.footnotes,
+      );
+
+      // Standalone [9] must be merged into the preceding hadith paragraph, leaving 2 paragraphs instead of 3
+      expect(paragraphs.length, equals(2));
+      final hadithParagraph = paragraphs.last;
+      expect(hadithParagraph.rawText, contains('azaltmaz.” [9]'));
+      expect(hadithParagraph.footnoteAnchors, isNotEmpty);
+      expect(hadithParagraph.footnoteAnchors.first.key, equals('9'));
+      expect(
+        hadithParagraph.footnoteAnchors.first.content,
+        contains('Müslim, İlim 16, nr. 2674'),
+      );
+      expect(
+        hadithParagraph.footnoteAnchors.first.content,
+        isNot(contains('Bu sayfadaki ilgili izahat.')),
+      );
+    });
+
+    test('18. Cross-page bracketed footnote extraction without space after bracket ([9]Müslim...)', () {
+      const elEzkarEndnotesPage21 = '''
+[1]Buhârî, Daavât 64, Tevhîd 50; Müslim, Zikir 2, 19, 22.
+[3]Münker, zayıf râvinin sika (güvenilir) râvilere muhâlefet ederek tek başına rivâyet ettiği hadistir.
+[9]Müslim, İlim 16, nr. 2674; Ebû Dâvûd, Sünnet 6, nr. 4609; Tirmizî, İlim 15, nr. 2674; İbn Mâce, Mukaddime 14, nr. 206. Bu hadisin daha uzun bir rivâyeti 925 numara ile gelecektir.
+''';
+
+      final footnoteMap = TextSegmenter.extractFootnoteMapFromRawText(elEzkarEndnotesPage21);
+      expect(footnoteMap['1'], contains('Buhârî, Daavât 64'));
+      expect(footnoteMap['3'], contains('Münker, zayıf râvinin'));
+      expect(footnoteMap['9'], contains('Müslim, İlim 16, nr. 2674'));
+      expect(footnoteMap['9'], contains('925 numara ile gelecektir'));
+    });
   });
 }
