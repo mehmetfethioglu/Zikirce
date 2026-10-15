@@ -109,5 +109,72 @@ void main() {
       expect(rabSpan.text, equals('رَبِّ'));
       expect(rabSpan.style?.color, equals(QuranWordHighlighter.darkDivineRed));
     });
+
+    test('cleanArabicText normalizes Farsi Yeh, D typo, and strips invisible characters', () {
+      // Farsi Yeh (06CC) in Tevbe 41
+      const rawTevbe41 = 'فٖی سَبٖیلِ اللّٰهِؕ ذٰلِكُمْ خَیْرٌ';
+      final clean = QuranWordHighlighter.cleanArabicText(rawTevbe41);
+
+      // Verify no Farsi Yeh remains (0x06CC)
+      expect(clean.contains('\u06CC'), isFalse);
+      // Verify standard Arabic Yeh is present (0x064A)
+      expect(clean.contains('\u064A'), isTrue);
+      // Check D artifact
+      expect(QuranWordHighlighter.cleanArabicText('D'), equals('ْد'));
+    });
+
+    test('mapStopCharacter maps stop characters for AmasyaAbay and mushaf fonts', () {
+      expect(QuranWordHighlighter.mapStopCharacter('\u0615', 'AmasyaAbay'), equals('\u06DC'));
+      expect(QuranWordHighlighter.mapStopCharacter('\u0615', 'mushaf'), equals('\u06DC'));
+      expect(QuranWordHighlighter.mapStopCharacter('\u0615', 'mushaf_bold'), equals('\u0615'));
+    });
+
+    test('toArabicDigits correctly converts numbers to Arabic numerals', () {
+      expect(QuranWordHighlighter.toArabicDigits(41), equals('٤١'));
+      expect(QuranWordHighlighter.toArabicDigits('194'), equals('١٩٤'));
+      expect(QuranWordHighlighter.toArabicDigits('٤١'), equals('٤١'));
+    });
+
+    test('buildHighlightedSpans correctly isolates stop signs from divine words in Tevbe 41', () {
+      // Verse containing Lafzatullah with attached stop sign ؕ
+      const tevbe41Snippet = 'فٖی سَبٖیلِ اللّٰهِؕ ذٰلِكُمْ';
+      const baseStyle = TextStyle(fontSize: 24, color: Colors.black);
+
+      final spans = QuranWordHighlighter.buildHighlightedSpans(
+        rawText: tevbe41Snippet,
+        baseStyle: baseStyle,
+        isDark: false,
+        fontFamily: 'AmasyaAbay',
+        enabled: true,
+      );
+
+      // Find the Lafzatullah text span
+      final divineSpan = spans.firstWhere(
+        (s) => s is TextSpan && s.text == 'اللّٰهِ',
+      ) as TextSpan;
+      expect(divineSpan.style?.color, equals(QuranWordHighlighter.lightDivineRed));
+
+      // Find the mapped stop span following Lafzatullah
+      final stopSpan = spans.firstWhere(
+        (s) => s is TextSpan && (s.text?.contains('\u06DC') ?? false),
+      ) as TextSpan;
+      expect(stopSpan.style?.color, equals(QuranWordHighlighter.lightWaqfRed));
+    });
+
+    test('buildHighlightedSpans appends ZikirceAyahStopMarker when showAyahStopMarker is true', () {
+      const v = 'اِنْ كُنْتُمْ تَعْلَمُونَ';
+      const baseStyle = TextStyle(fontSize: 24, color: Colors.black);
+
+      final spans = QuranWordHighlighter.buildHighlightedSpans(
+        rawText: v,
+        baseStyle: baseStyle,
+        isDark: false,
+        ayahNumber: '41',
+        showAyahStopMarker: true,
+      );
+
+      final hasWidgetSpan = spans.any((s) => s is WidgetSpan);
+      expect(hasWidgetSpan, isTrue);
+    });
   });
 }

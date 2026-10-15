@@ -8,6 +8,7 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../domain/smart_distractors_service.dart';
 import '../../domain/talim_audio_controller.dart';
@@ -1132,6 +1133,7 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
     final currentVerse = _verses.isNotEmpty && _currentVerseIndex < _verses.length
         ? _verses[_currentVerseIndex]
         : null;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1190,17 +1192,26 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                currentVerse?.ayetText ?? '',
+              Text.rich(
+                TextSpan(
+                  children: QuranWordHighlighter.buildHighlightedSpans(
+                    rawText: currentVerse?.ayetText ?? '',
+                    baseStyle: TextStyle(
+                      fontFamily: arabicFont,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextColor,
+                      height: 1.6,
+                      letterSpacing: -0.1,
+                    ),
+                    isDark: isDark,
+                    fontFamily: arabicFont,
+                    ayahNumber: currentVerse?.ayetNumber,
+                    showAyahStopMarker: currentVerse != null,
+                  ),
+                ),
                 textAlign: TextAlign.center,
                 textDirection: TextDirection.rtl,
-                style: TextStyle(
-                  fontFamily: arabicFont,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: primaryTextColor,
-                  height: 1.5,
-                ),
               ),
             ],
           ),
@@ -1301,6 +1312,7 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
                             fontWeight: FontWeight.bold,
                             color: textColor,
                             height: 1.4,
+                            letterSpacing: -0.1,
                           ),
                         ),
                       ),
@@ -1398,6 +1410,7 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
               fontWeight: FontWeight.bold,
               color: primaryTextColor,
               height: 1.6,
+              letterSpacing: -0.1,
             ),
           ),
         ),

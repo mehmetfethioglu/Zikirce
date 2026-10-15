@@ -6,6 +6,7 @@ import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/utils/arabic_normalizer.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../providers/kuran_providers.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class SearchResult {
   final int pageNumber;
@@ -131,6 +132,8 @@ class _QuranSearchScreenState extends ConsumerState<QuranSearchScreen> {
     final goldAccent = isDark ? AppColors.gold400 : const Color(0xFFB57D15);
 
     final highlightDivineWords = ref.watch(highlightDivineWordsProvider);
+    final fontFamily = ref.watch(arabicFontFamilyProvider);
+    final isBoldArabic = ref.watch(isBoldArabicProvider);
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -236,13 +239,17 @@ class _QuranSearchScreenState extends ConsumerState<QuranSearchScreen> {
                               children: QuranWordHighlighter.buildHighlightedSpans(
                                 rawText: res.arabicText,
                                 baseStyle: TextStyle(
-                                  fontFamily: ref.watch(arabicFontFamilyProvider),
+                                  fontFamily: fontFamily,
                                   fontSize: 20,
+                                  fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
                                   color: primaryTextColor,
                                   height: 2.0,
+                                  letterSpacing: -0.1,
                                 ),
                                 isDark: isDark,
                                 enabled: highlightDivineWords,
+                                fontFamily: fontFamily,
+                                isBold: isBoldArabic,
                               ),
                             ),
                             textAlign: TextAlign.right,

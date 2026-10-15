@@ -24,25 +24,7 @@ class MushafPageWidget extends ConsumerStatefulWidget {
 class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
   final List<TapGestureRecognizer> _recognizers = [];
 
-  static const Set<String> _stopSigns = {
-    '\u0615', // Small High Tah (Tı - ط)
-    '\u0617', // Small High Zain (Ze - ز)
-    '\u06D6', // Small High Sad (Sâd - ص)
-    '\u06D7', // Small High Qaf (Qaf - ق)
-    '\u06D8', // Small High Meem (Mîm - م / Lâzım)
-    '\u06D9', // Small High Lam Alef (Lâ - لا)
-    '\u06DA', // Small High Jeem (Cim - ج)
-    '\u06DB', // Small High Three Dots (Mu'anaqa 3 nokta - ۛ)
-    '\u06DC', // Small High Seen (Tı / Sin - ۜ)
-    '\u06DF', // Small High Rounded Zero (Ayn - ۟)
-    '\u06E2', // Small High Meem Isolated (Mîm - ۢ)
-    '\u06E3', // Small Low Seen (Sin - ۣ)
-    '\u06E7', // Small High Qaf / Kef (Kef - ۧ)
-    '\u08D5', // Arabic Small High Sad (Sâd - ࣕ)
-    '\u08D6', // Arabic Small High Ain (Ayn / Rükû - ࣖ)
-    '\u08D7', // Arabic Small High Qaf (Qaf - ࣗ)
-    '\u08DE', // Arabic Small High Word Kaph (Kef - ࣞ)
-  };
+  static const Set<String> _stopSigns = QuranWordHighlighter.stopSigns;
 
   @override
   void dispose() {
@@ -63,52 +45,8 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     return r;
   }
 
-  static String mapStopCharacter(String char, String fontFamily) {
-    if (fontFamily == 'AmasyaAbay' || fontFamily == 'mushaf') {
-      switch (char) {
-        case '\u0615': return '\u06DC'; // Tı stop -> U+06DC (hightah in AmasyaAbay/mushaf)
-        case '\u0617': return '\u0617'; // Ze stop -> U+0617
-        case '\u06D6':
-        case '\u08D5': return '\u06D6'; // Sâd stop -> U+06D6
-        case '\u06D7':
-        case '\u08D7': return '\u06D7'; // Qaf stop -> U+06D7
-        case '\u06D8':
-        case '\u06E2': return '\u06E2'; // Mîm stop -> U+06E2
-        case '\u06D9': return '\u06D9'; // Lâ stop -> U+06D9
-        case '\u06DA': return '\u06DA'; // Cim stop -> U+06DA
-        case '\u06DB': return '\u06DB'; // Mu'anaqa 3 dots -> U+06DB
-        case '\u06DC': return '\u06DC'; // Tı stop -> U+06DC
-        case '\u06DF':
-        case '\u08D6': return '\u06DF'; // Ayn stop -> U+06DF (highain in AmasyaAbay/mushaf)
-        case '\u06E3': return '\u06E3'; // Sin stop -> U+06E3 (lowseen)
-        case '\u06E7':
-        case '\u08DE': return '\u06E7'; // Kef stop -> U+06E7 (highkaf)
-        default: return char;
-      }
-    } else if (fontFamily == 'mushaf_bold') {
-      switch (char) {
-        case '\u0615':
-        case '\u06DC': return '\u0615';
-        case '\u0617': return '\u0617';
-        case '\u06D6':
-        case '\u08D5': return '\u06D6';
-        case '\u06D7':
-        case '\u08D7': return '\u06D7';
-        case '\u06D8':
-        case '\u06E2': return '\u06D8';
-        case '\u06D9': return '\u06D9';
-        case '\u06DA': return '\u06DA';
-        case '\u06DB': return '\u06DB';
-        case '\u06DF':
-        case '\u08D6': return '\u08D6';
-        case '\u06E3': return '\u06E3';
-        case '\u06E7':
-        case '\u08DE': return '\u06E7';
-        default: return char;
-      }
-    }
-    return char;
-  }
+  static String mapStopCharacter(String char, String fontFamily) =>
+      QuranWordHighlighter.mapStopCharacter(char, fontFamily);
 
   List<InlineSpan> _buildAyahWordSpans({
     required String rawText,
@@ -131,28 +69,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       final word = words[wIdx];
       if (word.isEmpty) continue;
 
-      // 1. Strip hidden control characters, annotations (kasr, med, etc.), surrogates and typos
-      // 2. Normalize Farsi Yeh (U+06CC) to standard Arabic Yeh (U+064A) so ligatures with sukun don't break!
-      final cleanWord = word
-          .replaceAll(String.fromCharCode(0x10EFD), '')
-          .replaceAll(String.fromCharCode(0x10EFE), '')
-          .replaceAll(String.fromCharCode(0x10EFF), '')
-          .replaceAll('\uD803\uDEFD', '')
-          .replaceAll('\uD803\uDEFE', '')
-          .replaceAll('\uD803\uDEFF', '')
-          .replaceAll('\uEE00', '')
-          .replaceAll('\uEE01', '')
-          .replaceAll('\u08CF', '')
-          .replaceAll('\u08D9', '')
-          .replaceAll('\u06EA', '')
-          .replaceAll('\u06EB', '')
-          .replaceAll('\u06EC', '')
-          .replaceAll('\u200C', '')
-          .replaceAll('\u200D', '')
-          .replaceAll('\u00A0', ' ')
-          .replaceAll('\u202F', ' ')
-          .replaceAll('ی', 'ي')
-          .replaceAll('D', 'ْد');
+      final cleanWord = QuranWordHighlighter.cleanArabicText(word);
 
       final cleanWordBuf = StringBuffer();
       final stops = <String>[];

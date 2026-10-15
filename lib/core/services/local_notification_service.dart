@@ -258,7 +258,7 @@ class LocalNotificationService {
         notificationDetails,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
+            UILocalNotificationDateInterpretation.wallClockTime,
         payload: payload,
       );
     } catch (e) {
@@ -273,7 +273,7 @@ class LocalNotificationService {
           notificationDetails,
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
           uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
+              UILocalNotificationDateInterpretation.wallClockTime,
           payload: payload,
         );
       } catch (e2) {
@@ -393,8 +393,14 @@ class LocalNotificationService {
 
       int globalFarzStep = 0;
 
-      // Iterate 7 days rolling forward (Day 0 to Day 6)
-      for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+      // On iOS, limit rolling window to 5 days so total scheduled notifications (5 * 11 = 55)
+      // do not exceed Apple's strict 64 pending notification cap (which drops notifications silently).
+      // On Android / Desktop, keep full 7-day rolling window.
+      final daysLimit = Platform.isIOS ? 5 : 7;
+      final currentTZNow = tz.TZDateTime.now(tz.local);
+
+      // Iterate rolling forward (Day 0 to Day daysLimit - 1)
+      for (int dayOffset = 0; dayOffset < daysLimit; dayOffset++) {
         final targetDate = now.add(Duration(days: dayOffset));
         final dayStr =
             '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
@@ -403,23 +409,24 @@ class LocalNotificationService {
             ? timings
             : PrayerTimesService.calculateOfflinePrayerTimes(city, targetDate);
 
-        DateTime parseTime(String hhmm) {
+        tz.TZDateTime parseTZTime(String hhmm, {Duration offset = Duration.zero}) {
           final clean = hhmm.trim();
           final parts = clean.split(':');
-          if (parts.length < 2) return DateTime.fromMillisecondsSinceEpoch(0);
+          if (parts.length < 2) return tz.TZDateTime.fromMillisecondsSinceEpoch(tz.local, 0);
           final h = int.tryParse(parts[0].trim()) ?? 0;
           final m = int.tryParse(parts[1].trim()) ?? 0;
-          return DateTime(targetDate.year, targetDate.month, targetDate.day, h, m);
+          final base = tz.TZDateTime(tz.local, targetDate.year, targetDate.month, targetDate.day, h, m);
+          return offset == Duration.zero ? base : base.add(offset);
         }
 
         // 1. Prayer Entry Items (İmsak, Güneş, Öğle, İkindi, Akşam, Yatsı)
         final prayerItems = [
-          (name: 'İmsak', time: parseTime(dayTimings.fajr), prefKey: 'ImsakNotificationEnabled'),
-          (name: 'Güneş', time: parseTime(dayTimings.sunrise), prefKey: 'GunesNotificationEnabled'),
-          (name: 'Öğle', time: parseTime(dayTimings.dhuhr), prefKey: 'OgleNotificationEnabled'),
-          (name: 'İkindi', time: parseTime(dayTimings.asr), prefKey: 'IkindiNotificationEnabled'),
-          (name: 'Akşam', time: parseTime(dayTimings.maghrib), prefKey: 'AksamNotificationEnabled'),
-          (name: 'Yatsı', time: parseTime(dayTimings.isha), prefKey: 'YatsiNotificationEnabled'),
+          (name: 'İmsak', time: parseTZTime(dayTimings.fajr), prefKey: 'ImsakNotificationEnabled'),
+          (name: 'Güneş', time: parseTZTime(dayTimings.sunrise), prefKey: 'GunesNotificationEnabled'),
+          (name: 'Öğle', time: parseTZTime(dayTimings.dhuhr), prefKey: 'OgleNotificationEnabled'),
+          (name: 'İkindi', time: parseTZTime(dayTimings.asr), prefKey: 'IkindiNotificationEnabled'),
+          (name: 'Akşam', time: parseTZTime(dayTimings.maghrib), prefKey: 'AksamNotificationEnabled'),
+          (name: 'Yatsı', time: parseTZTime(dayTimings.isha), prefKey: 'YatsiNotificationEnabled'),
         ];
 
         for (int pIdx = 0; pIdx < prayerItems.length; pIdx++) {
@@ -430,7 +437,7 @@ class LocalNotificationService {
           if (!isEnabled) continue;
 
           final targetTime = item.time;
-          if (targetTime.isBefore(now)) continue; // Already in the past
+          if (targetTime.isBefore(currentTZNow)) continue; // Already in the past
 
           final farzIdx = (baseFarzIdx + globalFarzStep) % kFarz32List.length;
           globalFarzStep++;
@@ -439,14 +446,13 @@ class LocalNotificationService {
           final title = '${item.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
           final body = '${farzItem.title}: ${farzItem.notificationSummary}';
           final details = _buildNotificationDetails(config: channelConfig, title: title);
-          final scheduledTZ = tz.TZDateTime.from(targetTime, tz.local);
 
           final notifId = basePrayerNotificationId + (dayOffset * 10) + pIdx;
           await _scheduleZonedWithFallback(
             id: notifId,
             title: title,
             body: body,
-            scheduledDate: scheduledTZ,
+            scheduledDate: targetTime,
             notificationDetails: details,
             payload: 'farz_article|${farzItem.id}',
           );
@@ -454,39 +460,34 @@ class LocalNotificationService {
 
         // 2. Question Notifications ("Namazınızı Kıldınız mı? 🕌")
         if (isQuestionMasterEnabled) {
-          final tSunrise = parseTime(dayTimings.sunrise);
-          final tAsr = parseTime(dayTimings.asr);
-          final tMaghrib = parseTime(dayTimings.maghrib);
-          final tIsha = parseTime(dayTimings.isha);
-
           final questionItems = [
             (
               name: 'Sabah',
-              targetTime: tSunrise.subtract(const Duration(minutes: 45)),
+              targetTime: parseTZTime(dayTimings.sunrise, offset: const Duration(minutes: -45)),
               prefKey: 'ImsakNotificationEnabled',
               fallbackKey: 'SabahNotificationEnabled',
             ),
             (
               name: 'Öğle',
-              targetTime: tAsr.subtract(const Duration(minutes: 45)),
+              targetTime: parseTZTime(dayTimings.asr, offset: const Duration(minutes: -45)),
               prefKey: 'OgleNotificationEnabled',
               fallbackKey: 'OgleNotificationEnabled',
             ),
             (
               name: 'İkindi',
-              targetTime: tMaghrib.subtract(const Duration(minutes: 45)),
+              targetTime: parseTZTime(dayTimings.maghrib, offset: const Duration(minutes: -45)),
               prefKey: 'IkindiNotificationEnabled',
               fallbackKey: 'IkindiNotificationEnabled',
             ),
             (
               name: 'Akşam',
-              targetTime: tIsha.subtract(const Duration(minutes: 45)),
+              targetTime: parseTZTime(dayTimings.isha, offset: const Duration(minutes: -45)),
               prefKey: 'AksamNotificationEnabled',
               fallbackKey: 'AksamNotificationEnabled',
             ),
             (
               name: 'Yatsı',
-              targetTime: tIsha.add(const Duration(hours: 1)),
+              targetTime: parseTZTime(dayTimings.isha, offset: const Duration(hours: 1)),
               prefKey: 'YatsiNotificationEnabled',
               fallbackKey: 'YatsiNotificationEnabled',
             ),
@@ -498,21 +499,20 @@ class LocalNotificationService {
             if (!isEnabled) continue;
 
             final questionTime = q.targetTime;
-            if (questionTime.isBefore(now)) continue; // In the past
+            if (questionTime.isBefore(currentTZNow)) continue; // In the past
 
             const title = 'Namazınızı Kıldınız mı? 🕌';
             final body = '${q.name} namazınızı kıldınız mı?';
             final payload = 'prayer_question|${q.name}|$dayStr';
 
             final details = _buildNotificationDetails(config: channelConfig, title: title);
-            final scheduledTZ = tz.TZDateTime.from(questionTime, tz.local);
 
             final notifId = baseQuestionNotificationId + (dayOffset * 10) + qIdx;
             await _scheduleZonedWithFallback(
               id: notifId,
               title: title,
               body: body,
-              scheduledDate: scheduledTZ,
+              scheduledDate: questionTime,
               notificationDetails: details,
               payload: payload,
             );
@@ -521,7 +521,7 @@ class LocalNotificationService {
       }
 
       await prefs.setInt('FarzNotificationDaySlotsCount', globalFarzStep.clamp(1, 42));
-      debugPrint('[LocalNotificationService] Successfully scheduled 7-day rolling prayer & question notifications');
+      debugPrint('[LocalNotificationService] Successfully scheduled $daysLimit-day rolling prayer & question notifications');
     } catch (e) {
       debugPrint(
           '[LocalNotificationService] scheduleAllPrayerNotifications error: $e');
@@ -542,10 +542,10 @@ class LocalNotificationService {
       final h = int.tryParse(parts[0].trim()) ?? 21;
       final m = int.tryParse(parts[1].trim()) ?? 0;
 
-      final now = DateTime.now();
-      var targetTime = DateTime(now.year, now.month, now.day, h, m);
-      if (targetTime.isBefore(now)) {
-        targetTime = targetTime.add(const Duration(days: 1));
+      final now = tz.TZDateTime.now(tz.local);
+      var scheduledTZ = tz.TZDateTime(tz.local, now.year, now.month, now.day, h, m);
+      if (scheduledTZ.isBefore(now)) {
+        scheduledTZ = scheduledTZ.add(const Duration(days: 1));
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -556,7 +556,6 @@ class LocalNotificationService {
       final details =
           _buildNotificationDetails(config: channelConfig, title: title);
 
-      final scheduledTZ = tz.TZDateTime.from(targetTime, tz.local);
       await _scheduleZonedWithFallback(
         id: dailyQuranReminderNotificationId,
         title: title,
@@ -567,7 +566,7 @@ class LocalNotificationService {
         payload: 'quran_reminder',
       );
       debugPrint(
-          '[LocalNotificationService] Scheduled Quran reminder at $targetTime ($scheduledTZ)');
+          '[LocalNotificationService] Scheduled Quran reminder at $scheduledTZ');
     } catch (e) {
       debugPrint('[LocalNotificationService] scheduleQuranDailyReminder error: $e');
     }

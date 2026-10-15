@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/haptic_service.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../data/tilavet_secdesi_data.dart';
 import '../../providers/tilavet_secdesi_provider.dart';
+import '../../providers/kuran_providers.dart';
 
 class TilavetSecdesiGuideSheet extends ConsumerStatefulWidget {
   final TilavetSecdeItem? initialSecdeItem;
@@ -511,11 +513,15 @@ class _TilavetSecdesiGuideSheetState
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
-                            step.arabicText!,
-                            style: const TextStyle(
-                              fontFamily: 'AmasyaAbay',
+                            QuranWordHighlighter.formatArabicTextForFont(
+                              step.arabicText!,
+                              ref.watch(arabicFontFamilyProvider),
+                            ),
+                            style: TextStyle(
+                              fontFamily: ref.watch(arabicFontFamilyProvider),
                               fontSize: 22,
                               height: 1.5,
+                              letterSpacing: -0.1,
                             ),
                             textAlign: TextAlign.center,
                             textDirection: TextDirection.rtl,
@@ -787,11 +793,15 @@ class _TilavetSecdesiGuideSheetState
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  item.arabicSnippet,
-                  style: const TextStyle(
-                    fontFamily: 'AmasyaAbay',
+                  QuranWordHighlighter.formatArabicTextForFont(
+                    item.arabicSnippet,
+                    ref.watch(arabicFontFamilyProvider),
+                  ),
+                  style: TextStyle(
+                    fontFamily: ref.watch(arabicFontFamilyProvider),
                     fontSize: 18,
                     height: 1.45,
+                    letterSpacing: -0.1,
                   ),
                   textDirection: TextDirection.rtl,
                 ),

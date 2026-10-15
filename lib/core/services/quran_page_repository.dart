@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import '../utils/quran_word_highlighter.dart';
 
 class QuranAyatModel {
   final int id;
@@ -23,16 +24,15 @@ class QuranAyatModel {
   });
 
   factory QuranAyatModel.fromJson(Map<String, dynamic> json) {
-    String rawText = json['AyetText']?.toString() ?? '';
-    // Normalize typographical artifacts and non-breaking spaces
-    rawText = rawText.replaceAll('D', 'ْد').replaceAll('\u00A0', ' ').replaceAll('\u202F', ' ');
+    final rawText = json['AyetText']?.toString() ?? '';
+    final cleanedText = QuranWordHighlighter.cleanArabicText(rawText);
 
     return QuranAyatModel(
       id: json['Id'] as int? ?? 0,
       sureId: json['SureId'] as int? ?? 0,
       ayetId: json['AyetId'] as int? ?? 0,
       ayetNumber: json['AyetNumber']?.toString() ?? '',
-      ayetText: rawText,
+      ayetText: cleanedText,
       page: json['Page'] as int? ?? 1,
       recitation: json['Recitation']?.toString(),
       sure: json['Sure'] != null ? SureMeta.fromJson(json['Sure']) : null,

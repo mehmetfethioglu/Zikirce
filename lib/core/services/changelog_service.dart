@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 58;
-  static const String currentVersionName = '2.1.3';
+  static const int currentVersionCode = 59;
+  static const String currentVersionName = '2.1.4';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 59,
+      versionName: '2.1.4',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Namaz Bildirimleri & Saat Dilimi Hassasiyeti',
+          titleEn: 'Prayer Notifications & Timezone Precision',
+          descTr: 'iOS için namaz vakit bildirimleri ve kaza takip ("Namazınızı Kıldınız mı? 🕌") soru hatırlatmalarının yerel saat dilimi çizelgelemesi güçlendirildi; tüm bildirimlerin tam vaktinde ulaşması sağlandı.',
+          descEn: 'Enhanced local timezone scheduling for prayer entry notifications and missed prayer reminders on iOS, guaranteeing pinpoint accuracy across time zones.',
+          icon: Icons.notifications_active_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kelimeli Mushaf & Arapça Harf Bütünlüğü',
+          titleEn: 'Word-by-Word Mushaf & Arabic Typography Precision',
+          descTr: 'Kelimeli Mushaf, İnteraktif Talim ve Mukabele ekranlarında Arapça metin akışı, harf bitişikliği ve kelime odaklı ses takibi daha pürüzsüz ve hatasız hale getirildi.',
+          descEn: 'Refined Arabic typography ligature continuity and word-by-word audio synchronicity across Mushaf reader, Interactive Talim, and Mukabele hatim screens.',
+          icon: Icons.menu_book_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kararlılık & Sistem İyileştirmeleri',
+          titleEn: 'Stability & System Polish',
+          descTr: 'App Store Connect ve TestFlight dağıtım altyapısı güncellendi, genel bellek yönetimi ve kullanıcı arayüzü akıcılığı artırıldı.',
+          descEn: 'Updated App Store Connect and TestFlight delivery pipeline, along with general memory management and UI responsiveness enhancements.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 58,
       versionName: '2.1.3',

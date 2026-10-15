@@ -115,6 +115,7 @@ class _BesmelePlaybackBannerState extends ConsumerState<BesmelePlaybackBanner>
                   fontWeight: FontWeight.w600,
                   color: isDark ? AppColors.gold400 : const Color(0xFF7A510A),
                   height: 1.6,
+                  letterSpacing: -0.1,
                 ),
               ),
             ],

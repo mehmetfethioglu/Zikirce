@@ -21,6 +21,8 @@ import '../widgets/quran_top_icon_ribbon.dart';
 import '../widgets/quick_access_card_wrapper.dart';
 import '../widgets/quick_access_management_sheet.dart';
 import '../../providers/quick_access_cards_provider.dart';
+import '../../providers/kuran_providers.dart';
+import '../../../settings/providers/settings_provider.dart';
 import 'mushaf_screen.dart';
 import '../../../ezber/presentation/screens/memorization_screen.dart';
 import '../../../ezber/presentation/screens/interactive_talim_screen.dart';
@@ -2760,16 +2762,17 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                           ],
                         ),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           'اللَّهُمَّ ارْحَمْنَا بِالقُرْآنِ، وَاجْعَلْهُ لَنَا إِمَاماً وَنُوراً وَهُدًى وَرَحْمَةً، اللَّهُمَّ ذَكِّرْنَا مِنْهُ مَا نَسِينَا، وَعَلِّمْنَا مِنْهُ مَا جَهِلْنَا، وَارْزُقْنَا تِلاَوَتَهُ آنَاءَ اللَّيْلِ وَأَطْرَافَ النَّهَارِ، وَاجْعَلْهُ لَنَا حُجَّةً يَا رَبَّ العَالَمِينَ.',
                           textAlign: TextAlign.right,
                           textDirection: TextDirection.rtl,
                           style: TextStyle(
-                            fontFamily: 'Amiri',
+                            fontFamily: ref.watch(arabicFontFamilyProvider),
                             fontSize: 16,
                             height: 1.8,
-                            color: Color(0xFFD97706),
-                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.1,
+                            color: const Color(0xFFD97706),
+                            fontWeight: ref.watch(isBoldArabicProvider) ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                         const SizedBox(height: 10),

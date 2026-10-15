@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../providers/kuran_providers.dart';
+import '../../../settings/providers/settings_provider.dart';
 
 class TafseerBottomSheet extends ConsumerWidget {
   final QuranAyatModel ayat;
@@ -45,11 +46,16 @@ class TafseerBottomSheet extends ConsumerWidget {
     final secondaryTextColor = isDark ? const Color(0xFFA89888) : const Color(0xFF706050);
     final borderColor = isDark ? AppColors.darkBorder : const Color(0xFFE2DDD2);
 
+    final isBoldArabic = ref.watch(isBoldArabicProvider);
+    final fontFamily = ref.watch(arabicFontFamilyProvider);
+
     final baseArabicStyle = TextStyle(
-      fontFamily: ref.watch(arabicFontFamilyProvider),
+      fontFamily: fontFamily,
       fontSize: 24,
+      fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
       color: isDark ? AppColors.gold300 : const Color(0xFF1B1917),
       height: 2.2,
+      letterSpacing: -0.1,
     );
 
     return DraggableScrollableSheet(
@@ -125,6 +131,10 @@ class TafseerBottomSheet extends ConsumerWidget {
                           baseStyle: baseArabicStyle,
                           isDark: isDark,
                           enabled: highlightDivineWords,
+                          fontFamily: fontFamily,
+                          ayahNumber: ayat.ayetNumber.isNotEmpty ? ayat.ayetNumber : '${ayat.ayetId}',
+                          showAyahStopMarker: true,
+                          isBold: isBoldArabic,
                         ),
                       ),
                       textAlign: TextAlign.right,
