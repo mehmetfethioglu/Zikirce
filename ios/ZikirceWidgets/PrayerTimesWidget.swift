@@ -12,9 +12,7 @@ struct PrayerTimelineProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PrayerTimesEntry>) -> Void) {
-        let entries = PrayerDataHelper.buildTimeline(from: Date())
-        let reloadDate = Calendar.current.date(byAdding: .hour, value: 4, to: Date()) ?? Date().addingTimeInterval(14400)
-        completion(Timeline(entries: entries, policy: .after(reloadDate)))
+        completion(PrayerDataHelper.buildTimeline())
     }
 }
 
@@ -856,19 +854,7 @@ struct PrayerMiniWidget: Widget {
     }
 }
 
-// MARK: - Helper ViewModifier for iOS 17+ containerBackground compatibility
-extension View {
-    @ViewBuilder
-    func widgetBackground(_ backgroundView: some View) -> some View {
-        if #available(iOSApplicationExtension 17.0, *) {
-            containerBackground(for: .widget) {
-                backgroundView
-            }
-        } else {
-            background(backgroundView)
-        }
-    }
-}
+// MARK: - Helper WidgetConfiguration for iOS 17+ contentMarginsDisabled compatibility
 
 extension WidgetConfiguration {
     func contentMarginsDisabledIfAvailable() -> some WidgetConfiguration {

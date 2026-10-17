@@ -13,6 +13,17 @@ enum WidgetConstants {
 
 // MARK: - Color Hex Helper
 extension Color {
+    init(hex: UInt, alpha: Double = 1.0) {
+        let red = Double((hex >> 16) & 0xff) / 255.0
+        let green = Double((hex >> 8) & 0xff) / 255.0
+        let blue = Double(hex & 0xff) / 255.0
+        self.init(.sRGB, red: red, green: green, blue: blue, opacity: alpha)
+    }
+
+    init(hex: Int, alpha: Double = 1.0) {
+        self.init(hex: UInt(bitPattern: hex), alpha: alpha)
+    }
+
     init(hex: String) {
         let clean = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
@@ -42,16 +53,23 @@ extension Color {
 struct LivePrayerCountdownText: View {
     let startDate: Date
     let targetDate: Date
+    var font: Font = .body
+    var color: Color = .primary
+    var alignment: TextAlignment = .center
 
     var body: some View {
         let safeEnd = max(startDate, targetDate)
-        if #available(iOS 16.0, *) {
-            Text(timerInterval: startDate...safeEnd, countsDown: true)
-                .monospacedDigit()
-        } else {
-            Text(safeEnd, style: .timer)
-                .monospacedDigit()
+        Group {
+            if #available(iOS 16.0, *) {
+                Text(timerInterval: startDate...safeEnd, countsDown: true)
+            } else {
+                Text(safeEnd, style: .timer)
+            }
         }
+        .font(font)
+        .foregroundColor(color)
+        .multilineTextAlignment(alignment)
+        .monospacedDigit()
     }
 }
 
@@ -84,6 +102,13 @@ struct PrayerTimesEntry: TimelineEntry {
     let countdownColorHex: String
     let allPrayers: [PrayerItem]
     let isSample: Bool
+
+    var fajr: String { allPrayers.first(where: { $0.id == "imsak" })?.time ?? "--:--" }
+    var sunrise: String { allPrayers.first(where: { $0.id == "gunes" })?.time ?? "--:--" }
+    var dhuhr: String { allPrayers.first(where: { $0.id == "ogle" })?.time ?? "--:--" }
+    var asr: String { allPrayers.first(where: { $0.id == "ikindi" })?.time ?? "--:--" }
+    var maghrib: String { allPrayers.first(where: { $0.id == "aksam" })?.time ?? "--:--" }
+    var isha: String { allPrayers.first(where: { $0.id == "yatsi" })?.time ?? "--:--" }
 
     static var placeholder: PrayerTimesEntry {
         let now = Date()
@@ -120,6 +145,14 @@ struct PrayerTimesEntry: TimelineEntry {
 }
 
 // MARK: - Offline Astronomical & Cached Prayer Data Helper
+// MARK: - Calculated Prayer Time Item
+struct CalculatedPrayerTime {
+    let key: String
+    let name: String
+    let time: String
+    let date: Date
+}
+
 enum PrayerDataHelper {
     private static let hijriMonthNamesTr = [
         "Muharrem", "Safer", "Rebiülevvel", "Rebiülahir",
@@ -344,11 +377,11 @@ enum PrayerDataHelper {
         ]
 
         let calendar = Calendar.current
-        var prayerDates: [(key: String, name: String, time: String, date: Date)] = []
+        var prayerDates: [CalculatedPrayerTime] = []
 
         for item in rawList {
             if let pDate = parseTimeToday(item.time, calendar: calendar, referenceDate: date) {
-                prayerDates.append((item.key, item.name, item.time, pDate))
+                prayerDates.append(CalculatedPrayerTime(key: item.key, name: item.name, time: item.time, date: pDate))
             }
         }
 
@@ -363,8 +396,11 @@ enum PrayerDataHelper {
             }
         }
 
-        let current = prayerDates.indices.contains(currentIdx) ? prayerDates[currentIdx] : ("ogle", "Öğle", ogle, date)
-        var next = prayerDates.indices.contains(nextIdx) ? prayerDates[nextIdx] : ("ikindi", "İkindi", ikindi, date)
+        let fallbackCurrent = CalculatedPrayerTime(key: "ogle", name: "Öğle", time: ogle, date: date)
+        let fallbackNext = CalculatedPrayerTime(key: "ikindi", name: "İkindi", time: ikindi, date: date)
+
+        let current = prayerDates.indices.contains(currentIdx) ? prayerDates[currentIdx] : fallbackCurrent
+        var next = prayerDates.indices.contains(nextIdx) ? prayerDates[nextIdx] : fallbackNext
 
         var prevDate = current.date
         var nextDate = next.date
@@ -376,16 +412,16 @@ enum PrayerDataHelper {
                 let tomorrowOffline = calculateOfflineTimes(city: city, for: tomorrow)
                 let tomorrowImsak = tomorrowOffline.imsak
                 nextDate = parseTimeToday(tomorrowImsak, calendar: calendar, referenceDate: tomorrow) ?? calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
-                next = ("imsak", "İmsak", tomorrowImsak, nextDate)
+                next = CalculatedPrayerTime(key: "imsak", name: "İmsak", time: tomorrowImsak, date: nextDate)
             } else {
                 // Before today's İmsak -> Previous prayer was yesterday's Yatsı
                 prevDate = calendar.date(byAdding: .day, value: -1, to: prevDate) ?? prevDate
             }
         }
 
-        let totalSec = max(1.0, nextDate.timeIntervalSince(prevDate))
-        let elapsedSec = max(0.0, date.timeIntervalSince(prevDate))
-        let progress = min(1.0, max(0.0, elapsedSec / totalSec))
+        let totalSec: TimeInterval = max(1.0, nextDate.timeIntervalSince(prevDate))
+        let elapsedSec: TimeInterval = max(0.0, date.timeIntervalSince(prevDate))
+        let progress: Double = min(1.0, max(0.0, elapsedSec / totalSec))
         let colorHex = countdownColorHex(prayerName: next.name, progress: progress)
 
         let prayerItems = prayerDates.enumerated().map { (idx, item) in
@@ -421,8 +457,12 @@ enum PrayerDataHelper {
         )
     }
 
-    static func buildTimeline(includeProgressSteps: Bool = false) -> Timeline<PrayerTimesEntry> {
-        let now = Date()
+    static func loadEntry() -> PrayerTimesEntry {
+        fetchPrayerTimes(for: Date())
+    }
+
+    static func buildTimeline(from date: Date = Date(), includeProgressSteps: Bool = false) -> Timeline<PrayerTimesEntry> {
+        let now = date
         let currentEntry = fetchPrayerTimes(for: now)
         var entries: [PrayerTimesEntry] = [currentEntry]
 
@@ -496,6 +536,18 @@ struct StreakEntry: TimelineEntry {
     let activeDatesInWeek: Set<String>
     let isSample: Bool
 
+    var streakCount: Int { currentStreak }
+    var progress: Double {
+        guard dailyGoal > 0 else { return 0.0 }
+        return min(1.0, max(0.0, Double(todayCount) / Double(dailyGoal)))
+    }
+    var weekDaysCompleted: [Bool] {
+        if weeklyCounts.isEmpty {
+            return Array(repeating: false, count: 7)
+        }
+        return weeklyCounts.map { $0 > 0 }
+    }
+
     static var placeholder: StreakEntry {
         StreakEntry(
             date: Date(),
@@ -512,6 +564,10 @@ struct StreakEntry: TimelineEntry {
 }
 
 enum StreakDataHelper {
+    static func loadEntry() -> StreakEntry {
+        fetchStreak()
+    }
+
     static func fetchStreak() -> StreakEntry {
         guard let prefs = WidgetConstants.userDefaults else {
             return .placeholder
@@ -572,10 +628,21 @@ struct KazaEntry: TimelineEntry {
     let ikindi: Int
     let aksam: Int
     let yatsi: Int
+    let vitir: Int
     let totalDebt: Int
     let highestPrayerName: String
     let highestPrayerCount: Int
     let hasCompletedToday: Bool
+
+    // Compatibility aliases
+    var fajr: Int { sabah }
+    var dhuhr: Int { ogle }
+    var asr: Int { ikindi }
+    var maghrib: Int { aksam }
+    var isha: Int { yatsi }
+    var witr: Int { vitir }
+    var totalRemaining: Int { totalDebt }
+    var completedToday: Bool { hasCompletedToday }
 
     static var placeholder: KazaEntry {
         KazaEntry(
@@ -585,6 +652,7 @@ struct KazaEntry: TimelineEntry {
             ikindi: 0,
             aksam: 0,
             yatsi: 0,
+            vitir: 0,
             totalDebt: 0,
             highestPrayerName: "Sabah",
             highestPrayerCount: 0,
@@ -594,6 +662,10 @@ struct KazaEntry: TimelineEntry {
 }
 
 enum KazaDataHelper {
+    static func loadEntry() -> KazaEntry {
+        fetchKaza()
+    }
+
     static func fetchKaza() -> KazaEntry {
         let prefs = WidgetConstants.userDefaults
         let sabah = max(0, prefs?.integer(forKey: "KazaCount_Sabah") ?? 0)
@@ -601,10 +673,11 @@ enum KazaDataHelper {
         let ikindi = max(0, prefs?.integer(forKey: "KazaCount_İkindi") ?? 0)
         let aksam = max(0, prefs?.integer(forKey: "KazaCount_Akşam") ?? 0)
         let yatsi = max(0, prefs?.integer(forKey: "KazaCount_Yatsı") ?? 0)
+        let vitir = max(0, prefs?.integer(forKey: "KazaCount_Vitir") ?? 0)
 
-        let total = sabah + ogle + ikindi + aksam + yatsi
+        let total = sabah + ogle + ikindi + aksam + yatsi + vitir
         let pairs: [(String, Int)] = [
-            ("Sabah", sabah), ("Öğle", ogle), ("İkindi", ikindi), ("Akşam", aksam), ("Yatsı", yatsi)
+            ("Sabah", sabah), ("Öğle", ogle), ("İkindi", ikindi), ("Akşam", aksam), ("Yatsı", yatsi), ("Vitir", vitir)
         ]
         var maxName = "Sabah"
         var maxVal = -1
@@ -629,6 +702,7 @@ enum KazaDataHelper {
             ikindi: ikindi,
             aksam: aksam,
             yatsi: yatsi,
+            vitir: vitir,
             totalDebt: total,
             highestPrayerName: maxName,
             highestPrayerCount: max(0, maxVal),
@@ -647,6 +721,17 @@ extension View {
             }
         } else {
             self.background(backgroundView)
+        }
+    }
+
+    @ViewBuilder
+    func widgetBackground(_ backgroundView: some View) -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            containerBackground(for: .widget) {
+                backgroundView
+            }
+        } else {
+            background(backgroundView)
         }
     }
 }
