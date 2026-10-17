@@ -174,47 +174,153 @@ object WidgetDataHelper {
         return defaultValue
     }
 
-    fun getCachedPrayerTimes(context: Context, city: String): WidgetPrayerTimes {
-        val (defDay, defMonth, defYear) = calculateHijri()
-        val jsonStr = getStringPref(context, "CachedPrayerTimes_$city", "")
-        if (jsonStr.isNotEmpty()) {
-            try {
-                val obj = JSONObject(jsonStr)
-                var rawMonth = obj.optString("HijriMonth", obj.optString("hijriMonth", defMonth))
-                if (rawMonth.isEmpty() || rawMonth.equals("null", ignoreCase = true)) {
-                    rawMonth = defMonth
-                } else {
-                    rawMonth = translateHijriMonth(rawMonth)
-                }
+    private val cityCoordinates = mapOf(
+        "Adana" to Pair(37.0000, 35.3213), "Adıyaman" to Pair(37.7648, 38.2786), "Afyonkarahisar" to Pair(38.7507, 30.5567),
+        "Ağrı" to Pair(39.7191, 43.0503), "Aksaray" to Pair(38.3687, 34.0370), "Amasya" to Pair(40.6501, 35.8353),
+        "Ankara" to Pair(39.9334, 32.8597), "Antalya" to Pair(36.8848, 30.7056), "Ardahan" to Pair(41.1105, 42.7022),
+        "Artvin" to Pair(41.1828, 41.8183), "Aydın" to Pair(37.8560, 27.8416), "Balıkesir" to Pair(39.6484, 27.8826),
+        "Bartın" to Pair(41.6344, 32.3375), "Batman" to Pair(37.8812, 41.1293), "Bayburt" to Pair(40.2552, 40.2249),
+        "Bilecik" to Pair(40.1451, 29.9799), "Bingöl" to Pair(38.8853, 40.4983), "Bitlis" to Pair(38.4006, 42.1095),
+        "Bolu" to Pair(40.7358, 31.6061), "Burdur" to Pair(37.7203, 30.2908), "Bursa" to Pair(40.1885, 29.0610),
+        "Çanakkale" to Pair(40.1553, 26.4142), "Çankırı" to Pair(40.6013, 33.6134), "Çorum" to Pair(40.5506, 34.9556),
+        "Denizli" to Pair(37.7765, 29.0864), "Diyarbakır" to Pair(37.9144, 40.2110), "Düzce" to Pair(40.8438, 31.1565),
+        "Edirne" to Pair(41.6768, 26.5603), "Elazığ" to Pair(38.6810, 39.2264), "Erzincan" to Pair(39.7500, 39.5000),
+        "Erzurum" to Pair(39.9056, 41.2658), "Eskişehir" to Pair(39.7767, 30.5206), "Gaziantep" to Pair(37.0662, 37.3833),
+        "Giresun" to Pair(40.9128, 38.3895), "Gümüşhane" to Pair(40.4600, 39.4700), "Hakkari" to Pair(37.5833, 43.7333),
+        "Hatay" to Pair(36.2023, 36.1613), "Iğdır" to Pair(39.9200, 44.0400), "Isparta" to Pair(37.7648, 30.5566),
+        "İstanbul" to Pair(41.0082, 28.9784), "İzmir" to Pair(38.4192, 27.1287), "Kahramanmaraş" to Pair(37.5858, 36.9371),
+        "Karabük" to Pair(41.2061, 32.6204), "Karaman" to Pair(37.1759, 33.2287), "Kars" to Pair(40.6013, 43.0975),
+        "Kastamonu" to Pair(41.3887, 33.7827), "Kayseri" to Pair(38.7205, 35.4826), "Kırıkkale" to Pair(39.8468, 33.5153),
+        "Kırklareli" to Pair(41.7355, 27.2252), "Kırşehir" to Pair(39.1425, 34.1709), "Kilis" to Pair(36.7184, 37.1212),
+        "Kocaeli" to Pair(40.8533, 29.8815), "Konya" to Pair(37.8714, 32.4847), "Kütahya" to Pair(39.4167, 29.9833),
+        "Malatya" to Pair(38.3552, 38.3095), "Manisa" to Pair(38.6191, 27.4289), "Mardin" to Pair(37.3212, 40.7245),
+        "Mersin" to Pair(36.8121, 34.6415), "Muğla" to Pair(37.2153, 28.3636), "Muş" to Pair(38.7432, 41.5064),
+        "Nevşehir" to Pair(38.6244, 34.7144), "Niğde" to Pair(37.9667, 34.6833), "Ordu" to Pair(40.9839, 37.8764),
+        "Osmaniye" to Pair(37.0742, 36.2478), "Rize" to Pair(41.0201, 40.5234), "Sakarya" to Pair(40.7569, 30.3783),
+        "Samsun" to Pair(41.2867, 36.3300), "Şanlıurfa" to Pair(37.1674, 38.7955), "Siirt" to Pair(37.9333, 41.9500),
+        "Sinop" to Pair(42.0231, 35.1531), "Şırnak" to Pair(37.5164, 42.4594), "Sivas" to Pair(39.7477, 36.9934),
+        "Tekirdağ" to Pair(40.9833, 27.5167), "Tokat" to Pair(40.3167, 36.5500), "Trabzon" to Pair(41.0027, 39.7168),
+        "Tunceli" to Pair(39.1079, 39.5401), "Uşak" to Pair(38.6823, 29.4082), "Van" to Pair(38.5012, 43.3730),
+        "Yalova" to Pair(40.6500, 29.2667), "Yozgat" to Pair(39.8181, 34.8147), "Zonguldak" to Pair(41.4564, 31.7987)
+    )
 
-                var rawDay = obj.optString("HijriDay", obj.optString("hijriDay", defDay))
-                if (rawDay.isEmpty() || rawDay.equals("null", ignoreCase = true)) {
-                    rawDay = defDay
-                }
+    fun calculateOfflinePrayerTimes(city: String, cal: Calendar = Calendar.getInstance()): WidgetPrayerTimes {
+        val coords = cityCoordinates[city] ?: Pair(41.0082, 28.9784)
+        val lat = coords.first
+        val lng = coords.second
 
-                var rawYear = obj.optString("HijriYear", obj.optString("hijriYear", defYear))
-                if (rawYear.isEmpty() || rawYear.equals("null", ignoreCase = true)) {
-                    rawYear = defYear
-                }
+        val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val fractionalYear = (2.0 * Math.PI / 365.0) * (dayOfYear - 1 + (hour - 12.0) / 24.0)
 
-                return WidgetPrayerTimes(
-                    imsak = obj.optString("Imsak", obj.optString("fajr", "04:12")),
-                    gunes = obj.optString("Gunes", obj.optString("sunrise", "05:48")),
-                    ogle = obj.optString("Ogle", obj.optString("dhuhr", "13:08")),
-                    ikindi = obj.optString("Ikindi", obj.optString("asr", "16:54")),
-                    aksam = obj.optString("Aksam", obj.optString("maghrib", "20:18")),
-                    yatsi = obj.optString("Yatsi", obj.optString("isha", "21:46")),
-                    hijriDay = rawDay,
-                    hijriMonth = rawMonth,
-                    hijriYear = rawYear
-                )
-            } catch (_: Exception) {}
+        val eqt = 229.18 * (0.000075 + 0.001868 * cos(fractionalYear)
+                - 0.032077 * sin(fractionalYear)
+                - 0.014615 * cos(2 * fractionalYear)
+                - 0.040849 * sin(2 * fractionalYear))
+
+        val declination = 0.006918 - 0.399912 * cos(fractionalYear)
+                + 0.070257 * sin(fractionalYear)
+                - 0.006758 * cos(2 * fractionalYear)
+                + 0.000907 * sin(2 * fractionalYear)
+                - 0.002697 * cos(3 * fractionalYear)
+                + 0.00148 * sin(3 * fractionalYear)
+
+        val latRad = lat * Math.PI / 180.0
+        val zoneOffset = 3.0
+        val solarNoon = 12.0 + zoneOffset - (lng / 15.0) - (eqt / 60.0)
+
+        fun hourAngle(zenithDeg: Double): Double {
+            val zRad = zenithDeg * Math.PI / 180.0
+            val c = ((cos(zRad) - sin(latRad) * sin(declination)) / (cos(latRad) * cos(declination))).coerceIn(-1.0, 1.0)
+            return acos(c) * 180.0 / Math.PI
         }
+
+        val hSunrise = hourAngle(90.833)
+        val sunrise = solarNoon - (hSunrise / 15.0)
+        val sunset = solarNoon + (hSunrise / 15.0)
+        val fajr = solarNoon - (hourAngle(108.0) / 15.0)
+        val isha = solarNoon + (hourAngle(107.0) / 15.0)
+
+        val asrAngle = atan(1.0 + tan(abs(latRad - declination)))
+        val cosHAsr = ((sin(asrAngle) - sin(latRad) * sin(declination)) / (cos(latRad) * cos(declination))).coerceIn(-1.0, 1.0)
+        val hAsr = acos(cosHAsr) * 180.0 / Math.PI
+        val asr = solarNoon + (hAsr / 15.0)
+
+        fun fmt(dec: Double): String {
+            var h = floor(dec).toInt()
+            var m = ((dec - h) * 60.0).roundToInt()
+            if (m >= 60) {
+                h += 1
+                m -= 60
+            }
+            h = ((h % 24) + 24) % 24
+            return String.format(Locale.US, "%02d:%02d", h, m)
+        }
+
+        val (defDay, defMonth, defYear) = calculateHijri(cal)
         return WidgetPrayerTimes(
+            imsak = fmt(fajr),
+            gunes = fmt(sunrise),
+            ogle = fmt(solarNoon),
+            ikindi = fmt(asr),
+            aksam = fmt(sunset),
+            yatsi = fmt(isha),
             hijriDay = defDay,
             hijriMonth = defMonth,
             hijriYear = defYear
         )
+    }
+
+    fun getCachedPrayerTimes(context: Context, city: String): WidgetPrayerTimes {
+        val nowCal = Calendar.getInstance()
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(nowCal.time)
+        val (defDay, defMonth, defYear) = calculateHijri(nowCal)
+
+        // 1. Try today's dated cache from Flutter PrayerTimesService first
+        val datedJson = getStringPref(context, "prayer_times_${city}_$todayStr", "")
+        val candidateJson = if (datedJson.isNotEmpty()) datedJson else getStringPref(context, "CachedPrayerTimes_$city", "")
+
+        if (candidateJson.isNotEmpty()) {
+            try {
+                val obj = JSONObject(candidateJson)
+                val cachedDate = obj.optString("Date", obj.optString("date", ""))
+                // Use cached JSON only if it has no date tag or matches today's date
+                if (cachedDate.isEmpty() || cachedDate == todayStr) {
+                    var rawMonth = obj.optString("HijriMonth", obj.optString("hijriMonth", defMonth))
+                    if (rawMonth.isEmpty() || rawMonth.equals("null", ignoreCase = true)) {
+                        rawMonth = defMonth
+                    } else {
+                        rawMonth = translateHijriMonth(rawMonth)
+                    }
+
+                    var rawDay = obj.optString("HijriDay", obj.optString("hijriDay", defDay))
+                    if (rawDay.isEmpty() || rawDay.equals("null", ignoreCase = true)) {
+                        rawDay = defDay
+                    }
+
+                    var rawYear = obj.optString("HijriYear", obj.optString("hijriYear", defYear))
+                    if (rawYear.isEmpty() || rawYear.equals("null", ignoreCase = true)) {
+                        rawYear = defYear
+                    }
+
+                    val fallback = calculateOfflinePrayerTimes(city, nowCal)
+                    return WidgetPrayerTimes(
+                        imsak = obj.optString("Imsak", obj.optString("fajr", fallback.imsak)),
+                        gunes = obj.optString("Gunes", obj.optString("sunrise", fallback.gunes)),
+                        ogle = obj.optString("Ogle", obj.optString("dhuhr", fallback.ogle)),
+                        ikindi = obj.optString("Ikindi", obj.optString("asr", fallback.ikindi)),
+                        aksam = obj.optString("Aksam", obj.optString("maghrib", fallback.aksam)),
+                        yatsi = obj.optString("Yatsi", obj.optString("isha", fallback.yatsi)),
+                        hijriDay = rawDay,
+                        hijriMonth = rawMonth,
+                        hijriYear = rawYear
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Automatic offline astronomical calculation when cache is from a previous day or missing
+        return calculateOfflinePrayerTimes(city, nowCal)
     }
 
     fun parseTimeMinutes(timeStr: String): Int {
@@ -357,6 +463,33 @@ object WidgetDataHelper {
             }
         } else {
             if (isEn) "${minutes}m" else "${minutes} dk"
+        }
+    }
+
+    fun getLocalizedPrayerName(context: Context, prayerName: String): String {
+        val lang = getStringPref(context, "AppLanguage", Locale.getDefault().language)
+        val isEn = lang.startsWith("en", ignoreCase = true)
+
+        if (isEn) {
+            return when (prayerName.lowercase(Locale("tr", "TR"))) {
+                "imsak", "sabah" -> "Fajr"
+                "güneş", "gunes" -> "Sunrise"
+                "öğle", "ogle" -> "Dhuhr"
+                "ikindi" -> "Asr"
+                "akşam", "aksam" -> "Maghrib"
+                "yatsı", "yatsi" -> "Isha"
+                else -> prayerName
+            }
+        }
+
+        return when (prayerName.lowercase(Locale("tr", "TR"))) {
+            "imsak", "sabah" -> "İmsak"
+            "güneş", "gunes" -> "Güneş"
+            "öğle", "ogle" -> "Öğle"
+            "ikindi" -> "İkindi"
+            "akşam", "aksam" -> "Akşam"
+            "yatsı", "yatsi" -> "Yatsı"
+            else -> prayerName
         }
     }
 

@@ -42,6 +42,22 @@ class WidgetSyncService {
     'PrayerMiniWidgetProvider',
   ];
 
+  static const List<String> iosWidgetKinds = [
+    'PrayerTimesWidget',
+    'PrayerTimesMiniWidget',
+    'PrayerCountdownWidget',
+    'PrayerDigitalClockWidget',
+    'PrayerAnalogClockWidget',
+    'PrayerNextWidget',
+    'PrayerMiniWidget',
+    'HijriCalendarWidget',
+    'PrayerKazaWidget',
+    'KazaQuickWidget',
+    'KalpSagligiWidget',
+    'ZikirCounterWidget',
+    'StreakWidget',
+  ];
+
   /// Synchronize prayer times for a city and push to all widgets
   static Future<void> syncPrayerTimes({
     required String city,
@@ -119,6 +135,7 @@ class WidgetSyncService {
     bool isGoldCompleted = false,
     int zikirDailyGoal = 100,
     List<int>? weeklyCounts,
+    List<String>? activeDatesInWeek,
   }) async {
     try {
       await _ensureInitialized();
@@ -139,6 +156,12 @@ class WidgetSyncService {
         await prefs.setString('WeeklyDhikrCounts', weeklyStr);
       }
 
+      if (activeDatesInWeek != null) {
+        final activeDatesStr = activeDatesInWeek.join(',');
+        await HomeWidget.saveWidgetData<String>('ActiveDatesInWeek', activeDatesStr);
+        await prefs.setString('ActiveDatesInWeek', activeDatesStr);
+      }
+
       await triggerWidgetUpdate();
     } catch (e) {
       if (kDebugMode) {
@@ -148,13 +171,21 @@ class WidgetSyncService {
   }
 
   /// Synchronize kaza prayer debts
-  static Future<void> syncKazaCounts(Map<String, int> kazaCounts) async {
+  static Future<void> syncKazaCounts(
+    Map<String, int> kazaCounts, {
+    String? lastCompletedDate,
+  }) async {
     try {
+      await _ensureInitialized();
       final prefs = await SharedPreferences.getInstance();
       for (final entry in kazaCounts.entries) {
         final key = 'KazaCount_${entry.key}';
         await HomeWidget.saveWidgetData<int>(key, entry.value);
         await prefs.setInt(key, entry.value);
+      }
+      if (lastCompletedDate != null && lastCompletedDate.isNotEmpty) {
+        await HomeWidget.saveWidgetData<String>('KazaLastCompletedDate', lastCompletedDate);
+        await prefs.setString('KazaLastCompletedDate', lastCompletedDate);
       }
 
       await triggerWidgetUpdate();
@@ -168,6 +199,7 @@ class WidgetSyncService {
   /// Synchronize today's fard prayer completion checkmarks
   static Future<void> syncFardTicks(Map<String, bool> fardTicks) async {
     try {
+      await _ensureInitialized();
       final prefs = await SharedPreferences.getInstance();
       for (final entry in fardTicks.entries) {
         final key = 'TodayFard_${entry.key}';
@@ -209,18 +241,22 @@ class WidgetSyncService {
       final streak = await (db.select(db.userStreaks)..limit(1)).getSingleOrNull();
       final now = DateTime.now();
       final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      
+
       final todayLogs = await (db.select(db.zikirLogs)..where((t) => t.dateStr.equals(todayStr))).get();
       final todayDhikr = todayLogs.fold<int>(0, (sum, item) => sum + item.count);
 
-      // Calculate last 7 days for the Heart Health curve
+      // Calculate last 7 days for the Heart Health curve and active dates
       final weeklyCounts = <int>[];
+      final activeDates = <String>[];
       for (int i = 6; i >= 0; i--) {
         final targetDate = now.subtract(Duration(days: i));
         final dStr = '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
         final dayLogs = await (db.select(db.zikirLogs)..where((t) => t.dateStr.equals(dStr))).get();
         final daySum = dayLogs.fold<int>(0, (s, l) => s + l.count);
         weeklyCounts.add(daySum);
+        if (daySum > 0) {
+          activeDates.add(dStr);
+        }
       }
 
       final isGold = PrefUtils.getBool(prefs, 'IsTodayGoldCompleted$sfx', false) || (isDefault && PrefUtils.getBool(prefs, 'IsTodayGoldCompleted', false));
@@ -232,22 +268,23 @@ class WidgetSyncService {
         isGoldCompleted: isGold,
         zikirDailyGoal: dailyGoal,
         weeklyCounts: weeklyCounts,
+        activeDatesInWeek: activeDates,
       );
 
       // 3. Kaza
       final kazas = await db.select(db.kazaPrayers).get();
       final kazaMap = <String, int>{
-        'Sabah': 0, 'Öğle': 0, 'İkindi': 0, 'Akşam': 0, 'Yatsı': 0,
+        'Sabah': 0, 'Öğle': 0, 'İkindi': 0, 'Akşam': 0, 'Yatsı': 0, 'Vitir': 0,
       };
       for (final k in kazas) {
         final remaining = k.totalCount.clamp(0, 999999);
         kazaMap[k.prayerType] = remaining;
       }
-      await syncKazaCounts(kazaMap);
+      final kazaLastDate = prefs.getString('KazaLastCompletedDate');
+      await syncKazaCounts(kazaMap, lastCompletedDate: kazaLastDate);
 
       // 4. Background auto backup (debounced)
       BackupService.triggerAutoBackupBackground(db, sessionId: sessionId);
-
     } catch (e) {
       if (kDebugMode) {
         print('[WidgetSyncService] syncAll error: $e');
@@ -268,14 +305,12 @@ class WidgetSyncService {
           );
         }
       } else if (Platform.isIOS) {
-        await HomeWidget.updateWidget(
-          name: 'PrayerTimesWidget',
-          iOSName: 'PrayerTimesWidget',
-        );
-        await HomeWidget.updateWidget(
-          name: 'StreakWidget',
-          iOSName: 'StreakWidget',
-        );
+        for (final kind in iosWidgetKinds) {
+          await HomeWidget.updateWidget(
+            name: kind,
+            iOSName: kind,
+          );
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -284,3 +319,4 @@ class WidgetSyncService {
     }
   }
 }
+

@@ -20,7 +20,10 @@ class PrayerDigitalClockWidgetProvider : AppWidgetProvider() {
 
         if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE ||
             intent.action == Intent.ACTION_USER_PRESENT ||
-            intent.action == Intent.ACTION_BOOT_COMPLETED
+            intent.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent.action == Intent.ACTION_CONFIGURATION_CHANGED ||
+            intent.action == Intent.ACTION_TIME_CHANGED ||
+            intent.action == Intent.ACTION_TIMEZONE_CHANGED
         ) {
             val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
             val component = ComponentName(context, PrayerDigitalClockWidgetProvider::class.java)
@@ -29,6 +32,7 @@ class PrayerDigitalClockWidgetProvider : AppWidgetProvider() {
                 for (id in ids) {
                     updateWidgetStatic(context, appWidgetManager, id)
                 }
+                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
             }
         }
     }
@@ -38,6 +42,7 @@ class PrayerDigitalClockWidgetProvider : AppWidgetProvider() {
         for (id in appWidgetIds) {
             updateWidgetStatic(context, appWidgetManager, id)
         }
+        WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
     }
 
     companion object {
@@ -53,8 +58,11 @@ class PrayerDigitalClockWidgetProvider : AppWidgetProvider() {
 
                 views.setTextViewText(R.id.widget_active_vakit, localizedNext)
 
-                val remainingStr = WidgetDataHelper.formatRemainingTime(context, nextPrayer.remainingMs)
-                views.setTextViewText(R.id.widget_countdown, remainingStr)
+                val targetRealtime = SystemClock.elapsedRealtime() + nextPrayer.remainingMs
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    views.setChronometerCountDown(R.id.widget_countdown, true)
+                }
+                views.setChronometer(R.id.widget_countdown, targetRealtime, null, true)
 
                 val openIntent = Intent(context, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -67,7 +75,6 @@ class PrayerDigitalClockWidgetProvider : AppWidgetProvider() {
                 val pendingIntent = PendingIntent.getActivity(context, 103, openIntent, flags)
                 views.setOnClickPendingIntent(R.id.widget_root_layout, pendingIntent)
 
-                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (_: Exception) {}
         }

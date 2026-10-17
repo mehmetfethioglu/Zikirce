@@ -133,11 +133,9 @@ void main(List<String> args) async {
       options.beforeSend = SentryConfig.beforeSend;
     },
     appRunner: () {
-      // Remove native splash as core DB and session state are ready
-      FlutterNativeSplash.remove();
-
-      // Defer non-critical background services until after the first frame renders
+      // Remove native splash seamlessly right as the first frame of ZikirceSplashOverlay renders
       WidgetsBinding.instance.addPostFrameCallback((_) async {
+        FlutterNativeSplash.remove();
         AudioSyncService.initialize();
         TafseerService.initialize();
         if (Platform.isAndroid || Platform.isIOS) {

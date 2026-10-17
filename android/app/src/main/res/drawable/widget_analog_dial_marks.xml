@@ -1,72 +1,291 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="600dp"
-    android:height="600dp"
-    android:viewportWidth="600"
-    android:viewportHeight="600">
+    android:width="220dp"
+    android:height="220dp"
+    android:viewportWidth="220"
+    android:viewportHeight="220">
 
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 330.1,14.0 L 329.2,22.5" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 360.8,14.0 L 359.0,22.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 392.9,14.0 L 390.3,22.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 427.3,14.0 L 423.9,21.8" />
-    <!-- Hour 1 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 465.1,14.0 L 454.1,33.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 507.8,14.0 L 502.8,20.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 552.1,20.0 L 546.4,26.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 580.0,47.9 L 573.7,53.6" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,92.2 L 579.1,97.2" />
-    <!-- Hour 2 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 586.0,134.9 L 566.9,145.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,172.7 L 578.2,176.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,207.1 L 577.9,209.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,239.2 L 577.7,241.0" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,269.9 L 577.5,270.8" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,330.1 L 577.5,329.2" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,360.8 L 577.7,359.0" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,392.9 L 577.9,390.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,427.3 L 578.2,423.9" />
-    <!-- Hour 4 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 586.0,465.1 L 566.9,454.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 586.0,507.8 L 579.1,502.8" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 580.0,552.1 L 573.7,546.4" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 552.1,580.0 L 546.4,573.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 507.8,586.0 L 502.8,579.1" />
-    <!-- Hour 5 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 465.1,586.0 L 454.1,566.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 427.3,586.0 L 423.9,578.2" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 392.9,586.0 L 390.3,577.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 360.8,586.0 L 359.0,577.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 330.1,586.0 L 329.2,577.5" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 269.9,586.0 L 270.8,577.5" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 239.2,586.0 L 241.0,577.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 207.1,586.0 L 209.7,577.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 172.7,586.0 L 176.1,578.2" />
-    <!-- Hour 7 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 134.9,586.0 L 145.9,566.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 92.2,586.0 L 97.2,579.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 47.9,580.0 L 53.6,573.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 20.0,552.1 L 26.3,546.4" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,507.8 L 20.9,502.8" />
-    <!-- Hour 8 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 14.0,465.1 L 33.1,454.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,427.3 L 21.8,423.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,392.9 L 22.1,390.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,360.8 L 22.3,359.0" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,330.1 L 22.5,329.2" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,269.9 L 22.5,270.8" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,239.2 L 22.3,241.0" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,207.1 L 22.1,209.7" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,172.7 L 21.8,176.1" />
-    <!-- Hour 10 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 14.0,134.9 L 33.1,145.9" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 14.0,92.2 L 20.9,97.2" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 20.0,47.9 L 26.3,53.6" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 47.9,20.0 L 53.6,26.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 92.2,14.0 L 97.2,20.9" />
-    <!-- Hour 11 -->
-    <path android:strokeColor="@color/widget_digital_primary" android:strokeWidth="6.5" android:strokeLineCap="round" android:pathData="M 134.9,14.0 L 145.9,33.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 172.7,14.0 L 176.1,21.8" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 207.1,14.0 L 209.7,22.1" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 239.2,14.0 L 241.0,22.3" />
-    <path android:strokeColor="@color/widget_digital_secondary" android:strokeWidth="2.0" android:strokeLineCap="round" android:pathData="M 269.9,14.0 L 270.8,22.5" />
+    <!-- =========================================================
+         1. ZİKİRCE CANONICAL 8-LOBED ROSETTE MEDALLION
+            (Scaled 1.105x around (110,110) so the medallion fills
+             98.3% of the 220x220 viewport with minimal margin)
+         ========================================================= -->
+    <!-- Soft outer drop shadow -->
+    <path
+        android:fillColor="#16000000"
+        android:pathData="M 147.25,22.08
+                          A 47.29,47.29 0 0 1 199.92,74.75
+                          A 47.29,47.29 0 0 1 199.92,149.25
+                          A 47.29,47.29 0 0 1 147.25,201.92
+                          A 47.29,47.29 0 0 1 72.75,201.92
+                          A 47.29,47.29 0 0 1 20.08,149.25
+                          A 47.29,47.29 0 0 1 20.08,74.75
+                          A 47.29,47.29 0 0 1 72.75,22.08
+                          A 47.29,47.29 0 0 1 147.25,22.08 Z" />
+
+    <!-- Layer 1: Outer Deep Emerald Rosette (rLobe=47.29, max radius=108.07) -->
+    <path
+        android:fillColor="@color/widget_clock_outer_emerald"
+        android:pathData="M 147.25,20.08
+                          A 47.29,47.29 0 0 1 199.92,72.75
+                          A 47.29,47.29 0 0 1 199.92,147.25
+                          A 47.29,47.29 0 0 1 147.25,199.92
+                          A 47.29,47.29 0 0 1 72.75,199.92
+                          A 47.29,47.29 0 0 1 20.08,147.25
+                          A 47.29,47.29 0 0 1 20.08,72.75
+                          A 47.29,47.29 0 0 1 72.75,20.08
+                          A 47.29,47.29 0 0 1 147.25,20.08 Z" />
+
+    <!-- Layer 2: Middle Burnished Gold Rosette (rLobe=35.91) -->
+    <path
+        android:fillColor="@color/widget_clock_gold_ring"
+        android:pathData="M 141.96,32.84
+                          A 35.91,35.91 0 0 1 187.16,78.04
+                          A 35.91,35.91 0 0 1 187.16,141.96
+                          A 35.91,35.91 0 0 1 141.96,187.16
+                          A 35.91,35.91 0 0 1 78.04,187.16
+                          A 35.91,35.91 0 0 1 32.84,141.96
+                          A 35.91,35.91 0 0 1 32.84,78.04
+                          A 35.91,35.91 0 0 1 78.04,32.84
+                          A 35.91,35.91 0 0 1 141.96,32.84 Z" />
+
+    <!-- Layer 3: Inner Warm Cream Dial Face (Filled #F1EACA in both Light & Dark themes) -->
+    <path
+        android:fillColor="@color/widget_clock_dial_bg"
+        android:strokeWidth="1.2"
+        android:strokeColor="@color/widget_clock_gold_ring_inner"
+        android:pathData="M 137.58,43.42
+                          A 28.18,28.18 0 0 1 176.58,82.42
+                          A 28.18,28.18 0 0 1 176.58,137.58
+                          A 28.18,28.18 0 0 1 137.58,176.58
+                          A 28.18,28.18 0 0 1 82.42,176.58
+                          A 28.18,28.18 0 0 1 43.42,137.58
+                          A 28.18,28.18 0 0 1 43.42,82.42
+                          A 28.18,28.18 0 0 1 82.42,43.42
+                          A 28.18,28.18 0 0 1 137.58,43.42 Z" />
+
+    <!-- =========================================================
+         2. PROPORTIONAL CIRCULAR DIAL TRACK (R = 64.64):
+            - 48 Thin Minute Tick Lines between adjacent hours (R = 63.10 .. 66.19)
+            - 12 Full-Hour Dots at every hour position (r = 2.05)
+         ========================================================= -->
+    <!-- 48 Thin Minute Lines (4 between every two adjacent hours) -->
+    <path
+        android:strokeWidth="1.05"
+        android:strokeLineCap="round"
+        android:strokeColor="@color/widget_clock_tick_minor"
+        android:pathData="M 116.60,47.25 L 116.92,44.17
+                          M 123.12,48.28 L 123.76,45.26
+                          M 129.50,49.99 L 130.45,47.05
+                          M 135.67,52.36 L 136.92,49.53
+                          M 147.09,58.95 L 148.91,56.45
+                          M 152.22,63.11 L 154.29,60.81
+                          M 156.89,67.78 L 159.19,65.71
+                          M 161.05,72.91 L 163.55,71.09
+                          M 167.64,84.33 L 170.47,83.08
+                          M 170.01,90.50 L 172.95,89.55
+                          M 171.72,96.88 L 174.74,96.24
+                          M 172.75,103.40 L 175.83,103.08
+                          M 172.75,116.60 L 175.83,116.92
+                          M 171.72,123.12 L 174.74,123.76
+                          M 170.01,129.50 L 172.95,130.45
+                          M 167.64,135.67 L 170.47,136.92
+                          M 161.05,147.09 L 163.55,148.91
+                          M 156.89,152.22 L 159.19,154.29
+                          M 152.22,156.89 L 154.29,159.19
+                          M 147.09,161.05 L 148.91,163.55
+                          M 135.67,167.64 L 136.92,170.47
+                          M 129.50,170.01 L 130.45,172.95
+                          M 123.12,171.72 L 123.76,174.74
+                          M 116.60,172.75 L 116.92,175.83
+                          M 103.40,172.75 L 103.08,175.83
+                          M 96.88,171.72 L 96.24,174.74
+                          M 90.50,170.01 L 89.55,172.95
+                          M 84.33,167.64 L 83.08,170.47
+                          M 72.91,161.05 L 71.09,163.55
+                          M 67.78,156.89 L 65.71,159.19
+                          M 63.11,152.22 L 60.81,154.29
+                          M 58.95,147.09 L 56.45,148.91
+                          M 52.36,135.67 L 49.53,136.92
+                          M 49.99,129.50 L 47.05,130.45
+                          M 48.28,123.12 L 45.26,123.76
+                          M 47.25,116.60 L 44.17,116.92
+                          M 47.25,103.40 L 44.17,103.08
+                          M 48.28,96.88 L 45.26,96.24
+                          M 49.99,90.50 L 47.05,89.55
+                          M 52.36,84.33 L 49.53,83.08
+                          M 58.95,72.91 L 56.45,71.09
+                          M 63.11,67.78 L 60.81,65.71
+                          M 67.78,63.11 L 65.71,60.81
+                          M 72.91,58.95 L 71.09,56.45
+                          M 84.33,52.36 L 83.08,49.53
+                          M 90.50,49.99 L 89.55,47.05
+                          M 96.88,48.28 L 96.24,45.26
+                          M 103.40,47.25 L 103.08,44.17" />
+
+    <!-- 12 Full-Hour Dots (r = 2.05 at R = 64.64) -->
+    <path
+        android:fillColor="@color/widget_clock_tick_major"
+        android:pathData="M 110.00,45.36 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 142.32,54.02 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 165.98,77.68 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 174.64,110.00 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 165.98,142.32 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 142.32,165.98 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 110.00,174.64 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 77.68,165.98 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 54.02,142.32 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 45.36,110.00 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 54.02,77.68 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0
+                          M 77.68,54.02 m -2.05,0 a 2.05,2.05 0 1,0 4.1,0 a 2.05,2.05 0 1,0 -4.1,0" />
+
+    <!-- =========================================================
+         3. CARDINAL NUMERALS: 12 - 3 - 6 - 9 (R = 78.7 in 4 cardinal lobes)
+         ========================================================= -->
+    <!-- "12" centered at (110.0, 31.3) -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="@color/widget_clock_numeral"
+        android:pathData="M 102.8,27.3 L 105.1,25.5 L 105.1,36.5 M 102.9,36.5 L 107.3,36.5
+                          M 110.7,28.0 C 110.7,25.8 112.4,25.2 114.2,25.2 C 116.2,25.2 117.5,26.5 117.5,28.2 C 117.5,30.0 116.0,31.4 110.7,36.5 L 117.7,36.5" />
+
+    <!-- "3" centered at (188.7, 110.0) -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="@color/widget_clock_numeral"
+        android:pathData="M 185.6,105.8 C 186.1,104.4 187.5,103.9 189.1,103.9 C 191.1,103.9 192.4,105.0 192.4,106.8 C 192.4,108.5 191.1,109.7 188.7,109.7 C 191.3,109.7 192.8,111.0 192.8,112.9 C 192.8,114.9 191.2,116.1 189.0,116.1 C 187.1,116.1 185.8,115.4 185.3,114.1" />
+
+    <!-- "6" centered at (110.0, 188.7) -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="@color/widget_clock_numeral"
+        android:pathData="M 113.1,183.5 C 111.8,182.9 110.1,183.2 108.8,184.3 C 107.1,185.7 106.7,188.2 106.7,190.7 C 106.7,193.3 108.2,194.9 110.3,194.9 C 112.4,194.9 113.9,193.4 113.9,191.4 C 113.9,189.5 112.4,188.1 110.3,188.1 C 108.6,188.1 107.1,189.1 106.8,190.6" />
+
+    <!-- "9" centered at (31.3, 110.0) -->
+    <path
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeColor="@color/widget_clock_numeral"
+        android:pathData="M 27.9,115.0 C 29.2,115.5 30.9,115.3 32.2,114.2 C 33.9,112.8 34.3,110.2 34.3,107.8 C 34.3,105.1 32.8,103.6 30.7,103.6 C 28.6,103.6 27.1,105.0 27.1,107.0 C 27.1,109.0 28.6,110.3 30.7,110.3 C 32.4,110.3 33.9,109.3 34.2,107.9" />
+
+    <!-- =========================================================
+         4. ZİKİRCE CANONICAL BROWN TESBİH (Exact ZikirceLogoPainter
+            Walnut/Chestnut Brown Palette: #442410 / #62371A / #86522B)
+         ========================================================= -->
+    <!-- Soft drop shadow under tesbih cord & tassel -->
+    <path
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:strokeColor="#22000000"
+        android:pathData="M 151.1,35.4 C 154.4,29.3 160.3,29.1 165.5,33.1
+                          M 151.1,37.1 C 147.8,48.1 147.6,63.6 153.3,76.3 C 157.7,85.7 164.7,94.5 170.8,101.7
+                          M 189.0,73.9 C 187.9,82.9 181.8,94.0 170.8,101.7" />
+
+    <!-- Top-right looped strap wrapping over the top-right cusp -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 151.1,34.3
+                          C 152.5,28.8 156.4,25.8 161.0,27.3
+                          C 164.1,28.5 166.1,31.3 165.5,33.2
+                          C 162.5,31.3 159.2,31.1 156.6,33.2
+                          C 154.8,34.6 152.9,36.2 151.1,34.3 Z" />
+
+    <!-- Tesbih Cord (Left strand & Right strand converging at knot (170.8, 100.6)) -->
+    <path
+        android:strokeWidth="1.65"
+        android:strokeLineCap="round"
+        android:strokeColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 151.1,36.0 C 147.8,47.0 147.6,62.5 153.3,75.2 C 157.7,84.6 164.7,93.4 170.8,100.6
+                          M 189.0,72.8 C 187.9,81.8 181.8,92.9 170.8,100.6" />
+
+    <!-- 10 Left Strand Beads (r = 3.15) + 5 Right Strand Beads (r = 3.15) -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_bead"
+        android:strokeWidth="0.95"
+        android:strokeColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 151.1,36.0 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 149.3,42.2 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 148.5,48.7 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 148.1,55.3 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 148.7,61.9 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 150.3,68.7 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 153.3,75.2 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 157.3,81.5 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 161.9,87.5 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 166.6,93.4 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 189.0,72.8 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 188.0,79.3 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 185.4,85.7 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 181.2,91.7 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0
+                          M 176.1,96.5 m -3.15,0 a 3.15,3.15 0 1,0 6.3,0 a 3.15,3.15 0 1,0 -6.3,0" />
+
+    <!-- Specular warm brown bead highlights (#86522B) -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_highlight"
+        android:pathData="M 150.2,35.1 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 148.4,41.3 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 147.6,47.8 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 147.2,54.4 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 147.8,61.0 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 149.4,67.8 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 152.4,74.3 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 156.4,80.6 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 161.0,86.6 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 165.7,92.5 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 188.1,71.9 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 187.1,78.4 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 184.5,84.8 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 180.3,90.8 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0
+                          M 175.2,95.6 m -0.95,0 a 0.95,0.95 0 1,0 1.9,0 a 0.95,0.95 0 1,0 -1.9,0" />
+
+    <!-- Convergence Knot Bead at (170.8, 100.6, r=3.4) -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_bead"
+        android:strokeWidth="1.0"
+        android:strokeColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 170.8,100.6 m -3.4,0 a 3.4,3.4 0 1,0 6.8,0 a 3.4,3.4 0 1,0 -6.8,0" />
+
+    <!-- Imame Body + Small Tip Bead (x=170.8, y=103.6..110.7) -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_bead"
+        android:strokeWidth="0.95"
+        android:strokeColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 169.4,103.6
+                          L 172.1,103.6
+                          C 172.7,106.1 171.9,108.7 172.3,110.2
+                          L 169.2,110.2
+                          C 169.7,108.7 168.9,106.1 169.4,103.6 Z
+                          M 170.8,110.7 m -1.95,0 a 1.95,1.95 0 1,0 3.9,0 a 1.95,1.95 0 1,0 -3.9,0" />
+
+    <!-- Tassel (Püskül) at x = 166.4 .. 175.2, y = 112.0 .. 125.7 -->
+    <path
+        android:fillColor="@color/widget_clock_tesbih_dark"
+        android:pathData="M 169.7,112.0
+                          L 171.9,112.0
+                          C 173.2,115.7 174.5,120.5 175.2,125.0
+                          C 172.4,126.0 169.1,126.0 166.4,125.0
+                          C 167.0,120.5 168.3,115.7 169.7,112.0 Z" />
+
+    <!-- 3 Internal Brown Tassel Thread Lines -->
+    <path
+        android:strokeWidth="0.8"
+        android:strokeLineCap="round"
+        android:strokeColor="@color/widget_clock_tesbih_highlight"
+        android:pathData="M 170.8,112.8 L 170.8,125.2
+                          M 169.8,113.1 L 168.2,124.8
+                          M 171.8,113.1 L 173.3,124.8" />
+
+    <!-- =========================================================
+         5. CENTER HUB COLLAR
+         ========================================================= -->
+    <path
+        android:fillColor="@color/widget_clock_gold_ring"
+        android:pathData="M 110,110 m -5.2,0 a 5.2,5.2 0 1,0 10.4,0 a 5.2,5.2 0 1,0 -10.4,0" />
 </vector>

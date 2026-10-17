@@ -125,16 +125,17 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 5. Namaz Vakti Saati (2x2 Analog Kadran)
+          // 5. Namaz Vakti Saati (2x2 Selçuklu Yıldızı & Tesbih Analog Kadran)
           _buildWidgetCard(
-            title: l10n.isTurkish ? '5. Namaz Vakti Saati (Analog Kadran)' : '5. Prayer Analog Clock (Dial)',
+            title: l10n.isTurkish ? '5. Selçuklu Yıldızı & Tesbih Analog Saat' : '5. Seljuk Star & Tasbih Analog Clock',
             sizeLabel: '2x2 / 3x3',
             description: l10n.isTurkish
-                ? 'Analog saat kadranı üzerinde 6 vaktin renkli yayları ve ibreleri.'
-                : 'Analog clock face with 6 prayer sectors and custom hands.',
+                ? 'Zikirce logosundaki 8 köşeli yuvarlatılmış Selçuklu yıldızı ve tesbih çerçevesi, 12-3-6-9 rakamları ve en altta zarif canlı geri sayım sayacı.'
+                : 'Zikirce 8-pointed rounded Seljuk star & tasbih frame, 12-3-6-9 numerals, and an elegant live countdown timer at the bottom.',
             colors: colors,
             child: _buildAnalogClockMock(colors, isDark),
           ),
+
           const SizedBox(height: 16),
 
           // 6. Hicri Takvim (2x2)
@@ -483,13 +484,11 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
 
   Widget _buildAnalogClockMock(AppThemeColors colors, bool isDark) {
     return Container(
-      width: 150,
-      height: 150,
-      padding: const EdgeInsets.all(5),
+      width: 156,
+      height: 156,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF141417) : const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colors.borderStroke),
+        color: isDark ? const Color(0xFF000000) : const Color(0xFFFFFFFF),
+        borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
@@ -499,11 +498,12 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
         ],
       ),
       child: AnalogPrayerClock(
-        size: 140,
+        size: 156,
         isDark: isDark,
       ),
     );
   }
+
 
   Widget _buildHijriCalendarMock(AppThemeColors colors, bool isDark) {
     final now = DateTime.now();

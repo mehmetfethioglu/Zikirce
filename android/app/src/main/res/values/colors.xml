@@ -56,4 +56,43 @@
     <color name="widget_prayer_progress_track">#EAE1D5</color>
     <color name="widget_prayer_progress_fill">#D97706</color>
     <color name="widget_prayer_pill_bg">#F2EAE0</color>
+
+    <!-- Zikirce 8-Köşeli Yuvarlatılmış Selçuklu Yıldızı & Tesbih Analog Clock Colors (Light Theme - Pure White Background) -->
+    <color name="widget_seljuk_card_bg_start">#FFFFFF</color>
+    <color name="widget_seljuk_card_bg_end">#FFFFFF</color>
+    <color name="widget_seljuk_card_border">#E0EBE7</color>
+    <color name="widget_seljuk_dial_bg">#F1EACA</color>
+    <color name="widget_seljuk_inner_track">#174D35</color>
+    <color name="widget_seljuk_girih_pattern">#16236B56</color>
+    <color name="widget_seljuk_gold_frame">#C8A353</color>
+    <color name="widget_seljuk_gold_highlight">#E5C878</color>
+    <color name="widget_seljuk_gold_dim">#9E7B32</color>
+    <color name="widget_seljuk_baton_shadow">#22000000</color>
+    <color name="widget_seljuk_text_primary">#1E2B27</color>
+    <color name="widget_seljuk_text_secondary">#236B56</color>
+    <color name="widget_seljuk_pill_bg">#F4F8F6</color>
+    <color name="widget_seljuk_pill_border">#D8E5E1</color>
+    <color name="widget_seljuk_pill_text">#1E2B27</color>
+    <color name="widget_seljuk_tesbih_bead">#62371A</color>
+    <color name="widget_seljuk_tesbih_dark">#442410</color>
+    <color name="widget_seljuk_tesbih_highlight">#86522B</color>
+    <color name="widget_seljuk_hand_fill">#163A2B</color>
+    <color name="widget_seljuk_second_hand">#DC2626</color>
+
+    <!-- Canonical Zikirce Clock Drawable Tokens (Light Theme) -->
+    <color name="widget_clock_outer_emerald">#174D35</color>
+    <color name="widget_clock_gold_ring">#C8A353</color>
+    <color name="widget_clock_gold_ring_inner">#E5C878</color>
+    <color name="widget_clock_dial_bg">#F1EACA</color>
+    <color name="widget_clock_tick_major">#174D35</color>
+    <color name="widget_clock_tick_minor">#9E7B32</color>
+    <color name="widget_clock_numeral">#1E2B27</color>
+    <color name="widget_clock_tesbih_bead">#62371A</color>
+    <color name="widget_clock_tesbih_dark">#442410</color>
+    <color name="widget_clock_tesbih_highlight">#86522B</color>
+    <color name="widget_clock_hour_hand">#163A2B</color>
+    <color name="widget_clock_minute_hand">#163A2B</color>
+    <color name="widget_clock_second_hand">#DC2626</color>
 </resources>
+
+

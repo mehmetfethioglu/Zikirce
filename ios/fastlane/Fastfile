@@ -169,15 +169,17 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Zikirce v2.1.4 Yenilikleri:
-      • Namaz Bildirimleri & Saat Dilimi Hassasiyeti: iOS için namaz vakit bildirimleri ve kaza takip ("Namazınızı Kıldınız mı?") soru hatırlatmalarının yerel saat dilimi çizelgelemesi güçlendirildi; tüm bildirimlerin tam vaktinde ulaşması sağlandı.
-      • Kelimeli Mushaf & Arapça Harf Bütünlüğü: Kelimeli Mushaf, İnteraktif Talim ve Mukabele ekranlarında Arapça metin akışı, harf bitişikliği ve kelime odaklı ses takibi daha pürüzsüz ve hatasız hale getirildi.
-      • Kararlılık & Sistem İyileştirmeleri: App Store Connect ve TestFlight dağıtım altyapısı güncellendi, genel bellek yönetimi ve kullanıcı arayüzü akıcılığı artırıldı.
+      Zikirce v2.1.5 Yenilikleri:
+      • iOS WidgetKit Selçuklu Analog Saati & Kilit Ekranı: iOS Ana Ekran ve Kilit Ekranı için 8 köşeli Selçuklu motifli estetik analog namaz saati, kilit ekranı aksesuarları ve zenginleştirilmiş vakit takip widget'ları eklendi.
+      • Canlı Vakit Dilimli Selçuklu Kadranı: Uygulama içi vakit kartlarına dinamik akrep-yelkovan ve namaz vakit dilimlerini canlı gösteren zarif saat kadranı entegre edildi.
+      • Kusursuz Açılış & Native Splash: Açılış logosu ve splash katmanı yenilenerek açık/koyu temalarla sıfır titremeli geçiş sağlandı.
+      • WidgetKit Arka Plan Senkronizasyonu: App Group veri köprüsü güçlendirildi, anlık veri aktarımı ve bellek verimliliği artırıldı.
 
-      What's New in v2.1.4:
-      • Prayer Notifications & Timezone Precision: Enhanced local timezone scheduling for prayer entry notifications and missed prayer reminders on iOS, guaranteeing pinpoint accuracy across time zones.
-      • Word-by-Word Mushaf & Arabic Typography: Refined Arabic typography ligature continuity and word-by-word audio synchronicity across Mushaf reader, Interactive Talim, and Mukabele hatim screens.
-      • Stability & System Polish: Updated App Store Connect and TestFlight delivery pipeline, along with general memory management and UI responsiveness enhancements.
+      What's New in v2.1.5:
+      • iOS WidgetKit Seljuk Analog Clock & Lock Screen: Exquisite 8-pointed Seljuk star analog prayer clock and enriched prayer accessories for iOS Home Screen & Lock Screen.
+      • Live Prayer-Sector Clock Dial: Integrated real-time hands and dynamic prayer time sector highlights in daily prayer cards.
+      • Refined Native Splash Experience: Brand-new splash architecture for seamless, flicker-free light and dark mode launch transitions.
+      • WidgetKit Background Sync & Robustness: Reinforced App Group bridge for instantaneous prayer time and streak sync with optimized energy efficiency.
     CHANGELOG
 
     upload_to_testflight(

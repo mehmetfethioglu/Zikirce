@@ -50,7 +50,9 @@ class TodayPrayersCard extends ConsumerWidget {
     final todayPrayersAsync = ref.watch(todayPrayersProvider);
     final timingsAsync = ref.watch(prayerTimingsProvider);
     final nextPrayerName = ref.watch(nextPrayerInfoProvider.select((i) => i?.name));
-    final nextPrayer = showCountdownHeader ? ref.watch(nextPrayerInfoProvider) : null;
+    final nextPrayerTime = showCountdownHeader
+        ? ref.watch(nextPrayerInfoProvider.select((i) => i?.time))
+        : null;
 
     final timings = timingsAsync.valueOrNull;
     final rawPrayers = todayPrayersAsync.valueOrNull ?? [];
@@ -71,20 +73,20 @@ class TodayPrayersCard extends ConsumerWidget {
     final String titleText;
     final String subtitleText;
 
-    if (showCountdownHeader && nextPrayer != null) {
-      final prayerName = nextPrayer.name;
+    if (showCountdownHeader && nextPrayerName != null && nextPrayerTime != null) {
       titleText = l10n.isTurkish
-          ? '$prayerName Vaktine Kalan'
-          : 'Until $prayerName';
+          ? '$nextPrayerName Vaktine Kalan'
+          : 'Until $nextPrayerName';
       subtitleText = l10n.isTurkish
-          ? 'Sonraki Vakit: ${nextPrayer.time}'
-          : 'Next: ${nextPrayer.time}';
+          ? 'Sonraki Vakit: $nextPrayerTime'
+          : 'Next: $nextPrayerTime';
     } else {
       titleText = l10n.isTurkish ? 'Günün 5 Vakit Namazı' : '5 Daily Prayers';
       subtitleText = l10n.isTurkish
           ? '$completedCount / 5 Vakit Tamamlandı'
           : '$completedCount / 5 Completed';
     }
+
 
     return Container(
       decoration: BoxDecoration(

@@ -89,6 +89,8 @@ class SessionManagerService {
     await prefs.setString(_activeSessionIdKey, id);
   }
 
+  static int _idCounter = 0;
+
   /// Yeni Yerel Oturum Oluşturur
   static Future<UserSession> createLocalSession({
     String? id,
@@ -99,7 +101,7 @@ class SessionManagerService {
     final sessions = await loadSessions();
     final newId = (id != null && id.isNotEmpty)
         ? id
-        : 'usr_${DateTime.now().microsecondsSinceEpoch}';
+        : 'usr_${DateTime.now().microsecondsSinceEpoch}_${++_idCounter}';
     final dbName = 'zikirce_user_$newId.sqlite';
 
     final hasPin = pin != null && pin.trim().length == 4;
@@ -135,7 +137,7 @@ class SessionManagerService {
     final sessions = await loadSessions();
     final newId = (id != null && id.isNotEmpty)
         ? id
-        : 'usr_${DateTime.now().microsecondsSinceEpoch}';
+        : 'usr_${DateTime.now().microsecondsSinceEpoch}_${++_idCounter}';
     final dbName = 'zikirce_user_$newId.sqlite';
 
     final hasPin = pin != null && pin.trim().length == 4;

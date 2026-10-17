@@ -1,30 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1000dp"
-    android:height="1000dp"
-    android:viewportWidth="1000"
-    android:viewportHeight="1000">
+    android:width="220dp"
+    android:height="220dp"
+    android:viewportWidth="220"
+    android:viewportHeight="220">
 
-    <!-- 1. Outermost Orbital Ring for Hour Hand: R=224 to R=242 (Center R=233, Width=18) -->
-    <!-- Tangent to middle Minute ring (R=224) -->
+    <!-- Soft drop shadow -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="@color/widget_hour_hand_color"
-        android:strokeWidth="18"
-        android:pathData="M 500,267 A 233,233 0 1,0 500,733 A 233,233 0 1,0 500,267 Z" />
+        android:fillColor="#28000000"
+        android:pathData="M 110.8,120.4 L 106.8,110.8 L 110.8,70.1 L 114.8,110.8 Z" />
 
-    <!-- 2. Modern Tapered Sword Hour Hand Frame (from y=258 to y=140, R=360) -->
+    <!-- Classic Dauphine Diamond Hour Hand (Akrep - Scaled 1.105x) -->
     <path
-        android:fillColor="@color/widget_hour_hand_color"
-        android:pathData="M 486,258 L 492.5,160 L 500,140 L 507.5,160 L 514,258 Z" />
+        android:fillColor="@color/widget_clock_hour_hand"
+        android:strokeWidth="0.85"
+        android:strokeColor="@color/widget_clock_gold_ring"
+        android:pathData="M 110.0,119.4 L 106.0,110.0 L 110.0,69.1 L 114.0,110.0 Z" />
 
-    <!-- 3. Inner Luminous Channel (Fosfor Kanalı) -->
+    <!-- Luminous gold central ridge -->
     <path
-        android:fillColor="@color/widget_hand_lume"
-        android:pathData="M 491,244 L 495.5,166 L 500,152 L 504.5,166 L 509,244 Z" />
-
-    <!-- 4. Luminous Accent Tip at Sword Point -->
-    <path
-        android:fillColor="@color/widget_digital_accent"
-        android:pathData="M 494,168 L 500,144 L 506,168 Z" />
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeColor="@color/widget_clock_gold_ring_inner"
+        android:pathData="M 110.0,107.8 L 110.0,75.5" />
 </vector>

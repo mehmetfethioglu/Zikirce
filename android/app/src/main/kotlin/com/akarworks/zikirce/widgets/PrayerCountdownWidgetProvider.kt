@@ -12,7 +12,6 @@ import android.os.SystemClock
 import android.widget.RemoteViews
 import com.akarworks.zikirce.MainActivity
 import com.akarworks.zikirce.R
-import java.util.Calendar
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -25,7 +24,9 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
         if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE ||
             intent.action == Intent.ACTION_USER_PRESENT ||
             intent.action == Intent.ACTION_BOOT_COMPLETED ||
-            intent.action == Intent.ACTION_CONFIGURATION_CHANGED
+            intent.action == Intent.ACTION_CONFIGURATION_CHANGED ||
+            intent.action == Intent.ACTION_TIME_CHANGED ||
+            intent.action == Intent.ACTION_TIMEZONE_CHANGED
         ) {
             val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
             val component = ComponentName(context, PrayerCountdownWidgetProvider::class.java)
@@ -34,6 +35,7 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
                 for (id in ids) {
                     updateWidgetTick(context, appWidgetManager, id)
                 }
+                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
             }
         }
     }
@@ -43,6 +45,7 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
         for (id in appWidgetIds) {
             updateWidgetTick(context, appWidgetManager, id)
         }
+        WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
     }
 
     companion object {
@@ -58,10 +61,13 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
 
                 views.setTextViewText(R.id.widget_next_prayer_name, localizedNext.uppercase())
 
-                val remainingStr = WidgetDataHelper.formatRemainingTime(context, nextPrayer.remainingMs)
-                views.setTextViewText(R.id.widget_next_prayer_countdown, remainingStr)
+                val targetRealtime = SystemClock.elapsedRealtime() + nextPrayer.remainingMs
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    views.setChronometerCountDown(R.id.widget_next_prayer_countdown, true)
+                }
+                views.setChronometer(R.id.widget_next_prayer_countdown, targetRealtime, null, true)
 
-                val bitmap = createConcentricRingsBitmap(cachedTimes, context = context)
+                val bitmap = createConcentricRingsBitmap(cachedTimes, nextPrayer)
                 if (bitmap != null) {
                     views.setImageViewBitmap(R.id.widget_rings_image, bitmap)
                 }
@@ -77,21 +83,19 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
                 val pendingIntent = PendingIntent.getActivity(context, 102, openIntent, flags)
                 views.setOnClickPendingIntent(R.id.widget_root_layout, pendingIntent)
 
-                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (_: Exception) {}
         }
 
-        private fun createConcentricRingsBitmap(times: WidgetPrayerTimes, context: Context): Bitmap? {
+        private fun createConcentricRingsBitmap(times: WidgetPrayerTimes, nextPrayer: NextPrayerResult): Bitmap? {
             return try {
-                val size = 400
+                val size = 320
                 val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(bitmap)
 
                 val cx = size / 2f
                 val cy = size / 2f
 
-                val nextPrayer = WidgetDataHelper.calculateNextPrayer(times)
                 val progress = (nextPrayer.progressPercent / 100.0).coerceIn(0.0, 1.0)
 
                 val strokeWidth = size * 0.088f
@@ -131,8 +135,8 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
                 for (i in 0 until 60) {
                     val isMajor = (i % 5 == 0)
                     val endR = radius - strokeWidth * 0.5f - 2f
-                    val startR = endR - if (isMajor) 8f else 4f
-                    tickPaint.strokeWidth = if (isMajor) 2f else 1f
+                    val startR = endR - if (isMajor) 7f else 3.5f
+                    tickPaint.strokeWidth = if (isMajor) 1.8f else 1f
 
                     val angleRad = Math.toRadians((i * 6.0 - 90.0))
                     val cosA = cos(angleRad).toFloat()

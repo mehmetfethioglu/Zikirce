@@ -1,20 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_digital_clock_bg"
-    android:padding="0dp"
+    android:background="@drawable/widget_seljuk_clock_bg"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:paddingHorizontal="1dp"
+    android:paddingTop="1dp"
+    android:paddingBottom="2dp"
     android:clickable="true"
     android:focusable="true">
 
+    <!-- 1. Üst Ana Bölüm: Zikirce 8 Köşeli Yuvarlatılmış Selçuklu Yıldızı & Tesbih Analog Saat (En Az Kenar Boşluğu) -->
     <FrameLayout
         android:id="@+id/widget_clock_frame"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_centerInParent="true">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-        <!-- 1. Native Vector Squircle Dial: 60 Edge Minute Ticks & 8 Bold Batons -->
+        <!-- Kadran Çerçevesi (8 Köşeli Selçuklu Yıldızı + Kahverengi Tesbih + 12-3-6-9 + Saat Noktaları & Dakika Çizgileri) -->
         <ImageView
             android:id="@+id/widget_clock_marks"
             android:layout_width="match_parent"
@@ -23,102 +28,56 @@
             android:src="@drawable/widget_analog_dial_marks"
             android:scaleType="fitCenter" />
 
-        <!-- 2. Native Cardinal Numbers (12, 3, 6, 9) - 100% Theme Synchronized -->
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
-
-            <TextView
-                android:id="@+id/clock_num_12"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentTop="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginTop="10dp"
-                android:text="12"
-                android:textColor="@color/widget_digital_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/clock_num_6"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentBottom="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginBottom="10dp"
-                android:text="6"
-                android:textColor="@color/widget_digital_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/clock_num_9"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"
-                android:layout_marginStart="14dp"
-                android:text="9"
-                android:textColor="@color/widget_digital_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/clock_num_3"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:layout_marginEnd="14dp"
-                android:text="3"
-                android:textColor="@color/widget_digital_primary"
-                android:textSize="22sp"
-                android:textStyle="bold" />
-        </RelativeLayout>
-
-        <!-- 3. Central Chrono Info Hub (Framed directly by concentric rings) -->
+        <!-- Kadran İçi Üst Bölüm: Sıradaki Vakit Adı ve Saati (12 Rakamının Altında, Sade & Zarif) -->
         <LinearLayout
-            android:id="@+id/widget_prayer_info_container"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:orientation="vertical"
-            android:gravity="center"
-            android:padding="2dp">
+            android:weightSum="100">
 
-            <TextView
-                android:id="@+id/widget_next_prayer_name"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/widget_digital_accent"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:gravity="center" />
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="26" />
 
-            <TextView
-                android:id="@+id/widget_countdown"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
-                android:layout_marginBottom="1dp"
-                android:textColor="@color/widget_digital_primary"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:singleLine="true"
-                android:gravity="center" />
+            <LinearLayout
+                android:id="@+id/widget_prayer_info_container"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="18"
+                android:orientation="vertical"
+                android:gravity="center">
 
-            <TextView
-                android:id="@+id/widget_next_prayer_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/widget_digital_secondary"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:gravity="center" />
+                <TextView
+                    android:id="@+id/widget_next_prayer_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="İmsak"
+                    android:textColor="@color/widget_seljuk_text_secondary"
+                    android:textSize="9.5sp"
+                    android:textStyle="bold"
+                    android:singleLine="true"
+                    android:gravity="center" />
+
+                <TextView
+                    android:id="@+id/widget_next_prayer_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="05:07"
+                    android:textColor="@color/widget_seljuk_text_primary"
+                    android:textSize="10.5sp"
+                    android:textStyle="bold"
+                    android:singleLine="true"
+                    android:gravity="center" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="56" />
         </LinearLayout>
 
-        <!-- 4. Real-time Native Analog Clock Hands (Zero Battery Lag, Red Second) -->
+        <!-- Canlı Analog Saat İbreleri (Sıfır Pil Tüketimi) -->
         <AnalogClock
             android:id="@+id/widget_analog_clock"
             android:layout_width="match_parent"
@@ -131,34 +90,27 @@
 
     </FrameLayout>
 
-    <!-- Placeholder Content -->
+    <!-- 2. Alt Bölüm (Saatin Dışında, Widget'ın En Altında Zarif Canlı Geri Sayım Sayacı) -->
     <LinearLayout
-        android:id="@+id/widget_placeholder_layout"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
+        android:id="@+id/widget_countdown_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="20dp"
+        android:layout_marginTop="0dp"
+        android:background="@drawable/widget_seljuk_pill_bg"
         android:gravity="center"
-        android:padding="8dp"
-        android:visibility="gone">
+        android:orientation="horizontal"
+        android:paddingHorizontal="10dp">
 
-        <TextView
+        <Chronometer
+            android:id="@+id/widget_countdown"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Namaz Vakti"
-            android:textColor="@color/widget_digital_secondary"
-            android:textSize="12sp"
+            android:textColor="@color/widget_seljuk_pill_text"
+            android:textSize="11sp"
             android:textStyle="bold"
-            android:gravity="center" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="YÜKLENİYOR"
-            android:textColor="@color/widget_digital_primary"
-            android:textSize="14sp"
-            android:textStyle="bold"
+            android:countDown="true"
+            android:singleLine="true"
             android:gravity="center" />
     </LinearLayout>
 
-</RelativeLayout>
+</LinearLayout>

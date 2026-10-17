@@ -33,23 +33,24 @@
                 android:id="@+id/widget_next_prayer_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="AKŞAM"
+                android:text="AKŞAMA"
                 android:textColor="@color/widget_digital_accent"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:gravity="center"
                 android:letterSpacing="0.05"
                 android:ellipsize="end"
                 android:maxLines="1" />
 
-            <TextView
+            <Chronometer
                 android:id="@+id/widget_next_prayer_countdown"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 android:textColor="@color/widget_digital_primary"
-                android:textSize="22sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
+                android:countDown="true"
                 android:maxLines="1"
                 android:singleLine="true"
                 android:gravity="center"

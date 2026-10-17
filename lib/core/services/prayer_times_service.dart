@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/hijri_calendar.dart';
-import 'widget_sync_service.dart';
 
 class PrayerTimings {
   final String fajr; // İmsak

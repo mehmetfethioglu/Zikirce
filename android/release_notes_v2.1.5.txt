@@ -1,0 +1,15 @@
+# ==============================================================================
+# Zikirce Android v2.1.5 (Build 60) Release Notes / Sürüm Notları
+# ==============================================================================
+
+[tr-TR] (Google Play Console - Maks. 500 Karakter)
+Zikirce v2.1.5 Yenilikleri:
+• Selçuklu Analog Saati & Canlı Kadran: 8 köşeli Selçuklu motifli estetik analog saat kadranı ve dinamik namaz vakit dilimleri eklendi.
+• Kusursuz Açılış & Native Splash: Açılış ekranı ve logo geçişleri baştan sona yenilendi, açık ve koyu temalara tam uyum sağlandı.
+• Widget & Arka Plan Senkronizasyonu: Saat ve sayaç widget'larının veri güncelleme hassasiyeti artırıldı, pil tüketimi optimize edildi.
+
+[en-US] (Google Play Console - Max. 500 Characters)
+Zikirce v2.1.5 What's New:
+• Seljuk Analog Clock & Live Dial: Introduced 8-pointed Seljuk star analog prayer clock dial with real-time hands and prayer sector highlights.
+• Seamless Launch & Native Splash: Re-engineered native splash screen for flicker-free startup with full light & dark theme harmony.
+• Widget & Background Sync Engine: Upgraded widget synchronization precision for clock and prayer countdowns with minimal battery impact.

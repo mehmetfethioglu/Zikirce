@@ -11,6 +11,7 @@ import '../features/settings/providers/settings_provider.dart';
 import '../features/namaz_vakitleri/providers/prayer_providers.dart';
 import '../features/gamification/providers/gamification_providers.dart';
 import '../core/widgets/celebration/spiritual_celebration_overlay.dart';
+import '../core/widgets/splash/zikirce_splash_overlay.dart';
 import 'router/app_router.dart';
 
 /// Masaüstü ve tüm platformlarda fare ile sürüklemeyi (mouse drag) aktif kılan ScrollBehavior
@@ -105,8 +106,10 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, child) {
-        return SpiritualCelebrationOverlay(
-          child: child ?? const SizedBox.shrink(),
+        return ZikirceSplashOverlay(
+          child: SpiritualCelebrationOverlay(
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );

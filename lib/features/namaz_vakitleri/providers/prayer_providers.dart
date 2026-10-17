@@ -94,7 +94,12 @@ final selectedCityProvider = StateNotifierProvider<CityNotifier, String>((ref) {
 });
 
 final currentDateProvider = Provider<String>((ref) {
-  final now = ref.watch(timeTickerStreamProvider).valueOrNull ?? DateTime.now();
+  final now = DateTime.now();
+  final nextMidnight = DateTime(now.year, now.month, now.day + 1, 0, 0, 2);
+  final timer = Timer(nextMidnight.difference(now), () {
+    ref.invalidateSelf();
+  });
+  ref.onDispose(timer.cancel);
   return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 });
 
@@ -103,23 +108,29 @@ final prayerTimingsProvider = FutureProvider<PrayerTimings>((ref) async {
   ref.watch(currentDateProvider); // Automatically re-fetch timings when date crosses midnight
   final timings = await PrayerTimesService.getPrayerTimes(city: city);
 
-  // Automatically schedule/update local notifications for prayer times and 'Did you pray?' questions
+  // Sync updated timings to native widgets and schedule local notifications
   try {
+    final activeSession = ref.read(activeSessionProvider);
+    await WidgetSyncService.syncPrayerTimes(
+      city: city,
+      timings: timings,
+      sessionId: activeSession.id,
+    );
     await LocalNotificationService.scheduleAllPrayerNotifications(timings);
   } catch (_) {}
 
   return timings;
 });
 
-// Periodic timer emitting every second for real-time clock and countdown ticking
-final timeTickerStreamProvider = StreamProvider<DateTime>((ref) {
+// Periodic timer emitting every second ONLY while watched by an active UI widget
+final timeTickerStreamProvider = StreamProvider.autoDispose<DateTime>((ref) {
   return Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now());
 });
 
-final nextPrayerInfoProvider = Provider<NextPrayerInfo?>((ref) {
+final nextPrayerInfoProvider = Provider.autoDispose<NextPrayerInfo?>((ref) {
   final timingsAsync = ref.watch(prayerTimingsProvider);
   final city = ref.watch(selectedCityProvider);
-  ref.watch(timeTickerStreamProvider); // trigger recompute every second
+  ref.watch(timeTickerStreamProvider); // trigger recompute every second only when watched
 
   return timingsAsync.when(
     data: (timings) => PrayerTimesService.getNextPrayerInfo(timings),
@@ -133,6 +144,7 @@ final nextPrayerInfoProvider = Provider<NextPrayerInfo?>((ref) {
     },
   );
 });
+
 
 // Today's 5 Fard Prayers Provider
 final todayPrayersProvider = FutureProvider<List<TodayPrayerStatusItem>>((ref) async {
@@ -219,6 +231,19 @@ class KazaNotifier extends StateNotifier<void> {
 
   KazaNotifier(this.ref) : super(null);
 
+  Future<void> _syncKazaWidgets(AppDatabase db, {String? lastCompletedDate}) async {
+    try {
+      final kazas = await db.select(db.kazaPrayers).get();
+      final kazaMap = <String, int>{
+        'Sabah': 0, 'Öğle': 0, 'İkindi': 0, 'Akşam': 0, 'Yatsı': 0, 'Vitir': 0,
+      };
+      for (final k in kazas) {
+        kazaMap[k.prayerType] = k.totalCount.clamp(0, 999999);
+      }
+      await WidgetSyncService.syncKazaCounts(kazaMap, lastCompletedDate: lastCompletedDate);
+    } catch (_) {}
+  }
+
   Future<void> adjustKaza(String prayerType, int delta) async {
     final db = ref.read(databaseProvider);
     final row = await (db.select(db.kazaPrayers)..where((t) => t.prayerType.equals(prayerType))).getSingleOrNull();
@@ -239,6 +264,7 @@ class KazaNotifier extends StateNotifier<void> {
       );
     }
 
+    await _syncKazaWidgets(db);
     ref.invalidate(todayPrayersProvider);
     ref.invalidate(kazaSummaryProvider);
     ref.invalidate(dailyGoalsStatusProvider);
@@ -263,6 +289,7 @@ class KazaNotifier extends StateNotifier<void> {
       );
     }
 
+    await _syncKazaWidgets(db);
     ref.invalidate(todayPrayersProvider);
     ref.invalidate(kazaSummaryProvider);
     ref.invalidate(dailyGoalsStatusProvider);
@@ -288,13 +315,14 @@ class KazaNotifier extends StateNotifier<void> {
         ),
       );
 
+      final todayStr = GoldenDayService.getTodayStr();
       if (prayerType != 'Oruç') {
         final prefs = await SharedPreferences.getInstance();
-        final todayStr = GoldenDayService.getTodayStr();
         final curCount = prefs.getInt('TodayKazaCount_$todayStr') ?? 0;
         await prefs.setInt('TodayKazaCount_$todayStr', curCount + 1);
       }
 
+      await _syncKazaWidgets(db, lastCompletedDate: todayStr);
       await DailyStreakService.recordDailyActivity(db);
       ref.read(badgeRefreshTriggerProvider.notifier).state++;
       ref.invalidate(todayPrayersProvider);
@@ -303,6 +331,7 @@ class KazaNotifier extends StateNotifier<void> {
     }
   }
 }
+
 
 final kazaNotifierProvider = Provider<KazaNotifier>((ref) {
   return KazaNotifier(ref);

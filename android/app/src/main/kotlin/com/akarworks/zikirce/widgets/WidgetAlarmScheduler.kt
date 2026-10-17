@@ -2,16 +2,64 @@ package com.akarworks.zikirce.widgets
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import java.util.Calendar
+import kotlin.math.min
 
 object WidgetAlarmScheduler {
+
+    private val prayerWidgetClasses = arrayOf(
+        PrayerTimesWidgetProvider::class.java,
+        PrayerTimesMiniWidgetProvider::class.java,
+        PrayerCountdownWidgetProvider::class.java,
+        PrayerDigitalClockWidgetProvider::class.java,
+        PrayerAnalogClockWidgetProvider::class.java,
+        PrayerNextWidgetProvider::class.java,
+        PrayerMiniWidgetProvider::class.java,
+        DailyVerseWidgetProvider::class.java,
+        ZikirCounterWidgetProvider::class.java,
+        StreakWidgetProvider::class.java
+    )
+
+    private fun hasAnyActiveTimeSensitiveWidget(context: Context): Boolean {
+        val manager = AppWidgetManager.getInstance(context) ?: return false
+        for (cls in prayerWidgetClasses) {
+            val ids = manager.getAppWidgetIds(ComponentName(context, cls))
+            if (ids != null && ids.isNotEmpty()) return true
+        }
+        return false
+    }
 
     fun scheduleNextPrayerAlarm(context: Context) {
         try {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+
+            val prayerIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
+                action = "com.akarworks.zikirce.WIDGET_PRAYER_ALARM"
+            }
+            val prayerPendingIntent = PendingIntent.getBroadcast(context, 1001, prayerIntent, flags)
+
+            val backupIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
+                action = "com.akarworks.zikirce.WIDGET_BACKUP_ALARM"
+            }
+            val backupPendingIntent = PendingIntent.getBroadcast(context, 1002, backupIntent, flags)
+
+            // Zero-battery guard: if no time-sensitive widgets are placed on the home screen, cancel alarms
+            if (!hasAnyActiveTimeSensitiveWidget(context)) {
+                alarmManager.cancel(prayerPendingIntent)
+                alarmManager.cancel(backupPendingIntent)
+                return
+            }
 
             val city = WidgetDataHelper.getStringPref(context, "SelectedCity", "İstanbul")
             val cachedTimes = WidgetDataHelper.getCachedPrayerTimes(context, city)
@@ -28,7 +76,7 @@ object WidgetAlarmScheduler {
                 WidgetDataHelper.parseTimeMinutes(cachedTimes.yatsi) * 60
             )
 
-            var nextAlarmCal: Calendar? = null
+            var nextPrayerCal: Calendar? = null
 
             for (pSec in prayerSeconds) {
                 // Schedule alarm 1 second after prayer time enters so now is strictly in the new prayer period
@@ -39,14 +87,16 @@ object WidgetAlarmScheduler {
                         set(Calendar.SECOND, 1)
                         set(Calendar.MILLISECOND, 0)
                     }
-                    nextAlarmCal = target
+                    nextPrayerCal = target
                     break
                 }
             }
 
-            if (nextAlarmCal == null) {
-                val firstSec = prayerSeconds[0]
-                nextAlarmCal = Calendar.getInstance().apply {
+            if (nextPrayerCal == null) {
+                val tomorrowCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
+                val tomorrowTimes = WidgetDataHelper.calculateOfflinePrayerTimes(city, tomorrowCal)
+                val firstSec = WidgetDataHelper.parseTimeMinutes(tomorrowTimes.imsak) * 60
+                nextPrayerCal = Calendar.getInstance().apply {
                     add(Calendar.DAY_OF_YEAR, 1)
                     set(Calendar.HOUR_OF_DAY, firstSec / 3600)
                     set(Calendar.MINUTE, (firstSec % 3600) / 60)
@@ -55,25 +105,22 @@ object WidgetAlarmScheduler {
                 }
             }
 
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
+            // Next midnight rollover (00:00:02) so Hijri calendar, streak & new day's prayer times update cleanly
+            val nextMidnightCal = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 2)
+                set(Calendar.MILLISECOND, 0)
             }
 
-            // 1. Primary prayer entry alarm (at exact HH:mm:01)
-            val prayerIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
-                action = "com.akarworks.zikirce.WIDGET_PRAYER_ALARM"
-            }
-            val prayerPendingIntent = PendingIntent.getBroadcast(context, 1001, prayerIntent, flags)
-            setAlarmSafe(alarmManager, nextAlarmCal.timeInMillis, prayerPendingIntent)
+            val triggerMillis = min(nextPrayerCal.timeInMillis, nextMidnightCal.timeInMillis)
 
-            // 2. Backup prayer entry alarm (1 minute after prayer entry to guarantee rollover)
-            val backupIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
-                action = "com.akarworks.zikirce.WIDGET_BACKUP_ALARM"
-            }
-            val backupPendingIntent = PendingIntent.getBroadcast(context, 1002, backupIntent, flags)
-            setAlarmSafe(alarmManager, nextAlarmCal.timeInMillis + 60_000L, backupPendingIntent)
+            // 1. Primary transition alarm (at exact HH:mm:01 or 00:00:02)
+            setAlarmSafe(alarmManager, triggerMillis, prayerPendingIntent)
+
+            // 2. Backup transition alarm (1 minute later to guarantee rollover under Doze)
+            setAlarmSafe(alarmManager, triggerMillis + 60_000L, backupPendingIntent)
         } catch (_: Exception) {}
     }
 

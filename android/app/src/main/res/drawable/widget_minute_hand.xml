@@ -1,30 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1000dp"
-    android:height="1000dp"
-    android:viewportWidth="1000"
-    android:viewportHeight="1000">
+    android:width="220dp"
+    android:height="220dp"
+    android:viewportWidth="220"
+    android:viewportHeight="220">
 
-    <!-- 1. Middle Orbital Ring for Minute Hand: R=210 to R=224 (Center R=217, Width=14) -->
-    <!-- Tangent to inner Saniye ring (R=210) and outer Hour ring (R=224) -->
+    <!-- Soft drop shadow -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="@color/widget_minute_hand_color"
-        android:strokeWidth="14"
-        android:pathData="M 500,283 A 217,217 0 1,0 500,717 A 217,217 0 1,0 500,283 Z" />
+        android:fillColor="#26000000"
+        android:pathData="M 110.8,122.0 L 107.8,110.8 L 110.8,55.2 L 113.8,110.8 Z" />
 
-    <!-- 2. Modern Tapered Sword Minute Hand Frame (from y=276 to y=50, R=450) -->
+    <!-- Classic Dauphine Minute Hand (Yelkovan - Scaled 1.105x) -->
     <path
-        android:fillColor="@color/widget_minute_hand_color"
-        android:pathData="M 489,276 L 494.5,70 L 500,50 L 505.5,70 L 511,276 Z" />
+        android:fillColor="@color/widget_clock_minute_hand"
+        android:strokeWidth="0.75"
+        android:strokeColor="@color/widget_clock_gold_ring"
+        android:pathData="M 110.0,121.0 L 107.0,110.0 L 110.0,54.2 L 113.0,110.0 Z" />
 
-    <!-- 3. Inner Luminous Channel (Fosfor Kanalı) -->
+    <!-- Luminous central spine -->
     <path
-        android:fillColor="@color/widget_hand_lume"
-        android:pathData="M 493,260 L 497,76 L 500,64 L 503,76 L 507,260 Z" />
+        android:strokeWidth="1.05"
+        android:strokeLineCap="round"
+        android:strokeColor="#99FFF8E7"
+        android:pathData="M 110.0,107.8 L 110.0,61.0" />
 
-    <!-- 4. Luminous Accent Tip at Sword Point -->
+    <!-- Center hub ring -->
     <path
-        android:fillColor="@color/widget_digital_accent"
-        android:pathData="M 496,78 L 500,54 L 504,78 Z" />
+        android:fillColor="@color/widget_clock_gold_ring"
+        android:pathData="M 110,110 m -4.2,0 a 4.2,4.2 0 1,0 8.4,0 a 4.2,4.2 0 1,0 -8.4,0" />
 </vector>

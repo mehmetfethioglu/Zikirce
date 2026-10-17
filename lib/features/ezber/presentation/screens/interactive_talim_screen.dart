@@ -7,7 +7,6 @@ import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
-import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../domain/smart_distractors_service.dart';
@@ -1555,8 +1554,6 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
     required Color primaryTextColor,
     required Color secondaryTextColor,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
       color: Colors.black.withOpacity(0.75),
       alignment: Alignment.center,
@@ -1681,27 +1678,23 @@ class _InteractiveTalimScreenState extends ConsumerState<InteractiveTalimScreen>
 class _BlankOption {
   final String text;
   final bool isCorrectTarget;
-  bool isSelected;
-  bool isRevealed;
+  bool isSelected = false;
+  bool isRevealed = false;
 
   _BlankOption({
     required this.text,
     required this.isCorrectTarget,
-    this.isSelected = false,
-    this.isRevealed = false,
   });
 }
 
 class _VerseOption {
   final QuranAyatModel verse;
   final bool isTarget;
-  bool isSelected;
-  bool isRevealed;
+  bool isSelected = false;
+  bool isRevealed = false;
 
   _VerseOption({
     required this.verse,
     required this.isTarget,
-    this.isSelected = false,
-    this.isRevealed = false,
   });
 }

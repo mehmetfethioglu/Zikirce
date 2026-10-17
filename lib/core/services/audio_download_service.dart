@@ -472,9 +472,6 @@ class AudioDownloadService {
 
     final diyanetUrl = getDiyanetAudioUrl(verse.surahId, verse.ayahId, pageId: verse.pageId);
     final fallbackUrl = getFallbackAudioUrl(verse.surahId, verse.ayahId);
-    final s = verse.surahId.toString().padLeft(3, '0');
-    final a = verse.ayahId.toString().padLeft(3, '0');
-    final husaryUrl = 'https://everyayah.com/data/Husary_128kbps/$s$a.mp3';
 
     // 1. Primary: Diyanet CDN (Osman Şahin / Mehmet Çevik) - EXACT MATCH FOR WORD TIMESTAMPS
     bool downloaded = await _tryDownloadUrl(diyanetUrl, tmpPath, timeoutSec: 15);

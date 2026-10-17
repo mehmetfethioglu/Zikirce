@@ -13,28 +13,30 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:gravity="center_horizontal">
+        android:gravity="center">
 
         <!-- 1. Aktif Vakit İsmi -->
         <TextView
             android:id="@+id/widget_active_vakit"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:text="İKİNDİYE"
             android:textColor="@color/widget_digital_accent"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold"
             android:gravity="center"
             android:singleLine="true" />
 
-        <!-- 2. Geri Sayım Sayacı -->
-        <TextView
+        <!-- 2. Canlı Geri Sayım Sayacı (Sıfır Arka Plan Pil Tüketimi) -->
+        <Chronometer
             android:id="@+id/widget_countdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:textColor="@color/widget_digital_accent"
-            android:textSize="22sp"
+            android:textSize="18sp"
             android:textStyle="bold"
+            android:countDown="true"
             android:singleLine="true"
             android:gravity="center" />
 
@@ -44,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="6dp"
             android:gravity="center">
 
             <TextClock
@@ -54,7 +56,7 @@
                 android:format24Hour="HH:mm"
                 android:format12Hour="hh:mm"
                 android:textColor="@color/widget_digital_primary"
-                android:textSize="48sp"
+                android:textSize="38sp"
                 android:textStyle="bold"
                 android:gravity="center" />
         </LinearLayout>

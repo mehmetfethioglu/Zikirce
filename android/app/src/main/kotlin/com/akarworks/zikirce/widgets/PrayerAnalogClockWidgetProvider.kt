@@ -11,7 +11,6 @@ import android.os.SystemClock
 import android.widget.RemoteViews
 import com.akarworks.zikirce.MainActivity
 import com.akarworks.zikirce.R
-import kotlin.math.max
 
 class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
 
@@ -22,7 +21,9 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
         if (intent.action == AppWidgetManager.ACTION_APPWIDGET_UPDATE ||
             intent.action == Intent.ACTION_USER_PRESENT ||
             intent.action == Intent.ACTION_BOOT_COMPLETED ||
-            intent.action == Intent.ACTION_CONFIGURATION_CHANGED
+            intent.action == Intent.ACTION_CONFIGURATION_CHANGED ||
+            intent.action == Intent.ACTION_TIME_CHANGED ||
+            intent.action == Intent.ACTION_TIMEZONE_CHANGED
         ) {
             val appWidgetManager = AppWidgetManager.getInstance(context) ?: return
             val component = ComponentName(context, PrayerAnalogClockWidgetProvider::class.java)
@@ -31,6 +32,7 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
                 for (id in ids) {
                     updateWidgetTick(context, appWidgetManager, id)
                 }
+                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
             }
         }
     }
@@ -40,6 +42,7 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
         for (id in appWidgetIds) {
             updateWidgetTick(context, appWidgetManager, id)
         }
+        WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
     }
 
     companion object {
@@ -51,13 +54,16 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
                 val cachedTimes = WidgetDataHelper.getCachedPrayerTimes(context, city)
 
                 val nextPrayer = WidgetDataHelper.calculateNextPrayer(cachedTimes)
-                val localizedNext = WidgetDataHelper.getDirectionalPrayerName(context, nextPrayer.name)
+                val localizedName = WidgetDataHelper.getLocalizedPrayerName(context, nextPrayer.name)
 
-                views.setTextViewText(R.id.widget_next_prayer_name, localizedNext.uppercase())
+                views.setTextViewText(R.id.widget_next_prayer_name, localizedName)
                 views.setTextViewText(R.id.widget_next_prayer_time, nextPrayer.timeStr)
 
-                val remainingStr = WidgetDataHelper.formatRemainingTime(context, nextPrayer.remainingMs)
-                views.setTextViewText(R.id.widget_countdown, remainingStr)
+                val targetRealtime = SystemClock.elapsedRealtime() + nextPrayer.remainingMs
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    views.setChronometerCountDown(R.id.widget_countdown, true)
+                }
+                views.setChronometer(R.id.widget_countdown, targetRealtime, null, true)
 
                 val openIntent = Intent(context, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -70,7 +76,6 @@ class PrayerAnalogClockWidgetProvider : AppWidgetProvider() {
                 val pendingIntent = PendingIntent.getActivity(context, 104, openIntent, flags)
                 views.setOnClickPendingIntent(R.id.widget_root_layout, pendingIntent)
 
-                WidgetAlarmScheduler.scheduleNextPrayerAlarm(context)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (_: Exception) {}
         }

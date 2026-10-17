@@ -1,33 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="1000dp"
-    android:height="1000dp"
-    android:viewportWidth="1000"
-    android:viewportHeight="1000">
+    android:width="220dp"
+    android:height="220dp"
+    android:viewportWidth="220"
+    android:viewportHeight="220">
 
-    <!-- 1. Innermost Red Second Ring: Exactly R=200 to R=210 (Center R=205, Width=10) -->
-    <!-- Center prayer text area (R < 200) is 100% transparent and open -->
+    <!-- Red Second Hand Counterbalance Tail -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#EF4444"
-        android:strokeWidth="10"
-        android:pathData="M 500,295 A 205,205 0 1,0 500,705 A 205,205 0 1,0 500,295 Z" />
+        android:fillColor="@color/widget_clock_second_hand"
+        android:pathData="M 108.6,126.0 L 109.2,110.0 L 110.8,110.0 L 111.4,126.0 Z" />
 
-    <!-- 2. Precision Red Needle Stem Extending Outward (from y=290 to y=35) -->
+    <!-- Red Second Hand Needle (Saniye - Kırmızı, Scaled 1.105x) -->
     <path
-        android:fillColor="#EF4444"
-        android:pathData="M 498.2,290 L 498.2,40 C 498.2,36 500,32 500,32 C 500,32 501.8,36 501.8,40 L 501.8,290 Z" />
+        android:strokeWidth="1.65"
+        android:strokeLineCap="round"
+        android:strokeColor="@color/widget_clock_second_hand"
+        android:pathData="M 110.0,126.0 L 110.0,50.3" />
 
-    <!-- 3. Futuristic Target Droplet Pip at R=380 (y=120) -->
+    <!-- Center Red Cap Jewel -->
     <path
-        android:fillColor="#EF4444"
-        android:pathData="M 500,106 A 14,14 0 1,0 500,134 A 14,14 0 1,0 500,106 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 500,113 A 7,7 0 1,0 500,127 A 7,7 0 1,0 500,113 Z" />
+        android:fillColor="@color/widget_clock_second_hand"
+        android:pathData="M 110,110 m -3.0,0 a 3.0,3.0 0 1,0 6.0,0 a 3.0,3.0 0 1,0 -6.0,0" />
 
-    <!-- 4. Sharp Red Needle Tip Accent -->
+    <!-- Center Gold Pin -->
     <path
-        android:fillColor="#EF4444"
-        android:pathData="M 500,26 L 504.5,42 L 495.5,42 Z" />
+        android:fillColor="#FFF8E7"
+        android:pathData="M 110,110 m -1.1,0 a 1.1,1.1 0 1,0 2.2,0 a 1.1,1.1 0 1,0 -2.2,0" />
 </vector>

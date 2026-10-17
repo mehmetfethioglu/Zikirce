@@ -1,0 +1,15 @@
+# ==============================================================================
+# Zikirce Android v2.1.4 (Build 59) Release Notes / Sürüm Notları
+# ==============================================================================
+
+[tr-TR] (Google Play Console - Maks. 500 Karakter)
+Zikirce v2.1.4 Yenilikleri:
+• Namaz Bildirimleri & Saat Dilimi: Vakit giriş ve kaza takip ("Namazınızı Kıldınız mı? 🕌") soru hatırlatmalarında yerel saat dilimi çizelgelemesi güçlendirildi; tüm bildirimler tam vaktinde ulaşır.
+• Kelimeli Mushaf & Arapça Metin Akışı: Mushaf, İnteraktif Talim ve Mukabele ekranlarında Arapça metin akışı, harf bitişikliği ve kelime odaklı ses senkronizasyonu mükemmelleştirildi.
+• Kararlılık & Hız: Bellek optimizasyonları ve akıcı sayfa geçişleri sağlandı.
+
+[en-US] (Google Play Console - Max. 500 Characters)
+Zikirce v2.1.4 What's New:
+• Prayer Notifications & Precision: Enhanced local timezone scheduling for prayer entry notifications and missed prayer question reminders, ensuring pinpoint on-time alerts.
+• Word-by-Word Mushaf & Typography: Perfected Arabic text ligature continuity and word-by-word audio synchronization across Mushaf reader, Interactive Talim, and Mukabele hatim screens.
+• Stability & Performance: Optimized memory footprint and smoother navigation responsiveness.

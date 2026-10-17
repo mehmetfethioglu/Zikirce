@@ -48,11 +48,51 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 59;
-  static const String currentVersionName = '2.1.4';
+  static const int currentVersionCode = 60;
+  static const String currentVersionName = '2.1.5';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 60,
+      versionName: '2.1.5',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'iOS WidgetKit Selçuklu Analog Saati & Kilit Ekranı',
+          titleEn: 'iOS WidgetKit Seljuk Analog Clock & Lock Screen',
+          descTr: 'iOS Ana Ekran ve Kilit Ekranı için 8 köşeli Selçuklu motifli estetik analog namaz saati ve zenginleştirilmiş vakit takip widget\'ları eklendi.',
+          descEn: 'Introduced an exquisite 8-pointed Seljuk star analog prayer clock and enriched prayer widgets for iOS Home Screen & Lock Screen.',
+          icon: Icons.access_time_filled_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Canlı Vakit Dilimli Analog Saat Kadranı',
+          titleEn: 'Live Sector-Highlighted Analog Clock Dial',
+          descTr: 'Uygulama içi vakit kartlarına dinamik akrep/yelkovan ve namaz vakit dilimlerini görselleştiren zarif Selçuklu analog saat kadranı entegre edildi.',
+          descEn: 'Integrated an elegant Seljuk analog clock dial with real-time hands and dynamic prayer sector highlights in daily prayer cards.',
+          icon: Icons.watch_later_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Zarif Açılış Ekranı & Tema Uyumu',
+          titleEn: 'Refined Native Splash & Theme Cohesion',
+          descTr: 'Açılış logosu ve native splash mimarisi baştan sona yenilenerek açık ve koyu temalara kusursuz uyum sağlandı.',
+          descEn: 'Native splash architecture and brand identity updated for zero-flicker transitions and perfect dark/light harmony.',
+          icon: Icons.palette_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'WidgetKit Arka Plan Senkronizasyonu & Kararlılık',
+          titleEn: 'WidgetKit Background Sync & Performance Polish',
+          descTr: 'App Group veri aktarım kanalı güçlendirildi; pil tüketimi optimize edilirken vakit ve seri güncellemeleri anlık hale getirildi.',
+          descEn: 'Reinforced native App Group data bridge for near-instant prayer and streak widget synchronization with minimal battery impact.',
+          icon: Icons.sync_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 59,
       versionName: '2.1.4',
