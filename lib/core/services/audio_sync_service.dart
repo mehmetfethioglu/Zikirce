@@ -6,6 +6,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart' as sql;
 import 'package:flutter/foundation.dart';
 
+import 'ios_now_playing_service.dart';
+
 class WordTimestamp {
   final int surahId;
   final int ayahId;
@@ -53,6 +55,7 @@ class AudioSyncService {
 
   /// Initializes the SQLite audio sync database by copying it from assets if needed.
   static Future<void> initialize() async {
+    await configureAudioSession();
     if (_db != null) return;
 
     try {
@@ -77,15 +80,15 @@ class AudioSyncService {
     } catch (e) {
       debugPrint('[AudioSyncService] Error initializing AudioSync database: $e');
     }
-
-    await configureAudioSession();
   }
 
-  /// Configures the global audio session for reliable playback on mobile devices
+  /// Configures the global audio session for reliable foreground & background playback on mobile devices
   static Future<void> configureAudioSession() async {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
+      await session.setActive(true);
+      await IosNowPlayingService.activateSession();
     } catch (e) {
       debugPrint('[AudioSyncService] configureAudioSession error: $e');
     }

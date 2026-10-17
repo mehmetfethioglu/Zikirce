@@ -169,17 +169,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Zikirce v2.1.5 Yenilikleri:
-      • iOS WidgetKit Selçuklu Analog Saati & Kilit Ekranı: iOS Ana Ekran ve Kilit Ekranı için 8 köşeli Selçuklu motifli estetik analog namaz saati, kilit ekranı aksesuarları ve zenginleştirilmiş vakit takip widget'ları eklendi.
-      • Canlı Vakit Dilimli Selçuklu Kadranı: Uygulama içi vakit kartlarına dinamik akrep-yelkovan ve namaz vakit dilimlerini canlı gösteren zarif saat kadranı entegre edildi.
-      • Kusursuz Açılış & Native Splash: Açılış logosu ve splash katmanı yenilenerek açık/koyu temalarla sıfır titremeli geçiş sağlandı.
-      • WidgetKit Arka Plan Senkronizasyonu: App Group veri köprüsü güçlendirildi, anlık veri aktarımı ve bellek verimliliği artırıldı.
+      Zikirce v2.1.6 Yenilikleri:
+      • iOS Arka Planda Kesintisiz Kur'an & Talim Dinleme: Kelime Takipli Dinleme Talimi, Mukabele ve Mushaf ekranlarında uygulama arka plana alındığında veya ekran kilitlendiğinde ayetler arası kesintisiz geçiş sağlandı.
+      • iOS Kilit Ekranı & Dynamic Island Medya Kontrolleri: Okunan sûre/âyet bilgisi ve oynat/duraklat/ileri/geri kontrolleri iOS Kilit Ekranı ve Denetim Merkezi'ne eklendi.
+      • App Store Gizlilik & Performans Uyumluluğu: Native AVAudioSession yönetimi, PrivacyInfo.xcprivacy manifestosu ve arka plan yetki tanımları güncellendi.
 
-      What's New in v2.1.5:
-      • iOS WidgetKit Seljuk Analog Clock & Lock Screen: Exquisite 8-pointed Seljuk star analog prayer clock and enriched prayer accessories for iOS Home Screen & Lock Screen.
-      • Live Prayer-Sector Clock Dial: Integrated real-time hands and dynamic prayer time sector highlights in daily prayer cards.
-      • Refined Native Splash Experience: Brand-new splash architecture for seamless, flicker-free light and dark mode launch transitions.
-      • WidgetKit Background Sync & Robustness: Reinforced App Group bridge for instantaneous prayer time and streak sync with optimized energy efficiency.
+      What's New in v2.1.6:
+      • Seamless iOS Background Quran & Talim Playback: Gapless verse-to-verse recitation in Word-by-Word Listening (Talim), Mukabele, and Mushaf when the app is backgrounded or the device screen is locked.
+      • iOS Lock Screen, Control Center & Dynamic Island Controls: Active Surah/Ayah metadata and remote playback controls (play, pause, next/previous ayah).
+      • App Store Privacy & Compliance Enhancements: Added native PrivacyInfo.xcprivacy manifest and refined UIBackgroundModes configuration.
     CHANGELOG
 
     upload_to_testflight(

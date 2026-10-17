@@ -44,7 +44,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Son güncelleme: 22 Şubat 2026',
+                  'Son güncelleme: 17 Ekim 2026',
                   style: TextStyle(
                     fontSize: 12,
                     color: colors.secondaryTextAlt,
@@ -101,7 +101,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           Text(
             'Uygulama aşağıdaki amaçlarla internet erişimi kullanır:\n'
             '• Namaz vakitlerini almak (Diyanet API)\n'
-            '• Kur\'an meali ve tefsir verilerini indirmek\n'
+            '• Kur\'an meali, sesli tilavet ve tefsir verilerini indirmek\n'
             '• Google Drive yedekleme (isteğe bağlı)\n\n'
             'Hiçbir kişisel veri internet üzerinden gönderilmez.',
             style: TextStyle(fontSize: 13.5, height: 1.6, color: colors.primaryText),
@@ -112,21 +112,22 @@ class PrivacyPolicyScreen extends StatelessWidget {
           _buildSectionTitle('4. Üçüncü Taraf Hizmetleri', colors.primaryText),
           const SizedBox(height: 6),
           Text(
-            'Zikirce reklam içermez ve hiçbir analitik veya izleme SDK\'sı kullanmaz.\n\n'
+            'Zikirce reklam içermez ve hiçbir reklam/pazarlama takip (tracking) SDK\'sı kullanmaz.\n\n'
             'Uygulama tamamen ücretsizdir ve herhangi bir ticari amaç gütmemektedir.',
             style: TextStyle(fontSize: 13.5, height: 1.6, color: colors.primaryText),
           ),
           const SizedBox(height: 20),
 
           // Bölüm 5
-          _buildSectionTitle('5. İzinler', colors.primaryText),
+          _buildSectionTitle('5. İzinler ve Arka Plan Özellikleri', colors.primaryText),
           const SizedBox(height: 6),
           Text(
-            'Uygulama aşağıdaki izinleri kullanır:\n'
-            '• Titreşim: Zikir sayarken dokunsal geri bildirim\n'
-            '• İnternet: Namaz vakitleri ve Kur\'an verileri\n'
-            '• Bildirim: Namaz vakti ve zikir hatırlatıcıları\n'
-            '• Depolama: Yerel yedekleme (isteğe bağlı)\n\n'
+            'Uygulama yalnızca ilgili özelliği kullandığınızda aşağıdaki izinleri talep eder:\n'
+            '• Arka Planda Ses Oynatma (Audio): Kelime takipli Kur\'an-ı Kerim dinleme talimi, Mushaf tilaveti ve Mukabele hatim dinlemelerinin ekran kilitliyken veya uygulama arka plandayken kesintisiz devam etmesi için kullanılır.\n'
+            '• Mikrofon: Ezber ve sesli talim modülünde kendi tilavetinizi kaydedip dinleyebilmeniz için kullanılır (ses kayıtları yalnızca cihazınızda işlenir, hiçbir sunucuya gönderilmez).\n'
+            '• Kamera: Zikir halkası ve profil karekodlarını (QR) okutabilmeniz için kullanılır.\n'
+            '• Fotoğraf / Dosya Erişimi: İsteğe bağlı profil fotoğrafı seçimi ve yerel yedek dosyalarını içe/dışa aktarmak için kullanılır.\n'
+            '• Bildirim ve Titreşim: Namaz vakti hatırlatıcıları ve zikir sayacı dokunsal geri bildirimi için kullanılır.\n\n'
             'Tüm izinler yalnızca uygulamanın temel işlevselliği için gereklidir.',
             style: TextStyle(fontSize: 13.5, height: 1.6, color: colors.primaryText),
           ),

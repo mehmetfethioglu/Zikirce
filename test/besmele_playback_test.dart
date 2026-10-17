@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:zikirce/core/database/app_database.dart';
+import 'package:zikirce/core/services/ios_now_playing_service.dart';
 import 'package:zikirce/features/settings/providers/settings_provider.dart';
 
 /// Helper reflecting the exact business logic used in MukabeleHatimScreen and KelimeTakipliDinlemeScreen
@@ -142,6 +142,28 @@ void main() {
         isBesmeleSettingEnabled: false,
       );
       expect(playBesmele, isFalse, reason: 'Kullanıcı ayarı kapattığında Besmele çalınmamalı');
+    });
+  });
+
+  group('IosNowPlayingService - Remote Command & Lifecycle Safety', () {
+    test('Safe no-op on non-iOS host and remote command registration', () async {
+      String? lastCommand;
+      IosNowPlayingService.setRemoteCommandCallback((cmd) {
+        lastCommand = cmd;
+      });
+      expect(lastCommand, isNull);
+
+      // Should safely no-op on Windows/Android test host without throwing MissingPluginException
+      await IosNowPlayingService.activateSession();
+      await IosNowPlayingService.beginTransitionTask();
+      await IosNowPlayingService.updateNowPlaying(
+        title: 'Bakara Suresi • 255. Ayet',
+        subtitle: 'Maher Al-Muaiqly • Sayfa 42',
+        album: 'Zikirce Kur\'an-ı Kerim',
+        isPlaying: true,
+      );
+      await IosNowPlayingService.clearNowPlaying();
+      IosNowPlayingService.setRemoteCommandCallback(null);
     });
   });
 }

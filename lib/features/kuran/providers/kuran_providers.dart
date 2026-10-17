@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
+import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -174,12 +176,44 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   final AudioPlayer _player = AudioPlayer();
   StreamSubscription? _posSub;
   StreamSubscription? _stateSub;
+  StreamSubscription<int?>? _indexSub;
+
+  List<({int surahId, int ayahId, int pageId})> _queueVerses = [];
+  int _lastIndex = -1;
+  int? _activePageId;
 
   KuranAudioNotifier() : super(KuranAudioState()) {
     _initAudioListeners();
   }
 
   void _initAudioListeners() {
+    _indexSub = _player.currentIndexStream.listen((idx) {
+      if (idx == null ||
+          idx < 0 ||
+          idx >= _queueVerses.length ||
+          idx == _lastIndex) {
+        return;
+      }
+      _lastIndex = idx;
+      final item = _queueVerses[idx];
+      state = state.copyWith(
+        currentSurahId: item.surahId,
+        currentAyahId: item.ayahId,
+        currentWordOrder: 0,
+        playbackProgress: 0.0,
+      );
+      _syncNowPlaying();
+
+      if (idx + 1 < _queueVerses.length) {
+        final next = _queueVerses[idx + 1];
+        unawaited(AudioDownloadService.ensureVerseDownloaded(
+          next.surahId,
+          next.ayahId,
+          pageId: next.pageId,
+        ));
+      }
+    });
+
     _posSub = _player.positionStream.listen((pos) {
       final ms = pos.inMilliseconds.toDouble();
       final activeWord = AudioSyncService.getActiveWordOrder(
@@ -199,19 +233,63 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
 
     _stateSub = _player.playerStateStream.listen((pState) {
       if (pState.processingState == ProcessingState.completed) {
-        // Auto play next verse if needed
-        state = state.copyWith(isPlaying: false, currentWordOrder: 0);
+        if (_activePageId != null && _activePageId! < 604) {
+          _advanceToNextPage(_activePageId! + 1);
+        } else {
+          state = state.copyWith(isPlaying: false, currentWordOrder: 0);
+          IosNowPlayingService.clearNowPlaying();
+        }
       } else {
+        final wasPlaying = state.isPlaying;
         state = state.copyWith(
           isPlaying: pState.playing,
           isLoading: pState.processingState == ProcessingState.loading ||
               pState.processingState == ProcessingState.buffering,
         );
+        if (wasPlaying != pState.playing && state.isBarVisible) {
+          _syncNowPlaying();
+        }
       }
     });
   }
 
-  Future<void> playVerse(int surahId, int ayahId, {int? pageId}) async {
+  void _syncNowPlaying() {
+    if (!state.isBarVisible) return;
+    final surah = SurahDataProvider.surahs
+        .where((s) => s.id == state.currentSurahId)
+        .firstOrNull;
+    final surahName = surah?.name ?? '${state.currentSurahId}. Sûre';
+    IosNowPlayingService.updateNowPlaying(
+      title: '$surahName Sûresi · ${state.currentAyahId}. Âyet',
+      subtitle: 'Zikirce • Kur\'an-ı Kerim Mushaf Tilaveti',
+      isPlaying: state.isPlaying,
+      durationMs: _player.duration?.inMilliseconds ?? 0,
+      positionMs: _player.position.inMilliseconds,
+    );
+  }
+
+  Future<void> _advanceToNextPage(int nextPageId) async {
+    try {
+      await IosNowPlayingService.beginTransitionTask();
+      final pageData = await QuranPageRepository.getPage(nextPageId);
+      if (pageData.quranAyats.isEmpty) {
+        state = state.copyWith(isPlaying: false, currentWordOrder: 0);
+        return;
+      }
+      final first = pageData.quranAyats.first;
+      await playVerse(first.sureId, first.ayetId, pageId: nextPageId);
+    } catch (_) {
+      state = state.copyWith(isPlaying: false, currentWordOrder: 0);
+    }
+  }
+
+  Future<void> playVerse(
+    int surahId,
+    int ayahId, {
+    int? pageId,
+    bool useFallbackCdn = false,
+  }) async {
+    _activePageId = pageId;
     state = state.copyWith(
       currentSurahId: surahId,
       currentAyahId: ayahId,
@@ -220,27 +298,95 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
       isBarVisible: true,
     );
 
-    try {
-      final localPath = await AudioDownloadService.getLocalAudioPath(surahId, ayahId);
-      final localFile = File(localPath);
+    IosNowPlayingService.setRemoteCommandCallback((cmd) {
+      if (cmd == 'play' && !_player.playing) {
+        togglePlayPause();
+      } else if (cmd == 'pause' && _player.playing) {
+        togglePlayPause();
+      } else if (cmd == 'togglePlayPause') {
+        togglePlayPause();
+      } else if (cmd == 'next' && _player.hasNext) {
+        _player.seekToNext();
+      } else if (cmd == 'previous' && _player.hasPrevious) {
+        _player.seekToPrevious();
+      }
+    });
 
-      if (localFile.existsSync() && localFile.lengthSync() > 0) {
-        await _player.setFilePath(localPath);
-      } else {
-        // Stream directly from Diyanet CDN
-        final diyanetUrl = AudioDownloadService.getDiyanetAudioUrl(surahId, ayahId, pageId: pageId);
-        try {
-          await _player.setUrl(diyanetUrl);
-          // Trigger background caching for offline use
-          unawaited(AudioDownloadService.ensureVerseDownloaded(surahId, ayahId, pageId: pageId));
-        } catch (_) {
-          // Fallback to EveryAyah Alafasy
-          final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(surahId, ayahId);
-          await _player.setUrl(fallbackUrl);
+    await AudioSyncService.configureAudioSession();
+    await IosNowPlayingService.beginTransitionTask();
+
+    try {
+      final soundsDir = await AudioDownloadService.getSoundsDirectory();
+      final soundsDirPath = soundsDir.path;
+
+      final queueItems = <({int surahId, int ayahId, int pageId})>[];
+      int initialIdx = 0;
+
+      if (pageId != null) {
+        final pageData = await QuranPageRepository.getPage(pageId);
+        for (int i = 0; i < pageData.quranAyats.length; i++) {
+          final a = pageData.quranAyats[i];
+          queueItems.add((surahId: a.sureId, ayahId: a.ayetId, pageId: pageId));
+          if (a.sureId == surahId && a.ayetId == ayahId) {
+            initialIdx = i;
+          }
         }
       }
+
+      if (queueItems.isEmpty) {
+        queueItems.add((surahId: surahId, ayahId: ayahId, pageId: pageId ?? 1));
+        initialIdx = 0;
+      }
+
+      final children = <AudioSource>[];
+      for (final item in queueItems) {
+        final localPath =
+            '$soundsDirPath${Platform.pathSeparator}audio_${item.surahId}_${item.ayahId}.mp3';
+        final localFile = File(localPath);
+        if (localFile.existsSync() && localFile.lengthSync() > 1024) {
+          children.add(AudioSource.file(localPath));
+        } else {
+          final url = useFallbackCdn
+              ? AudioDownloadService.getFallbackAudioUrl(
+                  item.surahId, item.ayahId)
+              : AudioDownloadService.getDiyanetAudioUrl(
+                  item.surahId, item.ayahId,
+                  pageId: item.pageId);
+          children.add(AudioSource.uri(Uri.parse(url)));
+        }
+      }
+
+      _queueVerses = queueItems;
+      _lastIndex = initialIdx;
+
+      final playlist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: children,
+      );
+
+      await _player.setLoopMode(LoopMode.off);
+      await _player.setAudioSource(
+        playlist,
+        initialIndex: initialIdx,
+        initialPosition: Duration.zero,
+      );
       await _player.play();
+      _syncNowPlaying();
+      unawaited(AudioDownloadService.ensureVerseDownloaded(
+        surahId,
+        ayahId,
+        pageId: pageId,
+      ));
     } catch (e) {
+      if (!useFallbackCdn) {
+        await playVerse(
+          surahId,
+          ayahId,
+          pageId: pageId,
+          useFallbackCdn: true,
+        );
+        return;
+      }
       state = state.copyWith(isPlaying: false, isLoading: false);
     }
   }
@@ -249,6 +395,7 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
     if (_player.playing) {
       await _player.pause();
     } else {
+      await AudioSyncService.configureAudioSession();
       await _player.play();
     }
   }
@@ -264,6 +411,9 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
       await _player.pause();
       await _player.seek(Duration.zero);
     } catch (_) {}
+    if (state.isBarVisible) {
+      IosNowPlayingService.clearNowPlaying();
+    }
     state = state.copyWith(
       isPlaying: false,
       isLoading: false,
@@ -283,6 +433,7 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
 
   @override
   void dispose() {
+    _indexSub?.cancel();
     _posSub?.cancel();
     _stateSub?.cancel();
     _player.dispose();

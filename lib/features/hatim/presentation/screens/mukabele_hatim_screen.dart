@@ -9,6 +9,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/haptic_service.dart';
+import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -26,6 +27,16 @@ import '../../../kuran/presentation/widgets/tilavet_secdesi_exit_dialog.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/hatim_providers.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
+
+class _MukabeleQueueItemMeta {
+  final int verseIndex;
+  final bool isBesmele;
+
+  const _MukabeleQueueItemMeta({
+    required this.verseIndex,
+    required this.isBesmele,
+  });
+}
 
 class MukabeleHatimScreen extends ConsumerStatefulWidget {
   final Hatim? activeHatim;
@@ -64,18 +75,20 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   bool _isPlaying = false;
   bool _isBuffering = false;
   bool _isPlayingBesmele = false;
-  int _targetVerseIndexAfterBesmele = 0;
   bool _isPageTransitioning = false;
   String? _transitionBannerText;
   Timer? _pageTransitionTimer;
 
   List<QuranAyatModel> _pageVerses = [];
   Map<String, String> _pageMeals = {};
+  List<_MukabeleQueueItemMeta> _playlistItems = [];
   int _currentVerseIndex = 0;
   int _activeWordOrder = 0;
+  int _lastHandledQueueIndex = -1;
 
   StreamSubscription? _posSub;
   StreamSubscription? _stateSub;
+  StreamSubscription<int?>? _currentIndexSub;
 
   @override
   void initState() {
@@ -95,14 +108,39 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     }
     _pageController = PageController(initialPage: _currentPage - 1);
     _focusNode = FocusNode();
+    IosNowPlayingService.setRemoteCommandCallback(_handleRemoteCommand);
 
     _initScreenAndAudio();
   }
 
+  void _handleRemoteCommand(String cmd) {
+    if (!mounted) return;
+    switch (cmd) {
+      case 'play':
+        if (!_isPlaying) _togglePlayPause();
+        break;
+      case 'pause':
+        if (_isPlaying) _togglePlayPause();
+        break;
+      case 'togglePlayPause':
+        _togglePlayPause();
+        break;
+      case 'next':
+        _nextAyah();
+        break;
+      case 'previous':
+        _previousAyah();
+        break;
+    }
+  }
+
   @override
   void dispose() {
+    IosNowPlayingService.setRemoteCommandCallback(null);
+    IosNowPlayingService.clearNowPlaying();
     _focusNode.dispose();
     _pageTransitionTimer?.cancel();
+    _currentIndexSub?.cancel();
     _posSub?.cancel();
     _stateSub?.cancel();
     _player.dispose();
@@ -132,17 +170,61 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       });
       // Start playback automatically for Mukabele
       if (_pageVerses.isNotEmpty) {
-        final startVerse = _pageVerses[_currentVerseIndex];
-        if (_shouldPlayBesmeleForVerse(startVerse, isSessionStart: true)) {
-          _playBesmeleThenVerse(_currentVerseIndex);
-        } else {
-          _prepareAndPlayVerse(_currentVerseIndex);
-        }
+        await _buildAndPlayPageQueue(
+          _currentVerseIndex,
+          includeInitialBesmele: true,
+        );
       }
     }
   }
 
+  void _syncNowPlaying() {
+    if (_pageVerses.isEmpty || _currentVerseIndex >= _pageVerses.length) return;
+    final verse = _pageVerses[_currentVerseIndex];
+    final surahName = verse.sure?.sureNameTurkish ?? '${verse.sureId}. Sûre';
+    final juzNo = (_currentPage / 20).ceil().clamp(1, 30);
+    final title = _isPlayingBesmele
+        ? 'Besmele-i Şerif ($surahName)'
+        : '$surahName · ${verse.ayetId}. Âyet';
+    IosNowPlayingService.updateNowPlaying(
+      title: title,
+      subtitle: 'Zikirce Mukabele • Cüz $juzNo · Sayfa $_currentPage',
+      isPlaying: _isPlaying,
+      durationMs: _player.duration?.inMilliseconds ?? 0,
+      positionMs: _player.position.inMilliseconds,
+      speed: _playbackSpeed,
+    );
+  }
+
   void _initAudioListeners() {
+    _currentIndexSub = _player.currentIndexStream.listen((qIdx) {
+      if (qIdx == null ||
+          qIdx < 0 ||
+          qIdx >= _playlistItems.length ||
+          qIdx == _lastHandledQueueIndex) {
+        return;
+      }
+      _lastHandledQueueIndex = qIdx;
+      final meta = _playlistItems[qIdx];
+      final prevVerseIndex = _currentVerseIndex;
+      _isPlayingBesmele = meta.isBesmele;
+      _currentVerseIndex = meta.verseIndex;
+
+      if (mounted) {
+        setState(() {
+          _activeWordOrder = 0;
+        });
+      }
+
+      if (!meta.isBesmele && prevVerseIndex != _currentVerseIndex) {
+        if (!_isMushafView) {
+          _scrollToActiveVerse();
+        }
+        _prefetchUpcomingVerses(_currentVerseIndex);
+      }
+      _syncNowPlaying();
+    });
+
     _posSub = _player.positionStream.listen((pos) {
       if (_isPlayingBesmele) return;
       if (_pageVerses.isEmpty || _currentVerseIndex >= _pageVerses.length) {
@@ -192,6 +274,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           _isPlaying = isPlaying;
           _isBuffering = isBuffering;
         });
+        _syncNowPlaying();
 
         if (_isPlayingBesmele) {
           ref
@@ -232,7 +315,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       }
 
       if (pState.processingState == ProcessingState.completed) {
-        _handleVerseCompleted();
+        _handlePageCompleted();
       }
     });
   }
@@ -312,158 +395,164 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     return false;
   }
 
-  Future<void> _playBesmeleThenVerse(int targetIndex) async {
-    _targetVerseIndexAfterBesmele = targetIndex;
-    _isPlayingBesmele = true;
-    if (mounted) {
-      setState(() {
-        _isBuffering = true;
-        _activeWordOrder = 0;
-      });
+  AudioSource _createAyahAudioSource(
+    String soundsDirPath,
+    int surahId,
+    int ayahId, {
+    int? pageId,
+    required bool useFallbackCdn,
+  }) {
+    final localPath =
+        '$soundsDirPath${Platform.pathSeparator}audio_${surahId}_$ayahId.mp3';
+    final localFile = File(localPath);
+    if (localFile.existsSync() && localFile.lengthSync() > 1024) {
+      return AudioSource.file(localPath);
     }
-
-    // Stop any conflicting background Quran player
-    try {
-      ref.read(kuranAudioNotifierProvider.notifier).stop();
-    } catch (_) {}
-
-    try {
-      final localPath = await AudioDownloadService.getLocalAudioPath(1, 1);
-      final localFile = File(localPath);
-
-      bool loadedLocally = false;
-      if (localFile.existsSync() && localFile.lengthSync() > 1024) {
-        try {
-          await _player.setFilePath(localPath);
-          loadedLocally = true;
-        } catch (_) {
-          loadedLocally = false;
-        }
-      }
-
-      if (!loadedLocally) {
-        final diyanetUrl =
-            AudioDownloadService.getDiyanetAudioUrl(1, 1, pageId: 1);
-        try {
-          await _player.setUrl(diyanetUrl);
-        } catch (_) {
-          final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(1, 1);
-          await _player.setUrl(fallbackUrl);
-        }
-        unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
-      }
-
-      await _player.setSpeed(_playbackSpeed);
-      await _player.play();
-    } catch (e) {
-      debugPrint('[MukabeleHatimScreen] Besmele playback fallback: $e');
-      _isPlayingBesmele = false;
-      if (mounted) {
-        setState(() {});
-      }
-      _prepareAndPlayVerse(targetIndex);
-    }
+    final url = useFallbackCdn
+        ? AudioDownloadService.getFallbackAudioUrl(surahId, ayahId)
+        : AudioDownloadService.getDiyanetAudioUrl(surahId, ayahId,
+            pageId: pageId);
+    return AudioSource.uri(Uri.parse(url));
   }
 
-  Future<void> _prepareAndPlayVerse(int verseIndex, {int seekMs = 0}) async {
-    if (verseIndex < 0 || verseIndex >= _pageVerses.length) return;
-
-    _isPlayingBesmele = false;
-    _currentVerseIndex = verseIndex;
-    final verse = _pageVerses[verseIndex];
-
-    if (mounted) {
-      setState(() {
-        _isBuffering = true;
-        _activeWordOrder = 0;
-      });
-    }
-
-    // Stop any conflicting background Quran player
-    try {
-      ref.read(kuranAudioNotifierProvider.notifier).stop();
-    } catch (_) {}
-
-    try {
-      final localPath = await AudioDownloadService.getLocalAudioPath(
-          verse.sureId, verse.ayetId);
-      final localFile = File(localPath);
-
-      bool loadedLocally = false;
-      if (localFile.existsSync() && localFile.lengthSync() > 1024) {
-        try {
-          await _player.setFilePath(localPath);
-          loadedLocally = true;
-        } catch (e) {
-          debugPrint(
-              '[MukabeleHatimScreen] Corrupt local file, falling back to CDN: $e');
-          try {
-            localFile.deleteSync();
-          } catch (_) {}
-          loadedLocally = false;
-        }
-      }
-
-      if (!loadedLocally) {
-        // Primary Diyanet CDN URL (Osman Şahin / Mehmet Çevik)
-        final diyanetUrl = AudioDownloadService.getDiyanetAudioUrl(
-          verse.sureId,
-          verse.ayetId,
-          pageId: _currentPage,
-        );
-
-        bool urlSet = false;
-        try {
-          await _player.setUrl(diyanetUrl);
-          urlSet = true;
-        } catch (e) {
-          debugPrint(
-              '[MukabeleHatimScreen] Diyanet CDN failed, trying fallback: $e');
-          final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(
-              verse.sureId, verse.ayetId);
-          try {
-            await _player.setUrl(fallbackUrl);
-            urlSet = true;
-          } catch (e2) {
-            debugPrint('[MukabeleHatimScreen] Fallback URL also failed: $e2');
-          }
-        }
-
-        if (!urlSet) {
-          // Retry once after brief delay for initial network socket wake-up
-          await Future.delayed(const Duration(milliseconds: 350));
-          try {
-            await _player.setUrl(diyanetUrl);
-            urlSet = true;
-          } catch (_) {
-            final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(
-                verse.sureId, verse.ayetId);
-            await _player.setUrl(fallbackUrl);
-            urlSet = true;
-          }
-        }
-
-        // Background caching
+  void _prefetchUpcomingVerses(int fromVerseIndex) {
+    for (int offset = 0; offset <= 3; offset++) {
+      final idx = fromVerseIndex + offset;
+      if (idx >= 0 && idx < _pageVerses.length) {
+        final v = _pageVerses[idx];
         unawaited(AudioDownloadService.ensureVerseDownloaded(
-          verse.sureId,
-          verse.ayetId,
+          v.sureId,
+          v.ayetId,
           pageId: _currentPage,
         ));
       }
+    }
+  }
 
-      await _player.setSpeed(_playbackSpeed);
+  Future<void> _buildAndPlayPageQueue(
+    int startVerseIndex, {
+    required bool includeInitialBesmele,
+    int seekMs = 0,
+    bool useFallbackCdn = false,
+  }) async {
+    if (_pageVerses.isEmpty ||
+        startVerseIndex < 0 ||
+        startVerseIndex >= _pageVerses.length) {
+      return;
+    }
 
-      if (seekMs > 0) {
-        await _player.seek(Duration(milliseconds: seekMs));
+    if (mounted) {
+      setState(() {
+        _isBuffering = true;
+        _activeWordOrder = 0;
+      });
+    }
+
+    try {
+      if (ref.read(kuranAudioNotifierProvider).isPlaying) {
+        await ref.read(kuranAudioNotifierProvider.notifier).stop();
+      }
+    } catch (_) {}
+
+    await AudioSyncService.configureAudioSession();
+    await IosNowPlayingService.beginTransitionTask();
+
+    try {
+      final soundsDir = await AudioDownloadService.getSoundsDirectory();
+      final soundsDirPath = soundsDir.path;
+
+      final children = <AudioSource>[];
+      final metas = <_MukabeleQueueItemMeta>[];
+      int initialQueueIndex = 0;
+
+      for (int i = 0; i < _pageVerses.length; i++) {
+        final v = _pageVerses[i];
+        final isStartVerse = (i == startVerseIndex);
+        final wantBesmele = isStartVerse
+            ? (includeInitialBesmele &&
+                seekMs == 0 &&
+                _shouldPlayBesmeleForVerse(v, isSessionStart: true))
+            : _shouldPlayBesmeleForVerse(v, isSessionStart: false);
+
+        final firstIdxForThisVerse = children.length;
+
+        if (wantBesmele) {
+          children.add(_createAyahAudioSource(
+            soundsDirPath,
+            1,
+            1,
+            pageId: 1,
+            useFallbackCdn: useFallbackCdn,
+          ));
+          metas.add(_MukabeleQueueItemMeta(
+            verseIndex: i,
+            isBesmele: true,
+          ));
+          unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
+        }
+
+        final firstAyahQueueIdx = children.length;
+        children.add(_createAyahAudioSource(
+          soundsDirPath,
+          v.sureId,
+          v.ayetId,
+          pageId: _currentPage,
+          useFallbackCdn: useFallbackCdn,
+        ));
+        metas.add(_MukabeleQueueItemMeta(
+          verseIndex: i,
+          isBesmele: false,
+        ));
+
+        if (isStartVerse) {
+          initialQueueIndex = (wantBesmele && seekMs == 0)
+              ? firstIdxForThisVerse
+              : firstAyahQueueIdx;
+        }
       }
 
+      _playlistItems = metas;
+      _lastHandledQueueIndex = initialQueueIndex;
+      final initialMeta = metas[initialQueueIndex];
+      _isPlayingBesmele = initialMeta.isBesmele;
+      _currentVerseIndex = initialMeta.verseIndex;
+
+      if (mounted) {
+        setState(() {});
+      }
+
+      await _player.setLoopMode(LoopMode.off);
+
+      final playlist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: children,
+      );
+
+      await _player.setAudioSource(
+        playlist,
+        initialIndex: initialQueueIndex,
+        initialPosition:
+            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+      );
+      await _player.setSpeed(_playbackSpeed);
       await _player.play();
+      _syncNowPlaying();
 
       if (!_isMushafView) {
         _scrollToActiveVerse();
       }
+      _prefetchUpcomingVerses(_currentVerseIndex);
     } catch (e) {
-      debugPrint('[MukabeleHatimScreen] Playback error: $e');
+      debugPrint('[MukabeleHatimScreen] Playlist playback error: $e');
+      if (!useFallbackCdn) {
+        await _buildAndPlayPageQueue(
+          startVerseIndex,
+          includeInitialBesmele: includeInitialBesmele,
+          seekMs: seekMs,
+          useFallbackCdn: true,
+        );
+        return;
+      }
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -471,6 +560,50 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         });
       }
     }
+  }
+
+  Future<void> _prepareAndPlayVerse(int verseIndex, {int seekMs = 0}) async {
+    if (verseIndex < 0 || verseIndex >= _pageVerses.length) return;
+
+    if (_playlistItems.isNotEmpty &&
+        _player.audioSource != null &&
+        _player.processingState != ProcessingState.idle &&
+        _player.processingState != ProcessingState.completed) {
+      final targetQIdx = _playlistItems.indexWhere(
+        (m) => m.verseIndex == verseIndex && !m.isBesmele,
+      );
+      if (targetQIdx != -1) {
+        _lastHandledQueueIndex = targetQIdx;
+        _isPlayingBesmele = false;
+        _currentVerseIndex = verseIndex;
+        if (mounted) {
+          setState(() {
+            _activeWordOrder = 0;
+          });
+        }
+        try {
+          await _player.seek(
+            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+            index: targetQIdx,
+          );
+          if (!_player.playing) {
+            await _player.play();
+          }
+          _syncNowPlaying();
+          if (!_isMushafView) {
+            _scrollToActiveVerse();
+          }
+          _prefetchUpcomingVerses(verseIndex);
+          return;
+        } catch (_) {}
+      }
+    }
+
+    await _buildAndPlayPageQueue(
+      verseIndex,
+      includeInitialBesmele: false,
+      seekMs: seekMs,
+    );
   }
 
   void _scrollToActiveVerse() {
@@ -488,31 +621,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     });
   }
 
-  Future<void> _handleVerseCompleted() async {
-    if (_isPlayingBesmele) {
-      _isPlayingBesmele = false;
-      if (mounted) {
-        setState(() {});
-      }
-      _prepareAndPlayVerse(_targetVerseIndexAfterBesmele);
-      return;
-    }
-
-    if (_currentVerseIndex < _pageVerses.length - 1) {
-      // Advance to next verse on this page
-      final nextVerse = _pageVerses[_currentVerseIndex + 1];
-      if (_shouldPlayBesmeleForVerse(nextVerse, isSessionStart: false)) {
-        _playBesmeleThenVerse(_currentVerseIndex + 1);
-      } else {
-        _prepareAndPlayVerse(_currentVerseIndex + 1);
-      }
-    } else {
-      // PAGE FINISHED!
-      await _handlePageCompleted();
-    }
-  }
-
   Future<void> _handlePageCompleted() async {
+    await IosNowPlayingService.beginTransitionTask();
     final completedPage = _currentPage;
     final hatimId = widget.activeHatim?.id;
 
@@ -550,23 +660,47 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     final isJuzEnd = completedPage % 20 == 0 || completedPage >= 605;
     final completedJuzNo = (completedPage / 20).ceil().clamp(1, 30);
 
-    if (isJuzEnd && mounted) {
+    final isForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+    if (isJuzEnd && mounted && isForeground) {
       _showJuzCompletedDialog(completedJuzNo);
     }
 
     if (completedPage >= 605) {
       // Full Hatim Finished!
+      IosNowPlayingService.clearNowPlaying();
       if (mounted) {
         setState(() {
           _isPlaying = false;
           _isPageTransitioning = false;
         });
-        _showHatimCompletedDialog();
+        if (isForeground) {
+          _showHatimCompletedDialog();
+        }
       }
       return;
     }
 
-    // 2-second buffer pause before transitioning to next page
+    if (!isForeground) {
+      // In background / Lock Screen: advance immediately without 2-second dead air gap
+      if (!mounted) return;
+      setState(() {
+        _isPageTransitioning = false;
+        _transitionBannerText = null;
+        _currentPage = completedPage + 1;
+      });
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(_currentPage - 1);
+      }
+      await _loadPageData(_currentPage);
+      if (mounted && _pageVerses.isNotEmpty) {
+        await _buildAndPlayPageQueue(0, includeInitialBesmele: false);
+      }
+      return;
+    }
+
+    // 2-second buffer pause before transitioning to next page when in foreground
     if (mounted) {
       setState(() {
         _isPageTransitioning = true;
@@ -595,12 +729,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
       await _loadPageData(_currentPage);
       if (mounted && _pageVerses.isNotEmpty) {
-        final firstVerse = _pageVerses[0];
-        if (_shouldPlayBesmeleForVerse(firstVerse, isSessionStart: false)) {
-          _playBesmeleThenVerse(0);
-        } else {
-          _prepareAndPlayVerse(0);
-        }
+        await _buildAndPlayPageQueue(0, includeInitialBesmele: false);
       }
     });
   }
@@ -745,9 +874,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             ));
       }
     } else {
-      if (_player.processingState == ProcessingState.completed) {
-        _prepareAndPlayVerse(_currentVerseIndex);
+      if (_player.processingState == ProcessingState.completed ||
+          _player.processingState == ProcessingState.idle) {
+        _buildAndPlayPageQueue(_currentVerseIndex, includeInitialBesmele: false);
       } else {
+        AudioSyncService.configureAudioSession();
         _player.play();
         final verse = _currentVerseIndex < _pageVerses.length
             ? _pageVerses[_currentVerseIndex]
@@ -776,6 +907,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       _playbackSpeed = newSpeed;
     });
     _player.setSpeed(newSpeed);
+    _syncNowPlaying();
   }
 
   void _onWordTapped(int verseIndex, int wordOrder) {
@@ -829,12 +961,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     }
     await _loadPageData(target);
     if (mounted && _pageVerses.isNotEmpty) {
-      final firstVerse = _pageVerses[0];
-      if (_shouldPlayBesmeleForVerse(firstVerse, isSessionStart: false)) {
-        _playBesmeleThenVerse(0);
-      } else {
-        _prepareAndPlayVerse(0);
-      }
+      await _buildAndPlayPageQueue(0, includeInitialBesmele: false);
     }
   }
 

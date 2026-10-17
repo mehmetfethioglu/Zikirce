@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
+import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/presentation/widgets/besmele_playback_banner.dart';
@@ -24,6 +25,18 @@ class _CleanWordInfo {
   final String pureWord;
   final List<String> stops;
   const _CleanWordInfo({required this.pureWord, required this.stops});
+}
+
+class _PlaylistItemMeta {
+  final int verseIndex;
+  final bool isBesmele;
+  final int repeatIteration;
+
+  const _PlaylistItemMeta({
+    required this.verseIndex,
+    required this.isBesmele,
+    this.repeatIteration = 0,
+  });
 }
 
 class TalimSelectionResult {
@@ -77,35 +90,62 @@ class _KelimeTakipliDinlemeScreenState
   bool _isLoading = true;
   List<QuranAyatModel> _verses = [];
   Map<String, String> _meals = {}; // key: "surahId_ayahId" -> meal text
+  List<_PlaylistItemMeta> _playlistItems = [];
 
   int _currentVerseIndex = 0;
   int _activeWordOrder = 0;
   bool _isPlaying = false;
   bool _isAudioBuffering = false;
   bool _isPlayingBesmele = false;
-  int _targetVerseIndexAfterBesmele = 0;
   double _playbackSpeed = 1.0;
   int _repeatMode = 1; // 1 = Once, 3 = 3x, 5 = 5x, 0 = Infinite for current ayah
   bool _isScopeLoopEnabled = false; // Loop whole Surah/Juz/Ashr/Page when finished
   bool _autoAdvancePage = true; // Auto advance to next page in Page mode
   late int _currentPageId;
-  int _currentAyahPlayCount = 0;
   bool _showMeal = true;
   bool _maskingMode = false; // Ezber için henüz okunmayan kelimeleri gizleme
   double _fontSize = 26.0;
   bool _isBatchDownloading = false;
   bool _isCurrentScopeDownloaded = false;
   bool _hasMarkedSurahAsCompleted = false;
+  int _lastHandledQueueIndex = -1;
 
   StreamSubscription? _posSub;
   StreamSubscription? _playerStateSub;
+  StreamSubscription<int?>? _currentIndexSub;
 
   @override
   void initState() {
     super.initState();
     _currentPageId = widget.targetId;
     _fontSize = ref.read(quranFontSizeProvider);
+    IosNowPlayingService.setRemoteCommandCallback(_handleRemoteCommand);
     _initDataAndPlayer();
+  }
+
+  void _handleRemoteCommand(String cmd) {
+    if (!mounted) return;
+    switch (cmd) {
+      case 'play':
+        if (!_isPlaying) _togglePlayPause();
+        break;
+      case 'pause':
+        if (_isPlaying) _togglePlayPause();
+        break;
+      case 'togglePlayPause':
+        _togglePlayPause();
+        break;
+      case 'next':
+        if (!_isPlayingBesmele && _currentVerseIndex < _verses.length - 1) {
+          _goToVerse(_currentVerseIndex + 1);
+        }
+        break;
+      case 'previous':
+        if (!_isPlayingBesmele && _currentVerseIndex > 0) {
+          _goToVerse(_currentVerseIndex - 1);
+        }
+        break;
+    }
   }
 
   Future<void> _initDataAndPlayer() async {
@@ -121,12 +161,10 @@ class _KelimeTakipliDinlemeScreenState
         setState(() {
           _isLoading = false;
         });
-        final startVerse = _verses[_currentVerseIndex];
-        if (_shouldPlayBesmeleForVerse(startVerse, isSessionStart: true)) {
-          _playBesmeleThenVerse(_currentVerseIndex);
-        } else {
-          _prepareAndPlayVerse(_currentVerseIndex);
-        }
+        await _buildAndPlayQueue(
+          _currentVerseIndex,
+          includeInitialBesmele: true,
+        );
       }
     } else {
       if (mounted) {
@@ -213,6 +251,32 @@ class _KelimeTakipliDinlemeScreenState
   }
 
   void _initAudioListeners() {
+    _currentIndexSub = _player.currentIndexStream.listen((qIdx) {
+      if (qIdx == null ||
+          qIdx < 0 ||
+          qIdx >= _playlistItems.length ||
+          qIdx == _lastHandledQueueIndex) {
+        return;
+      }
+      _lastHandledQueueIndex = qIdx;
+      final meta = _playlistItems[qIdx];
+      final prevVerseIndex = _currentVerseIndex;
+      _isPlayingBesmele = meta.isBesmele;
+      _currentVerseIndex = meta.verseIndex;
+
+      if (mounted) {
+        setState(() {
+          _activeWordOrder = 0;
+        });
+      }
+
+      if (!meta.isBesmele && prevVerseIndex != _currentVerseIndex) {
+        _scrollToActiveVerse();
+        _prefetchUpcomingVerses(_currentVerseIndex);
+      }
+      _syncNowPlaying();
+    });
+
     _posSub = _player.positionStream.listen((pos) {
       if (_isPlayingBesmele) return;
       if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return;
@@ -235,59 +299,55 @@ class _KelimeTakipliDinlemeScreenState
 
     _playerStateSub = _player.playerStateStream.listen((state) {
       if (!mounted) return;
+      final wasPlaying = _isPlaying;
       setState(() {
         _isPlaying = state.playing;
         _isAudioBuffering = state.processingState == ProcessingState.buffering ||
             state.processingState == ProcessingState.loading;
       });
+      if (wasPlaying != state.playing) {
+        _syncNowPlaying();
+      }
 
       if (state.processingState == ProcessingState.completed) {
-        _handleVerseCompleted();
+        _handlePlaylistCompleted();
       }
     });
   }
 
-  void _handleVerseCompleted() {
-    if (_isPlayingBesmele) {
-      _isPlayingBesmele = false;
-      if (mounted) {
-        setState(() {});
-      }
-      _prepareAndPlayVerse(_targetVerseIndexAfterBesmele);
-      return;
-    }
+  void _syncNowPlaying() {
+    if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return;
+    final verse = _verses[_currentVerseIndex];
+    final surahName = verse.sure?.sureNameTurkish ?? '${verse.sureId}. Sûre';
+    final title = _isPlayingBesmele
+        ? 'Besmele-i Şerif ($surahName)'
+        : '$surahName · ${verse.ayetId}. Âyet';
+    IosNowPlayingService.updateNowPlaying(
+      title: title,
+      subtitle: 'Zikirce • ${_getScreenTitle()}',
+      isPlaying: _isPlaying,
+      durationMs: _player.duration?.inMilliseconds ?? 0,
+      positionMs: _player.position.inMilliseconds,
+      speed: _playbackSpeed,
+    );
+  }
 
-    _currentAyahPlayCount++;
-    if (_repeatMode == 0 || (_repeatMode > 1 && _currentAyahPlayCount < _repeatMode)) {
-      // Repeat current verse
-      _player.seek(Duration.zero);
-      _player.play();
+  void _handlePlaylistCompleted() {
+    if (_isScopeLoopEnabled) {
+      _goToVerse(0);
+    } else if (widget.targetType == TalimTargetType.page &&
+        _autoAdvancePage &&
+        _currentPageId < 604) {
+      _loadAndPlayNextPage();
     } else {
-      // Next verse
-      _currentAyahPlayCount = 0;
-      if (_currentVerseIndex < _verses.length - 1) {
-        final nextVerse = _verses[_currentVerseIndex + 1];
-        if (_shouldPlayBesmeleForVerse(nextVerse, isSessionStart: false)) {
-          _playBesmeleThenVerse(_currentVerseIndex + 1);
-        } else {
-          _goToVerse(_currentVerseIndex + 1);
-        }
-      } else {
-        // Finished all verses in scope
-        if (_isScopeLoopEnabled) {
-          // Loop entire scope
-          _goToVerse(0);
-        } else if (widget.targetType == TalimTargetType.page && _autoAdvancePage && _currentPageId < 604) {
-          _loadAndPlayNextPage();
-        } else {
-          setState(() {
-            _isPlaying = false;
-            _activeWordOrder = 0;
-          });
-          if (widget.targetType == TalimTargetType.surah) {
-            _handleSurahCompleted();
-          }
-        }
+      setState(() {
+        _isPlaying = false;
+        _isPlayingBesmele = false;
+        _activeWordOrder = 0;
+      });
+      IosNowPlayingService.clearNowPlaying();
+      if (widget.targetType == TalimTargetType.surah) {
+        _handleSurahCompleted();
       }
     }
   }
@@ -589,8 +649,10 @@ class _KelimeTakipliDinlemeScreenState
   Future<void> _loadAndPlayNextPage() async {
     if (_currentPageId >= 604) {
       setState(() => _isPlaying = false);
+      IosNowPlayingService.clearNowPlaying();
       return;
     }
+    await IosNowPlayingService.beginTransitionTask();
     _currentPageId++;
     setState(() {
       _isLoading = true;
@@ -604,12 +666,7 @@ class _KelimeTakipliDinlemeScreenState
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0.0);
       }
-      final firstVerse = _verses[0];
-      if (_shouldPlayBesmeleForVerse(firstVerse, isSessionStart: false)) {
-        _playBesmeleThenVerse(0);
-      } else {
-        _prepareAndPlayVerse(0);
-      }
+      await _buildAndPlayQueue(0, includeInitialBesmele: true);
     } else if (mounted) {
       setState(() => _isLoading = false);
     }
@@ -633,64 +690,47 @@ class _KelimeTakipliDinlemeScreenState
     return false;
   }
 
-  Future<void> _playBesmeleThenVerse(int targetIndex) async {
-    _targetVerseIndexAfterBesmele = targetIndex;
-    _isPlayingBesmele = true;
-    if (mounted) {
-      setState(() {
-        _isAudioBuffering = true;
-        _activeWordOrder = 0;
-      });
+  AudioSource _createAyahAudioSource(
+    String soundsDirPath,
+    int surahId,
+    int ayahId, {
+    int? pageId,
+    required bool useFallbackCdn,
+  }) {
+    final localPath = '$soundsDirPath${Platform.pathSeparator}audio_${surahId}_$ayahId.mp3';
+    final localFile = File(localPath);
+    if (localFile.existsSync() && localFile.lengthSync() > 1024) {
+      return AudioSource.file(localPath);
     }
+    final url = useFallbackCdn
+        ? AudioDownloadService.getFallbackAudioUrl(surahId, ayahId)
+        : AudioDownloadService.getDiyanetAudioUrl(surahId, ayahId, pageId: pageId);
+    return AudioSource.uri(Uri.parse(url));
+  }
 
-    // Stop any conflicting background Quran player
-    try {
-      ref.read(kuranAudioNotifierProvider.notifier).stop();
-    } catch (_) {}
-
-    try {
-      final localPath = await AudioDownloadService.getLocalAudioPath(1, 1);
-      final localFile = File(localPath);
-
-      bool loadedLocally = false;
-      if (localFile.existsSync() && localFile.lengthSync() > 1024) {
-        try {
-          await _player.setFilePath(localPath);
-          loadedLocally = true;
-        } catch (_) {
-          loadedLocally = false;
-        }
+  void _prefetchUpcomingVerses(int fromVerseIndex) {
+    for (int offset = 0; offset <= 3; offset++) {
+      final idx = fromVerseIndex + offset;
+      if (idx >= 0 && idx < _verses.length) {
+        final v = _verses[idx];
+        unawaited(AudioDownloadService.ensureVerseDownloaded(
+          v.sureId,
+          v.ayetId,
+          pageId: v.page,
+        ));
       }
-
-      if (!loadedLocally) {
-        final diyanetUrl = AudioDownloadService.getDiyanetAudioUrl(1, 1, pageId: 1);
-        try {
-          await _player.setUrl(diyanetUrl);
-        } catch (_) {
-          final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(1, 1);
-          await _player.setUrl(fallbackUrl);
-        }
-        unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
-      }
-
-      await _player.setSpeed(_playbackSpeed);
-      await _player.play();
-    } catch (e) {
-      debugPrint('[KelimeTakipliDinlemeScreen] Besmele playback fallback: $e');
-      _isPlayingBesmele = false;
-      if (mounted) {
-        setState(() {});
-      }
-      _prepareAndPlayVerse(targetIndex);
     }
   }
 
-  Future<void> _prepareAndPlayVerse(int verseIndex, {int seekMs = 0}) async {
-    if (verseIndex < 0 || verseIndex >= _verses.length) return;
-
-    _isPlayingBesmele = false;
-    _currentVerseIndex = verseIndex;
-    final verse = _verses[verseIndex];
+  Future<void> _buildAndPlayQueue(
+    int startVerseIndex, {
+    required bool includeInitialBesmele,
+    int seekMs = 0,
+    bool useFallbackCdn = false,
+  }) async {
+    if (_verses.isEmpty || startVerseIndex < 0 || startVerseIndex >= _verses.length) {
+      return;
+    }
 
     if (mounted) {
       setState(() {
@@ -699,93 +739,121 @@ class _KelimeTakipliDinlemeScreenState
       });
     }
 
-    // Stop any conflicting background Quran player
+    // Stop any conflicting background Quran player only if it is currently active
     try {
-      ref.read(kuranAudioNotifierProvider.notifier).stop();
+      if (ref.read(kuranAudioNotifierProvider).isPlaying) {
+        await ref.read(kuranAudioNotifierProvider.notifier).stop();
+      }
     } catch (_) {}
 
+    await AudioSyncService.configureAudioSession();
+    await IosNowPlayingService.beginTransitionTask();
+
     try {
-      final localPath = await AudioDownloadService.getLocalAudioPath(verse.sureId, verse.ayetId);
-      final localFile = File(localPath);
+      final soundsDir = await AudioDownloadService.getSoundsDirectory();
+      final soundsDirPath = soundsDir.path;
 
-      bool loadedLocally = false;
-      if (localFile.existsSync() && localFile.lengthSync() > 1024) {
-        try {
-          await _player.setFilePath(localPath);
-          loadedLocally = true;
-        } catch (e) {
-          debugPrint('[KelimeTakipliDinlemeScreen] Corrupt local file, falling back to CDN: $e');
-          try {
-            localFile.deleteSync();
-          } catch (_) {}
-          loadedLocally = false;
+      final children = <AudioSource>[];
+      final metas = <_PlaylistItemMeta>[];
+      int initialQueueIndex = 0;
+
+      final repeatCount = (_repeatMode == 3 || _repeatMode == 5) ? _repeatMode : 1;
+
+      for (int i = 0; i < _verses.length; i++) {
+        final v = _verses[i];
+        final isStartVerse = (i == startVerseIndex);
+        final wantBesmele = isStartVerse
+            ? (includeInitialBesmele &&
+                seekMs == 0 &&
+                _shouldPlayBesmeleForVerse(v, isSessionStart: true))
+            : _shouldPlayBesmeleForVerse(v, isSessionStart: false);
+
+        int firstIdxForThisVerse = children.length;
+
+        if (wantBesmele) {
+          children.add(_createAyahAudioSource(
+            soundsDirPath,
+            1,
+            1,
+            pageId: 1,
+            useFallbackCdn: useFallbackCdn,
+          ));
+          metas.add(_PlaylistItemMeta(
+            verseIndex: i,
+            isBesmele: true,
+            repeatIteration: 0,
+          ));
+          unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
+        }
+
+        final firstAyahQueueIdx = children.length;
+        for (int r = 0; r < repeatCount; r++) {
+          children.add(_createAyahAudioSource(
+            soundsDirPath,
+            v.sureId,
+            v.ayetId,
+            pageId: v.page,
+            useFallbackCdn: useFallbackCdn,
+          ));
+          metas.add(_PlaylistItemMeta(
+            verseIndex: i,
+            isBesmele: false,
+            repeatIteration: r,
+          ));
+        }
+
+        if (isStartVerse) {
+          initialQueueIndex = (wantBesmele && seekMs == 0)
+              ? firstIdxForThisVerse
+              : firstAyahQueueIdx;
         }
       }
 
-      if (!loadedLocally) {
-        // 1. Primary Source: Diyanet CDN (Osman Şahin / Mehmet Çevik) - EXACT MATCH FOR WORD TIMESTAMPS
-        final diyanetUrl = AudioDownloadService.getDiyanetAudioUrl(
-          verse.sureId,
-          verse.ayetId,
-          pageId: verse.page,
-        );
+      _playlistItems = metas;
+      _lastHandledQueueIndex = initialQueueIndex;
+      final initialMeta = metas[initialQueueIndex];
+      _isPlayingBesmele = initialMeta.isBesmele;
+      _currentVerseIndex = initialMeta.verseIndex;
 
-        bool urlSet = false;
-        try {
-          await _player.setUrl(diyanetUrl);
-          urlSet = true;
-        } catch (e) {
-          debugPrint('[KelimeTakipliDinlemeScreen] Diyanet CDN failed, trying fallback: $e');
-          final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(verse.sureId, verse.ayetId);
-          try {
-            await _player.setUrl(fallbackUrl);
-            urlSet = true;
-          } catch (e2) {
-            debugPrint('[KelimeTakipliDinlemeScreen] Fallback URL also failed: $e2');
-          }
-        }
-
-        if (!urlSet) {
-          // Retry once after brief delay for initial network socket wake-up
-          await Future.delayed(const Duration(milliseconds: 350));
-          try {
-            await _player.setUrl(diyanetUrl);
-            urlSet = true;
-          } catch (_) {
-            final fallbackUrl = AudioDownloadService.getFallbackAudioUrl(verse.sureId, verse.ayetId);
-            await _player.setUrl(fallbackUrl);
-            urlSet = true;
-          }
-        }
-
-        // Cache in background for offline use
-        unawaited(AudioDownloadService.ensureVerseDownloaded(
-          verse.sureId,
-          verse.ayetId,
-          pageId: verse.page,
-        ));
+      if (mounted) {
+        setState(() {});
       }
 
+      if (_repeatMode == 0) {
+        await _player.setLoopMode(LoopMode.one);
+      } else if (_isScopeLoopEnabled) {
+        await _player.setLoopMode(LoopMode.all);
+      } else {
+        await _player.setLoopMode(LoopMode.off);
+      }
+
+      final playlist = ConcatenatingAudioSource(
+        useLazyPreparation: true,
+        children: children,
+      );
+
+      await _player.setAudioSource(
+        playlist,
+        initialIndex: initialQueueIndex,
+        initialPosition:
+            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+      );
       await _player.setSpeed(_playbackSpeed);
-
-      if (seekMs > 0) {
-        await _player.seek(Duration(milliseconds: seekMs));
-      }
-
       await _player.play();
+      _syncNowPlaying();
       _scrollToActiveVerse();
-
-      // Smart Pre-buffering: Prefetch next verse in background
-      if (verseIndex + 1 < _verses.length) {
-        final nextVerse = _verses[verseIndex + 1];
-        unawaited(AudioDownloadService.ensureVerseDownloaded(
-          nextVerse.sureId,
-          nextVerse.ayetId,
-          pageId: nextVerse.page,
-        ));
-      }
+      _prefetchUpcomingVerses(_currentVerseIndex);
     } catch (e) {
-      debugPrint('[KelimeTakipliDinlemeScreen] Playback error: $e');
+      debugPrint('[KelimeTakipliDinlemeScreen] Playlist playback error: $e');
+      if (!useFallbackCdn) {
+        await _buildAndPlayQueue(
+          startVerseIndex,
+          includeInitialBesmele: includeInitialBesmele,
+          seekMs: seekMs,
+          useFallbackCdn: true,
+        );
+        return;
+      }
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -795,10 +863,52 @@ class _KelimeTakipliDinlemeScreenState
     }
   }
 
+  Future<void> _prepareAndPlayVerse(int verseIndex, {int seekMs = 0}) async {
+    if (verseIndex < 0 || verseIndex >= _verses.length) return;
+
+    // Seek directly within active native queue if already loaded
+    if (_playlistItems.isNotEmpty &&
+        _player.audioSource != null &&
+        _player.processingState != ProcessingState.idle &&
+        _player.processingState != ProcessingState.completed) {
+      final targetQIdx = _playlistItems.indexWhere(
+        (m) => m.verseIndex == verseIndex && !m.isBesmele && m.repeatIteration == 0,
+      );
+      if (targetQIdx != -1) {
+        _lastHandledQueueIndex = targetQIdx;
+        _isPlayingBesmele = false;
+        _currentVerseIndex = verseIndex;
+        if (mounted) {
+          setState(() {
+            _activeWordOrder = 0;
+          });
+        }
+        try {
+          await _player.seek(
+            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+            index: targetQIdx,
+          );
+          if (!_player.playing) {
+            await _player.play();
+          }
+          _syncNowPlaying();
+          _scrollToActiveVerse();
+          _prefetchUpcomingVerses(verseIndex);
+          return;
+        } catch (_) {}
+      }
+    }
+
+    await _buildAndPlayQueue(
+      verseIndex,
+      includeInitialBesmele: false,
+      seekMs: seekMs,
+    );
+  }
+
   void _goToVerse(int index) {
     if (_isPlayingBesmele) return;
     if (index < 0 || index >= _verses.length) return;
-    _currentAyahPlayCount = 0;
     _prepareAndPlayVerse(index);
   }
 
@@ -844,9 +954,11 @@ class _KelimeTakipliDinlemeScreenState
     if (_isPlaying) {
       _player.pause();
     } else {
-      if (_player.processingState == ProcessingState.completed) {
-        _prepareAndPlayVerse(_currentVerseIndex);
+      if (_player.processingState == ProcessingState.completed ||
+          _player.processingState == ProcessingState.idle) {
+        _buildAndPlayQueue(_currentVerseIndex, includeInitialBesmele: false);
       } else {
+        AudioSyncService.configureAudioSession();
         _player.play();
       }
     }
@@ -860,6 +972,7 @@ class _KelimeTakipliDinlemeScreenState
       _playbackSpeed = newSpeed;
     });
     _player.setSpeed(newSpeed);
+    _syncNowPlaying();
   }
 
   void _cycleRepeatMode() {
@@ -877,8 +990,13 @@ class _KelimeTakipliDinlemeScreenState
 
     setState(() {
       _repeatMode = nextRepeat;
-      _currentAyahPlayCount = 0;
     });
+    final currentPos = _player.position.inMilliseconds;
+    _buildAndPlayQueue(
+      _currentVerseIndex,
+      includeInitialBesmele: false,
+      seekMs: currentPos,
+    );
   }
 
   void _onWordTapped(int verseIndex, int wordOrder) {
@@ -1019,6 +1137,9 @@ class _KelimeTakipliDinlemeScreenState
 
   @override
   void dispose() {
+    IosNowPlayingService.setRemoteCommandCallback(null);
+    IosNowPlayingService.clearNowPlaying();
+    _currentIndexSub?.cancel();
     _posSub?.cancel();
     _playerStateSub?.cancel();
     _player.dispose();
@@ -1715,6 +1836,11 @@ class _KelimeTakipliDinlemeScreenState
                       : 'Bölüm Döngüsü: Kapalı (Bölüm bitince durur)',
                   onPressed: () {
                     setState(() => _isScopeLoopEnabled = !_isScopeLoopEnabled);
+                    if (_repeatMode != 0) {
+                      _player.setLoopMode(
+                        _isScopeLoopEnabled ? LoopMode.all : LoopMode.off,
+                      );
+                    }
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(

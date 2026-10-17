@@ -171,6 +171,7 @@ class TalimAudioController {
       if (_isRecording) {
         final path = await _audioRecorder.stop();
         _isRecording = false;
+        await AudioSyncService.configureAudioSession();
         if (path != null && File(path).existsSync()) {
           _lastUserRecordingPath = path;
         }
@@ -180,6 +181,7 @@ class TalimAudioController {
     } catch (e) {
       debugPrint('[TalimAudioController] stopVoiceRecording Error: $e');
       _isRecording = false;
+      await AudioSyncService.configureAudioSession();
       return null;
     }
   }

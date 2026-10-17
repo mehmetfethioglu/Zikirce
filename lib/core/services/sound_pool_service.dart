@@ -4,8 +4,16 @@ import 'package:flutter/foundation.dart';
 import '../constants/asset_constants.dart';
 
 class SoundPoolService {
-  static final AudioPlayer _bulbulPlayer = AudioPlayer();
-  static final AudioPlayer _kumruPlayer = AudioPlayer();
+  static final AudioPlayer _bulbulPlayer = AudioPlayer(
+    handleInterruptions: false,
+    androidApplyAudioAttributes: false,
+    handleAudioSessionActivation: false,
+  );
+  static final AudioPlayer _kumruPlayer = AudioPlayer(
+    handleInterruptions: false,
+    androidApplyAudioAttributes: false,
+    handleAudioSessionActivation: false,
+  );
   static Future<void>? _initFuture;
   static DateTime _lastCounterSoundTime = DateTime.fromMillisecondsSinceEpoch(0);
   static bool _isPlaybackBusy = false;

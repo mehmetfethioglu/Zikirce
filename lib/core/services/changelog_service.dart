@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 60;
-  static const String currentVersionName = '2.1.5';
+  static const int currentVersionCode = 61;
+  static const String currentVersionName = '2.1.6';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 61,
+      versionName: '2.1.6',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'iOS Arka Planda Kesintisiz Kur\'an & Talim Dinleme',
+          titleEn: 'Seamless iOS Background Quran & Talim Playback',
+          descTr: 'Kelime Takipli Dinleme Talimi, Mukabele ve Mushaf ekranlarında uygulama arka plana alındığında veya ekran kapatıldığında (kilit ekranında) ayetler arası kesintisiz geçiş ve tilavet devamlılığı sağlandı.',
+          descEn: 'Continuous gapless verse-to-verse recitation in Word-by-Word Talim, Mukabele, and Mushaf when the app is in the background or the screen is locked.',
+          icon: Icons.headphones_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'iOS Kilit Ekranı, Denetim Merkezi & Dynamic Island Medya Kontrolleri',
+          titleEn: 'iOS Lock Screen, Control Center & Dynamic Island Media Controls',
+          descTr: 'Okunan sûre ve âyet bilgisi ile oynat/duraklat ve önceki/sonraki âyet geçiş kontrolleri iOS Kilit Ekranı ve Dynamic Island\'a entegre edildi.',
+          descEn: 'Integrated active Surah & Ayah metadata and play/pause/skip controls directly into iOS Lock Screen, Control Center, and Dynamic Island.',
+          icon: Icons.queue_music_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'App Store Gizlilik Manifestosu & İzin Uyumluluğu',
+          titleEn: 'App Store Privacy Manifest & Permission Compliance',
+          descTr: 'iOS PrivacyInfo.xcprivacy manifestosu, arka plan çalışma modları ve uygulama içi gizlilik açıklamaları Apple standartlarına tam uyumlu hale getirildi.',
+          descEn: 'Added native iOS PrivacyInfo.xcprivacy manifest and aligned background capability declarations with Apple App Store guidelines.',
+          icon: Icons.verified_user_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 60,
       versionName: '2.1.5',
