@@ -20,6 +20,8 @@ import '../../taklit_tagsis/presentation/taklit_tagsis_screen.dart';
 import '../../taklit_tagsis/presentation/widgets/taklit_tagsis_detail_sheet.dart';
 import '../../monetization/domain/subscription_service.dart';
 import '../domain/alternative_recommendation_engine.dart';
+import '../../bio_rpg/presentation/widgets/scan_encounter_decision_card.dart';
+import '../../bio_rpg/presentation/bio_rpg_hub_screen.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class ProductResultScreen extends StatefulWidget {
@@ -909,6 +911,18 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    ScanEncounterDecisionCard(
+                      barcode: widget.barcode ?? 'MANUEL_OCR',
+                      productName: _productName,
+                      productScore: _scoreResult!.overallScore,
+                      ingredientsText: _snapshotResponse?.aiSummary ?? widget.ingredientsOcrText ?? '',
+                      violationTitles: _profileViolations.map((v) => v.title).toList(),
+                      additiveNames: _ocrResult?.additives.map((a) => '${a.code} ${a.name}').toList() ?? const [],
+                      onOpenArenaRequested: () {
+                        BioRpgHubController.switchToTab(1);
+                        Navigator.of(context).popUntil((route) => route.isFirst);
+                      },
+                    ),
                     TransparentScoreCard(
                       scoreResult: _scoreResult!,
                       personalMatch: _personalMatch,
