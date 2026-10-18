@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../scanner/presentation/scanner_screen.dart';
 import '../domain/bio_rpg_service.dart';
+import 'bio_arena_screen.dart';
+import 'pixar_avatar_studio_screen.dart';
 
 class BioRpgHubController {
   static final ValueNotifier<int> activeTabIndex = ValueNotifier<int>(0);
@@ -48,9 +50,9 @@ class _BioRpgHubScreenState extends State<BioRpgHubScreen> {
                   index: currentIndex,
                   children: [
                     const ScannerScreen(),
-                    widget.arenaTabOverride ?? const _PhaseOneArenaPreviewTab(),
+                    widget.arenaTabOverride ?? const BioArenaScreen(),
                     widget.rhythmTabOverride ?? const _PhaseOneRhythmPreviewTab(),
-                    widget.avatarTabOverride ?? const _PhaseOneAvatarPreviewTab(),
+                    widget.avatarTabOverride ?? const PixarAvatarStudioScreen(),
                   ],
                 ),
               ),
@@ -353,17 +355,6 @@ class _BioRpgBottomDock extends StatelessWidget {
   }
 }
 
-class _PhaseOneArenaPreviewTab extends StatelessWidget {
-  const _PhaseOneArenaPreviewTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text('3D Pixar Bio-Arena Yükleniyor...'),
-    );
-  }
-}
-
 class _PhaseOneRhythmPreviewTab extends StatelessWidget {
   const _PhaseOneRhythmPreviewTab();
 
@@ -371,17 +362,6 @@ class _PhaseOneRhythmPreviewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Center(
       child: Text('Adımsayar & Akıllı Saat Biyo-Ritim Merkezi'),
-    );
-  }
-}
-
-class _PhaseOneAvatarPreviewTab extends StatelessWidget {
-  const _PhaseOneAvatarPreviewTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text('3D Pixar Avatar & Kişisel OrganicScore'),
     );
   }
 }
