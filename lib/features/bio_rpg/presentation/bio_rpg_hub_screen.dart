@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../scanner/presentation/scanner_screen.dart';
 import '../domain/bio_rpg_service.dart';
 import 'bio_arena_screen.dart';
+import 'bio_rhythm_screen.dart';
 import 'pixar_avatar_studio_screen.dart';
 
 class BioRpgHubController {
@@ -51,7 +52,7 @@ class _BioRpgHubScreenState extends State<BioRpgHubScreen> {
                   children: [
                     const ScannerScreen(),
                     widget.arenaTabOverride ?? const BioArenaScreen(),
-                    widget.rhythmTabOverride ?? const _PhaseOneRhythmPreviewTab(),
+                    widget.rhythmTabOverride ?? const BioRhythmScreen(),
                     widget.avatarTabOverride ?? const PixarAvatarStudioScreen(),
                   ],
                 ),
@@ -351,17 +352,6 @@ class _BioRpgBottomDock extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _PhaseOneRhythmPreviewTab extends StatelessWidget {
-  const _PhaseOneRhythmPreviewTab();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Adımsayar & Akıllı Saat Biyo-Ritim Merkezi'),
     );
   }
 }
