@@ -141,6 +141,14 @@ void main() {
                   bmi: state.bmi,
                   size: 120,
                 ),
+                Pixar3DFullBodyWalkingStage(
+                  config: state.avatarConfig,
+                  personalOrganicScore: state.personalOrganicScore,
+                  bmi: state.bmi,
+                  isWalking: true,
+                  width: 120,
+                  height: 180,
+                ),
               ],
             ),
           ),
@@ -150,6 +158,7 @@ void main() {
       expect(find.byType(Pixar3DGuardianStage), findsOneWidget);
       expect(find.byType(Pixar3DBossStage), findsOneWidget);
       expect(find.byType(Pixar3DAvatarCanvas), findsOneWidget);
+      expect(find.byType(Pixar3DFullBodyWalkingStage), findsOneWidget);
     });
   });
 }
