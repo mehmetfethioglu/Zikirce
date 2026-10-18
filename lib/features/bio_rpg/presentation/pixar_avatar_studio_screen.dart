@@ -4,6 +4,7 @@ import '../../family_profiles/presentation/family_profiles_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../domain/bio_rpg_models.dart';
 import '../domain/bio_rpg_service.dart';
+import 'widgets/organic_pass_viral_card.dart';
 import 'widgets/pixar_3d_renderer.dart';
 
 class PixarAvatarStudioScreen extends StatelessWidget {
@@ -162,6 +163,9 @@ class PixarAvatarStudioScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+
+              OrganicPassAndViralSection(state: state),
               const SizedBox(height: 18),
 
               // 3D ANIMOJI CUSTOMIZATION STUDIO

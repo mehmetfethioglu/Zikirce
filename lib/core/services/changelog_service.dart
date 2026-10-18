@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 10;
-  static const String currentVersionName = '1.0.5';
+  static const int currentVersionCode = 11;
+  static const String currentVersionName = '2.0.0';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 11,
+      versionName: '2.0.0',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '⚔️ Bio-Guardians RPG & 3D Pixar Düello Arenası',
+          titleEn: '⚔️ Bio-Guardians RPG & 3D Pixar Duel Arena',
+          descTr: 'Barkodu taranan ürünlerdeki katkı maddeleri, emülgatörler ve yasaklı içerikler artık 3D Toksik Boss\'a dönüşüyor! Kendi 3D Pixar Muhafızlarınla düelloya gir.',
+          descEn: 'Additives, emulsifiers, and restricted ingredients in scanned barcodes now spawn 3D Toxic Bosses! Battle them with your 3D Pixar Bio-Guardians.',
+          icon: Icons.sports_mma_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🧬 3D Pixar Animoji Stüdyosu & Kişisel OrganicScore',
+          titleEn: '🧬 3D Pixar Animoji Studio & Personal OrganicScore',
+          descTr: 'Taranan ürünlerde "Aldım / Rafa Bıraktım" seçimiyle kendi Yaşayan Kişisel OrganicScore\'unu yükselt ve Boy/Kilo verine göre şekillenen 3D karakterini özelleştir.',
+          descEn: 'Boost your Living Personal OrganicScore with "Bought / Left on Shelf" feedback and customize your 3D Pixar avatar synced with your height and weight.',
+          icon: Icons.face_retouching_natural_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🏃‍♂️ Adımsayar, Detoks Görevleri & Akıllı Saat Köprüsü',
+          titleEn: '🏃‍♂️ Step Counter, Detox Quests & Smartwatch Bridge',
+          descTr: 'Health Connect, Apple Watch ve cihaz adımsayarınla attığın her 1.000 adımı Biyo-Enerjiye dönüştür ve Detoks görevlerini tamamla!',
+          descEn: 'Convert every 1,000 steps into Bio-Energy via Health Connect, Apple Watch, and device pedometer to complete metabolic Detox Quests!',
+          icon: Icons.directions_walk_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 10,
       versionName: '1.0.5',
