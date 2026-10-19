@@ -31,6 +31,13 @@ class HasibuDatabase {
 
   void _initSchema() {
     _db.execute('''
+      CREATE TABLE IF NOT EXISTS company_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        company_name TEXT NOT NULL DEFAULT 'HASİBU İŞLETME YÖNETİMİ',
+        auto_poll_enabled INTEGER NOT NULL DEFAULT 1,
+        auto_poll_minutes INTEGER NOT NULL DEFAULT 5
+      );
+
       CREATE TABLE IF NOT EXISTS branches (
         id INTEGER PRIMARY KEY,
         code TEXT NOT NULL,
@@ -42,6 +49,14 @@ class HasibuDatabase {
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         geofence_radius REAL NOT NULL DEFAULT 150.0
+      );
+
+      CREATE TABLE IF NOT EXISTS shifts (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        end_time TEXT NOT NULL,
+        tolerance_minutes INTEGER NOT NULL DEFAULT 15
       );
 
       CREATE TABLE IF NOT EXISTS departments (
@@ -98,83 +113,82 @@ class HasibuDatabase {
   }
 
   void _seedIfEmpty() {
+    // 1. Şirket ayarları yoksa varsayılan satırı ekle
+    final settingsCount =
+        _db.select('SELECT COUNT(*) AS cnt FROM company_settings').first['cnt']
+                as int? ??
+            0;
+    if (settingsCount == 0) {
+      _db.execute('''
+        INSERT INTO company_settings (id, company_name, auto_poll_enabled, auto_poll_minutes)
+        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5)
+      ''');
+    }
+
+    // 2. Vardiyalar yoksa tohumla (mevcut veritabanı yükseltmesi için bağımsız kontrol)
+    final shiftsCount =
+        _db.select('SELECT COUNT(*) AS cnt FROM shifts').first['cnt'] as int? ??
+            0;
+    if (shiftsCount == 0) {
+      for (final s in WorkplaceSeedData.shifts) {
+        upsertShift(s);
+      }
+    }
+
+    // 3. Personeller doluysa diğer tohumlamaları atla
     final countRow = _db.select('SELECT COUNT(*) AS cnt FROM employees');
     final int count = countRow.first['cnt'] as int? ?? 0;
     if (count > 0) return;
 
     _db.execute('BEGIN TRANSACTION;');
     try {
-      final branchStmt = _db.prepare('''
-        INSERT OR REPLACE INTO branches
-        (id, code, name, has_terminal, terminal_ip, terminal_port, machine_no, latitude, longitude, geofence_radius)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ''');
       for (final b in WorkplaceSeedData.branches) {
-        branchStmt.execute([
-          b.id,
-          b.code,
-          b.name,
-          b.hasTerminal ? 1 : 0,
-          b.terminalIp,
-          b.terminalPort,
-          b.machineNo,
-          b.latitude,
-          b.longitude,
-          b.geofenceRadiusMeters,
-        ]);
+        upsertBranch(b);
       }
-      branchStmt.dispose();
-
-      final deptStmt = _db.prepare('''
-        INSERT OR REPLACE INTO departments (id, name, branch_id, is_production_line)
-        VALUES (?, ?, ?, ?)
-      ''');
       for (final d in WorkplaceSeedData.departments) {
-        deptStmt.execute([
-          d.id,
-          d.name,
-          d.branchId,
-          d.isProductionLine ? 1 : 0,
-        ]);
+        upsertDepartment(d);
       }
-      deptStmt.dispose();
-
-      final empStmt = _db.prepare('''
-        INSERT OR REPLACE INTO employees
-        (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ''');
       for (final e in WorkplaceSeedData.activeEmployees) {
-        empStmt.execute([
-          e.id,
-          e.cardNo,
-          e.fullName,
-          e.title,
-          e.departmentId,
-          e.branchId,
-          e.shiftId,
-          e.hireDate,
-          e.sgkActive ? 1 : 0,
-          e.annualLeaveEntitlement,
-          e.usedAnnualLeave,
-          e.kpiScore,
-        ]);
+        upsertEmployee(e);
       }
-      empStmt.dispose();
-
       for (final log in WorkplaceSeedData.buildInitialAttendanceLogs()) {
         upsertAttendanceLog(log);
       }
-
       for (final lv in WorkplaceSeedData.buildInitialLeaves()) {
         upsertLeaveRecord(lv);
       }
-
       _db.execute('COMMIT;');
     } catch (_) {
       _db.execute('ROLLBACK;');
       rethrow;
     }
+  }
+
+  CompanySettings getCompanySettings() {
+    final rows = _db.select('SELECT * FROM company_settings WHERE id = 1');
+    if (rows.isEmpty) return const CompanySettings();
+    final r = rows.first;
+    return CompanySettings(
+      companyName: r['company_name'] as String,
+      autoPollEnabled: (r['auto_poll_enabled'] as int) == 1,
+      autoPollMinutes: r['auto_poll_minutes'] as int,
+    );
+  }
+
+  void saveCompanySettings(CompanySettings settings) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO company_settings
+      (id, company_name, auto_poll_enabled, auto_poll_minutes)
+      VALUES (1, ?, ?, ?)
+    ''');
+    stmt.execute([
+      settings.companyName.trim().isEmpty
+          ? 'HASİBU İŞLETME YÖNETİMİ'
+          : settings.companyName.trim(),
+      settings.autoPollEnabled ? 1 : 0,
+      settings.autoPollMinutes.clamp(1, 1440),
+    ]);
+    stmt.dispose();
   }
 
   List<Branch> getBranches() {
@@ -197,6 +211,34 @@ class HasibuDatabase {
         .toList(growable: false);
   }
 
+  void upsertBranch(Branch b) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO branches
+      (id, code, name, has_terminal, terminal_ip, terminal_port, machine_no, latitude, longitude, geofence_radius)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      b.id,
+      b.code.trim().toUpperCase(),
+      b.name.trim(),
+      b.hasTerminal ? 1 : 0,
+      b.terminalIp?.trim(),
+      b.terminalPort,
+      b.machineNo,
+      b.latitude,
+      b.longitude,
+      b.geofenceRadiusMeters,
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteBranch(int branchId) {
+    if (branchId == 1) return; // Merkez şube silinmez
+    final stmt = _db.prepare('DELETE FROM branches WHERE id = ?');
+    stmt.execute([branchId]);
+    stmt.dispose();
+  }
+
   void updateBranchTerminal({
     required int branchId,
     required String terminalIp,
@@ -212,6 +254,44 @@ class HasibuDatabase {
     stmt.dispose();
   }
 
+  List<ShiftPlan> getShifts() {
+    final rows = _db.select('SELECT * FROM shifts ORDER BY id ASC');
+    return rows
+        .map(
+          (r) => ShiftPlan(
+            id: r['id'] as int,
+            name: r['name'] as String,
+            startTime: r['start_time'] as String,
+            endTime: r['end_time'] as String,
+            toleranceMinutes: r['tolerance_minutes'] as int,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  void upsertShift(ShiftPlan s) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO shifts
+      (id, name, start_time, end_time, tolerance_minutes)
+      VALUES (?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      s.id,
+      s.name.trim(),
+      s.startTime.trim(),
+      s.endTime.trim(),
+      s.toleranceMinutes.clamp(0, 240),
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteShift(int shiftId) {
+    if (shiftId == 1) return; // Varsayılan vardiya silinmez
+    final stmt = _db.prepare('DELETE FROM shifts WHERE id = ?');
+    stmt.execute([shiftId]);
+    stmt.dispose();
+  }
+
   List<Department> getDepartments() {
     final rows = _db.select('SELECT * FROM departments ORDER BY name ASC');
     return rows
@@ -224,6 +304,26 @@ class HasibuDatabase {
           ),
         )
         .toList(growable: false);
+  }
+
+  void upsertDepartment(Department d) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO departments (id, name, branch_id, is_production_line)
+      VALUES (?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      d.id,
+      d.name.trim().toUpperCase(),
+      d.branchId,
+      d.isProductionLine ? 1 : 0,
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteDepartment(int departmentId) {
+    final stmt = _db.prepare('DELETE FROM departments WHERE id = ?');
+    stmt.execute([departmentId]);
+    stmt.dispose();
   }
 
   List<Employee> getEmployees() {
@@ -246,6 +346,35 @@ class HasibuDatabase {
           ),
         )
         .toList(growable: false);
+  }
+
+  void upsertEmployee(Employee e) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO employees
+      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      e.id,
+      e.cardNo.trim().padLeft(5, '0'),
+      e.fullName.trim().toUpperCase(),
+      e.title.trim().toUpperCase(),
+      e.departmentId,
+      e.branchId,
+      e.shiftId,
+      e.hireDate.trim(),
+      e.sgkActive ? 1 : 0,
+      e.annualLeaveEntitlement,
+      e.usedAnnualLeave,
+      e.kpiScore,
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteEmployee(int employeeId) {
+    final stmt = _db.prepare('DELETE FROM employees WHERE id = ?');
+    stmt.execute([employeeId]);
+    stmt.dispose();
   }
 
   List<AttendanceLog> getAttendanceLogsForDate(String dateKey) {
@@ -354,6 +483,12 @@ class HasibuDatabase {
     return existing.isEmpty;
   }
 
+  void deleteAttendanceLog(String logId) {
+    final stmt = _db.prepare('DELETE FROM attendance_logs WHERE id = ?');
+    stmt.execute([logId]);
+    stmt.dispose();
+  }
+
   List<LeaveRecord> getLeaveRecordsForDate(String dateKey) {
     final stmt = _db.prepare('''
       SELECT * FROM leave_records WHERE date_key = ?
@@ -372,6 +507,23 @@ class HasibuDatabase {
         .toList(growable: false);
     stmt.dispose();
     return list;
+  }
+
+  List<LeaveRecord> getAllLeaveRecords() {
+    final rows = _db.select(
+      'SELECT * FROM leave_records ORDER BY date_key DESC LIMIT 200',
+    );
+    return rows
+        .map(
+          (r) => LeaveRecord(
+            id: r['id'] as String,
+            employeeId: r['employee_id'] as int,
+            date: r['date_key'] as String,
+            leaveType: LeaveType.fromCode(r['leave_code'] as int),
+            note: r['note'] as String,
+          ),
+        )
+        .toList(growable: false);
   }
 
   void upsertLeaveRecord(LeaveRecord record) {
@@ -398,8 +550,9 @@ class HasibuDatabase {
 
   /// Zikirce_ Bulut Senkronizasyon standardında tüm yerel durumu JSON paketi olarak dışa aktarır.
   Map<String, dynamic> exportCloudSnapshot({required String deviceName}) {
-    final allLogsRows =
-        _db.select('SELECT * FROM attendance_logs ORDER BY timestamp_iso DESC LIMIT 5000');
+    final allLogsRows = _db.select(
+      'SELECT * FROM attendance_logs ORDER BY timestamp_iso DESC LIMIT 5000',
+    );
     final allLeavesRows = _db.select('SELECT * FROM leave_records');
 
     final logs = allLogsRows
@@ -436,11 +589,16 @@ class HasibuDatabase {
         .toList(growable: false);
 
     return <String, dynamic>{
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'exportedAt': DateTime.now().toIso8601String(),
       'deviceName': deviceName,
+      'companySettings': getCompanySettings().toJson(),
       'branches': getBranches().map((e) => e.toJson()).toList(growable: false),
-      'employees': getEmployees().map((e) => e.toJson()).toList(growable: false),
+      'shifts': getShifts().map((e) => e.toJson()).toList(growable: false),
+      'departments':
+          getDepartments().map((e) => e.toJson()).toList(growable: false),
+      'employees':
+          getEmployees().map((e) => e.toJson()).toList(growable: false),
       'attendanceLogs': logs,
       'leaveRecords': leaves,
     };
@@ -451,6 +609,39 @@ class HasibuDatabase {
     int mergedCount = 0;
     _db.execute('BEGIN TRANSACTION;');
     try {
+      final rawCompany = snapshot['companySettings'];
+      if (rawCompany is Map<String, dynamic>) {
+        saveCompanySettings(CompanySettings.fromJson(rawCompany));
+      }
+
+      final rawBranches = snapshot['branches'] as List<dynamic>? ?? const [];
+      for (final item in rawBranches) {
+        if (item is Map<String, dynamic>) {
+          upsertBranch(Branch.fromJson(item));
+        }
+      }
+
+      final rawShifts = snapshot['shifts'] as List<dynamic>? ?? const [];
+      for (final item in rawShifts) {
+        if (item is Map<String, dynamic>) {
+          upsertShift(ShiftPlan.fromJson(item));
+        }
+      }
+
+      final rawDepts = snapshot['departments'] as List<dynamic>? ?? const [];
+      for (final item in rawDepts) {
+        if (item is Map<String, dynamic>) {
+          upsertDepartment(Department.fromJson(item));
+        }
+      }
+
+      final rawEmployees = snapshot['employees'] as List<dynamic>? ?? const [];
+      for (final item in rawEmployees) {
+        if (item is Map<String, dynamic>) {
+          upsertEmployee(Employee.fromJson(item));
+        }
+      }
+
       final rawLogs = snapshot['attendanceLogs'] as List<dynamic>? ?? const [];
       for (final item in rawLogs) {
         if (item is Map<String, dynamic>) {

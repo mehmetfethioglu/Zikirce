@@ -56,6 +56,45 @@ enum DailyAttendanceState {
 }
 
 @immutable
+class CompanySettings {
+  final String companyName;
+  final bool autoPollEnabled;
+  final int autoPollMinutes;
+
+  const CompanySettings({
+    this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
+    this.autoPollEnabled = true,
+    this.autoPollMinutes = 5,
+  });
+
+  CompanySettings copyWith({
+    String? companyName,
+    bool? autoPollEnabled,
+    int? autoPollMinutes,
+  }) {
+    return CompanySettings(
+      companyName: companyName ?? this.companyName,
+      autoPollEnabled: autoPollEnabled ?? this.autoPollEnabled,
+      autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'companyName': companyName,
+        'autoPollEnabled': autoPollEnabled,
+        'autoPollMinutes': autoPollMinutes,
+      };
+
+  factory CompanySettings.fromJson(Map<String, dynamic> json) =>
+      CompanySettings(
+        companyName:
+            json['companyName'] as String? ?? 'HASİBU İŞLETME YÖNETİMİ',
+        autoPollEnabled: json['autoPollEnabled'] as bool? ?? true,
+        autoPollMinutes: json['autoPollMinutes'] as int? ?? 5,
+      );
+}
+
+@immutable
 class Branch {
   final int id;
   final String code;
@@ -82,21 +121,28 @@ class Branch {
   });
 
   Branch copyWith({
+    int? id,
+    String? code,
+    String? name,
     String? terminalIp,
     int? terminalPort,
+    int? machineNo,
     bool? hasTerminal,
+    double? latitude,
+    double? longitude,
+    double? geofenceRadiusMeters,
   }) {
     return Branch(
-      id: id,
-      code: code,
-      name: name,
+      id: id ?? this.id,
+      code: code ?? this.code,
+      name: name ?? this.name,
       hasTerminal: hasTerminal ?? this.hasTerminal,
       terminalIp: terminalIp ?? this.terminalIp,
       terminalPort: terminalPort ?? this.terminalPort,
-      machineNo: machineNo,
-      latitude: latitude,
-      longitude: longitude,
-      geofenceRadiusMeters: geofenceRadiusMeters,
+      machineNo: machineNo ?? this.machineNo,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      geofenceRadiusMeters: geofenceRadiusMeters ?? this.geofenceRadiusMeters,
     );
   }
 
@@ -172,6 +218,38 @@ class ShiftPlan {
     required this.endTime,
     this.toleranceMinutes = 15,
   });
+
+  ShiftPlan copyWith({
+    int? id,
+    String? name,
+    String? startTime,
+    String? endTime,
+    int? toleranceMinutes,
+  }) {
+    return ShiftPlan(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
+      toleranceMinutes: toleranceMinutes ?? this.toleranceMinutes,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'startTime': startTime,
+        'endTime': endTime,
+        'toleranceMinutes': toleranceMinutes,
+      };
+
+  factory ShiftPlan.fromJson(Map<String, dynamic> json) => ShiftPlan(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        startTime: json['startTime'] as String? ?? '08:00',
+        endTime: json['endTime'] as String? ?? '18:00',
+        toleranceMinutes: json['toleranceMinutes'] as int? ?? 15,
+      );
 }
 
 @immutable
@@ -206,6 +284,37 @@ class Employee {
 
   int get remainingAnnualLeave =>
       (annualLeaveEntitlement - usedAnnualLeave).clamp(0, 365);
+
+  Employee copyWith({
+    int? id,
+    String? cardNo,
+    String? fullName,
+    String? title,
+    int? departmentId,
+    int? branchId,
+    int? shiftId,
+    String? hireDate,
+    bool? sgkActive,
+    int? annualLeaveEntitlement,
+    int? usedAnnualLeave,
+    double? kpiScore,
+  }) {
+    return Employee(
+      id: id ?? this.id,
+      cardNo: cardNo ?? this.cardNo,
+      fullName: fullName ?? this.fullName,
+      title: title ?? this.title,
+      departmentId: departmentId ?? this.departmentId,
+      branchId: branchId ?? this.branchId,
+      shiftId: shiftId ?? this.shiftId,
+      hireDate: hireDate ?? this.hireDate,
+      sgkActive: sgkActive ?? this.sgkActive,
+      annualLeaveEntitlement:
+          annualLeaveEntitlement ?? this.annualLeaveEntitlement,
+      usedAnnualLeave: usedAnnualLeave ?? this.usedAnnualLeave,
+      kpiScore: kpiScore ?? this.kpiScore,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -265,6 +374,28 @@ class AttendanceLog {
 
   String get timeFormatted =>
       '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+
+  AttendanceLog copyWith({
+    String? id,
+    String? cardNo,
+    int? branchId,
+    int? deviceNo,
+    DateTime? timestamp,
+    bool? isCheckIn,
+    AttendanceSource? source,
+    VerifyMethod? verifyMethod,
+  }) {
+    return AttendanceLog(
+      id: id ?? this.id,
+      cardNo: cardNo ?? this.cardNo,
+      branchId: branchId ?? this.branchId,
+      deviceNo: deviceNo ?? this.deviceNo,
+      timestamp: timestamp ?? this.timestamp,
+      isCheckIn: isCheckIn ?? this.isCheckIn,
+      source: source ?? this.source,
+      verifyMethod: verifyMethod ?? this.verifyMethod,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -337,6 +468,7 @@ class EmployeeDailyStatus {
   final DailyAttendanceState state;
   final AttendanceLog? firstCheckIn;
   final AttendanceLog? lastCheckOut;
+  final List<AttendanceLog> allLogsOfDay;
   final LeaveRecord? leaveRecord;
   final int lateMinutes;
 
@@ -348,6 +480,7 @@ class EmployeeDailyStatus {
     required this.state,
     this.firstCheckIn,
     this.lastCheckOut,
+    this.allLogsOfDay = const <AttendanceLog>[],
     this.leaveRecord,
     this.lateMinutes = 0,
   });

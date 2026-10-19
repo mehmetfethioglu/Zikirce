@@ -23,13 +23,16 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
 
 @immutable
 class PdksDashboardState {
+  final CompanySettings companySettings;
   final String selectedDate; // YYYY-MM-DD
   final int? selectedBranchId; // null => Tüm Şubeler
   final DailyAttendanceState? selectedStateFilter; // null => Tümü
   final String searchQuery;
   final List<Branch> branches;
+  final List<ShiftPlan> shifts;
   final List<Department> departments;
   final List<EmployeeDailyStatus> dailyStatuses;
+  final List<LeaveRecord> allLeaveRecords;
   final bool isPollingTerminal;
   final bool autoPollEnabled;
   final int autoPollMinutes;
@@ -38,13 +41,16 @@ class PdksDashboardState {
   final String activeSelfServiceCardNo;
 
   const PdksDashboardState({
+    this.companySettings = const CompanySettings(),
     required this.selectedDate,
     this.selectedBranchId,
     this.selectedStateFilter,
     this.searchQuery = '',
     this.branches = const <Branch>[],
+    this.shifts = const <ShiftPlan>[],
     this.departments = const <Department>[],
     this.dailyStatuses = const <EmployeeDailyStatus>[],
+    this.allLeaveRecords = const <LeaveRecord>[],
     this.isPollingTerminal = false,
     this.autoPollEnabled = true,
     this.autoPollMinutes = 5,
@@ -103,13 +109,16 @@ class PdksDashboardState {
   }
 
   PdksDashboardState copyWith({
+    CompanySettings? companySettings,
     String? selectedDate,
     int? Function()? selectedBranchId,
     DailyAttendanceState? Function()? selectedStateFilter,
     String? searchQuery,
     List<Branch>? branches,
+    List<ShiftPlan>? shifts,
     List<Department>? departments,
     List<EmployeeDailyStatus>? dailyStatuses,
+    List<LeaveRecord>? allLeaveRecords,
     bool? isPollingTerminal,
     bool? autoPollEnabled,
     int? autoPollMinutes,
@@ -118,6 +127,7 @@ class PdksDashboardState {
     String? activeSelfServiceCardNo,
   }) {
     return PdksDashboardState(
+      companySettings: companySettings ?? this.companySettings,
       selectedDate: selectedDate ?? this.selectedDate,
       selectedBranchId:
           selectedBranchId != null ? selectedBranchId() : this.selectedBranchId,
@@ -126,8 +136,10 @@ class PdksDashboardState {
           : this.selectedStateFilter,
       searchQuery: searchQuery ?? this.searchQuery,
       branches: branches ?? this.branches,
+      shifts: shifts ?? this.shifts,
       departments: departments ?? this.departments,
       dailyStatuses: dailyStatuses ?? this.dailyStatuses,
+      allLeaveRecords: allLeaveRecords ?? this.allLeaveRecords,
       isPollingTerminal: isPollingTerminal ?? this.isPollingTerminal,
       autoPollEnabled: autoPollEnabled ?? this.autoPollEnabled,
       autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
@@ -159,15 +171,18 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   void refreshDashboard() {
+    final companySettings = _db.getCompanySettings();
     final branches = _db.getBranches();
+    final shifts = _db.getShifts();
     final departments = _db.getDepartments();
     final employees = _db.getEmployees();
     final logs = _db.getAttendanceLogsForDate(state.selectedDate);
     final leaves = _db.getLeaveRecordsForDate(state.selectedDate);
+    final allLeaves = _db.getAllLeaveRecords();
 
     final branchMap = {for (final b in branches) b.id: b};
     final deptMap = {for (final d in departments) d.id: d};
-    final shiftMap = {for (final s in WorkplaceSeedData.shifts) s.id: s};
+    final shiftMap = {for (final s in shifts) s.id: s};
     final leaveMap = {for (final l in leaves) l.employeeId: l};
 
     final logsByCard = <String, List<AttendanceLog>>{};
@@ -177,21 +192,26 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     final statuses = <EmployeeDailyStatus>[];
     for (final emp in employees) {
-      final branch = branchMap[emp.branchId] ?? WorkplaceSeedData.branches.first;
+      final branch = branchMap[emp.branchId] ??
+          (branches.isNotEmpty
+              ? branches.first
+              : WorkplaceSeedData.branches.first);
       final dept = deptMap[emp.departmentId] ??
           const Department(id: 1, name: 'GENEL', branchId: 1);
-      final shift = shiftMap[emp.shiftId] ?? WorkplaceSeedData.shifts.first;
+      final shift = shiftMap[emp.shiftId] ??
+          (shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first);
       final empLogs = logsByCard[emp.cardNo] ?? const <AttendanceLog>[];
       final leave = leaveMap[emp.id];
 
-      AttendanceLog? firstIn;
-      AttendanceLog? lastOut;
-      if (empLogs.isNotEmpty) {
-        firstIn = empLogs.first;
-        if (empLogs.length > 1) {
-          lastOut = empLogs.last;
-        }
-      }
+      final checkIns = empLogs.where((l) => l.isCheckIn).toList(growable: false);
+      final checkOuts =
+          empLogs.where((l) => !l.isCheckIn).toList(growable: false);
+
+      final AttendanceLog? firstIn =
+          checkIns.isNotEmpty ? checkIns.first : (empLogs.isNotEmpty ? empLogs.first : null);
+      final AttendanceLog? lastOut = checkOuts.isNotEmpty
+          ? checkOuts.last
+          : (empLogs.length > 1 ? empLogs.last : null);
 
       DailyAttendanceState dailyState;
       int lateMins = 0;
@@ -226,6 +246,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           state: dailyState,
           firstCheckIn: firstIn,
           lastCheckOut: lastOut,
+          allLogsOfDay: empLogs,
           leaveRecord: leave,
           lateMinutes: lateMins,
         ),
@@ -233,9 +254,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
 
     state = state.copyWith(
+      companySettings: companySettings,
+      autoPollEnabled: companySettings.autoPollEnabled,
+      autoPollMinutes: companySettings.autoPollMinutes,
       branches: branches,
+      shifts: shifts,
       departments: departments,
       dailyStatuses: statuses,
+      allLeaveRecords: allLeaves,
     );
   }
 
@@ -280,11 +306,24 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     state = state.copyWith(activeSelfServiceCardNo: cardNo);
   }
 
+  Future<void> updateCompanySettings(CompanySettings newSettings) async {
+    _db.saveCompanySettings(newSettings);
+    refreshDashboard();
+    _configureAutoPollTimer();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Ayarlar (${newSettings.companyName})',
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
   void toggleAutoPoll(bool enabled) {
+    final updated = state.companySettings.copyWith(autoPollEnabled: enabled);
+    _db.saveCompanySettings(updated);
     state = state.copyWith(
+      companySettings: updated,
       autoPollEnabled: enabled,
       terminalStatusMessage: enabled
-          ? 'Otomatik Tenfei D35 veri çekimi aktif (Her ${state.autoPollMinutes} dk)'
+          ? 'Otomatik Tenfei D35 veri çekimi aktif (Her ${updated.autoPollMinutes} dk)'
           : 'Otomatik Tenfei D35 veri çekimi duraklatıldı',
     );
     _configureAutoPollTimer();
@@ -296,7 +335,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     if (!state.autoPollEnabled) return;
 
     _autoPollTimer = Timer.periodic(
-      Duration(minutes: state.autoPollMinutes),
+      Duration(minutes: state.autoPollMinutes.clamp(1, 1440)),
       (_) => pullFromTenfeiTerminals(),
     );
   }
@@ -333,7 +372,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         final logs = await client.fetchAttendanceLogs();
         totalFetched += logs.length;
         newInserted += _db.upsertAttendanceLogsBatch(logs);
-        messages.add('${branch.name} ($ip:${branch.terminalPort}): ${logs.length} kayıt');
+        messages.add(
+          '${branch.name} ($ip:${branch.terminalPort}): ${logs.length} kayıt',
+        );
       } catch (_) {
         messages.add(
           '${branch.name} ($ip:${branch.terminalPort}): Yerel ağ dışı — önbellek aktif',
@@ -357,20 +398,158 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     );
   }
 
-  /// Şube terminali IP/Port yapılandırmasını günceller.
-  void updateBranchTerminalConfig({
-    required int branchId,
-    required String ip,
-    required int port,
-    required bool enabled,
-  }) {
-    _db.updateBranchTerminal(
-      branchId: branchId,
-      terminalIp: ip.trim(),
-      terminalPort: port,
-      hasTerminal: enabled,
+  Future<TenfeiConnectionDiagnostics> testBranchTerminalConnection(
+    Branch branch,
+  ) async {
+    final ip = (branch.terminalIp ?? '').trim();
+    if (ip.isEmpty) {
+      return const TenfeiConnectionDiagnostics(
+        isReachable: false,
+        latencyMs: 0,
+        message: 'Terminal IP adresi boş.',
+      );
+    }
+    final client = TenfeiZkClient(
+      host: ip,
+      port: branch.terminalPort,
+      branchId: branch.id,
+      machineNo: branch.machineNo,
     );
+    try {
+      return await client.testConnection();
+    } finally {
+      await client.dispose();
+    }
+  }
+
+  /// Şube veya Cihaz ekler / günceller.
+  Future<void> saveBranch(Branch branch) async {
+    _db.upsertBranch(branch);
     refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Şube/Cihaz Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  Future<void> deleteBranch(int branchId) async {
+    _db.deleteBranch(branchId);
+    if (state.selectedBranchId == branchId) {
+      state = state.copyWith(selectedBranchId: () => null);
+    }
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Şube/Cihaz Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Vardiya / Mesai Saat Aralığı ve Geç Kalma Toleransını ekler veya günceller.
+  Future<void> saveShiftPlan(ShiftPlan shift) async {
+    _db.upsertShift(shift);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Vardiya Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  Future<void> deleteShiftPlan(int shiftId) async {
+    _db.deleteShift(shiftId);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Vardiya Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Departman / Üretim Bölümü ekler veya günceller.
+  Future<void> saveDepartment(Department dept) async {
+    _db.upsertDepartment(dept);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Bölüm Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Personel ekler veya mevcut personelin bilgilerini günceller.
+  Future<void> saveEmployee(Employee employee) async {
+    _db.upsertEmployee(employee);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Personel Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  Future<void> deleteEmployee(int employeeId) async {
+    _db.deleteEmployee(employeeId);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Personel Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Personel hareketini (Giriş veya Çıkış saatini) manuel ekler veya düzeltir.
+  Future<void> saveOrUpdateAttendanceLog({
+    String? existingLogId,
+    required Employee employee,
+    required String dateKey, // YYYY-MM-DD
+    required String timeHhMm, // HH:mm
+    required bool isCheckIn,
+    AttendanceSource source = AttendanceSource.manual,
+    VerifyMethod verifyMethod = VerifyMethod.face,
+  }) async {
+    final dParts = dateKey.split('-');
+    final tParts = timeHhMm.split(':');
+    final dt = DateTime(
+      int.tryParse(dParts[0]) ?? 2026,
+      dParts.length > 1 ? (int.tryParse(dParts[1]) ?? 1) : 1,
+      dParts.length > 2 ? (int.tryParse(dParts[2]) ?? 1) : 1,
+      int.tryParse(tParts[0]) ?? 8,
+      tParts.length > 1 ? (int.tryParse(tParts[1]) ?? 0) : 0,
+    );
+
+    final String logId = existingLogId ??
+        '${employee.branchId}_${employee.cardNo}_${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}_${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}_${isCheckIn ? "IN" : "OUT"}';
+
+    final log = AttendanceLog(
+      id: logId,
+      cardNo: employee.cardNo,
+      branchId: employee.branchId,
+      deviceNo: 1,
+      timestamp: dt,
+      isCheckIn: isCheckIn,
+      source: source,
+      verifyMethod: verifyMethod,
+    );
+
+    _db.upsertAttendanceLog(log);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Hareket Düzeltme',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  Future<void> deleteAttendanceLog(String logId) async {
+    _db.deleteAttendanceLog(logId);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Hareket Düzeltme',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
   }
 
   /// Cihaz olmayan şubelerde (Devteyşti, Yenişehir, Karaköprü) Mobil QR veya
@@ -437,11 +616,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required int employeeId,
     required LeaveType leaveType,
     required String note,
+    String? customDateKey,
   }) async {
+    final targetDate = customDateKey ?? state.selectedDate;
     final record = LeaveRecord(
-      id: 'leave_${employeeId}_${state.selectedDate}',
+      id: 'leave_${employeeId}_$targetDate',
       employeeId: employeeId,
-      date: state.selectedDate,
+      date: targetDate,
       leaveType: leaveType,
       note: note.trim().isEmpty ? leaveType.label : note.trim(),
     );
@@ -449,6 +630,56 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     refreshDashboard();
     final syncResult = await _syncService.pushToCloud(
       deviceName: 'Hasibu İK Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Başlangıç ve bitiş tarihleri arasındaki tüm günler için toplu izin/rapor kaydı oluşturur.
+  Future<int> assignLeaveDateRange({
+    required int employeeId,
+    required DateTime startDate,
+    required DateTime endDate,
+    required LeaveType leaveType,
+    required String note,
+  }) async {
+    final DateTime normalizedStart =
+        DateTime(startDate.year, startDate.month, startDate.day);
+    final DateTime normalizedEnd =
+        DateTime(endDate.year, endDate.month, endDate.day);
+    if (normalizedEnd.isBefore(normalizedStart)) return 0;
+
+    int daysCount = 0;
+    DateTime cursor = normalizedStart;
+    while (!cursor.isAfter(normalizedEnd) && daysCount <= 90) {
+      final dKey =
+          '${cursor.year.toString().padLeft(4, '0')}-${cursor.month.toString().padLeft(2, '0')}-${cursor.day.toString().padLeft(2, '0')}';
+      final rec = LeaveRecord(
+        id: 'leave_${employeeId}_$dKey',
+        employeeId: employeeId,
+        date: dKey,
+        leaveType: leaveType,
+        note: note.trim().isEmpty ? leaveType.label : note.trim(),
+      );
+      _db.upsertLeaveRecord(rec);
+      daysCount++;
+      cursor = cursor.add(const Duration(days: 1));
+    }
+
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu İK İzin/Rapor Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+    return daysCount;
+  }
+
+  Future<void> deleteLeaveRecord(String leaveId) async {
+    _db.deleteLeaveRecord(leaveId);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu İK İzin/Rapor Yönetimi',
       force: true,
     );
     state = state.copyWith(syncStatus: syncResult);

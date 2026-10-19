@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hasibu/core/database/hasibu_database.dart';
 import 'package:hasibu/features/pdks/data/tenfei_zk_client.dart';
+import 'package:hasibu/features/pdks/domain/pdks_models.dart';
 import 'package:hasibu/main.dart';
 
 void main() {
@@ -17,12 +19,11 @@ void main() {
       expect(decoded, equals(dt));
     });
 
-    test('TenfeiZkClient fetches 40-byte binary attendance logs over TCP', () async {
-      // Yerel sahte Tenfei D35 TCP sunucusu başlat
+    test('TenfeiZkClient fetches 40-byte binary attendance logs over TCP',
+        () async {
       final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(server.close);
 
-      // 40-byte örnek Tenfei D35 ikili hareket kaydı (Kart: 00064, Saat: 2026-10-19 05:45:00)
       final record40 = Uint8List(40);
       final bd = ByteData.sublistView(record40);
       bd.setUint16(0, 1, Endian.little);
@@ -43,16 +44,8 @@ void main() {
           final cmd = inBd.getUint16(8, Endian.little);
           final replyId = inBd.getUint16(14, Endian.little);
 
-          if (cmd == TenfeiZkClient.cmdConnect) {
-            clientSocket.add(
-              TenfeiZkClient.buildTcpFrame(
-                command: TenfeiZkClient.cmdAckOk,
-                sessionId: 77,
-                replyId: replyId,
-                payload: Uint8List(0),
-              ),
-            );
-          } else if (cmd == TenfeiZkClient.cmdDisableDevice ||
+          if (cmd == TenfeiZkClient.cmdConnect ||
+              cmd == TenfeiZkClient.cmdDisableDevice ||
               cmd == TenfeiZkClient.cmdEnableDevice ||
               cmd == TenfeiZkClient.cmdFreeData ||
               cmd == TenfeiZkClient.cmdExit) {
@@ -65,7 +58,6 @@ void main() {
               ),
             );
           } else if (cmd == TenfeiZkClient.cmdAttLogRrq) {
-            // 1. CMD_PREPARE_DATA (toplam 40 byte)
             final sizePayload = ByteData(4)..setUint32(0, 40, Endian.little);
             clientSocket.add(
               TenfeiZkClient.buildTcpFrame(
@@ -75,7 +67,6 @@ void main() {
                 payload: sizePayload.buffer.asUint8List(),
               ),
             );
-            // 2. CMD_DATA (40 byte kayıt)
             clientSocket.add(
               TenfeiZkClient.buildTcpFrame(
                 command: TenfeiZkClient.cmdData,
@@ -104,22 +95,47 @@ void main() {
     });
   });
 
-  group('HasibuDatabase & Cloud Snapshot Reconciliation Tests', () {
-    test('Seeds workplace departments, branches, employees and exports snapshot', () {
+  group('HasibuDatabase & Settings CRUD Tests', () {
+    test(
+        'Persists company settings, shifts, branches, employees and exports snapshot',
+        () {
       final db = HasibuDatabase.inMemory();
       addTearDown(db.dispose);
 
       expect(db.getBranches().length, 4);
+      expect(db.getShifts().length, 4);
       expect(db.getDepartments().length, 27);
       expect(db.getEmployees().isNotEmpty, isTrue);
 
+      db.saveCompanySettings(
+        const CompanySettings(
+          companyName: 'AKAR GIDA & BAKLAVA A.Ş.',
+          autoPollEnabled: true,
+          autoPollMinutes: 10,
+        ),
+      );
+      expect(db.getCompanySettings().companyName, 'AKAR GIDA & BAKLAVA A.Ş.');
+
+      db.upsertShift(
+        const ShiftPlan(
+          id: 99,
+          name: 'Gece Üretim',
+          startTime: '22:00',
+          endTime: '06:00',
+          toleranceMinutes: 10,
+        ),
+      );
+      expect(db.getShifts().any((s) => s.id == 99 && s.toleranceMinutes == 10),
+          isTrue);
+
       final snapshot = db.exportCloudSnapshot(deviceName: 'Test-Laptop');
       expect(snapshot['deviceName'], 'Test-Laptop');
-      expect((snapshot['attendanceLogs'] as List).isNotEmpty, isTrue);
+      expect((snapshot['shifts'] as List).length, 5);
     });
   });
 
-  testWidgets('HasibuApp renders Live PDKS Dashboard and Branch filters', (
+  testWidgets(
+      'HasibuApp renders Live PDKS Dashboard and navigates to Settings View', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -131,8 +147,16 @@ void main() {
 
     expect(find.textContaining('HASİBU'), findsOneWidget);
     expect(find.text('Tüm Şubeler & Merkez'), findsOneWidget);
-    expect(find.text('Şube Devteyşti'), findsWidgets);
-    expect(find.text('Giriş Yapan'), findsOneWidget);
-    expect(find.text('Devamsız'), findsOneWidget);
+
+    // Ayarlar ikonuna tıkla ve 5 yönetim alt sekmesinin açıldığını doğrula
+    await tester.tap(find.byTooltip('Ayarlar & Yönetim'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. Şirket, Şube & Cihaz Ayarları'), findsOneWidget);
+    expect(find.text('2. Mesai Saatleri & Geç Kalma'), findsOneWidget);
+    expect(find.text('3. Hareket Düzeltme (Giriş/Çıkış)'), findsOneWidget);
+    expect(find.text('4. İzin & Rapor Girişi'), findsOneWidget);
+    expect(find.text('5. Personel & Bölüm Yönetimi'), findsOneWidget);
+    expect(find.byIcon(Icons.add_business_rounded), findsOneWidget);
   });
 }

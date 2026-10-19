@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_settings_view.dart';
 
 class HasibuShellScreen extends ConsumerStatefulWidget {
   const HasibuShellScreen({super.key});
@@ -19,12 +20,16 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.sizeOf(context).width >= 860;
+    final companyName = ref.watch(
+      pdksDashboardProvider.select((s) => s.companySettings.companyName),
+    );
 
     const pages = <Widget>[
       _LiveAttendanceDashboardView(),
       _TenfeiTerminalsAndSyncView(),
       _BranchQrGpsCheckInView(),
       _EmployeeSelfServicePortalView(),
+      HasibuSettingsView(),
     ];
 
     return Scaffold(
@@ -33,22 +38,39 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
         elevation: 0,
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.precision_manufacturing_rounded, color: Color(0xFF38BDF8)),
-            SizedBox(width: 10),
+            const Icon(
+              Icons.precision_manufacturing_rounded,
+              color: Color(0xFF38BDF8),
+            ),
+            const SizedBox(width: 10),
             Flexible(
               child: Text(
-                'HASİBU • Yalın Üretim, Çok Şubeli PDKS & İK',
+                '$companyName • Çok Şubeli PDKS & İK',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
               ),
             ),
           ],
         ),
-        actions: const [
-          _CloudSyncAppBarBadge(),
-          SizedBox(width: 12),
+        actions: [
+          const _CloudSyncAppBarBadge(),
+          const SizedBox(width: 6),
+          IconButton(
+            tooltip: 'Ayarlar & Yönetim',
+            onPressed: () => setState(() => _selectedTabIndex = 4),
+            icon: Icon(
+              Icons.settings_rounded,
+              color: _selectedTabIndex == 4
+                  ? const Color(0xFF38BDF8)
+                  : Colors.white,
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Row(
@@ -86,6 +108,11 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                   selectedIcon: Icon(Icons.badge_rounded),
                   label: Text('Personel Mobil Portalı'),
                 ),
+                NavigationRailDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings_rounded),
+                  label: Text('Ayarlar & Yönetim'),
+                ),
               ],
             ),
           if (isWide) const VerticalDivider(width: 1, thickness: 1),
@@ -118,6 +145,11 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                   icon: Icon(Icons.badge_outlined),
                   selectedIcon: Icon(Icons.badge_rounded),
                   label: 'Personel',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.settings_outlined),
+                  selectedIcon: Icon(Icons.settings_rounded),
+                  label: 'Ayarlar',
                 ),
               ],
             ),
@@ -171,7 +203,11 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
                     color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.bolt_rounded, size: 18, color: Color(0xFF38BDF8)),
+              : const Icon(
+                  Icons.bolt_rounded,
+                  size: 18,
+                  color: Color(0xFF38BDF8),
+                ),
           label: const Text('Tenfei D35 Çek'),
         ),
         const SizedBox(width: 8),
@@ -199,7 +235,11 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Icon(Icons.cloud_sync_rounded, size: 16, color: Colors.white70),
+                const Icon(
+                  Icons.cloud_sync_rounded,
+                  size: 16,
+                  color: Colors.white70,
+                ),
                 const SizedBox(width: 4),
                 const Text(
                   'Drive Sync',
@@ -253,7 +293,6 @@ class _LiveAttendanceDashboardViewState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Üst Bilgi & Tarih Şeridi
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -615,9 +654,17 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
         ),
     };
 
-    final checkInText = item.firstCheckIn != null
-        ? '${item.firstCheckIn!.timeFormatted} (${item.firstCheckIn!.verifyMethod.label})'
-        : (item.leaveRecord?.note ?? 'Giriş Yok');
+    final String checkInText;
+    if (item.firstCheckIn != null) {
+      final outPart = item.lastCheckOut != null &&
+              item.lastCheckOut!.id != item.firstCheckIn!.id
+          ? ' • Çıkış: ${item.lastCheckOut!.timeFormatted}'
+          : '';
+      checkInText =
+          'Giriş: ${item.firstCheckIn!.timeFormatted}$outPart (${item.firstCheckIn!.verifyMethod.label})';
+    } else {
+      checkInText = item.leaveRecord?.note ?? 'Giriş Yok';
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -673,7 +720,7 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${item.branch.name} • ${item.department.name} • ${item.employee.title}',
+                  '${item.branch.name} • ${item.department.name} • Mesai: ${item.shift.startTime}-${item.shift.endTime}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF64748B),
@@ -789,7 +836,10 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Eski SMT.exe veya 32-bit zkemkeeper.dll kullanmadan doğrudan 192.168.9.150:4370 protokolüyle yüz ve parmak izi hareketlerini çeker ve Google Drive yedeğini günceller.',
-                  style: TextStyle(color: Colors.blueGrey.shade700, fontSize: 13),
+                  style: TextStyle(
+                    color: Colors.blueGrey.shade700,
+                    fontSize: 13,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Container(
@@ -1222,7 +1272,7 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                     value: current.state.label,
                     subValue: current.firstCheckIn != null
                         ? 'Giriş: ${current.firstCheckIn!.timeFormatted}'
-                        : current.shift.name,
+                        : '${current.shift.startTime}-${current.shift.endTime}',
                   ),
                 ],
               ),
