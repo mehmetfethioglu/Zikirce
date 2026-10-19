@@ -1,5 +1,62 @@
 import 'package:flutter/foundation.dart';
 
+enum HasibuModule {
+  pdksHr('PDKS & İK', 'Personel Devam, Vardiya & İzin'),
+  leanProduction('Yalın Üretim & KPI', '27 İstasyon Akışı & Performans'),
+  preAccounting('Ön Muhasebe & Puantaj', 'Puantaj, Şube Kasa & Gider'),
+  employeePortal('Personel Portalı', 'Özlük, SGK, İzin & KPI Görünümü'),
+  systemSettings('Sistem & Ayarlar', 'Şirket, Şube, Cihaz & Yetkiler');
+
+  final String title;
+  final String subtitle;
+  const HasibuModule(this.title, this.subtitle);
+}
+
+enum UserRole {
+  admin('Yönetici / İK'),
+  employee('Personel');
+
+  final String label;
+  const UserRole(this.label);
+}
+
+@immutable
+class AuthSession {
+  final bool isAuthenticated;
+  final String username;
+  final String displayName;
+  final UserRole role;
+  final String? employeeCardNo;
+  final String? errorMessage;
+
+  const AuthSession({
+    this.isAuthenticated = false,
+    this.username = '',
+    this.displayName = '',
+    this.role = UserRole.admin,
+    this.employeeCardNo,
+    this.errorMessage,
+  });
+
+  AuthSession copyWith({
+    bool? isAuthenticated,
+    String? username,
+    String? displayName,
+    UserRole? role,
+    String? employeeCardNo,
+    String? Function()? errorMessage,
+  }) {
+    return AuthSession(
+      isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      username: username ?? this.username,
+      displayName: displayName ?? this.displayName,
+      role: role ?? this.role,
+      employeeCardNo: employeeCardNo ?? this.employeeCardNo,
+      errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
+    );
+  }
+}
+
 enum AttendanceSource {
   tenfeiD35('Tenfei D35 Terminal'),
   mobileQr('Mobil QR Kod'),
@@ -60,22 +117,34 @@ class CompanySettings {
   final String companyName;
   final bool autoPollEnabled;
   final int autoPollMinutes;
+  final String adminUsername;
+  final String adminPassword;
+  final String defaultEmployeePin;
 
   const CompanySettings({
     this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
     this.autoPollEnabled = true,
     this.autoPollMinutes = 5,
+    this.adminUsername = 'admin',
+    this.adminPassword = '123',
+    this.defaultEmployeePin = '1234',
   });
 
   CompanySettings copyWith({
     String? companyName,
     bool? autoPollEnabled,
     int? autoPollMinutes,
+    String? adminUsername,
+    String? adminPassword,
+    String? defaultEmployeePin,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
       autoPollEnabled: autoPollEnabled ?? this.autoPollEnabled,
       autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
+      adminUsername: adminUsername ?? this.adminUsername,
+      adminPassword: adminPassword ?? this.adminPassword,
+      defaultEmployeePin: defaultEmployeePin ?? this.defaultEmployeePin,
     );
   }
 
@@ -83,6 +152,9 @@ class CompanySettings {
         'companyName': companyName,
         'autoPollEnabled': autoPollEnabled,
         'autoPollMinutes': autoPollMinutes,
+        'adminUsername': adminUsername,
+        'adminPassword': adminPassword,
+        'defaultEmployeePin': defaultEmployeePin,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> json) =>
@@ -91,6 +163,9 @@ class CompanySettings {
             json['companyName'] as String? ?? 'HASİBU İŞLETME YÖNETİMİ',
         autoPollEnabled: json['autoPollEnabled'] as bool? ?? true,
         autoPollMinutes: json['autoPollMinutes'] as int? ?? 5,
+        adminUsername: json['adminUsername'] as String? ?? 'admin',
+        adminPassword: json['adminPassword'] as String? ?? '123',
+        defaultEmployeePin: json['defaultEmployeePin'] as String? ?? '1234',
       );
 }
 

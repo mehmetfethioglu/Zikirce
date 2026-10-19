@@ -5,7 +5,22 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_enterprise_modules_view.dart';
 import 'hasibu_settings_view.dart';
+
+class _ModuleNavTab {
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final Widget view;
+
+  const _ModuleNavTab({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.view,
+  });
+}
 
 class HasibuShellScreen extends ConsumerStatefulWidget {
   const HasibuShellScreen({super.key});
@@ -15,22 +30,142 @@ class HasibuShellScreen extends ConsumerStatefulWidget {
 }
 
 class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
-  int _selectedTabIndex = 0;
+  final Map<HasibuModule, int> _tabIndexByModule = <HasibuModule, int>{
+    for (final m in HasibuModule.values) m: 0,
+  };
+
+  List<_ModuleNavTab> _buildTabsForModule(HasibuModule module) {
+    switch (module) {
+      case HasibuModule.pdksHr:
+        return const <_ModuleNavTab>[
+          _ModuleNavTab(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard_rounded,
+            label: 'Canlı PDKS & Şubeler',
+            view: _LiveAttendanceDashboardView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.router_outlined,
+            selectedIcon: Icons.router_rounded,
+            label: 'Tenfei D35 & Drive Sync',
+            view: _TenfeiTerminalsAndSyncView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.qr_code_scanner_outlined,
+            selectedIcon: Icons.qr_code_scanner_rounded,
+            label: 'Şube QR / GPS Yoklama',
+            view: _BranchQrGpsCheckInView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.edit_calendar_outlined,
+            selectedIcon: Icons.edit_calendar_rounded,
+            label: 'Hareket Düzeltme',
+            view: AttendanceCorrectionSettingsView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.medical_information_outlined,
+            selectedIcon: Icons.medical_information_rounded,
+            label: 'İzin & Rapor Girişi',
+            view: LeavesAndReportsSettingsView(),
+          ),
+        ];
+
+      case HasibuModule.leanProduction:
+        return const <_ModuleNavTab>[
+          _ModuleNavTab(
+            icon: Icons.precision_manufacturing_outlined,
+            selectedIcon: Icons.precision_manufacturing_rounded,
+            label: '27 İstasyon Canlı Akış',
+            view: LeanProductionStationsView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.leaderboard_outlined,
+            selectedIcon: Icons.leaderboard_rounded,
+            label: 'Personel KPI Sıralaması',
+            view: LeanKpiLeaderboardView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.manage_accounts_outlined,
+            selectedIcon: Icons.manage_accounts_rounded,
+            label: 'Bölüm & Kadro Tanımları',
+            view: EmployeesManagementSettingsView(),
+          ),
+        ];
+
+      case HasibuModule.preAccounting:
+        return const <_ModuleNavTab>[
+          _ModuleNavTab(
+            icon: Icons.receipt_long_outlined,
+            selectedIcon: Icons.receipt_long_rounded,
+            label: 'Günlük Puantaj & Bordro',
+            view: PreAccountingPayrollSummaryView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.schedule_outlined,
+            selectedIcon: Icons.schedule_rounded,
+            label: 'Mesai & Kesinti Kuralları',
+            view: ShiftAndLateToleranceSettingsView(),
+          ),
+        ];
+
+      case HasibuModule.employeePortal:
+        return const <_ModuleNavTab>[
+          _ModuleNavTab(
+            icon: Icons.badge_outlined,
+            selectedIcon: Icons.badge_rounded,
+            label: 'Özlük, SGK & KPI Kartım',
+            view: _EmployeeSelfServicePortalView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.qr_code_scanner_outlined,
+            selectedIcon: Icons.qr_code_scanner_rounded,
+            label: 'Şube Mobil QR / GPS',
+            view: _BranchQrGpsCheckInView(),
+          ),
+        ];
+
+      case HasibuModule.systemSettings:
+        return const <_ModuleNavTab>[
+          _ModuleNavTab(
+            icon: Icons.business_outlined,
+            selectedIcon: Icons.business_rounded,
+            label: '1. Şirket, Şube & Cihaz Ayarları',
+            view: CompanyAndBranchesSettingsView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.schedule_outlined,
+            selectedIcon: Icons.schedule_rounded,
+            label: '2. Mesai Saatleri & Geç Kalma',
+            view: ShiftAndLateToleranceSettingsView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.manage_accounts_outlined,
+            selectedIcon: Icons.manage_accounts_rounded,
+            label: '3. Personel & Bölüm Yönetimi',
+            view: EmployeesManagementSettingsView(),
+          ),
+        ];
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final authSession =
+        ref.watch(pdksDashboardProvider.select((s) => s.authSession));
+    if (!authSession.isAuthenticated) {
+      return const HasibuLoginScreen();
+    }
+
     final isWide = MediaQuery.sizeOf(context).width >= 860;
     final companyName = ref.watch(
       pdksDashboardProvider.select((s) => s.companySettings.companyName),
     );
+    final activeModule =
+        ref.watch(pdksDashboardProvider.select((s) => s.activeModule));
 
-    const pages = <Widget>[
-      _LiveAttendanceDashboardView(),
-      _TenfeiTerminalsAndSyncView(),
-      _BranchQrGpsCheckInView(),
-      _EmployeeSelfServicePortalView(),
-      HasibuSettingsView(),
-    ];
+    final tabs = _buildTabsForModule(activeModule);
+    final int rawIndex = _tabIndexByModule[activeModule] ?? 0;
+    final int safeIndex = rawIndex.clamp(0, tabs.length - 1);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -47,112 +182,246 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
             const SizedBox(width: 10),
             Flexible(
               child: Text(
-                '$companyName • Çok Şubeli PDKS & İK',
+                '$companyName • ${activeModule.title}',
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
-                  fontSize: 17,
+                  fontSize: 16,
                 ),
               ),
             ),
           ],
         ),
         actions: [
-          const _CloudSyncAppBarBadge(),
+          if (authSession.role == UserRole.admin)
+            const _CloudSyncAppBarBadge(),
           const SizedBox(width: 6),
-          IconButton(
-            tooltip: 'Ayarlar & Yönetim',
-            onPressed: () => setState(() => _selectedTabIndex = 4),
-            icon: Icon(
-              Icons.settings_rounded,
-              color: _selectedTabIndex == 4
-                  ? const Color(0xFF38BDF8)
-                  : Colors.white,
+          if (authSession.role == UserRole.admin)
+            IconButton(
+              tooltip: 'Ayarlar & Yönetim',
+              onPressed: () => ref
+                  .read(pdksDashboardProvider.notifier)
+                  .selectModule(HasibuModule.systemSettings),
+              icon: Icon(
+                Icons.settings_rounded,
+                color: activeModule == HasibuModule.systemSettings
+                    ? const Color(0xFF38BDF8)
+                    : Colors.white,
+              ),
             ),
+          IconButton(
+            tooltip: 'Oturumu Kapat (${authSession.displayName})',
+            onPressed: () =>
+                ref.read(pdksDashboardProvider.notifier).logout(),
+            icon: const Icon(Icons.logout_rounded, color: Color(0xFFF87171)),
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Row(
+      body: Column(
         children: [
-          if (isWide)
-            NavigationRail(
-              selectedIndex: _selectedTabIndex,
-              onDestinationSelected: (idx) =>
-                  setState(() => _selectedTabIndex = idx),
-              extended: MediaQuery.sizeOf(context).width >= 1150,
-              backgroundColor: Colors.white,
-              selectedIconTheme: const IconThemeData(color: Color(0xFF0284C7)),
-              selectedLabelTextStyle: const TextStyle(
-                color: Color(0xFF0284C7),
-                fontWeight: FontWeight.w700,
-              ),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard_rounded),
-                  label: Text('Canlı PDKS & Şubeler'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.router_outlined),
-                  selectedIcon: Icon(Icons.router_rounded),
-                  label: Text('Tenfei D35 & Drive Sync'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.qr_code_scanner_outlined),
-                  selectedIcon: Icon(Icons.qr_code_scanner_rounded),
-                  label: Text('Şube QR / GPS Yoklama'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.badge_outlined),
-                  selectedIcon: Icon(Icons.badge_rounded),
-                  label: Text('Personel Mobil Portalı'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings_rounded),
-                  label: Text('Ayarlar & Yönetim'),
-                ),
+          // ÜST MODÜL SEÇME SATIRI (Yalnızca Yönetici / İK rolünde tüm modüller açık)
+          if (authSession.role == UserRole.admin)
+            _TopModuleSelectorRibbon(
+              activeModule: activeModule,
+              onSelectModule: (m) =>
+                  ref.read(pdksDashboardProvider.notifier).selectModule(m),
+            ),
+          Expanded(
+            child: Row(
+              children: [
+                if (isWide)
+                  NavigationRail(
+                    selectedIndex: safeIndex,
+                    onDestinationSelected: (idx) => setState(
+                      () => _tabIndexByModule[activeModule] = idx,
+                    ),
+                    extended: MediaQuery.sizeOf(context).width >= 1150,
+                    backgroundColor: Colors.white,
+                    selectedIconTheme:
+                        const IconThemeData(color: Color(0xFF0284C7)),
+                    selectedLabelTextStyle: const TextStyle(
+                      color: Color(0xFF0284C7),
+                      fontWeight: FontWeight.w700,
+                    ),
+                    destinations: [
+                      for (final t in tabs)
+                        NavigationRailDestination(
+                          icon: Icon(t.icon),
+                          selectedIcon: Icon(t.selectedIcon),
+                          label: Text(t.label),
+                        ),
+                    ],
+                  ),
+                if (isWide) const VerticalDivider(width: 1, thickness: 1),
+                Expanded(child: tabs[safeIndex].view),
               ],
             ),
-          if (isWide) const VerticalDivider(width: 1, thickness: 1),
-          Expanded(child: pages[_selectedTabIndex]),
+          ),
         ],
       ),
-      bottomNavigationBar: isWide
+      bottomNavigationBar: isWide || tabs.length < 2
           ? null
           : NavigationBar(
-              selectedIndex: _selectedTabIndex,
+              selectedIndex: safeIndex,
               onDestinationSelected: (idx) =>
-                  setState(() => _selectedTabIndex = idx),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard_rounded),
-                  label: 'Canlı PDKS',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.router_outlined),
-                  selectedIcon: Icon(Icons.router_rounded),
-                  label: 'Tenfei D35',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.qr_code_scanner_outlined),
-                  selectedIcon: Icon(Icons.qr_code_scanner_rounded),
-                  label: 'Şube QR/GPS',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.badge_outlined),
-                  selectedIcon: Icon(Icons.badge_rounded),
-                  label: 'Personel',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings_rounded),
-                  label: 'Ayarlar',
-                ),
+                  setState(() => _tabIndexByModule[activeModule] = idx),
+              destinations: [
+                for (final t in tabs)
+                  NavigationDestination(
+                    icon: Icon(t.icon),
+                    selectedIcon: Icon(t.selectedIcon),
+                    label: t.label,
+                  ),
               ],
             ),
+    );
+  }
+}
+
+class _TopModuleSelectorRibbon extends StatelessWidget {
+  final HasibuModule activeModule;
+  final ValueChanged<HasibuModule> onSelectModule;
+
+  const _TopModuleSelectorRibbon({
+    required this.activeModule,
+    required this.onSelectModule,
+  });
+
+  IconData _iconForModule(HasibuModule m) {
+    switch (m) {
+      case HasibuModule.pdksHr:
+        return Icons.fingerprint_rounded;
+      case HasibuModule.leanProduction:
+        return Icons.precision_manufacturing_rounded;
+      case HasibuModule.preAccounting:
+        return Icons.account_balance_wallet_rounded;
+      case HasibuModule.employeePortal:
+        return Icons.badge_rounded;
+      case HasibuModule.systemSettings:
+        return Icons.settings_suggest_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktopWidth = MediaQuery.sizeOf(context).width >= 960;
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E293B),
+        border: Border(
+          bottom: BorderSide(color: Color(0xFF334155), width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: isDesktopWidth
+          ? Row(
+              children: [
+                for (var i = 0; i < HasibuModule.values.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _TopModuleButton(
+                      module: HasibuModule.values[i],
+                      icon: _iconForModule(HasibuModule.values[i]),
+                      isSelected: HasibuModule.values[i] == activeModule,
+                      onTap: () => onSelectModule(HasibuModule.values[i]),
+                    ),
+                  ),
+                ],
+              ],
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final m in HasibuModule.values) ...[
+                    _TopModuleButton(
+                      module: m,
+                      icon: _iconForModule(m),
+                      isSelected: m == activeModule,
+                      onTap: () => onSelectModule(m),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _TopModuleButton extends StatelessWidget {
+  final HasibuModule module;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TopModuleButton({
+    required this.module,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0284C7) : const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color:
+                isSelected ? const Color(0xFF38BDF8) : const Color(0xFF334155),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected ? Colors.white : const Color(0xFF38BDF8),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    module.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    module.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isSelected
+                          ? Colors.white70
+                          : const Color(0xFF94A3B8),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1114,6 +1383,8 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
     final selectedCard = ref.watch(
       pdksDashboardProvider.select((s) => s.activeSelfServiceCardNo),
     );
+    final authRole =
+        ref.watch(pdksDashboardProvider.select((s) => s.authSession.role));
 
     if (statuses.isEmpty) {
       return const Center(child: Text('Personel verisi bulunamadı.'));
@@ -1128,55 +1399,56 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Personel Mobil Self-Servis Ekranı (Önizleme)',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Personeller telefonlarına Hasibu uygulamasını yükleyip firma bilgileriyle giriş yaptığında kendi yıllık izin, sigortalılık, departman, vardiya ve yalın üretim KPI puanlarını görür.',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: current.employee.cardNo,
-                  decoration: const InputDecoration(
-                    labelText: 'Önizlenecek Personeli Seçin',
-                    border: OutlineInputBorder(),
+        if (authRole == UserRole.admin)
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: Color(0xFFE2E8F0)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Personel Mobil Self-Servis Ekranı (Yönetici Önizleme Modu)',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                   ),
-                  items: [
-                    for (final s in statuses)
-                      DropdownMenuItem<String>(
-                        value: s.employee.cardNo,
-                        child: Text(
-                          '${s.employee.fullName} (#${s.employee.cardNo} - ${s.department.name})',
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Personeller kendi Kart No ve PIN bilgileriyle oturum açtığında yalnızca kendi kartlarını görürler.',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: current.employee.cardNo,
+                    decoration: const InputDecoration(
+                      labelText: 'Önizlenecek Personeli Seçin',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      for (final s in statuses)
+                        DropdownMenuItem<String>(
+                          value: s.employee.cardNo,
+                          child: Text(
+                            '${s.employee.fullName} (#${s.employee.cardNo} - ${s.department.name})',
+                          ),
                         ),
-                      ),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      ref
-                          .read(pdksDashboardProvider.notifier)
-                          .setSelfServiceEmployee(val);
-                    }
-                  },
-                ),
-              ],
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        ref
+                            .read(pdksDashboardProvider.notifier)
+                            .setSelfServiceEmployee(val);
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
+        if (authRole == UserRole.admin) const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(

@@ -135,9 +135,15 @@ void main() {
   });
 
   testWidgets(
-      'HasibuApp renders Live PDKS Dashboard and navigates to Settings View', (
+      'HasibuApp enforces Login Gate, shows Top Module Ribbon, and dynamically updates Left Menu per module',
+      (
     WidgetTester tester,
   ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       const ProviderScope(
         child: HasibuApp(),
@@ -145,18 +151,44 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('HASİBU'), findsOneWidget);
-    expect(find.text('Tüm Şubeler & Merkez'), findsOneWidget);
+    // 1. Uygulama doğrudan açılmaz, Oturum Açma (Login Gate) ekranı gelir
+    expect(find.byKey(const ValueKey('login_submit_button')), findsOneWidget);
+    expect(find.text('Tüm Şubeler & Merkez'), findsNothing);
 
-    // Ayarlar ikonuna tıkla ve 5 yönetim alt sekmesinin açıldığını doğrula
-    await tester.tap(find.byTooltip('Ayarlar & Yönetim'));
+    // 2. Yönetici olarak oturum aç (varsayılan admin / 123 dolu gelir)
+    await tester.tap(find.byKey(const ValueKey('login_submit_button')));
+    await tester.pumpAndSettle();
+
+    // 3. Üst Modül Seçme Satırı (5 ana modül) ve PDKS & İK sol menüsündeki 5 sekme görünür
+    expect(find.text('PDKS & İK'), findsOneWidget);
+    expect(find.text('Yalın Üretim & KPI'), findsOneWidget);
+    expect(find.text('Ön Muhasebe & Puantaj'), findsOneWidget);
+    expect(find.text('Personel Portalı'), findsOneWidget);
+    expect(find.text('Sistem & Ayarlar'), findsOneWidget);
+
+    expect(find.text('Canlı PDKS & Şubeler'), findsOneWidget);
+    expect(find.text('Tenfei D35 & Drive Sync'), findsOneWidget);
+    expect(find.text('Şube QR / GPS Yoklama'), findsOneWidget);
+    expect(find.text('Hareket Düzeltme'), findsOneWidget);
+    expect(find.text('İzin & Rapor Girişi'), findsOneWidget);
+
+    // 4. Üst modül satırından "Yalın Üretim & KPI" modülüne tıkla -> Sol menü Yalın Üretim sekmelerine dönüşür
+    await tester.tap(find.text('Yalın Üretim & KPI'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('27 İstasyon Canlı Akış'), findsOneWidget);
+    expect(find.text('Personel KPI Sıralaması'), findsOneWidget);
+    expect(find.text('Canlı PDKS & Şubeler'), findsNothing);
+
+    // 5. Üst modül satırından "Sistem & Ayarlar" modülüne tıkla -> Sol menü Ayar sekmelerine dönüşür
+    await tester.tap(find.text('Sistem & Ayarlar'));
     await tester.pumpAndSettle();
 
     expect(find.text('1. Şirket, Şube & Cihaz Ayarları'), findsOneWidget);
     expect(find.text('2. Mesai Saatleri & Geç Kalma'), findsOneWidget);
-    expect(find.text('3. Hareket Düzeltme (Giriş/Çıkış)'), findsOneWidget);
-    expect(find.text('4. İzin & Rapor Girişi'), findsOneWidget);
-    expect(find.text('5. Personel & Bölüm Yönetimi'), findsOneWidget);
+    expect(find.text('3. Personel & Bölüm Yönetimi'), findsOneWidget);
     expect(find.byIcon(Icons.add_business_rounded), findsOneWidget);
   });
 }
+
+

@@ -4,147 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
 
-/// Hasibu Ayarlar & Yönetim Merkezi:
-/// 1) Şirket İsmi, Şube Özelleştirme ve Tenfei D35 Cihaz Bağlantı Ayarları
-/// 2) Mesai Saat Aralıkları (Vardiyalar) ve Geç Kalma Tolerans Süreleri
-/// 3) Personel Ekleme, Güncelleme ve Bölüm Atama
-/// 4) Personel Giriş-Çıkış Hareketlerini Düzeltme / Manuel Ekleme
-/// 5) İzinli ve Raporlu Personel Kayıt Yönetimi
-class HasibuSettingsView extends StatefulWidget {
-  const HasibuSettingsView({super.key});
-
-  @override
-  State<HasibuSettingsView> createState() => _HasibuSettingsViewState();
-}
-
-class _HasibuSettingsViewState extends State<HasibuSettingsView> {
-  int _activeSubTab = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    const sections = <Widget>[
-      _CompanyAndBranchesSection(),
-      _ShiftAndLateToleranceSection(),
-      _EmployeesManagementSection(),
-      _AttendanceCorrectionSection(),
-      _LeavesAndReportsSection(),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: double.infinity,
-          color: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _SubTabChip(
-                  index: 0,
-                  activeIndex: _activeSubTab,
-                  icon: Icons.business_rounded,
-                  label: '1. Şirket, Şube & Cihaz Ayarları',
-                  onTap: () => setState(() => _activeSubTab = 0),
-                ),
-                const SizedBox(width: 8),
-                _SubTabChip(
-                  index: 1,
-                  activeIndex: _activeSubTab,
-                  icon: Icons.schedule_rounded,
-                  label: '2. Mesai Saatleri & Geç Kalma',
-                  onTap: () => setState(() => _activeSubTab = 1),
-                ),
-                const SizedBox(width: 8),
-                _SubTabChip(
-                  index: 3,
-                  activeIndex: _activeSubTab,
-                  icon: Icons.edit_calendar_rounded,
-                  label: '3. Hareket Düzeltme (Giriş/Çıkış)',
-                  onTap: () => setState(() => _activeSubTab = 3),
-                ),
-                const SizedBox(width: 8),
-                _SubTabChip(
-                  index: 4,
-                  activeIndex: _activeSubTab,
-                  icon: Icons.medical_information_rounded,
-                  label: '4. İzin & Rapor Girişi',
-                  onTap: () => setState(() => _activeSubTab = 4),
-                ),
-                const SizedBox(width: 8),
-                _SubTabChip(
-                  index: 2,
-                  activeIndex: _activeSubTab,
-                  icon: Icons.manage_accounts_rounded,
-                  label: '5. Personel & Bölüm Yönetimi',
-                  onTap: () => setState(() => _activeSubTab = 2),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(child: sections[_activeSubTab]),
-      ],
-    );
-  }
-}
-
-class _SubTabChip extends StatelessWidget {
-  final int index;
-  final int activeIndex;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _SubTabChip({
-    required this.index,
-    required this.activeIndex,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bool selected = index == activeIndex;
-    return ChoiceChip(
-      avatar: Icon(
-        icon,
-        size: 18,
-        color: selected ? Colors.white : const Color(0xFF0284C7),
-      ),
-      label: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          color: selected ? Colors.white : const Color(0xFF1E293B),
-        ),
-      ),
-      selectedColor: const Color(0xFF0284C7),
-      backgroundColor: const Color(0xFFF1F5F9),
-      selected: selected,
-      onSelected: (_) => onTap(),
-    );
-  }
-}
-
 // ============================================================================
-// 1. ŞİRKET, ŞUBE VE TENFEI D35 CİHAZ BAĞLANTI AYARLARI
+// 1. ŞİRKET, OTURUM ŞİFRELERİ, ŞUBE VE TENFEI D35 CİHAZ BAĞLANTI AYARLARI
 // ============================================================================
-class _CompanyAndBranchesSection extends ConsumerStatefulWidget {
-  const _CompanyAndBranchesSection();
+class CompanyAndBranchesSettingsView extends ConsumerStatefulWidget {
+  const CompanyAndBranchesSettingsView({super.key});
 
   @override
-  ConsumerState<_CompanyAndBranchesSection> createState() =>
-      _CompanyAndBranchesSectionState();
+  ConsumerState<CompanyAndBranchesSettingsView> createState() =>
+      _CompanyAndBranchesSettingsViewState();
 }
 
-class _CompanyAndBranchesSectionState
-    extends ConsumerState<_CompanyAndBranchesSection> {
+class _CompanyAndBranchesSettingsViewState
+    extends ConsumerState<CompanyAndBranchesSettingsView> {
   late final TextEditingController _companyNameCtrl;
   late final TextEditingController _pollMinutesCtrl;
+  late final TextEditingController _adminUserCtrl;
+  late final TextEditingController _adminPassCtrl;
+  late final TextEditingController _empPinCtrl;
   String? _connectionTestFeedback;
 
   @override
@@ -154,12 +31,18 @@ class _CompanyAndBranchesSectionState
     _companyNameCtrl = TextEditingController(text: settings.companyName);
     _pollMinutesCtrl =
         TextEditingController(text: settings.autoPollMinutes.toString());
+    _adminUserCtrl = TextEditingController(text: settings.adminUsername);
+    _adminPassCtrl = TextEditingController(text: settings.adminPassword);
+    _empPinCtrl = TextEditingController(text: settings.defaultEmployeePin);
   }
 
   @override
   void dispose() {
     _companyNameCtrl.dispose();
     _pollMinutesCtrl.dispose();
+    _adminUserCtrl.dispose();
+    _adminPassCtrl.dispose();
+    _empPinCtrl.dispose();
     super.dispose();
   }
 
@@ -172,7 +55,6 @@ class _CompanyAndBranchesSectionState
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Şirket ve Otomasyon Kartı
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -185,7 +67,7 @@ class _CompanyAndBranchesSectionState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Şirket Kimliği & Otomatik Veri Çekme Ayarları',
+                  'Şirket Kimliği, Giriş Şifreleri & Otomatik Veri Çekme Ayarları',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
@@ -195,25 +77,58 @@ class _CompanyAndBranchesSectionState
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     SizedBox(
-                      width: 340,
+                      width: 300,
                       child: TextField(
                         controller: _companyNameCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Şirket / İşletme Adı (Üst Başlıkta Görünür)',
+                          labelText: 'Şirket / İşletme Adı',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.apartment_rounded),
                         ),
                       ),
                     ),
                     SizedBox(
-                      width: 200,
+                      width: 170,
                       child: TextField(
                         controller: _pollMinutesCtrl,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Otomatik Çekim (Dakika)',
+                          labelText: 'Oto Çekim (Dk)',
                           border: OutlineInputBorder(),
                           prefixIcon: Icon(Icons.timer_outlined),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 170,
+                      child: TextField(
+                        controller: _adminUserCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Yönetici Kullanıcı',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 160,
+                      child: TextField(
+                        controller: _adminPassCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Yönetici Şifresi',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.lock_outline_rounded),
+                        ),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 160,
+                      child: TextField(
+                        controller: _empPinCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Personel PIN',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.pin_outlined),
                         ),
                       ),
                     ),
@@ -242,19 +157,23 @@ class _CompanyAndBranchesSectionState
                               settings.copyWith(
                                 companyName: _companyNameCtrl.text.trim(),
                                 autoPollMinutes: mins.clamp(1, 1440),
+                                adminUsername: _adminUserCtrl.text.trim(),
+                                adminPassword: _adminPassCtrl.text.trim(),
+                                defaultEmployeePin: _empPinCtrl.text.trim(),
                               ),
                             );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content:
-                                  Text('Şirket ve otomasyon ayarları kaydedildi.'),
+                              content: Text(
+                                'Şirket, otomasyon ve oturum şifresi ayarları kaydedildi.',
+                              ),
                             ),
                           );
                         }
                       },
                       icon: const Icon(Icons.save_rounded),
-                      label: const Text('Şirket Ayarlarını Kaydet'),
+                      label: const Text('Ayarları Kaydet'),
                     ),
                   ],
                 ),
@@ -607,8 +526,8 @@ class _CompanyAndBranchesSectionState
 // ============================================================================
 // 2. MESAİ SAAT ARALIKLARI (VARDİYALAR) & GEÇ KALMA TOLERANS SÜRELERİ
 // ============================================================================
-class _ShiftAndLateToleranceSection extends ConsumerWidget {
-  const _ShiftAndLateToleranceSection();
+class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
+  const ShiftAndLateToleranceSettingsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -617,26 +536,26 @@ class _ShiftAndLateToleranceSection extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Mesai Saat Aralıkları & Geç Kalma Tolerans Süreleri',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Personellerin hangi saat aralığında işe geleceğini ve kaç dakika gecikmeden sonra "Geç Geldi" sayılacağını buradan tanımlayabilirsiniz.',
-                    style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
-                  ),
-                ],
-              ),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Mesai Saat Aralıkları & Geç Kalma Tolerans Süreleri',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Personellerin hangi saat aralığında işe geleceğini ve kaç dakika gecikmeden sonra "Geç Geldi" sayılacağını tanımlayın.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
             FilledButton.icon(
               onPressed: () => _showShiftDialog(context, ref, null),
               icon: const Icon(Icons.add_alarm_rounded),
@@ -653,34 +572,65 @@ class _ShiftAndLateToleranceSection extends ConsumerWidget {
               borderRadius: BorderRadius.circular(12),
               side: const BorderSide(color: Color(0xFFE2E8F0)),
             ),
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Color(0xFFFEF3C7),
-                child: Icon(Icons.access_time_filled_rounded, color: Color(0xFFD97706)),
-              ),
-              title: Text(
-                shift.name,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text(
-                'İşe Geliş - Çıkış Aralığı: ${shift.startTime} - ${shift.endTime}  •  Geç Kalma Toleransı: ${shift.toleranceMinutes} dakika',
-              ),
-              trailing: Wrap(
-                spacing: 8,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  FilledButton.tonalIcon(
-                    onPressed: () => _showShiftDialog(context, ref, shift),
-                    icon: const Icon(Icons.edit_rounded, size: 16),
-                    label: const Text('Saat & Toleransı Düzenle'),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircleAvatar(
+                        backgroundColor: Color(0xFFFEF3C7),
+                        child: Icon(
+                          Icons.access_time_filled_rounded,
+                          color: Color(0xFFD97706),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              shift.name,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'İşe Geliş - Çıkış Aralığı: ${shift.startTime} - ${shift.endTime}  •  Geç Kalma Toleransı: ${shift.toleranceMinutes} dakika',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  if (shift.id != 1)
-                    IconButton(
-                      color: const Color(0xFFDC2626),
-                      onPressed: () => ref
-                          .read(pdksDashboardProvider.notifier)
-                          .deleteShiftPlan(shift.id),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () => _showShiftDialog(context, ref, shift),
+                        icon: const Icon(Icons.edit_rounded, size: 16),
+                        label: const Text('Saat & Toleransı Düzenle'),
+                      ),
+                      if (shift.id != 1)
+                        IconButton(
+                          color: const Color(0xFFDC2626),
+                          onPressed: () => ref
+                              .read(pdksDashboardProvider.notifier)
+                              .deleteShiftPlan(shift.id),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -806,16 +756,16 @@ class _ShiftAndLateToleranceSection extends ConsumerWidget {
 // ============================================================================
 // 3. PERSONEL HAREKETLERİNİ DÜZELTME & MANUEL GİRİŞ/ÇIKIŞ EKLEME
 // ============================================================================
-class _AttendanceCorrectionSection extends ConsumerStatefulWidget {
-  const _AttendanceCorrectionSection();
+class AttendanceCorrectionSettingsView extends ConsumerStatefulWidget {
+  const AttendanceCorrectionSettingsView({super.key});
 
   @override
-  ConsumerState<_AttendanceCorrectionSection> createState() =>
-      _AttendanceCorrectionSectionState();
+  ConsumerState<AttendanceCorrectionSettingsView> createState() =>
+      _AttendanceCorrectionSettingsViewState();
 }
 
-class _AttendanceCorrectionSectionState
-    extends ConsumerState<_AttendanceCorrectionSection> {
+class _AttendanceCorrectionSettingsViewState
+    extends ConsumerState<AttendanceCorrectionSettingsView> {
   late final TextEditingController _dateCtrl;
   late final TextEditingController _filterCtrl;
 
@@ -911,62 +861,64 @@ class _AttendanceCorrectionSectionState
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${item.employee.fullName} (#${item.employee.cardNo})',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14,
-                          ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.employee.fullName} (#${item.employee.cardNo})',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${item.branch.name} • ${item.department.name} • Vardiya: ${item.shift.startTime}-${item.shift.endTime} (${item.shift.toleranceMinutes} dk tol.)',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${item.branch.name} • ${item.department.name} • Vardiya: ${item.shift.startTime}-${item.shift.endTime} (${item.shift.toleranceMinutes} dk tol.)',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
                         ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 6,
-                          children: [
-                            if (item.allLogsOfDay.isEmpty)
-                              const Text(
-                                'Bu tarihte giriş/çıkış hareketi yok',
-                                style: TextStyle(
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          if (item.allLogsOfDay.isEmpty)
+                            const Text(
+                              'Bu tarihte giriş/çıkış hareketi yok',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFFDC2626),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          for (final log in item.allLogsOfDay)
+                            Chip(
+                              backgroundColor: log.isCheckIn
+                                  ? const Color(0xFFDCFCE7)
+                                  : const Color(0xFFFEF3C7),
+                              label: Text(
+                                '${log.isCheckIn ? "GİRİŞ" : "ÇIKIŞ"}: ${log.timeFormatted} (${log.source.label})',
+                                style: const TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFFDC2626),
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            for (final log in item.allLogsOfDay)
-                              Chip(
-                                backgroundColor: log.isCheckIn
-                                    ? const Color(0xFFDCFCE7)
-                                    : const Color(0xFFFEF3C7),
-                                label: Text(
-                                  '${log.isCheckIn ? "GİRİŞ" : "ÇIKIŞ"}: ${log.timeFormatted} (${log.source.label})',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                deleteIcon: const Icon(Icons.close, size: 16),
-                                onDeleted: () => ref
-                                    .read(pdksDashboardProvider.notifier)
-                                    .deleteAttendanceLog(log.id),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () => ref
+                                  .read(pdksDashboardProvider.notifier)
+                                  .deleteAttendanceLog(log.id),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
                   Wrap(
                     spacing: 6,
@@ -1086,16 +1038,16 @@ class _AttendanceCorrectionSectionState
 // ============================================================================
 // 4. İZİNLİ VE RAPORLU PERSONEL BİLGİLERİNİ GİRME / YÖNETME
 // ============================================================================
-class _LeavesAndReportsSection extends ConsumerStatefulWidget {
-  const _LeavesAndReportsSection();
+class LeavesAndReportsSettingsView extends ConsumerStatefulWidget {
+  const LeavesAndReportsSettingsView({super.key});
 
   @override
-  ConsumerState<_LeavesAndReportsSection> createState() =>
-      _LeavesAndReportsSectionState();
+  ConsumerState<LeavesAndReportsSettingsView> createState() =>
+      _LeavesAndReportsSettingsViewState();
 }
 
-class _LeavesAndReportsSectionState
-    extends ConsumerState<_LeavesAndReportsSection> {
+class _LeavesAndReportsSettingsViewState
+    extends ConsumerState<LeavesAndReportsSettingsView> {
   int? _selectedEmployeeId;
   LeaveType _selectedLeaveType = LeaveType.yillikIzin;
   late final TextEditingController _startDateCtrl;
@@ -1314,16 +1266,16 @@ class _LeavesAndReportsSectionState
 // ============================================================================
 // 5. PERSONEL & DEPARTMAN (ÜRETİM BÖLÜMÜ) YÖNETİMİ
 // ============================================================================
-class _EmployeesManagementSection extends ConsumerStatefulWidget {
-  const _EmployeesManagementSection();
+class EmployeesManagementSettingsView extends ConsumerStatefulWidget {
+  const EmployeesManagementSettingsView({super.key});
 
   @override
-  ConsumerState<_EmployeesManagementSection> createState() =>
-      _EmployeesManagementSectionState();
+  ConsumerState<EmployeesManagementSettingsView> createState() =>
+      _EmployeesManagementSettingsViewState();
 }
 
-class _EmployeesManagementSectionState
-    extends ConsumerState<_EmployeesManagementSection> {
+class _EmployeesManagementSettingsViewState
+    extends ConsumerState<EmployeesManagementSettingsView> {
   late final TextEditingController _searchCtrl;
 
   @override
@@ -1396,31 +1348,50 @@ class _EmployeesManagementSectionState
               borderRadius: BorderRadius.circular(12),
               side: const BorderSide(color: Color(0xFFE2E8F0)),
             ),
-            child: ListTile(
-              title: Text(
-                '${item.employee.fullName} (Kart No: #${item.employee.cardNo})',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              subtitle: Text(
-                'Şube: ${item.branch.name} • Bölüm: ${item.department.name} • Unvan: ${item.employee.title}\n'
-                'Mesai: ${item.shift.name} • Yıllık İzin: ${item.employee.remainingAnnualLeave}/${item.employee.annualLeaveEntitlement} Gün • KPI: %${item.employee.kpiScore.toStringAsFixed(0)}',
-              ),
-              isThreeLine: true,
-              trailing: Wrap(
-                spacing: 6,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  FilledButton.tonalIcon(
-                    onPressed: () => _showEmployeeDialog(context, item.employee),
-                    icon: const Icon(Icons.edit_rounded, size: 16),
-                    label: const Text('Düzenle'),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${item.employee.fullName} (Kart No: #${item.employee.cardNo})',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Şube: ${item.branch.name} • Bölüm: ${item.department.name} • Unvan: ${item.employee.title}\n'
+                        'Mesai: ${item.shift.name} • Yıllık İzin: ${item.employee.remainingAnnualLeave}/${item.employee.annualLeaveEntitlement} Gün • KPI: %${item.employee.kpiScore.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    color: const Color(0xFFDC2626),
-                    tooltip: 'Personeli Sil',
-                    onPressed: () => ref
-                        .read(pdksDashboardProvider.notifier)
-                        .deleteEmployee(item.employee.id),
-                    icon: const Icon(Icons.delete_outline_rounded),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () =>
+                            _showEmployeeDialog(context, item.employee),
+                        icon: const Icon(Icons.edit_rounded, size: 16),
+                        label: const Text('Düzenle'),
+                      ),
+                      IconButton(
+                        color: const Color(0xFFDC2626),
+                        tooltip: 'Personeli Sil',
+                        onPressed: () => ref
+                            .read(pdksDashboardProvider.notifier)
+                            .deleteEmployee(item.employee.id),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),

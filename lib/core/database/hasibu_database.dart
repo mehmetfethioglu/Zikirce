@@ -35,9 +35,25 @@ class HasibuDatabase {
         id INTEGER PRIMARY KEY CHECK (id = 1),
         company_name TEXT NOT NULL DEFAULT 'HASİBU İŞLETME YÖNETİMİ',
         auto_poll_enabled INTEGER NOT NULL DEFAULT 1,
-        auto_poll_minutes INTEGER NOT NULL DEFAULT 5
+        auto_poll_minutes INTEGER NOT NULL DEFAULT 5,
+        admin_username TEXT NOT NULL DEFAULT 'admin',
+        admin_password TEXT NOT NULL DEFAULT '123',
+        default_employee_pin TEXT NOT NULL DEFAULT '1234'
       );
+    ''');
 
+    // Mevcut veritabanı yükseltmesi (migration)
+    for (final colSql in <String>[
+      "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'",
+      "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'",
+      "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
+    ]) {
+      try {
+        _db.execute(colSql);
+      } catch (_) {}
+    }
+
+    _db.execute('''
       CREATE TABLE IF NOT EXISTS branches (
         id INTEGER PRIMARY KEY,
         code TEXT NOT NULL,
@@ -120,8 +136,9 @@ class HasibuDatabase {
             0;
     if (settingsCount == 0) {
       _db.execute('''
-        INSERT INTO company_settings (id, company_name, auto_poll_enabled, auto_poll_minutes)
-        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5)
+        INSERT INTO company_settings
+        (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin)
+        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5, 'admin', '123', '1234')
       ''');
     }
 
@@ -172,14 +189,17 @@ class HasibuDatabase {
       companyName: r['company_name'] as String,
       autoPollEnabled: (r['auto_poll_enabled'] as int) == 1,
       autoPollMinutes: r['auto_poll_minutes'] as int,
+      adminUsername: r['admin_username'] as String? ?? 'admin',
+      adminPassword: r['admin_password'] as String? ?? '123',
+      defaultEmployeePin: r['default_employee_pin'] as String? ?? '1234',
     );
   }
 
   void saveCompanySettings(CompanySettings settings) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO company_settings
-      (id, company_name, auto_poll_enabled, auto_poll_minutes)
-      VALUES (1, ?, ?, ?)
+      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin)
+      VALUES (1, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       settings.companyName.trim().isEmpty
@@ -187,6 +207,15 @@ class HasibuDatabase {
           : settings.companyName.trim(),
       settings.autoPollEnabled ? 1 : 0,
       settings.autoPollMinutes.clamp(1, 1440),
+      settings.adminUsername.trim().isEmpty
+          ? 'admin'
+          : settings.adminUsername.trim(),
+      settings.adminPassword.trim().isEmpty
+          ? '123'
+          : settings.adminPassword.trim(),
+      settings.defaultEmployeePin.trim().isEmpty
+          ? '1234'
+          : settings.defaultEmployeePin.trim(),
     ]);
     stmt.dispose();
   }

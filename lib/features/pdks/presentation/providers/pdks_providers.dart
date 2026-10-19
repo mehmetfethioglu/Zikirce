@@ -23,6 +23,8 @@ final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
 
 @immutable
 class PdksDashboardState {
+  final AuthSession authSession;
+  final HasibuModule activeModule;
   final CompanySettings companySettings;
   final String selectedDate; // YYYY-MM-DD
   final int? selectedBranchId; // null => Tüm Şubeler
@@ -41,6 +43,8 @@ class PdksDashboardState {
   final String activeSelfServiceCardNo;
 
   const PdksDashboardState({
+    this.authSession = const AuthSession(),
+    this.activeModule = HasibuModule.pdksHr,
     this.companySettings = const CompanySettings(),
     required this.selectedDate,
     this.selectedBranchId,
@@ -109,6 +113,8 @@ class PdksDashboardState {
   }
 
   PdksDashboardState copyWith({
+    AuthSession? authSession,
+    HasibuModule? activeModule,
     CompanySettings? companySettings,
     String? selectedDate,
     int? Function()? selectedBranchId,
@@ -127,6 +133,8 @@ class PdksDashboardState {
     String? activeSelfServiceCardNo,
   }) {
     return PdksDashboardState(
+      authSession: authSession ?? this.authSession,
+      activeModule: activeModule ?? this.activeModule,
       companySettings: companySettings ?? this.companySettings,
       selectedDate: selectedDate ?? this.selectedDate,
       selectedBranchId:
@@ -170,6 +178,88 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     _configureAutoPollTimer();
   }
 
+  /// Yönetici / İK Girişi doğrular.
+  bool loginAsAdmin({required String username, required String password}) {
+    final u = username.trim().toLowerCase();
+    final p = password.trim();
+    final expectedUser = state.companySettings.adminUsername.toLowerCase();
+    final expectedPass = state.companySettings.adminPassword;
+
+    if (u == expectedUser && p == expectedPass) {
+      state = state.copyWith(
+        authSession: AuthSession(
+          isAuthenticated: true,
+          username: username.trim(),
+          displayName: 'Yönetim (${state.companySettings.companyName})',
+          role: UserRole.admin,
+        ),
+        activeModule: HasibuModule.pdksHr,
+      );
+      return true;
+    }
+
+    state = state.copyWith(
+      authSession: state.authSession.copyWith(
+        isAuthenticated: false,
+        errorMessage: () =>
+            'Kullanıcı adı veya şifre hatalı (Varsayılan: $expectedUser / $expectedPass).',
+      ),
+    );
+    return false;
+  }
+
+  /// Personel Kart/Sicil No + PIN Girişi doğrular ve Personel Portalını açar.
+  bool loginAsEmployee({required String cardNo, required String pin}) {
+    final normalizedCard = cardNo.trim().padLeft(5, '0');
+    final expectedPin = state.companySettings.defaultEmployeePin;
+
+    final matchIndex = state.dailyStatuses.indexWhere(
+      (s) => s.employee.cardNo == normalizedCard,
+    );
+
+    if (matchIndex >= 0 && pin.trim() == expectedPin) {
+      final emp = state.dailyStatuses[matchIndex].employee;
+      state = state.copyWith(
+        authSession: AuthSession(
+          isAuthenticated: true,
+          username: emp.cardNo,
+          displayName: emp.fullName,
+          role: UserRole.employee,
+          employeeCardNo: emp.cardNo,
+        ),
+        activeSelfServiceCardNo: emp.cardNo,
+        activeModule: HasibuModule.employeePortal,
+      );
+      return true;
+    }
+
+    state = state.copyWith(
+      authSession: state.authSession.copyWith(
+        isAuthenticated: false,
+        errorMessage: () =>
+            'Personel Kart No (#$normalizedCard) veya PIN ($expectedPin) hatalı.',
+      ),
+    );
+    return false;
+  }
+
+  /// Oturumu kapatır ve Giriş (Login) ekranına döner.
+  void logout() {
+    state = state.copyWith(
+      authSession: const AuthSession(isAuthenticated: false),
+      activeModule: HasibuModule.pdksHr,
+    );
+  }
+
+  /// Üst modül seçme satırından aktif modülü değiştirir.
+  void selectModule(HasibuModule module) {
+    if (state.authSession.role == UserRole.employee &&
+        module != HasibuModule.employeePortal) {
+      return;
+    }
+    state = state.copyWith(activeModule: module);
+  }
+
   void refreshDashboard() {
     final companySettings = _db.getCompanySettings();
     final branches = _db.getBranches();
@@ -203,12 +293,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       final empLogs = logsByCard[emp.cardNo] ?? const <AttendanceLog>[];
       final leave = leaveMap[emp.id];
 
-      final checkIns = empLogs.where((l) => l.isCheckIn).toList(growable: false);
+      final checkIns =
+          empLogs.where((l) => l.isCheckIn).toList(growable: false);
       final checkOuts =
           empLogs.where((l) => !l.isCheckIn).toList(growable: false);
 
-      final AttendanceLog? firstIn =
-          checkIns.isNotEmpty ? checkIns.first : (empLogs.isNotEmpty ? empLogs.first : null);
+      final AttendanceLog? firstIn = checkIns.isNotEmpty
+          ? checkIns.first
+          : (empLogs.isNotEmpty ? empLogs.first : null);
       final AttendanceLog? lastOut = checkOuts.isNotEmpty
           ? checkOuts.last
           : (empLogs.length > 1 ? empLogs.last : null);
