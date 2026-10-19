@@ -40,7 +40,9 @@ class HasibuDatabase {
         admin_password TEXT NOT NULL DEFAULT '123',
         default_employee_pin TEXT NOT NULL DEFAULT '1234',
         sync_gmail_account TEXT NOT NULL DEFAULT '',
-        sync_folder_path TEXT NOT NULL DEFAULT ''
+        sync_folder_path TEXT NOT NULL DEFAULT '',
+        logo_path TEXT,
+        admin_theme_mode TEXT NOT NULL DEFAULT 'light'
       );
     ''');
 
@@ -88,7 +90,8 @@ class HasibuDatabase {
         kpi_score REAL NOT NULL DEFAULT 92.0,
         password TEXT NOT NULL DEFAULT '1234',
         allowed_modules TEXT NOT NULL DEFAULT 'employeePortal',
-        photo_path TEXT
+        photo_path TEXT,
+        theme_mode TEXT NOT NULL DEFAULT 'light'
       );
 
       CREATE INDEX IF NOT EXISTS idx_employees_card_no ON employees(card_no);
@@ -128,9 +131,12 @@ class HasibuDatabase {
       "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
       "ALTER TABLE company_settings ADD COLUMN sync_gmail_account TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE company_settings ADD COLUMN sync_folder_path TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE company_settings ADD COLUMN logo_path TEXT",
+      "ALTER TABLE company_settings ADD COLUMN admin_theme_mode TEXT NOT NULL DEFAULT 'light'",
       "ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT '1234'",
       "ALTER TABLE employees ADD COLUMN allowed_modules TEXT NOT NULL DEFAULT 'employeePortal'",
       "ALTER TABLE employees ADD COLUMN photo_path TEXT",
+      "ALTER TABLE employees ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'light'",
     ]) {
       try {
         _db.execute(colSql);
@@ -147,8 +153,8 @@ class HasibuDatabase {
     if (settingsCount == 0) {
       _db.execute('''
         INSERT INTO company_settings
-        (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path)
-        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5, 'admin', '123', '1234', '', '')
+        (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, admin_theme_mode)
+        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5, 'admin', '123', '1234', '', '', NULL, 'light')
       ''');
     }
 
@@ -204,14 +210,17 @@ class HasibuDatabase {
       defaultEmployeePin: r['default_employee_pin'] as String? ?? '1234',
       syncGmailAccount: r['sync_gmail_account'] as String? ?? '',
       syncFolderPath: r['sync_folder_path'] as String? ?? '',
+      logoPath: r['logo_path'] as String?,
+      adminThemeMode:
+          HasibuThemeMode.fromName(r['admin_theme_mode'] as String?),
     );
   }
 
   void saveCompanySettings(CompanySettings settings) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO company_settings
-      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, admin_theme_mode)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       settings.companyName.trim().isEmpty
@@ -230,6 +239,10 @@ class HasibuDatabase {
           : settings.defaultEmployeePin.trim(),
       settings.syncGmailAccount.trim(),
       settings.syncFolderPath.trim(),
+      settings.logoPath?.trim().isEmpty == true
+          ? null
+          : settings.logoPath?.trim(),
+      settings.adminThemeMode.name,
     ]);
     stmt.dispose();
   }
@@ -392,6 +405,7 @@ class HasibuDatabase {
             allowedModules:
                 HasibuModule.parseCsv(r['allowed_modules'] as String?),
             photoPath: r['photo_path'] as String?,
+            themeMode: HasibuThemeMode.fromName(r['theme_mode'] as String?),
           ),
         )
         .toList(growable: false);
@@ -400,8 +414,8 @@ class HasibuDatabase {
   void upsertEmployee(Employee e) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO employees
-      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score, password, allowed_modules, photo_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score, password, allowed_modules, photo_path, theme_mode)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       e.id,
@@ -419,6 +433,7 @@ class HasibuDatabase {
       e.password.trim().isEmpty ? '1234' : e.password.trim(),
       HasibuModule.toCsv(e.allowedModules),
       e.photoPath?.trim().isEmpty == true ? null : e.photoPath?.trim(),
+      e.themeMode.name,
     ]);
     stmt.dispose();
   }

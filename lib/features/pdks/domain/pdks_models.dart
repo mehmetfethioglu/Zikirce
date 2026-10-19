@@ -140,6 +140,24 @@ enum DailyAttendanceState {
   const DailyAttendanceState(this.label);
 }
 
+enum HasibuThemeMode {
+  light('Açık Tema'),
+  dark('Koyu Tema'),
+  system('Sistem Teması');
+
+  final String label;
+  const HasibuThemeMode(this.label);
+
+  static HasibuThemeMode fromName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return HasibuThemeMode.light;
+    final clean = raw.trim().toLowerCase();
+    for (final m in HasibuThemeMode.values) {
+      if (m.name.toLowerCase() == clean) return m;
+    }
+    return HasibuThemeMode.light;
+  }
+}
+
 @immutable
 class CompanySettings {
   final String companyName;
@@ -150,6 +168,8 @@ class CompanySettings {
   final String defaultEmployeePin;
   final String syncGmailAccount;
   final String syncFolderPath;
+  final String? logoPath;
+  final HasibuThemeMode adminThemeMode;
 
   const CompanySettings({
     this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
@@ -160,6 +180,8 @@ class CompanySettings {
     this.defaultEmployeePin = '1234',
     this.syncGmailAccount = '',
     this.syncFolderPath = '',
+    this.logoPath,
+    this.adminThemeMode = HasibuThemeMode.light,
   });
 
   CompanySettings copyWith({
@@ -171,6 +193,8 @@ class CompanySettings {
     String? defaultEmployeePin,
     String? syncGmailAccount,
     String? syncFolderPath,
+    String? Function()? logoPath,
+    HasibuThemeMode? adminThemeMode,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -181,6 +205,8 @@ class CompanySettings {
       defaultEmployeePin: defaultEmployeePin ?? this.defaultEmployeePin,
       syncGmailAccount: syncGmailAccount ?? this.syncGmailAccount,
       syncFolderPath: syncFolderPath ?? this.syncFolderPath,
+      logoPath: logoPath != null ? logoPath() : this.logoPath,
+      adminThemeMode: adminThemeMode ?? this.adminThemeMode,
     );
   }
 
@@ -193,6 +219,8 @@ class CompanySettings {
         'defaultEmployeePin': defaultEmployeePin,
         'syncGmailAccount': syncGmailAccount,
         'syncFolderPath': syncFolderPath,
+        'logoPath': logoPath,
+        'adminThemeMode': adminThemeMode.name,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> json) =>
@@ -206,6 +234,9 @@ class CompanySettings {
         defaultEmployeePin: json['defaultEmployeePin'] as String? ?? '1234',
         syncGmailAccount: json['syncGmailAccount'] as String? ?? '',
         syncFolderPath: json['syncFolderPath'] as String? ?? '',
+        logoPath: json['logoPath'] as String?,
+        adminThemeMode:
+            HasibuThemeMode.fromName(json['adminThemeMode'] as String?),
       );
 }
 
@@ -384,6 +415,7 @@ class Employee {
   final String password;
   final List<HasibuModule> allowedModules;
   final String? photoPath;
+  final HasibuThemeMode themeMode;
 
   const Employee({
     required this.id,
@@ -401,6 +433,7 @@ class Employee {
     this.password = '1234',
     this.allowedModules = const <HasibuModule>[HasibuModule.employeePortal],
     this.photoPath,
+    this.themeMode = HasibuThemeMode.light,
   });
 
   int get remainingAnnualLeave =>
@@ -422,6 +455,7 @@ class Employee {
     String? password,
     List<HasibuModule>? allowedModules,
     String? Function()? photoPath,
+    HasibuThemeMode? themeMode,
   }) {
     return Employee(
       id: id ?? this.id,
@@ -440,6 +474,7 @@ class Employee {
       password: password ?? this.password,
       allowedModules: allowedModules ?? this.allowedModules,
       photoPath: photoPath != null ? photoPath() : this.photoPath,
+      themeMode: themeMode ?? this.themeMode,
     );
   }
 
@@ -459,6 +494,7 @@ class Employee {
         'password': password,
         'allowedModules': HasibuModule.toCsv(allowedModules),
         'photoPath': photoPath,
+        'themeMode': themeMode.name,
       };
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
@@ -478,6 +514,7 @@ class Employee {
         allowedModules:
             HasibuModule.parseCsv(json['allowedModules'] as String?),
         photoPath: json['photoPath'] as String?,
+        themeMode: HasibuThemeMode.fromName(json['themeMode'] as String?),
       );
 }
 

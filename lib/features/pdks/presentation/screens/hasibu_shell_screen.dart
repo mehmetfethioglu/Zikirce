@@ -156,9 +156,10 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
       return const HasibuLoginScreen();
     }
 
-    final isWide = MediaQuery.sizeOf(context).width >= 860;
-    final companyName = ref.watch(
-      pdksDashboardProvider.select((s) => s.companySettings.companyName),
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isWide = screenWidth >= 860;
+    final companySettings = ref.watch(
+      pdksDashboardProvider.select((s) => s.companySettings),
     );
     final rawActiveModule =
         ref.watch(pdksDashboardProvider.select((s) => s.activeModule));
@@ -172,69 +173,69 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
     final tabs = _buildTabsForModule(activeModule);
     final int rawIndex = _tabIndexByModule[activeModule] ?? 0;
     final int safeIndex = rawIndex.clamp(0, tabs.length - 1);
+    final pal = HasibuPalette.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: pal.bg,
       appBar: AppBar(
         elevation: 0,
         scrolledUnderElevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF0F172A),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+        backgroundColor: pal.card,
+        foregroundColor: pal.textPrimary,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, thickness: 1, color: pal.border),
         ),
         title: Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(
-                Icons.grid_view_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+            CompanyLogoBadge(
+              key: const ValueKey('appbar_company_logo_badge'),
+              settings: companySettings,
+              size: 34,
+              borderRadius: 9,
+              onTap: authSession.canAccess(HasibuModule.systemSettings)
+                  ? () => showCompanyLogoDialog(context, ref)
+                  : null,
             ),
             const SizedBox(width: 10),
             Flexible(
               child: Text(
-                companyName,
+                companySettings.companyName,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 15,
+                  fontSize: isWide ? 15 : 13.5,
                   letterSpacing: -0.2,
-                  color: Color(0xFF0F172A),
+                  color: pal.textPrimary,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                authSession.displayName,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF475569),
+            if (screenWidth >= 520) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: pal.chip,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  authSession.displayName,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: pal.textSecondary,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
         actions: [
           if (authSession.canAccess(HasibuModule.pdksHr) ||
               authSession.canAccess(HasibuModule.systemSettings))
-            const _CloudSyncAppBarBadge(),
+            _CloudSyncAppBarBadge(compact: !isWide),
           const SizedBox(width: 6),
+          const UserThemeSelectorBar(compact: true),
           if (authSession.canAccess(HasibuModule.systemSettings))
             IconButton(
               tooltip: 'Ayarlar & Yönetim',
@@ -245,7 +246,7 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                 Icons.settings_outlined,
                 color: activeModule == HasibuModule.systemSettings
                     ? const Color(0xFF0284C7)
-                    : const Color(0xFF475569),
+                    : pal.textSecondary,
               ),
             ),
           IconButton(
@@ -258,7 +259,7 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
               size: 20,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
       ),
       body: Column(
@@ -279,20 +280,21 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                     onDestinationSelected: (idx) => setState(
                       () => _tabIndexByModule[activeModule] = idx,
                     ),
-                    extended: MediaQuery.sizeOf(context).width >= 1150,
-                    backgroundColor: Colors.white,
-                    indicatorColor: const Color(0xFFF0F9FF),
+                    extended: screenWidth >= 1150,
+                    backgroundColor: pal.card,
+                    indicatorColor:
+                        const Color(0xFF0284C7).withValues(alpha: 0.14),
                     selectedIconTheme:
                         const IconThemeData(color: Color(0xFF0284C7)),
                     unselectedIconTheme:
-                        const IconThemeData(color: Color(0xFF64748B)),
-                    selectedLabelTextStyle: const TextStyle(
-                      color: Color(0xFF0F172A),
+                        IconThemeData(color: pal.textSecondary),
+                    selectedLabelTextStyle: TextStyle(
+                      color: pal.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
-                    unselectedLabelTextStyle: const TextStyle(
-                      color: Color(0xFF64748B),
+                    unselectedLabelTextStyle: TextStyle(
+                      color: pal.textSecondary,
                       fontWeight: FontWeight.w500,
                       fontSize: 13,
                     ),
@@ -306,10 +308,10 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                     ],
                   ),
                 if (isWide)
-                  const VerticalDivider(
+                  VerticalDivider(
                     width: 1,
                     thickness: 1,
-                    color: Color(0xFFE2E8F0),
+                    color: pal.border,
                   ),
                 Expanded(child: tabs[safeIndex].view),
               ],
@@ -319,18 +321,39 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
       ),
       bottomNavigationBar: isWide || tabs.length < 2
           ? null
-          : NavigationBar(
-              selectedIndex: safeIndex,
-              onDestinationSelected: (idx) =>
-                  setState(() => _tabIndexByModule[activeModule] = idx),
-              destinations: [
-                for (final t in tabs)
-                  NavigationDestination(
-                    icon: Icon(t.icon),
-                    selectedIcon: Icon(t.selectedIcon),
-                    label: t.label,
-                  ),
-              ],
+          : Container(
+              decoration: BoxDecoration(
+                color: pal.card,
+                border: Border(
+                  top: BorderSide(color: pal.border, width: 1),
+                ),
+              ),
+              child: NavigationBar(
+                height: 64,
+                backgroundColor: pal.card,
+                indicatorColor:
+                    const Color(0xFF0284C7).withValues(alpha: 0.15),
+                selectedIndex: safeIndex,
+                onDestinationSelected: (idx) =>
+                    setState(() => _tabIndexByModule[activeModule] = idx),
+                destinations: [
+                  for (final t in tabs)
+                    NavigationDestination(
+                      icon: Icon(t.icon, color: pal.textSecondary, size: 20),
+                      selectedIcon: const Icon(
+                        Icons.circle,
+                        size: 0,
+                      ).icon == null
+                          ? Icon(t.selectedIcon)
+                          : Icon(
+                              t.selectedIcon,
+                              color: const Color(0xFF0284C7),
+                              size: 20,
+                            ),
+                      label: t.label,
+                    ),
+                ],
+              ),
             ),
     );
   }
@@ -365,12 +388,13 @@ class _TopModuleSelectorRibbon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDesktopWidth = MediaQuery.sizeOf(context).width >= 960;
+    final pal = HasibuPalette.of(context);
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: pal.card,
         border: Border(
-          bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+          bottom: BorderSide(color: pal.border, width: 1),
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -425,6 +449,9 @@ class _TopModuleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
+    final Color activeBg =
+        pal.isDark ? const Color(0xFF0284C7) : const Color(0xFF0F172A);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: onTap,
@@ -432,11 +459,10 @@ class _TopModuleButton extends StatelessWidget {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+          color: isSelected ? activeBg : pal.subtle,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color:
-                isSelected ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+            color: isSelected ? activeBg : pal.border,
           ),
         ),
         child: Row(
@@ -446,7 +472,7 @@ class _TopModuleButton extends StatelessWidget {
             Icon(
               icon,
               size: 18,
-              color: isSelected ? Colors.white : const Color(0xFF475569),
+              color: isSelected ? Colors.white : pal.textSecondary,
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -455,7 +481,7 @@ class _TopModuleButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                  color: isSelected ? Colors.white : pal.textPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 12.5,
                 ),
@@ -469,7 +495,9 @@ class _TopModuleButton extends StatelessWidget {
 }
 
 class _CloudSyncAppBarBadge extends ConsumerWidget {
-  const _CloudSyncAppBarBadge();
+  final bool compact;
+
+  const _CloudSyncAppBarBadge({this.compact = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -480,6 +508,7 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
     );
     final isPolling =
         ref.watch(pdksDashboardProvider.select((s) => s.isPollingTerminal));
+    final pal = HasibuPalette.of(context);
 
     final Color dotColor;
     switch (syncStatus.stage) {
@@ -498,33 +527,35 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+        if (!compact) ...[
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              side: BorderSide(color: pal.border),
+            ),
+            onPressed: isPolling
+                ? null
+                : () => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .pullFromTenfeiTerminals(),
+            icon: isPolling
+                ? const SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(
+                    Icons.bolt_rounded,
+                    size: 16,
+                    color: Color(0xFF0284C7),
+                  ),
+            label: const Text(
+              'Terminal Çek',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
-          onPressed: isPolling
-              ? null
-              : () => ref
-                  .read(pdksDashboardProvider.notifier)
-                  .pullFromTenfeiTerminals(),
-          icon: isPolling
-              ? const SizedBox(
-                  width: 13,
-                  height: 13,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(
-                  Icons.bolt_rounded,
-                  size: 16,
-                  color: Color(0xFF0284C7),
-                ),
-          label: const Text(
-            'Terminal Çek',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-          ),
-        ),
-        const SizedBox(width: 6),
+          const SizedBox(width: 6),
+        ],
         InkWell(
           key: const ValueKey('gmail_sync_setup_button'),
           borderRadius: BorderRadius.circular(8),
@@ -532,9 +563,9 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: pal.subtle,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -548,20 +579,22 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Icon(
+                Icon(
                   Icons.cloud_sync_outlined,
                   size: 15,
-                  color: Color(0xFF475569),
+                  color: pal.textSecondary,
                 ),
-                const SizedBox(width: 5),
-                Text(
-                  gmail.isNotEmpty ? gmail : 'Gmail Eşitleme',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
+                if (!compact) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    gmail.isNotEmpty ? gmail : 'Gmail Eşitleme',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: pal.textPrimary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -601,6 +634,7 @@ class _LiveAttendanceDashboardViewState
         ref.watch(pdksDashboardProvider.select((s) => s.selectedDate));
     final terminalMsg =
         ref.watch(pdksDashboardProvider.select((s) => s.terminalStatusMessage));
+    final pal = HasibuPalette.of(context);
 
     return CustomScrollView(
       slivers: [
@@ -616,9 +650,9 @@ class _LiveAttendanceDashboardViewState
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: pal.card,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: pal.border),
                   ),
                   child: Wrap(
                     spacing: 12,
@@ -638,10 +672,10 @@ class _LiveAttendanceDashboardViewState
                           Flexible(
                             child: Text(
                               terminalMsg,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF334155),
+                                color: pal.textPrimary,
                               ),
                             ),
                           ),
@@ -650,18 +684,18 @@ class _LiveAttendanceDashboardViewState
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.calendar_today_rounded,
                             size: 15,
-                            color: Color(0xFF64748B),
+                            color: pal.textSecondary,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             'Tarih: $selectedDate',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
+                              color: pal.textPrimary,
                             ),
                           ),
                         ],
@@ -679,11 +713,11 @@ class _LiveAttendanceDashboardViewState
                   onChanged: (val) => ref
                       .read(pdksDashboardProvider.notifier)
                       .setSearchQuery(val),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText:
                         'Personel adı, kart no (örn. 00064) veya üretim bölümü ara...',
-                    prefixIcon: Icon(Icons.search_rounded, size: 20),
-                    fillColor: Colors.white,
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    fillColor: pal.card,
                   ),
                 ),
               ],
@@ -757,6 +791,7 @@ class _KpiSummaryCards extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.sickReportCount));
     final activeFilter =
         ref.watch(pdksDashboardProvider.select((s) => s.selectedStateFilter));
+    final pal = HasibuPalette.of(context);
 
     return Wrap(
       spacing: 10,
@@ -765,7 +800,7 @@ class _KpiSummaryCards extends ConsumerWidget {
         _StatFilterCard(
           title: 'Toplam Kadro',
           count: total,
-          color: const Color(0xFF0F172A),
+          color: pal.isDark ? const Color(0xFF38BDF8) : const Color(0xFF0F172A),
           icon: Icons.groups_rounded,
           isSelected: activeFilter == null,
           onTap: () =>
@@ -845,6 +880,7 @@ class _StatFilterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
@@ -853,10 +889,10 @@ class _StatFilterCard extends StatelessWidget {
         width: 152,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.08) : Colors.white,
+          color: isSelected ? color.withValues(alpha: 0.12) : pal.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? color : const Color(0xFFE2E8F0),
+            color: isSelected ? color : pal.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -865,7 +901,7 @@ class _StatFilterCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
+                color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 18),
@@ -886,10 +922,10 @@ class _StatFilterCard extends StatelessWidget {
                   Text(
                     title,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
+                      color: pal.textSecondary,
                     ),
                   ),
                 ],
@@ -942,6 +978,7 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final pal = HasibuPalette.of(context);
     final Color badgeColor = switch (item.state) {
       DailyAttendanceState.present => const Color(0xFF059669),
       DailyAttendanceState.late => const Color(0xFFD97706),
@@ -965,9 +1002,9 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: pal.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: pal.border),
       ),
       child: Row(
         children: [
@@ -986,10 +1023,10 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
                     Flexible(
                       child: Text(
                         item.employee.fullName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13.5,
-                          color: Color(0xFF0F172A),
+                          color: pal.textPrimary,
                         ),
                       ),
                     ),
@@ -1000,15 +1037,15 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
+                        color: pal.chip,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         '#${item.employee.cardNo}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF475569),
+                          color: pal.textSecondary,
                         ),
                       ),
                     ),
@@ -1017,9 +1054,9 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
                 const SizedBox(height: 3),
                 Text(
                   '${item.branch.name} • ${item.department.name} • Mesai: ${item.shift.startTime}-${item.shift.endTime}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF64748B),
+                    color: pal.textSecondary,
                   ),
                 ),
               ],
@@ -1031,7 +1068,7 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.10),
+                  color: badgeColor.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -1048,10 +1085,10 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 checkInText,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF64748B),
+                  color: pal.textSecondary,
                 ),
               ),
             ],
@@ -1059,9 +1096,9 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
           const SizedBox(width: 6),
           PopupMenuButton<LeaveType>(
             tooltip: 'İzin / Rapor Durumu Ata',
-            icon: const Icon(
+            icon: Icon(
               Icons.more_horiz_rounded,
-              color: Color(0xFF64748B),
+              color: pal.textSecondary,
             ),
             onSelected: (leaveType) {
               ref.read(pdksDashboardProvider.notifier).assignLeaveOrReport(
@@ -1099,6 +1136,7 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
     );
     final terminalMsg =
         ref.watch(pdksDashboardProvider.select((s) => s.terminalStatusMessage));
+    final pal = HasibuPalette.of(context);
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -1106,9 +1144,9 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: pal.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: pal.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1117,12 +1155,13 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                 children: [
                   const Icon(Icons.sensors_rounded, color: Color(0xFF0284C7)),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Yüz Tanıma & Parmak İzi Terminali (TCP 4370) ve Gmail Bulut Eşitleme',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
+                        color: pal.textPrimary,
                       ),
                     ),
                   ),
@@ -1135,10 +1174,10 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Ağdaki yüz ve parmak izi terminallerine doğrudan TCP 4370 protokolüyle bağlanarak giriş-çıkış hareketlerini çeker ve tanımladığınız Gmail / Google Drive hesabıyla eşitler.',
                 style: TextStyle(
-                  color: Color(0xFF64748B),
+                  color: pal.textSecondary,
                   fontSize: 12.5,
                 ),
               ),
@@ -1147,9 +1186,9 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: pal.subtle,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: pal.border),
                 ),
                 child: Wrap(
                   spacing: 12,
@@ -1162,18 +1201,18 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                       children: [
                         Text(
                           'Terminal: $terminalMsg',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF334155),
+                            color: pal.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Gmail / Drive (${gmail.isEmpty ? "Henüz tanımlanmadı" : gmail}): ${syncStatus.message}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: pal.textSecondary,
                           ),
                         ),
                       ],
@@ -1206,24 +1245,27 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Kayıtlı Terminaller & Şube Bağlantıları',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: pal.textPrimary,
+          ),
         ),
         const SizedBox(height: 10),
         for (final b in branches)
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: pal.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: b.hasTerminal
-                    ? const Color(0xFFF0F9FF)
-                    : const Color(0xFFF1F5F9),
+                backgroundColor:
+                    const Color(0xFF0284C7).withValues(alpha: 0.14),
                 child: Icon(
                   b.hasTerminal
                       ? Icons.face_retouching_natural_rounded
@@ -1234,16 +1276,17 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
               ),
               title: Text(
                 '${b.name} (${b.code})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13.5,
+                  color: pal.textPrimary,
                 ),
               ),
               subtitle: Text(
                 b.hasTerminal
                     ? 'Aktif Terminal • IP: ${b.terminalIp}:${b.terminalPort} (Cihaz No: ${b.machineNo})'
                     : 'Mobil QR / GPS Geofence Modu (${b.geofenceRadiusMeters.round()}m) • IP: ${b.terminalIp}:${b.terminalPort}',
-                style: const TextStyle(fontSize: 12),
+                style: TextStyle(fontSize: 12, color: pal.textSecondary),
               ),
               trailing: FilledButton.tonal(
                 onPressed: () => ref
@@ -1274,6 +1317,7 @@ class _BranchQrGpsCheckInViewState
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(pdksDashboardProvider);
+    final pal = HasibuPalette.of(context);
     final branch = state.branches.firstWhere(
       (b) => b.id == _selectedBranchId,
       orElse: () => state.branches.first,
@@ -1291,25 +1335,30 @@ class _BranchQrGpsCheckInViewState
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: pal.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: pal.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Şube Mobil QR & Konum (GPS Geofence) Giriş-Çıkış Sistemi',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: pal.textPrimary,
+                ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Yüz tanıma terminali bulunmayan şubelerde personeller şube QR kodunu okutarak veya GPS konum doğrulaması ile giriş-çıkış yapar.',
-                style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                style: TextStyle(fontSize: 12.5, color: pal.textSecondary),
               ),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   for (final b in state.branches)
                     ChoiceChip(
@@ -1321,38 +1370,42 @@ class _BranchQrGpsCheckInViewState
                 ],
               ),
               const SizedBox(height: 16),
-              Row(
+              Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      border: Border.all(color: pal.border),
                     ),
                     child: QrImageView(
                       data: qrPayload,
                       size: 112,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 420),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           branch.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 15,
+                            color: pal.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'GPS Merkez: ${branch.latitude}, ${branch.longitude}\nGeofence Sınırı: ${branch.geofenceRadiusMeters.round()} metre\nDinamik QR: $qrPayload',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: pal.textSecondary,
                           ),
                         ),
                       ],
@@ -1365,13 +1418,13 @@ class _BranchQrGpsCheckInViewState
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFECFDF5),
+                    color: const Color(0xFF059669).withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     _lastActionFeedback!,
                     style: const TextStyle(
-                      color: Color(0xFF065F46),
+                      color: Color(0xFF059669),
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
@@ -1384,27 +1437,35 @@ class _BranchQrGpsCheckInViewState
         const SizedBox(height: 16),
         Text(
           '${branch.name} Personelleri (${branchStaff.length} Kişi)',
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: pal.textPrimary,
+          ),
         ),
         const SizedBox(height: 8),
         for (final s in branchStaff)
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: pal.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: ListTile(
               leading: EmployeeProfileAvatar(employee: s.employee, size: 38),
               title: Text(
                 '${s.employee.fullName} (#${s.employee.cardNo})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13.5,
+                  color: pal.textPrimary,
                 ),
               ),
-              subtitle: Text('${s.employee.title} • Durum: ${s.state.label}'),
+              subtitle: Text(
+                '${s.employee.title} • Durum: ${s.state.label}',
+                style: TextStyle(color: pal.textSecondary, fontSize: 12),
+              ),
               trailing: Wrap(
                 spacing: 6,
                 children: [
@@ -1465,6 +1526,10 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
     );
     final authRole =
         ref.watch(pdksDashboardProvider.select((s) => s.authSession.role));
+    final companySettings = ref.watch(
+      pdksDashboardProvider.select((s) => s.companySettings),
+    );
+    final pal = HasibuPalette.of(context);
 
     if (statuses.isEmpty) {
       return const Center(child: Text('Personel verisi bulunamadı.'));
@@ -1483,21 +1548,25 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: pal.card,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Personel Mobil Self-Servis Ekranı (Yönetici Önizleme)',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: pal.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Personeller kendi Kart No ve kişisel parolalarıyla oturum açtığında yetki verilen modülleri ve özlük kartlarını görürler.',
-                  style: TextStyle(fontSize: 12.5, color: Color(0xFF64748B)),
+                Text(
+                  'Personeller kendi Kart No ve kişisel parolalarıyla oturum açtığında yetki verilen modülleri, kişisel temalarını ve özlük kartlarını görürler.',
+                  style: TextStyle(fontSize: 12.5, color: pal.textSecondary),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -1528,16 +1597,80 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
             ),
           ),
         if (authRole == UserRole.admin) const SizedBox(height: 16),
+        // MOBİL & MASAÜSTÜ MİNİMALİST PERSONEL PORTALI KARTI
         Container(
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: pal.card,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: pal.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ŞİRKET LOGOSU VE KURUMSAL BAŞLIK BANDI
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: pal.subtle,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: pal.border),
+                ),
+                child: Row(
+                  children: [
+                    CompanyLogoBadge(
+                      settings: companySettings,
+                      size: 36,
+                      borderRadius: 9,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            companySettings.companyName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: pal.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Kurumsal Mobil & Masaüstü Personel Portalı',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: pal.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        emp.sgkActive ? 'SGK AKTİF' : 'SGK PASİF',
+                        style: const TextStyle(
+                          color: Color(0xFF059669),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   EmployeeProfileAvatar(
@@ -1551,8 +1684,8 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                       children: [
                         Text(
                           emp.fullName,
-                          style: const TextStyle(
-                            color: Color(0xFF0F172A),
+                          style: TextStyle(
+                            color: pal.textPrimary,
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
@@ -1560,8 +1693,8 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${current.department.name} • ${emp.title} (${current.branch.name})',
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
+                          style: TextStyle(
+                            color: pal.textSecondary,
                             fontSize: 12.5,
                           ),
                         ),
@@ -1577,43 +1710,22 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF0F9FF),
+                                  color: const Color(0xFF0284C7)
+                                      .withValues(alpha: 0.14),
                                   borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFFBAE6FD),
-                                  ),
                                 ),
                                 child: Text(
                                   'Yetki: ${mod.title}',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF0369A1),
+                                    color: Color(0xFF0284C7),
                                   ),
                                 ),
                               ),
                           ],
                         ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFA7F3D0)),
-                    ),
-                    child: Text(
-                      emp.sgkActive ? 'SGK AKTİF' : 'SGK PASİF',
-                      style: const TextStyle(
-                        color: Color(0xFF059669),
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
-                      ),
                     ),
                   ),
                 ],
@@ -1648,6 +1760,9 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 18),
+              // HER KULLANICIYA ÖZGÜ KİŞİSEL TEMA SEÇİCİ (Açık / Koyu / Sistem)
+              const UserThemeSelectorBar(),
             ],
           ),
         ),
@@ -1669,26 +1784,27 @@ class _SelfServiceMetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
     return Container(
       width: 210,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: pal.subtle,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+            style: TextStyle(color: pal.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
-              color: Color(0xFF0F172A),
+            style: TextStyle(
+              color: pal.textPrimary,
               fontSize: 17,
               fontWeight: FontWeight.w800,
             ),
@@ -1696,7 +1812,7 @@ class _SelfServiceMetricTile extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             subValue,
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+            style: TextStyle(color: pal.textMuted, fontSize: 11),
           ),
         ],
       ),

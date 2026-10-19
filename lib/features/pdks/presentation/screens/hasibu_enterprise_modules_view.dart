@@ -7,7 +7,8 @@ import 'hasibu_settings_view.dart';
 
 /// Hasibu Kurumsal Oturum Açma (Login Gate) Ekranı.
 /// Yönetici girişi tüm üst modülleri açar; Personel girişi ise personele
-/// tanımlanan kişisel parola ve yetki alanlarına (`allowedModules`) göre açılır.
+/// tanımlanan kişisel parola, kişisel tema (`themeMode`) ve yetki alanlarına (`allowedModules`) göre açılır.
+/// Üst bölümde şirket logosu yer alır ve doğrudan login ekranından logo eklenip değiştirilebilir.
 class HasibuLoginScreen extends ConsumerStatefulWidget {
   const HasibuLoginScreen({super.key});
 
@@ -65,31 +66,32 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final companyName = ref.watch(
-      pdksDashboardProvider.select((s) => s.companySettings.companyName),
+    final companySettings = ref.watch(
+      pdksDashboardProvider.select((s) => s.companySettings),
     );
     final errorMsg = ref.watch(
       pdksDashboardProvider.select((s) => s.authSession.errorMessage),
     );
+    final pal = HasibuPalette.of(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: pal.bg,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 430),
             child: Container(
-              padding: const EdgeInsets.all(32),
+              padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: pal.card,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-                boxShadow: const [
+                border: Border.all(color: pal.border),
+                boxShadow: [
                   BoxShadow(
-                    color: Color(0x0A0F172A),
+                    color: Colors.black.withValues(alpha: pal.isDark ? 0.28 : 0.05),
                     blurRadius: 24,
-                    offset: Offset(0, 8),
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
@@ -97,46 +99,69 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(14),
+                      TextButton.icon(
+                        key: const ValueKey('login_company_logo_button'),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.grid_view_rounded,
-                          color: Colors.white,
-                          size: 24,
+                        onPressed: () => showCompanyLogoDialog(context, ref),
+                        icon: const Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 16,
+                        ),
+                        label: const Text(
+                          'Şirket Logosu Ekle',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
+                      const UserThemeSelectorBar(compact: true),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: CompanyLogoBadge(
+                      key: const ValueKey('login_company_logo_badge'),
+                      settings: companySettings,
+                      size: 64,
+                      borderRadius: 16,
+                      onTap: () => showCompanyLogoDialog(context, ref),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Text(
-                    companyName,
+                    companySettings.companyName,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
+                      color: pal.textPrimary,
                       letterSpacing: -0.3,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'PDKS • Yalın Üretim • İK • Ön Muhasebe',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF64748B),
+                      color: pal.textSecondary,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 20),
                   SegmentedButton<UserRole>(
                     segments: const [
                       ButtonSegment<UserRole>(
@@ -153,7 +178,7 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                     selected: {_selectedRole},
                     onSelectionChanged: (sel) => _switchRole(sel.first),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   TextField(
                     key: const ValueKey('login_username_field'),
                     controller: _usernameOrCardCtrl,
@@ -170,7 +195,7 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   TextField(
                     key: const ValueKey('login_password_field'),
                     controller: _passwordOrPinCtrl,
@@ -202,25 +227,29 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFEF2F2),
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFFECACA)),
+                        border: Border.all(
+                          color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                        ),
                       ),
                       child: Text(
                         errorMsg,
                         style: const TextStyle(
-                          color: Color(0xFFB91C1C),
+                          color: Color(0xFFDC2626),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 18),
                   FilledButton.icon(
                     key: const ValueKey('login_submit_button'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
+                      backgroundColor: pal.isDark
+                          ? const Color(0xFF0284C7)
+                          : const Color(0xFF0F172A),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -243,9 +272,9 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                         ? 'Varsayılan Yönetici: admin / 123'
                         : 'Örnek Personel: Kart No 00064 / Parola: 1234',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
-                      color: Color(0xFF94A3B8),
+                      color: pal.textMuted,
                     ),
                   ),
                 ],
@@ -270,6 +299,7 @@ class LeanProductionStationsView extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.departments));
     final statuses =
         ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
+    final pal = HasibuPalette.of(context);
 
     final prodDepts = departments
         .where((d) => d.isProductionLine)
@@ -278,18 +308,18 @@ class LeanProductionStationsView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
+        Text(
           'Yalın Üretim İstasyonları • Canlı Hat Doluluk ve KPI Panosu',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF0F172A),
+            color: pal.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Cihazlardan gelen canlı yoklama verilerine göre üretim istasyonlarında iş başı yapan ustalar ve hat verimliliği.',
-          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+          style: TextStyle(fontSize: 12, color: pal.textSecondary),
         ),
         const SizedBox(height: 16),
         Wrap(
@@ -321,6 +351,7 @@ class _ProductionStationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
     final int total = stationStaff.length;
     final int active = stationStaff
         .where(
@@ -337,7 +368,7 @@ class _ProductionStationCard extends StatelessWidget {
             total;
 
     final Color statusColor = total == 0
-        ? const Color(0xFF64748B)
+        ? pal.textSecondary
         : (active == total
             ? const Color(0xFF059669)
             : (active > 0
@@ -348,9 +379,9 @@ class _ProductionStationCard extends StatelessWidget {
       width: 280,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: pal.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,17 +393,17 @@ class _ProductionStationCard extends StatelessWidget {
                 child: Text(
                   department.name,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
-                    color: Color(0xFF0F172A),
+                    color: pal.textPrimary,
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.10),
+                  color: statusColor.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -389,7 +420,7 @@ class _ProductionStationCard extends StatelessWidget {
           const SizedBox(height: 10),
           LinearProgressIndicator(
             value: total == 0 ? 0 : active / total,
-            backgroundColor: const Color(0xFFF1F5F9),
+            backgroundColor: pal.chip,
             color: statusColor,
             minHeight: 5,
             borderRadius: BorderRadius.circular(4),
@@ -397,10 +428,10 @@ class _ProductionStationCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             'Ortalama İstasyon KPI: %${avgKpi.toStringAsFixed(1)}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Color(0xFF64748B),
+              color: pal.textSecondary,
             ),
           ),
         ],
@@ -416,18 +447,19 @@ class LeanKpiLeaderboardView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statuses =
         ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
+    final pal = HasibuPalette.of(context);
     final sorted = List<EmployeeDailyStatus>.from(statuses)
       ..sort((a, b) => b.employee.kpiScore.compareTo(a.employee.kpiScore));
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
+        Text(
           'Personel Yalın Üretim KPI & Disiplin Sıralaması',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF0F172A),
+            color: pal.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
@@ -435,9 +467,9 @@ class LeanKpiLeaderboardView extends ConsumerWidget {
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: pal.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: ListTile(
               leading: EmployeeProfileAvatar(
@@ -446,20 +478,21 @@ class LeanKpiLeaderboardView extends ConsumerWidget {
               ),
               title: Text(
                 '${i + 1}. ${sorted[i].employee.fullName} (#${sorted[i].employee.cardNo})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13.5,
+                  color: pal.textPrimary,
                 ),
               ),
               subtitle: Text(
                 '${sorted[i].department.name} • ${sorted[i].branch.name} • Bugün: ${sorted[i].state.label}',
-                style: const TextStyle(fontSize: 12),
+                style: TextStyle(fontSize: 12, color: pal.textSecondary),
               ),
               trailing: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFECFDF5),
+                  color: const Color(0xFF059669).withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -490,6 +523,7 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
     final selectedDate =
         ref.watch(pdksDashboardProvider.select((s) => s.selectedDate));
+    final pal = HasibuPalette.of(context);
 
     final int normalCount = statuses
         .where((s) => s.state == DailyAttendanceState.present)
@@ -513,10 +547,10 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
       children: [
         Text(
           'Ön Muhasebe & Günlük Puantaj Tahakkuk Özeti ($selectedDate)',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF0F172A),
+            color: pal.textPrimary,
           ),
         ),
         const SizedBox(height: 12),
@@ -551,18 +585,22 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 20),
-        const Text(
+        Text(
           'Personel Bazlı Puantaj & Bordro Durum Çizelgesi',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: pal.textPrimary,
+          ),
         ),
         const SizedBox(height: 10),
         for (final item in statuses)
           Container(
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: pal.card,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: pal.border),
             ),
             child: ListTile(
               leading: EmployeeProfileAvatar(
@@ -571,14 +609,15 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
               ),
               title: Text(
                 '${item.employee.fullName} (#${item.employee.cardNo})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 13.5,
+                  color: pal.textPrimary,
                 ),
               ),
               subtitle: Text(
                 '${item.branch.name} • ${item.department.name} • SGK: ${item.employee.sgkActive ? "Aktif" : "Pasif"}',
-                style: const TextStyle(fontSize: 12),
+                style: TextStyle(fontSize: 12, color: pal.textSecondary),
               ),
               trailing: Text(
                 item.state == DailyAttendanceState.present
@@ -620,23 +659,24 @@ class _AccountingSummaryBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
     return Container(
       width: 220,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: pal.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: pal.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF64748B),
+              color: pal.textSecondary,
             ),
           ),
           const SizedBox(height: 6),
@@ -651,7 +691,7 @@ class _AccountingSummaryBox extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+            style: TextStyle(fontSize: 11, color: pal.textMuted),
           ),
         ],
       ),

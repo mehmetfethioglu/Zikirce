@@ -66,6 +66,20 @@ class PdksDashboardState {
 
   int get totalCount => filteredByBranch.length;
 
+  /// Aktif oturumdaki kullanıcının (Yönetici veya Personel) kendine özgü tema seçimi.
+  HasibuThemeMode get activeThemeMode {
+    if (authSession.isAuthenticated &&
+        authSession.role == UserRole.employee &&
+        authSession.employeeCardNo != null) {
+      for (final s in dailyStatuses) {
+        if (s.employee.cardNo == authSession.employeeCardNo) {
+          return s.employee.themeMode;
+        }
+      }
+    }
+    return companySettings.adminThemeMode;
+  }
+
   List<EmployeeDailyStatus> get filteredByBranch {
     if (selectedBranchId == null) return dailyStatuses;
     return dailyStatuses
@@ -834,6 +848,37 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       force: true,
     );
     state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Aktif kullanıcının (Yönetici veya Personel) kendine özgü temasını (Açık / Koyu / Sistem) günceller.
+  Future<void> setCurrentUserThemeMode(HasibuThemeMode mode) async {
+    if (state.authSession.isAuthenticated &&
+        state.authSession.role == UserRole.employee &&
+        state.authSession.employeeCardNo != null) {
+      final cardNo = state.authSession.employeeCardNo!;
+      final idx = state.dailyStatuses.indexWhere(
+        (s) => s.employee.cardNo == cardNo,
+      );
+      if (idx >= 0) {
+        final emp = state.dailyStatuses[idx].employee.copyWith(themeMode: mode);
+        _db.upsertEmployee(emp);
+        refreshDashboard();
+        return;
+      }
+    }
+    final updated = state.companySettings.copyWith(adminThemeMode: mode);
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
+  }
+
+  /// Şirket logosunu (yerel görsel yolu veya kurumsal hazır logo) günceller.
+  Future<void> updateCompanyLogo(String? logoPath) async {
+    final clean = logoPath?.trim();
+    final updated = state.companySettings.copyWith(
+      logoPath: () => (clean == null || clean.isEmpty) ? null : clean,
+    );
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
   }
 
   /// Manuel Google Drive Yedekleme & Cihazlar Arası Uzlaştırma (Zikirce_ modeli)

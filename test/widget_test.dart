@@ -97,7 +97,7 @@ void main() {
 
   group('HasibuDatabase & Settings CRUD Tests', () {
     test(
-        'Persists company settings, shifts, branches, employees and exports snapshot',
+        'Persists company settings, company logo, per-user themes, shifts, branches, employees and exports snapshot',
         () {
       final db = HasibuDatabase.inMemory();
       addTearDown(db.dispose);
@@ -112,9 +112,14 @@ void main() {
           companyName: 'AKAR GIDA & BAKLAVA A.Ş.',
           autoPollEnabled: true,
           autoPollMinutes: 10,
+          logoPath: 'logo:2',
+          adminThemeMode: HasibuThemeMode.dark,
         ),
       );
-      expect(db.getCompanySettings().companyName, 'AKAR GIDA & BAKLAVA A.Ş.');
+      final savedSettings = db.getCompanySettings();
+      expect(savedSettings.companyName, 'AKAR GIDA & BAKLAVA A.Ş.');
+      expect(savedSettings.logoPath, 'logo:2');
+      expect(savedSettings.adminThemeMode, HasibuThemeMode.dark);
 
       db.upsertShift(
         const ShiftPlan(
@@ -132,7 +137,7 @@ void main() {
       expect(snapshot['deviceName'], 'Test-Laptop');
       expect((snapshot['shifts'] as List).length, 5);
 
-      // Kişisel parola, modül yetkisi ve profil fotoğrafı kaydı
+      // Kişisel parola, modül yetkisi, profil fotoğrafı ve kullanıcıya özgü tema kaydı
       final sampleEmp = db.getEmployees().first.copyWith(
             password: '9876',
             allowedModules: const <HasibuModule>[
@@ -140,6 +145,7 @@ void main() {
               HasibuModule.employeePortal,
             ],
             photoPath: () => 'preset:3',
+            themeMode: HasibuThemeMode.dark,
           );
       db.upsertEmployee(sampleEmp);
       final reloadedEmp =
@@ -153,6 +159,7 @@ void main() {
         ]),
       );
       expect(reloadedEmp.photoPath, 'preset:3');
+      expect(reloadedEmp.themeMode, HasibuThemeMode.dark);
 
       // Toplu Hareket Düzenleme (Bulk Attendance)
       final affected = db.applyBulkManualAttendance(
@@ -167,7 +174,7 @@ void main() {
   });
 
   testWidgets(
-      'HasibuApp enforces Login Gate, shows Top Module Ribbon, Bulk Attendance, and Gmail Sync Modal',
+      'HasibuApp enforces Login Gate with Company Logo, Per-User Theme Switching, Top Module Ribbon, Bulk Attendance, and Gmail Sync Modal',
       (
     WidgetTester tester,
   ) async {
@@ -183,15 +190,33 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Uygulama doğrudan açılmaz, Oturum Açma (Login Gate) ekranı gelir
+    // 1. Uygulama doğrudan açılmaz, Oturum Açma (Login Gate) ekranı ve Şirket Logosu gelir
     expect(find.byKey(const ValueKey('login_submit_button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('login_company_logo_badge')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('login_company_logo_button')),
+      findsOneWidget,
+    );
     expect(find.text('Tüm Şubeler & Merkez'), findsNothing);
 
     // 2. Yönetici olarak oturum aç (varsayılan admin / 123 dolu gelir)
     await tester.tap(find.byKey(const ValueKey('login_submit_button')));
     await tester.pumpAndSettle();
 
-    // 3. Üst Modül Seçme Satırı (5 ana modül) ve PDKS & İK sol menüsündeki 5 sekme görünür
+    // 3. Uygulama içerisinde üst barda Şirket Logosu ve Kişisel Tema seçici görünür
+    expect(
+      find.byKey(const ValueKey('appbar_company_logo_badge')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('appbar_theme_selector_button')),
+      findsOneWidget,
+    );
+
+    // 4. Üst Modül Seçme Satırı (5 ana modül) ve PDKS & İK sol menüsündeki 5 sekme görünür
     expect(find.text('PDKS & İK'), findsOneWidget);
     expect(find.text('Yalın Üretim & KPI'), findsOneWidget);
     expect(find.text('Ön Muhasebe & Puantaj'), findsOneWidget);
@@ -204,7 +229,7 @@ void main() {
     expect(find.text('Hareket Düzeltme'), findsOneWidget);
     expect(find.text('İzin & Rapor Girişi'), findsOneWidget);
 
-    // 4. Hareket Düzeltme sekmesine tıkla -> Toplu Hareket Düzenleme paneli açılır
+    // 5. Hareket Düzeltme sekmesine tıkla -> Toplu Hareket Düzenleme paneli açılır
     await tester.tap(find.text('Hareket Düzeltme'));
     await tester.pumpAndSettle();
     expect(
@@ -216,7 +241,7 @@ void main() {
       findsOneWidget,
     );
 
-    // 5. Üst bardaki Gmail Eşitleme butonuna tıkla -> Gmail & Google Drive kurulum penceresi açılır
+    // 6. Üst bardaki Gmail Eşitleme butonuna tıkla -> Gmail & Google Drive kurulum penceresi açılır
     await tester.tap(find.byKey(const ValueKey('gmail_sync_setup_button')));
     await tester.pumpAndSettle();
     expect(
@@ -226,7 +251,7 @@ void main() {
     await tester.tap(find.text('Kapat'));
     await tester.pumpAndSettle();
 
-    // 6. Üst modül satırından "Sistem & Ayarlar" modülüne tıkla -> Sol menü Ayar sekmelerine dönüşür
+    // 7. Üst modül satırından "Sistem & Ayarlar" modülüne tıkla -> Sol menü Ayar sekmelerine dönüşür
     await tester.tap(find.text('Sistem & Ayarlar'));
     await tester.pumpAndSettle();
 
@@ -234,8 +259,13 @@ void main() {
     expect(find.text('2. Mesai Saatleri & Geç Kalma'), findsOneWidget);
     expect(find.text('3. Personel & Bölüm Yönetimi'), findsOneWidget);
     expect(find.byIcon(Icons.add_business_rounded), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('settings_company_logo_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('settings_theme_segmented_button')),
+      findsOneWidget,
+    );
   });
 }
-
-
-
