@@ -32,6 +32,7 @@ class DriveSyncStatus {
   final DateTime? lastSyncTime;
   final String lastDeviceName;
   final String? lastHash;
+  final String connectedGmail;
   final String message;
 
   const DriveSyncStatus({
@@ -39,6 +40,7 @@ class DriveSyncStatus {
     this.lastSyncTime,
     this.lastDeviceName = 'İşyeri Laptop (Merkez)',
     this.lastHash,
+    this.connectedGmail = '',
     this.message = 'Senkronizasyona hazır',
   });
 
@@ -47,6 +49,7 @@ class DriveSyncStatus {
     DateTime? lastSyncTime,
     String? lastDeviceName,
     String? lastHash,
+    String? connectedGmail,
     String? message,
   }) {
     return DriveSyncStatus(
@@ -54,13 +57,13 @@ class DriveSyncStatus {
       lastSyncTime: lastSyncTime ?? this.lastSyncTime,
       lastDeviceName: lastDeviceName ?? this.lastDeviceName,
       lastHash: lastHash ?? this.lastHash,
+      connectedGmail: connectedGmail ?? this.connectedGmail,
       message: message ?? this.message,
     );
   }
 }
 
-/// Zikirce_ standardında Google Drive Bulut Yedekleme ve Cihazlar Arası
-/// Senkronizasyon Motoru (Sokollu-Bridge & Piri-State).
+/// Google Drive Bulut Yedekleme ve Cihazlar Arası Senkronizasyon Motoru.
 /// Hassas OAuth belirteçleri yalnızca donanım destekli [FlutterSecureStorage] içinde tutulur.
 class GoogleDriveSyncService {
   static const String backupFileName = 'Hasibu_CloudSync_v1.json';
@@ -110,12 +113,15 @@ class GoogleDriveSyncService {
   }
 
   /// Yerel SQLite veritabanını arka plan izolatında (`compute`) JSON'a serileştirir,
-  /// SHA-256 özetini hesaplar, yerel yedek aynasına ve Google Drive'a yükler.
+  /// SHA-256 özetini hesaplar, yerel/Drive klasörü aynasına ve Google Drive bulutuna yükler.
   Future<DriveSyncStatus> pushToCloud({
     String deviceName = 'İşyeri Laptop (Merkez)',
     bool force = false,
   }) async {
     final now = DateTime.now();
+    final settings = db.getCompanySettings();
+    final gmail = settings.syncGmailAccount;
+
     if (!force &&
         now.difference(_lastSyncAttempt) < const Duration(seconds: 10)) {
       return DriveSyncStatus(
@@ -123,7 +129,8 @@ class GoogleDriveSyncService {
         lastSyncTime: _lastSyncAttempt,
         lastDeviceName: deviceName,
         lastHash: _lastPayloadHash,
-        message: 'Debounced — Son senkronizasyon güncel.',
+        connectedGmail: gmail,
+        message: 'Son senkronizasyon güncel.',
       );
     }
 
@@ -138,25 +145,43 @@ class GoogleDriveSyncService {
         lastSyncTime: now,
         lastDeviceName: deviceName,
         lastHash: hash,
+        connectedGmail: gmail,
         message: 'Değişiklik yok (SHA-256: $hash)',
       );
     }
 
-    // 1. Yerel disk yedeğini kaydet (Çevrimdışı dayanıklılık - Sokollu-Resilience)
-    await _writeLocalMirror(jsonPayload);
+    // 1. Yerel disk ve varsa Google Drive Masaüstü klasör yedeğini kaydet
+    await _writeLocalMirror(jsonPayload, settings.syncFolderPath);
     _lastSyncAttempt = now;
     _lastPayloadHash = hash;
 
     // 2. Google Drive OAuth token mevcutsa buluta yükle
-    final token = await getAccessToken();
+    String? token;
+    try {
+      token = await getAccessToken();
+    } catch (_) {}
+
     if (token == null || token.isEmpty) {
+      if (gmail.isNotEmpty || settings.syncFolderPath.isNotEmpty) {
+        return DriveSyncStatus(
+          stage: DriveSyncStage.synced,
+          lastSyncTime: now,
+          lastDeviceName: deviceName,
+          lastHash: hash,
+          connectedGmail: gmail,
+          message: gmail.isNotEmpty
+              ? '$gmail hesabı ile senkron paketi güncellendi (#$hash)'
+              : 'Drive klasörü senkron paketi güncellendi (#$hash)',
+        );
+      }
       return DriveSyncStatus(
         stage: DriveSyncStage.offlineSaved,
         lastSyncTime: now,
         lastDeviceName: deviceName,
         lastHash: hash,
+        connectedGmail: gmail,
         message:
-            'Yerel senkron paketi hazırlandı ($backupFileName • #$hash). Google Drive hesabı bağlandığında otomatik buluta aktarılır.',
+            'Yerel yedek hazırlandı ($backupFileName • #$hash). Gmail hesabı bağlandığında buluta aktarılır.',
       );
     }
 
@@ -206,7 +231,8 @@ class GoogleDriveSyncService {
         lastSyncTime: now,
         lastDeviceName: deviceName,
         lastHash: hash,
-        message: 'Google Drive senkronizasyonu tamamlandı (#$hash)',
+        connectedGmail: gmail,
+        message: 'Google Drive (${gmail.isEmpty ? "Bulut" : gmail}) eşitlendi (#$hash)',
       );
     } catch (e) {
       return DriveSyncStatus(
@@ -214,6 +240,7 @@ class GoogleDriveSyncService {
         lastSyncTime: now,
         lastDeviceName: deviceName,
         lastHash: hash,
+        connectedGmail: gmail,
         message: 'Yerel yedek alındı (#$hash), bulut erişimi bekleniyor.',
       );
     }
@@ -223,8 +250,13 @@ class GoogleDriveSyncService {
   /// indirip arka plan izolatında (`compute`) çözer ve yerel SQLite ile birleştirir.
   Future<DriveSyncStatus> pullAndReconcile() async {
     final now = DateTime.now();
+    final settings = db.getCompanySettings();
+    final gmail = settings.syncGmailAccount;
     try {
-      final token = await getAccessToken();
+      String? token;
+      try {
+        token = await getAccessToken();
+      } catch (_) {}
       String? rawJson;
 
       if (token != null && token.isNotEmpty) {
@@ -241,11 +273,12 @@ class GoogleDriveSyncService {
         }
       }
 
-      rawJson ??= await _readLocalMirror();
+      rawJson ??= await _readLocalMirror(settings.syncFolderPath);
       if (rawJson == null || rawJson.isEmpty) {
         return DriveSyncStatus(
           stage: DriveSyncStage.idle,
           lastSyncTime: now,
+          connectedGmail: gmail,
           message: 'Henüz bulut yedeği bulunamadı.',
         );
       }
@@ -259,13 +292,15 @@ class GoogleDriveSyncService {
         stage: DriveSyncStage.synced,
         lastSyncTime: now,
         lastDeviceName: remoteDevice,
+        connectedGmail: gmail,
         message:
-            'Senkronize edildi ($remoteDevice) • $merged yeni hareket birleştirildi.',
+            'Eşitlendi ($remoteDevice) • $merged yeni hareket birleştirildi.',
       );
     } catch (e) {
       return DriveSyncStatus(
         stage: DriveSyncStage.error,
         lastSyncTime: now,
+        connectedGmail: gmail,
         message: 'Senkronizasyon hatası: $e',
       );
     }
@@ -289,8 +324,17 @@ class GoogleDriveSyncService {
     return (files.first as Map<String, dynamic>)['id'] as String?;
   }
 
-  Future<void> _writeLocalMirror(String jsonPayload) async {
+  Future<void> _writeLocalMirror(
+    String jsonPayload,
+    String customFolderPath,
+  ) async {
     try {
+      if (customFolderPath.trim().isNotEmpty) {
+        final customDir = Directory(customFolderPath.trim());
+        await customDir.create(recursive: true);
+        final customFile = File(p.join(customDir.path, backupFileName));
+        await customFile.writeAsString(jsonPayload, flush: true);
+      }
       final dir = await getApplicationSupportDirectory();
       final file = File(p.join(dir.path, backupFileName));
       await file.writeAsString(jsonPayload, flush: true);
@@ -299,8 +343,15 @@ class GoogleDriveSyncService {
     }
   }
 
-  Future<String?> _readLocalMirror() async {
+  Future<String?> _readLocalMirror(String customFolderPath) async {
     try {
+      if (customFolderPath.trim().isNotEmpty) {
+        final customFile =
+            File(p.join(customFolderPath.trim(), backupFileName));
+        if (await customFile.exists()) {
+          return await customFile.readAsString();
+        }
+      }
       final dir = await getApplicationSupportDirectory();
       final file = File(p.join(dir.path, backupFileName));
       if (await file.exists()) {

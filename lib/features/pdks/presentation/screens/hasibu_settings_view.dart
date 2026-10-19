@@ -1,11 +1,327 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
 
 // ============================================================================
-// 1. ŞİRKET, OTURUM ŞİFRELERİ, ŞUBE VE TENFEI D35 CİHAZ BAĞLANTI AYARLARI
+// ORTAK BİLEŞEN 1: PERSONEL PROFİL FOTOĞRAFI / MİNİMALİST STÜDYO AVATARI
+// ============================================================================
+class EmployeeProfileAvatar extends StatelessWidget {
+  final Employee employee;
+  final double size;
+  final Color? borderColor;
+
+  const EmployeeProfileAvatar({
+    super.key,
+    required this.employee,
+    this.size = 44,
+    this.borderColor,
+  });
+
+  static const List<List<Color>> _palettes = <List<Color>>[
+    [Color(0xFF0F172A), Color(0xFF334155)],
+    [Color(0xFF0369A1), Color(0xFF0284C7)],
+    [Color(0xFF047857), Color(0xFF10B981)],
+    [Color(0xFF4338CA), Color(0xFF6366F1)],
+    [Color(0xFFB45309), Color(0xFFF59E0B)],
+    [Color(0xFFBE123C), Color(0xFFF43F5E)],
+  ];
+
+  String _initials(String fullName) {
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) return 'P';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}'
+        .toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rawPath = employee.photoPath?.trim() ?? '';
+    final bool isPreset = rawPath.startsWith('preset:');
+    final int paletteIndex = isPreset
+        ? ((int.tryParse(rawPath.replaceFirst('preset:', '')) ?? 1) - 1)
+            .clamp(0, _palettes.length - 1)
+        : (employee.id.abs() % _palettes.length);
+    final colors = _palettes[paletteIndex];
+
+    Widget inner;
+    if (rawPath.isNotEmpty && !isPreset) {
+      final file = File(rawPath);
+      if (file.existsSync()) {
+        inner = Image.file(
+          file,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _buildFallback(colors),
+        );
+      } else {
+        inner = _buildFallback(colors);
+      }
+    } else {
+      inner = _buildFallback(colors);
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: borderColor ?? const Color(0xFFE2E8F0),
+          width: 1.5,
+        ),
+      ),
+      child: ClipOval(child: inner),
+    );
+  }
+
+  Widget _buildFallback(List<Color> colors) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            bottom: -size * 0.14,
+            child: Icon(
+              Icons.person_rounded,
+              size: size * 0.85,
+              color: Colors.white.withValues(alpha: 0.18),
+            ),
+          ),
+          Text(
+            _initials(employee.fullName),
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: size * 0.36,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Windows masaüstünde yerel dosya seçici penceresini açar.
+  static Future<String?> pickPhotoFromDesktop() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final result = await Process.run('powershell', <String>[
+        '-NoProfile',
+        '-Command',
+        "Add-Type -AssemblyName System.Windows.Forms; "
+            "\$f = New-Object System.Windows.Forms.OpenFileDialog; "
+            "\$f.Title = 'Personel Profil Fotoğrafı Seçin'; "
+            "\$f.Filter = 'Görsel Dosyaları (*.jpg;*.jpeg;*.png;*.webp)|*.jpg;*.jpeg;*.png;*.webp'; "
+            "if (\$f.ShowDialog() -eq 'OK') { Write-Output \$f.FileName }",
+      ]);
+      final path = result.stdout.toString().trim();
+      return path.isNotEmpty ? path : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Windows masaüstünde yerel klasör seçici penceresini açar.
+  static Future<String?> pickFolderFromDesktop() async {
+    if (!Platform.isWindows) return null;
+    try {
+      final result = await Process.run('powershell', <String>[
+        '-NoProfile',
+        '-Command',
+        "Add-Type -AssemblyName System.Windows.Forms; "
+            "\$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+            "\$d.Description = 'Google Drive Senkronizasyon Klasörünü Seçin'; "
+            "if (\$d.ShowDialog() -eq 'OK') { Write-Output \$d.SelectedPath }",
+      ]);
+      final path = result.stdout.toString().trim();
+      return path.isNotEmpty ? path : null;
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
+// ============================================================================
+// ORTAK BİLEŞEN 2: GOOGLE (GMAIL) & DRIVE VERİ EŞİTLEME KURULUM MODALI
+// ============================================================================
+Future<void> showGmailDriveSyncDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final state = ref.read(pdksDashboardProvider);
+  final gmailCtrl = TextEditingController(
+    text: state.companySettings.syncGmailAccount,
+  );
+  final folderCtrl = TextEditingController(
+    text: state.companySettings.syncFolderPath,
+  );
+  final tokenCtrl = TextEditingController();
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.cloud_sync_rounded, color: Color(0xFF0284C7)),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Gmail & Google Drive Veri Eşitleme Ayarları',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Şubeler, işyeri bilgisayarı ve mobil cihazlar arasında verileri eşitlemek için kurumsal Gmail hesabınızı tanımlayın.',
+                  style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: gmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Eşitleme Yapılacak Gmail Hesabı',
+                    hintText: 'ornek.isletme@gmail.com',
+                    prefixIcon: Icon(Icons.alternate_email_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: folderCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Google Drive Masaüstü Klasörü (Önerilen)',
+                          hintText: r"Örn: G:\Drive'ım\Hasibu_Sync",
+                          prefixIcon: Icon(Icons.folder_shared_outlined),
+                        ),
+                      ),
+                    ),
+                    if (Platform.isWindows) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final picked = await EmployeeProfileAvatar
+                              .pickFolderFromDesktop();
+                          if (picked != null) {
+                            setDialogState(() => folderCtrl.text = picked);
+                          }
+                        },
+                        icon: const Icon(Icons.folder_open_rounded, size: 18),
+                        label: const Text('Seç'),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: tokenCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Google Cloud OAuth2 Anahtarı (İsteğe Bağlı)',
+                    hintText: 'Doğrudan bulut API erişimi için ya29.a0...',
+                    prefixIcon: Icon(Icons.vpn_key_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.verified_user_outlined,
+                        size: 18,
+                        color: Color(0xFF0284C7),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Yedek Dosyası: ${GoogleDriveSyncService.backupFileName}\n'
+                          'Durum: ${state.syncStatus.message}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Kapat'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await ref
+                  .read(pdksDashboardProvider.notifier)
+                  .saveGmailSyncAccount(
+                    gmailAccount: gmailCtrl.text.trim(),
+                    syncFolderPath: folderCtrl.text.trim(),
+                    accessToken: tokenCtrl.text.trim().isEmpty
+                        ? null
+                        : tokenCtrl.text.trim(),
+                  );
+              if (dialogCtx.mounted) {
+                Navigator.of(dialogCtx).pop();
+              }
+            },
+            icon: const Icon(Icons.cloud_done_rounded, size: 18),
+            label: const Text('Gmail Hesabını Kaydet & Eşitle'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  gmailCtrl.dispose();
+  folderCtrl.dispose();
+  tokenCtrl.dispose();
+}
+
+// ============================================================================
+// 1. ŞİRKET, GMAIL BULUT EŞİTLEME, ŞUBE VE TENFEI D35 CİHAZ AYARLARI
 // ============================================================================
 class CompanyAndBranchesSettingsView extends ConsumerStatefulWidget {
   const CompanyAndBranchesSettingsView({super.key});
@@ -22,6 +338,8 @@ class _CompanyAndBranchesSettingsViewState
   late final TextEditingController _adminUserCtrl;
   late final TextEditingController _adminPassCtrl;
   late final TextEditingController _empPinCtrl;
+  late final TextEditingController _gmailCtrl;
+  late final TextEditingController _driveFolderCtrl;
   String? _connectionTestFeedback;
 
   @override
@@ -34,6 +352,8 @@ class _CompanyAndBranchesSettingsViewState
     _adminUserCtrl = TextEditingController(text: settings.adminUsername);
     _adminPassCtrl = TextEditingController(text: settings.adminPassword);
     _empPinCtrl = TextEditingController(text: settings.defaultEmployeePin);
+    _gmailCtrl = TextEditingController(text: settings.syncGmailAccount);
+    _driveFolderCtrl = TextEditingController(text: settings.syncFolderPath);
   }
 
   @override
@@ -43,6 +363,8 @@ class _CompanyAndBranchesSettingsViewState
     _adminUserCtrl.dispose();
     _adminPassCtrl.dispose();
     _empPinCtrl.dispose();
+    _gmailCtrl.dispose();
+    _driveFolderCtrl.dispose();
     super.dispose();
   }
 
@@ -50,138 +372,195 @@ class _CompanyAndBranchesSettingsViewState
   Widget build(BuildContext context) {
     final settings =
         ref.watch(pdksDashboardProvider.select((s) => s.companySettings));
+    final syncStatus =
+        ref.watch(pdksDashboardProvider.select((s) => s.syncStatus));
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        // KART 1: ŞİRKET & OTURUM AYARLARI
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Şirket Kimliği, Giriş Şifreleri & Otomatik Veri Çekme Ayarları',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Kurumsal Kimlik, Yönetici Parolası & Otomatik Veri Çekme',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F172A),
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 300,
-                      child: TextField(
-                        controller: _companyNameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Şirket / İşletme Adı',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.apartment_rounded),
-                        ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 280,
+                    child: TextField(
+                      controller: _companyNameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Şirket / İşletme Adı',
+                        prefixIcon: Icon(Icons.apartment_rounded),
                       ),
                     ),
-                    SizedBox(
-                      width: 170,
-                      child: TextField(
-                        controller: _pollMinutesCtrl,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Oto Çekim (Dk)',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.timer_outlined),
-                        ),
+                  ),
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      controller: _pollMinutesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Oto Çekim (Dk)',
+                        prefixIcon: Icon(Icons.timer_outlined),
                       ),
                     ),
-                    SizedBox(
-                      width: 170,
-                      child: TextField(
-                        controller: _adminUserCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Yönetici Kullanıcı',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.admin_panel_settings_outlined),
-                        ),
+                  ),
+                  SizedBox(
+                    width: 160,
+                    child: TextField(
+                      controller: _adminUserCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Yönetici Kullanıcı',
+                        prefixIcon: Icon(Icons.admin_panel_settings_outlined),
                       ),
                     ),
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        controller: _adminPassCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Yönetici Şifresi',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
-                        ),
+                  ),
+                  SizedBox(
+                    width: 150,
+                    child: TextField(
+                      controller: _adminPassCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Yönetici Parolası',
+                        prefixIcon: Icon(Icons.lock_outline_rounded),
                       ),
                     ),
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        controller: _empPinCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Personel PIN',
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.pin_outlined),
-                        ),
+                  ),
+                  SizedBox(
+                    width: 160,
+                    child: TextField(
+                      controller: _empPinCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Varsayılan Personel Parolası',
+                        prefixIcon: Icon(Icons.pin_outlined),
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Switch(
-                          value: settings.autoPollEnabled,
-                          onChanged: (val) => ref
-                              .read(pdksDashboardProvider.notifier)
-                              .toggleAutoPoll(val),
-                        ),
-                        const Text(
-                          'Otomatik Tenfei D35 Çekimi',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    FilledButton.icon(
-                      onPressed: () async {
-                        final mins =
-                            int.tryParse(_pollMinutesCtrl.text.trim()) ?? 5;
-                        await ref
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: settings.autoPollEnabled,
+                        onChanged: (val) => ref
                             .read(pdksDashboardProvider.notifier)
-                            .updateCompanySettings(
-                              settings.copyWith(
-                                companyName: _companyNameCtrl.text.trim(),
-                                autoPollMinutes: mins.clamp(1, 1440),
-                                adminUsername: _adminUserCtrl.text.trim(),
-                                adminPassword: _adminPassCtrl.text.trim(),
-                                defaultEmployeePin: _empPinCtrl.text.trim(),
-                              ),
-                            );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Şirket, otomasyon ve oturum şifresi ayarları kaydedildi.',
-                              ),
+                            .toggleAutoPoll(val),
+                      ),
+                      const Text(
+                        'Otomatik Terminal Çekimi',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+              const SizedBox(height: 16),
+              const Text(
+                'Google (Gmail) & Bulut Veri Eşitleme Hesabı',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Cihazlar arası veri eşitleme için Gmail adresinizi ve varsa Google Drive klasörünüzü girin. (${syncStatus.message})',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 280,
+                    child: TextField(
+                      controller: _gmailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Gmail Adresi (Eşitleme Hesabı)',
+                        hintText: 'isletme@gmail.com',
+                        prefixIcon: Icon(Icons.alternate_email_rounded),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 300,
+                    child: TextField(
+                      controller: _driveFolderCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Google Drive Klasör Yolu (İsteğe Bağlı)',
+                        hintText: r"G:\Drive'ım\Hasibu_Sync",
+                        prefixIcon: Icon(Icons.folder_shared_outlined),
+                      ),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => showGmailDriveSyncDialog(context, ref),
+                    icon: const Icon(Icons.cloud_sync_rounded, size: 18),
+                    label: const Text('Gelişmiş Gmail / OAuth Bağlantısı'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final mins =
+                          int.tryParse(_pollMinutesCtrl.text.trim()) ?? 5;
+                      await ref
+                          .read(pdksDashboardProvider.notifier)
+                          .updateCompanySettings(
+                            settings.copyWith(
+                              companyName: _companyNameCtrl.text.trim(),
+                              autoPollMinutes: mins.clamp(1, 1440),
+                              adminUsername: _adminUserCtrl.text.trim(),
+                              adminPassword: _adminPassCtrl.text.trim(),
+                              defaultEmployeePin: _empPinCtrl.text.trim(),
+                              syncGmailAccount: _gmailCtrl.text.trim(),
+                              syncFolderPath: _driveFolderCtrl.text.trim(),
                             ),
                           );
-                        }
-                      },
-                      icon: const Icon(Icons.save_rounded),
-                      label: const Text('Ayarları Kaydet'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Şirket, parola ve Gmail bulut eşitleme ayarları kaydedildi.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: const Text('Ayarları Kaydet'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         Wrap(
           spacing: 12,
           runSpacing: 8,
@@ -189,12 +568,16 @@ class _CompanyAndBranchesSettingsViewState
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Text(
-              'Şubeler & Tenfei D35 Yüz/Parmak İzi Terminalleri',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              'Şubeler & Yüz / Parmak İzi Terminalleri',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
             ),
             FilledButton.icon(
               onPressed: () => _showBranchDialog(context, null),
-              icon: const Icon(Icons.add_business_rounded),
+              icon: const Icon(Icons.add_business_rounded, size: 18),
               label: const Text('Yeni Şube / Cihaz Ekle'),
             ),
           ],
@@ -204,117 +587,123 @@ class _CompanyAndBranchesSettingsViewState
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFE0F2FE),
+              color: const Color(0xFFF0F9FF),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF38BDF8)),
+              border: Border.all(color: const Color(0xFFBAE6FD)),
             ),
             child: Text(
               _connectionTestFeedback!,
               style: const TextStyle(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
                 color: Color(0xFF0369A1),
               ),
             ),
           ),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         for (final branch in branches)
-          Card(
+          Container(
             margin: const EdgeInsets.only(bottom: 10),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 10,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: branch.hasTerminal
-                            ? const Color(0xFFDCFCE7)
-                            : const Color(0xFFE0F2FE),
-                        child: Icon(
-                          branch.hasTerminal
-                              ? Icons.router_rounded
-                              : Icons.storefront_rounded,
-                          color: branch.hasTerminal
-                              ? const Color(0xFF15803D)
-                              : const Color(0xFF0284C7),
-                        ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: branch.hasTerminal
+                            ? const Color(0xFFECFDF5)
+                            : const Color(0xFFF0F9FF),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${branch.name} (Kod: ${branch.code})',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800),
+                      child: Icon(
+                        branch.hasTerminal
+                            ? Icons.router_rounded
+                            : Icons.storefront_rounded,
+                        size: 20,
+                        color: branch.hasTerminal
+                            ? const Color(0xFF059669)
+                            : const Color(0xFF0284C7),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${branch.name} (${branch.code})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Terminal Durumu: ${branch.hasTerminal ? "AKTİF (Tenfei D35)" : "Mobil QR / GPS Modu"}\n'
-                              'Cihaz IP / Port: ${branch.terminalIp ?? "-"}:${branch.terminalPort} • Makine No: ${branch.machineNo}\n'
-                              'GPS Konum: ${branch.latitude}, ${branch.longitude} (${branch.geofenceRadiusMeters.round()}m Geofence)',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF475569),
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '${branch.hasTerminal ? "Aktif Terminal" : "Mobil QR / GPS Modu"}  •  '
+                            'IP: ${branch.terminalIp ?? "-"}:${branch.terminalPort}  •  '
+                            'Konum: ${branch.latitude}, ${branch.longitude} (${branch.geofenceRadiusMeters.round()}m)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          setState(() {
-                            _connectionTestFeedback =
-                                '${branch.name} (${branch.terminalIp}:${branch.terminalPort}) test ediliyor...';
-                          });
-                          final diag = await ref
-                              .read(pdksDashboardProvider.notifier)
-                              .testBranchTerminalConnection(branch);
-                          if (mounted) {
-                            setState(
-                              () => _connectionTestFeedback = diag.message,
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.network_check_rounded, size: 16),
-                        label: const Text('Bağlantı Testi'),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        setState(() {
+                          _connectionTestFeedback =
+                              '${branch.name} (${branch.terminalIp}:${branch.terminalPort}) test ediliyor...';
+                        });
+                        final diag = await ref
+                            .read(pdksDashboardProvider.notifier)
+                            .testBranchTerminalConnection(branch);
+                        if (mounted) {
+                          setState(
+                            () => _connectionTestFeedback = diag.message,
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.network_check_rounded, size: 16),
+                      label: const Text('Bağlantı Testi'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _showBranchDialog(context, branch),
+                      icon: const Icon(Icons.edit_rounded, size: 16),
+                      label: const Text('Düzenle'),
+                    ),
+                    if (branch.id != 1)
+                      IconButton(
+                        tooltip: 'Şubeyi Sil',
+                        color: const Color(0xFFDC2626),
+                        onPressed: () => ref
+                            .read(pdksDashboardProvider.notifier)
+                            .deleteBranch(branch.id),
+                        icon: const Icon(Icons.delete_outline_rounded),
                       ),
-                      FilledButton.tonalIcon(
-                        onPressed: () => _showBranchDialog(context, branch),
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: const Text('Düzenle'),
-                      ),
-                      if (branch.id != 1)
-                        IconButton(
-                          tooltip: 'Şubeyi Sil',
-                          color: const Color(0xFFDC2626),
-                          onPressed: () => ref
-                              .read(pdksDashboardProvider.notifier)
-                              .deleteBranch(branch.id),
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
       ],
@@ -370,7 +759,6 @@ class _CompanyAndBranchesSettingsViewState
                         controller: nameCtrl,
                         decoration: const InputDecoration(
                           labelText: 'Şube / Lokasyon Adı (örn. Şube Karaköprü)',
-                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -378,15 +766,14 @@ class _CompanyAndBranchesSettingsViewState
                         controller: codeCtrl,
                         decoration: const InputDecoration(
                           labelText: 'Şube Kısa Kodu (örn. KARAKOPRU)',
-                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 10),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
-                          'Bu Şubede Tenfei D35 / ZKTeco Terminal Var',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                          'Bu Şubede Yüz / Parmak İzi Terminali Var',
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: const Text(
                           'Açıksa TCP 4370 üzerinden otomatik veri çekilir',
@@ -403,7 +790,6 @@ class _CompanyAndBranchesSettingsViewState
                               controller: ipCtrl,
                               decoration: const InputDecoration(
                                 labelText: 'Cihaz IP Adresi',
-                                border: OutlineInputBorder(),
                               ),
                             ),
                           ),
@@ -413,8 +799,7 @@ class _CompanyAndBranchesSettingsViewState
                               controller: portCtrl,
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
-                                labelText: 'TCP Port (4370)',
-                                border: OutlineInputBorder(),
+                                labelText: 'Port (4370)',
                               ),
                             ),
                           ),
@@ -425,7 +810,6 @@ class _CompanyAndBranchesSettingsViewState
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'Makine No',
-                                border: OutlineInputBorder(),
                               ),
                             ),
                           ),
@@ -440,7 +824,6 @@ class _CompanyAndBranchesSettingsViewState
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'GPS Enlem (Lat)',
-                                border: OutlineInputBorder(),
                               ),
                             ),
                           ),
@@ -451,7 +834,6 @@ class _CompanyAndBranchesSettingsViewState
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'GPS Boylam (Lng)',
-                                border: OutlineInputBorder(),
                               ),
                             ),
                           ),
@@ -462,7 +844,6 @@ class _CompanyAndBranchesSettingsViewState
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
                                 labelText: 'Yarıçap (m)',
-                                border: OutlineInputBorder(),
                               ),
                             ),
                           ),
@@ -534,7 +915,7 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
     final shifts = ref.watch(pdksDashboardProvider.select((s) => s.shifts));
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
         Wrap(
           spacing: 12,
@@ -547,92 +928,102 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
               children: [
                 Text(
                   'Mesai Saat Aralıkları & Geç Kalma Tolerans Süreleri',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Personellerin hangi saat aralığında işe geleceğini ve kaç dakika gecikmeden sonra "Geç Geldi" sayılacağını tanımlayın.',
-                  style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                  'Personellerin işe geliş-çıkış saatlerini ve kaç dakika gecikmeden sonra "Geç Geldi" sayılacağını tanımlayın.',
+                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                 ),
               ],
             ),
             FilledButton.icon(
               onPressed: () => _showShiftDialog(context, ref, null),
-              icon: const Icon(Icons.add_alarm_rounded),
+              icon: const Icon(Icons.add_alarm_rounded, size: 18),
               label: const Text('Yeni Mesai Saat Aralığı Ekle'),
             ),
           ],
         ),
         const SizedBox(height: 14),
         for (final shift in shifts)
-          Card(
+          Container(
             margin: const EdgeInsets.only(bottom: 10),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircleAvatar(
-                        backgroundColor: Color(0xFFFEF3C7),
-                        child: Icon(
-                          Icons.access_time_filled_rounded,
-                          color: Color(0xFFD97706),
-                        ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              shift.name,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w800),
+                      child: const Icon(
+                        Icons.access_time_filled_rounded,
+                        color: Color(0xFFD97706),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            shift.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'İşe Geliş - Çıkış Aralığı: ${shift.startTime} - ${shift.endTime}  •  Geç Kalma Toleransı: ${shift.toleranceMinutes} dakika',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF475569),
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Mesai Saatleri: ${shift.startTime} - ${shift.endTime}  •  Geç Kalma Toleransı: ${shift.toleranceMinutes} dakika',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: () => _showShiftDialog(context, ref, shift),
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: const Text('Saat & Toleransı Düzenle'),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () => _showShiftDialog(context, ref, shift),
+                      icon: const Icon(Icons.edit_rounded, size: 16),
+                      label: const Text('Saat & Toleransı Düzenle'),
+                    ),
+                    if (shift.id != 1)
+                      IconButton(
+                        color: const Color(0xFFDC2626),
+                        onPressed: () => ref
+                            .read(pdksDashboardProvider.notifier)
+                            .deleteShiftPlan(shift.id),
+                        icon: const Icon(Icons.delete_outline_rounded),
                       ),
-                      if (shift.id != 1)
-                        IconButton(
-                          color: const Color(0xFFDC2626),
-                          onPressed: () => ref
-                              .read(pdksDashboardProvider.notifier)
-                              .deleteShiftPlan(shift.id),
-                          icon: const Icon(Icons.delete_outline_rounded),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
       ],
@@ -675,7 +1066,6 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
                 controller: nameCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Vardiya / Grup Adı (örn. Üretim Sabah)',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -687,7 +1077,6 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
                       decoration: const InputDecoration(
                         labelText: 'Giriş Saati (SS:DD)',
                         hintText: '06:00',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -698,7 +1087,6 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
                       decoration: const InputDecoration(
                         labelText: 'Çıkış Saati (SS:DD)',
                         hintText: '15:00',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -712,7 +1100,6 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
                   labelText: 'Geç Kalma Tolerans Süresi (Dakika)',
                   helperText:
                       'Örn: 15 yazılırsa 06:00 vardiyasında 06:16 ve sonrası Geç Geldi sayılır.',
-                  border: OutlineInputBorder(),
                 ),
               ),
             ],
@@ -754,7 +1141,7 @@ class ShiftAndLateToleranceSettingsView extends ConsumerWidget {
 }
 
 // ============================================================================
-// 3. PERSONEL HAREKETLERİNİ DÜZELTME & MANUEL GİRİŞ/ÇIKIŞ EKLEME
+// 3. PERSONEL HAREKETLERİNİ DÜZELTME & TOPLU HAREKET DÜZENLEME MODÜLÜ
 // ============================================================================
 class AttendanceCorrectionSettingsView extends ConsumerStatefulWidget {
   const AttendanceCorrectionSettingsView({super.key});
@@ -768,6 +1155,15 @@ class _AttendanceCorrectionSettingsViewState
     extends ConsumerState<AttendanceCorrectionSettingsView> {
   late final TextEditingController _dateCtrl;
   late final TextEditingController _filterCtrl;
+  late final TextEditingController _bulkInCtrl;
+  late final TextEditingController _bulkOutCtrl;
+
+  final Set<String> _selectedCardNos = <String>{};
+  int? _branchFilterId;
+  bool _onlyAbsentFilter = false;
+  bool _applyIn = true;
+  bool _applyOut = true;
+  bool _replaceExisting = true;
 
   @override
   void initState() {
@@ -775,12 +1171,16 @@ class _AttendanceCorrectionSettingsViewState
     final date = ref.read(pdksDashboardProvider).selectedDate;
     _dateCtrl = TextEditingController(text: date);
     _filterCtrl = TextEditingController();
+    _bulkInCtrl = TextEditingController(text: '08:00');
+    _bulkOutCtrl = TextEditingController(text: '18:00');
   }
 
   @override
   void dispose() {
     _dateCtrl.dispose();
     _filterCtrl.dispose();
+    _bulkInCtrl.dispose();
+    _bulkOutCtrl.dispose();
     super.dispose();
   }
 
@@ -789,174 +1189,431 @@ class _AttendanceCorrectionSettingsViewState
     final state = ref.watch(pdksDashboardProvider);
     final q = _filterCtrl.text.trim().toUpperCase();
     final filtered = state.dailyStatuses.where((s) {
+      if (_branchFilterId != null && s.branch.id != _branchFilterId) {
+        return false;
+      }
+      if (_onlyAbsentFilter && s.allLogsOfDay.isNotEmpty) {
+        return false;
+      }
       if (q.isEmpty) return true;
       return s.employee.fullName.toUpperCase().contains(q) ||
           s.employee.cardNo.contains(q) ||
-          s.branch.name.toUpperCase().contains(q);
+          s.department.name.toUpperCase().contains(q);
     }).toList(growable: false);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        // ÜST PANEL: TOPLU HAREKET DÜZENLEME (ÇOKLU PERSONEL)
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 200,
-                  child: TextField(
-                    controller: _dateCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'İşlem Tarihi (YYYY-AA-GG)',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.calendar_month_rounded),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.playlist_add_check_circle_rounded,
+                      color: Color(0xFF0284C7),
+                      size: 20,
                     ),
                   ),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () {
-                    final d = _dateCtrl.text.trim();
-                    if (d.length >= 8) {
-                      ref
-                          .read(pdksDashboardProvider.notifier)
-                          .setSelectedDate(d);
-                    }
-                  },
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Tarihi Yükle'),
-                ),
-                SizedBox(
-                  width: 320,
-                  child: TextField(
-                    controller: _filterCtrl,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Personel veya Kart No Ara',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search_rounded),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Toplu Hareket Düzenleme & Çoklu Giriş/Çıkış Atama',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        Text(
+                          'Aşağıdaki listeden birden fazla personeli seçip tek işlemle toplu giriş ve çıkış saati tanımlayabilirsiniz.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _selectedCardNos.isEmpty
+                          ? const Color(0xFFF1F5F9)
+                          : const Color(0xFFE0F2FE),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_selectedCardNos.length} Personel Seçili',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: _selectedCardNos.isEmpty
+                            ? const Color(0xFF64748B)
+                            : const Color(0xFF0369A1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 170,
+                    child: TextField(
+                      controller: _dateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Tarih (YYYY-AA-GG)',
+                        prefixIcon: Icon(Icons.calendar_today_rounded, size: 18),
+                      ),
+                    ),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () {
+                      final d = _dateCtrl.text.trim();
+                      if (d.length >= 8) {
+                        ref
+                            .read(pdksDashboardProvider.notifier)
+                            .setSelectedDate(d);
+                      }
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Tarihi Yükle'),
+                  ),
+                  SizedBox(
+                    width: 220,
+                    child: DropdownButtonFormField<int?>(
+                      isExpanded: true,
+                      initialValue: _branchFilterId,
+                      decoration: const InputDecoration(
+                        labelText: 'Şube Filtresi',
+                      ),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text(
+                            'Tüm Şubeler',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        for (final b in state.branches)
+                          DropdownMenuItem<int?>(
+                            value: b.id,
+                            child: Text(
+                              b.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _branchFilterId = v),
+                    ),
+                  ),
+                  FilterChip(
+                    selected: _onlyAbsentFilter,
+                    label: const Text('Sadece Hareketi Olmayanlar'),
+                    onSelected: (v) => setState(() => _onlyAbsentFilter = v),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        for (final s in filtered) {
+                          _selectedCardNos.add(s.employee.cardNo);
+                        }
+                      });
+                    },
+                    icon: const Icon(Icons.select_all_rounded, size: 16),
+                    label: Text('Listeyi Seç (${filtered.length})'),
+                  ),
+                  if (_selectedCardNos.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _selectedCardNos.clear()),
+                      icon: const Icon(Icons.deselect_rounded, size: 16),
+                      label: const Text('Seçimi Temizle'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
-              ],
-            ),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: _applyIn,
+                          onChanged: (v) =>
+                              setState(() => _applyIn = v ?? true),
+                        ),
+                        SizedBox(
+                          width: 130,
+                          child: TextField(
+                            controller: _bulkInCtrl,
+                            enabled: _applyIn,
+                            decoration: const InputDecoration(
+                              labelText: 'Toplu Giriş',
+                              hintText: '08:00',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: _applyOut,
+                          onChanged: (v) =>
+                              setState(() => _applyOut = v ?? true),
+                        ),
+                        SizedBox(
+                          width: 130,
+                          child: TextField(
+                            controller: _bulkOutCtrl,
+                            enabled: _applyOut,
+                            decoration: const InputDecoration(
+                              labelText: 'Toplu Çıkış',
+                              hintText: '18:00',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Switch(
+                          value: _replaceExisting,
+                          onChanged: (v) =>
+                              setState(() => _replaceExisting = v),
+                        ),
+                        const Text(
+                          'Günlük Kayıtları Yenile',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    FilledButton.icon(
+                      key: const ValueKey('bulk_attendance_apply_button'),
+                      onPressed: _selectedCardNos.isEmpty
+                          ? null
+                          : () async {
+                              final selectedEmployees = state.dailyStatuses
+                                  .where(
+                                    (s) => _selectedCardNos
+                                        .contains(s.employee.cardNo),
+                                  )
+                                  .map((s) => s.employee)
+                                  .toList(growable: false);
+                              final count = await ref
+                                  .read(pdksDashboardProvider.notifier)
+                                  .saveBulkManualAttendance(
+                                    employees: selectedEmployees,
+                                    dateKey: state.selectedDate,
+                                    checkInTime: _applyIn
+                                        ? _bulkInCtrl.text.trim()
+                                        : null,
+                                    checkOutTime: _applyOut
+                                        ? _bulkOutCtrl.text.trim()
+                                        : null,
+                                    replaceExistingForDay: _replaceExisting,
+                                  );
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      '${selectedEmployees.length} personel için $count toplu hareket uygulandı.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                      icon: const Icon(Icons.done_all_rounded, size: 18),
+                      label: Text(
+                        'Seçili ${_selectedCardNos.length} Personele Toplu Uygula',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        // ARAMA SATIRI
+        TextField(
+          controller: _filterCtrl,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Personel Adı, Kart No veya Bölüm Ara',
+            prefixIcon: Icon(Icons.search_rounded),
           ),
         ),
         const SizedBox(height: 12),
         for (final item in filtered)
-          Card(
+          Container(
             margin: const EdgeInsets.only(bottom: 8),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              border: Border.all(
+                color: _selectedCardNos.contains(item.employee.cardNo)
+                    ? const Color(0xFF0284C7)
+                    : const Color(0xFFE2E8F0),
+              ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${item.employee.fullName} (#${item.employee.cardNo})',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${item.branch.name} • ${item.department.name} • Vardiya: ${item.shift.startTime}-${item.shift.endTime} (${item.shift.toleranceMinutes} dk tol.)',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: _selectedCardNos.contains(item.employee.cardNo),
+                      onChanged: (checked) {
+                        setState(() {
+                          if (checked == true) {
+                            _selectedCardNos.add(item.employee.cardNo);
+                          } else {
+                            _selectedCardNos.remove(item.employee.cardNo);
+                          }
+                        });
+                      },
+                    ),
+                    EmployeeProfileAvatar(employee: item.employee, size: 38),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (item.allLogsOfDay.isEmpty)
-                            const Text(
-                              'Bu tarihte giriş/çıkış hareketi yok',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFFDC2626),
-                                fontWeight: FontWeight.w600,
-                              ),
+                          Text(
+                            '${item.employee.fullName} (#${item.employee.cardNo})',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
                             ),
-                          for (final log in item.allLogsOfDay)
-                            Chip(
-                              backgroundColor: log.isCheckIn
-                                  ? const Color(0xFFDCFCE7)
-                                  : const Color(0xFFFEF3C7),
-                              label: Text(
-                                '${log.isCheckIn ? "GİRİŞ" : "ÇIKIŞ"}: ${log.timeFormatted} (${log.source.label})',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${item.branch.name} • ${item.department.name} • Vardiya: ${item.shift.startTime}-${item.shift.endTime}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              if (item.allLogsOfDay.isEmpty)
+                                const Text(
+                                  'Kayıt yok',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: Color(0xFFDC2626),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                              ),
-                              deleteIcon: const Icon(Icons.close, size: 16),
-                              onDeleted: () => ref
-                                  .read(pdksDashboardProvider.notifier)
-                                  .deleteAttendanceLog(log.id),
-                            ),
+                              for (final log in item.allLogsOfDay)
+                                Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  backgroundColor: log.isCheckIn
+                                      ? const Color(0xFFECFDF5)
+                                      : const Color(0xFFFFFBEB),
+                                  label: Text(
+                                    '${log.isCheckIn ? "GİRİŞ" : "ÇIKIŞ"}: ${log.timeFormatted}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  deleteIcon:
+                                      const Icon(Icons.close, size: 14),
+                                  onDeleted: () => ref
+                                      .read(pdksDashboardProvider.notifier)
+                                      .deleteAttendanceLog(log.id),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _showEditAttendanceDialog(
-                          context,
-                          item.employee,
-                          state.selectedDate,
-                          existingLog: item.firstCheckIn,
-                          defaultIsCheckIn: true,
-                        ),
-                        icon: const Icon(Icons.login_rounded, size: 16),
-                        label: Text(
-                          item.firstCheckIn == null
-                              ? 'Giriş Saati Gir'
-                              : 'Girişi Düzelt (${item.firstCheckIn!.timeFormatted})',
-                        ),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _showEditAttendanceDialog(
+                        context,
+                        item.employee,
+                        state.selectedDate,
+                        existingLog: item.firstCheckIn,
+                        defaultIsCheckIn: true,
                       ),
-                      OutlinedButton.icon(
-                        onPressed: () => _showEditAttendanceDialog(
-                          context,
-                          item.employee,
-                          state.selectedDate,
-                          existingLog: item.lastCheckOut,
-                          defaultIsCheckIn: false,
-                        ),
-                        icon: const Icon(Icons.logout_rounded, size: 16),
-                        label: Text(
-                          item.lastCheckOut == null
-                              ? 'Çıkış Saati Gir'
-                              : 'Çıkışı Düzelt (${item.lastCheckOut!.timeFormatted})',
-                        ),
+                      icon: const Icon(Icons.login_rounded, size: 15),
+                      label: Text(
+                        item.firstCheckIn == null
+                            ? 'Giriş Ekle'
+                            : 'Giriş (${item.firstCheckIn!.timeFormatted})',
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _showEditAttendanceDialog(
+                        context,
+                        item.employee,
+                        state.selectedDate,
+                        existingLog: item.lastCheckOut,
+                        defaultIsCheckIn: false,
+                      ),
+                      icon: const Icon(Icons.logout_rounded, size: 15),
+                      label: Text(
+                        item.lastCheckOut == null
+                            ? 'Çıkış Ekle'
+                            : 'Çıkış (${item.lastCheckOut!.timeFormatted})',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
       ],
@@ -971,7 +1628,7 @@ class _AttendanceCorrectionSettingsViewState
     required bool defaultIsCheckIn,
   }) async {
     final timeCtrl = TextEditingController(
-      text: existingLog?.timeFormatted ?? (defaultIsCheckIn ? '06:00' : '15:00'),
+      text: existingLog?.timeFormatted ?? (defaultIsCheckIn ? '08:00' : '18:00'),
     );
     bool isCheckIn = existingLog?.isCheckIn ?? defaultIsCheckIn;
 
@@ -999,8 +1656,7 @@ class _AttendanceCorrectionSettingsViewState
                 controller: timeCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Saat (SS:DD)',
-                  hintText: '06:00',
-                  border: OutlineInputBorder(),
+                  hintText: '08:00',
                 ),
               ),
             ],
@@ -1083,169 +1739,169 @@ class _LeavesAndReportsSettingsViewState
     }
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'İzinli veya Raporlu Personel Kaydı Oluştur',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'İzinli veya Raporlu Personel Kaydı Oluştur',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F172A),
                 ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    SizedBox(
-                      width: 320,
-                      child: DropdownButtonFormField<int>(
-                        initialValue: _selectedEmployeeId,
-                        decoration: const InputDecoration(
-                          labelText: 'Personel Seçin',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final e in employees)
-                            DropdownMenuItem(
-                              value: e.id,
-                              child: Text('${e.fullName} (#${e.cardNo})'),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 300,
+                    child: DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      initialValue: _selectedEmployeeId,
+                      decoration: const InputDecoration(
+                        labelText: 'Personel Seçin',
+                      ),
+                      items: [
+                        for (final e in employees)
+                          DropdownMenuItem(
+                            value: e.id,
+                            child: Text(
+                              '${e.fullName} (#${e.cardNo})',
+                              overflow: TextOverflow.ellipsis,
                             ),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _selectedEmployeeId = v),
-                      ),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() => _selectedEmployeeId = v),
                     ),
-                    SizedBox(
-                      width: 220,
-                      child: DropdownButtonFormField<LeaveType>(
-                        initialValue: _selectedLeaveType,
-                        decoration: const InputDecoration(
-                          labelText: 'İzin / Rapor Türü',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final lt in LeaveType.values)
-                            DropdownMenuItem(
-                              value: lt,
-                              child: Text(lt.label),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<LeaveType>(
+                      isExpanded: true,
+                      initialValue: _selectedLeaveType,
+                      decoration: const InputDecoration(
+                        labelText: 'İzin / Rapor Türü',
+                      ),
+                      items: [
+                        for (final lt in LeaveType.values)
+                          DropdownMenuItem(
+                            value: lt,
+                            child: Text(
+                              lt.label,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) {
-                            setState(() => _selectedLeaveType = v);
-                          }
-                        },
-                      ),
-                    ),
-                    SizedBox(
-                      width: 170,
-                      child: TextField(
-                        controller: _startDateCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Başlangıç (YYYY-AA-GG)',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 170,
-                      child: TextField(
-                        controller: _endDateCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Bitiş (YYYY-AA-GG)',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 280,
-                      child: TextField(
-                        controller: _noteCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Açıklama / Rapor Notu',
-                          hintText: 'Örn: 3 Günlük Hastane Raporu',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: () async {
-                        final empId = _selectedEmployeeId;
-                        if (empId == null) return;
-                        final start =
-                            DateTime.tryParse(_startDateCtrl.text.trim()) ??
-                                DateTime(2026, 10, 19);
-                        final end =
-                            DateTime.tryParse(_endDateCtrl.text.trim()) ??
-                                start;
-                        final count = await ref
-                            .read(pdksDashboardProvider.notifier)
-                            .assignLeaveDateRange(
-                              employeeId: empId,
-                              startDate: start,
-                              endDate: end,
-                              leaveType: _selectedLeaveType,
-                              note: _noteCtrl.text,
-                            );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '$count günlük ${_selectedLeaveType.label} kaydı eklendi.',
-                              ),
-                            ),
-                          );
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _selectedLeaveType = v);
                         }
                       },
-                      icon: const Icon(Icons.check_rounded),
-                      label: const Text('İzin / Rapor Kaydet'),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  SizedBox(
+                    width: 165,
+                    child: TextField(
+                      controller: _startDateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Başlangıç (YYYY-AA-GG)',
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 165,
+                    child: TextField(
+                      controller: _endDateCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Bitiş (YYYY-AA-GG)',
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 260,
+                    child: TextField(
+                      controller: _noteCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Açıklama / Rapor Notu',
+                        hintText: 'Örn: 3 Günlük Hastane Raporu',
+                      ),
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final empId = _selectedEmployeeId;
+                      if (empId == null) return;
+                      final start =
+                          DateTime.tryParse(_startDateCtrl.text.trim()) ??
+                              DateTime(2026, 10, 19);
+                      final end =
+                          DateTime.tryParse(_endDateCtrl.text.trim()) ?? start;
+                      final count = await ref
+                          .read(pdksDashboardProvider.notifier)
+                          .assignLeaveDateRange(
+                            employeeId: empId,
+                            startDate: start,
+                            endDate: end,
+                            leaveType: _selectedLeaveType,
+                            note: _noteCtrl.text,
+                          );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              '$count günlük ${_selectedLeaveType.label} kaydı eklendi.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('İzin / Rapor Kaydet'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 16),
         Text(
           'Kayıtlı İzinler & Sağlık Raporları (${state.allLeaveRecords.length})',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 8),
         for (final rec in state.allLeaveRecords)
-          Card(
+          Container(
             margin: const EdgeInsets.only(bottom: 8),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: rec.leaveType == LeaveType.saglikRaporu
-                    ? const Color(0xFFEDE9FE)
-                    : const Color(0xFFE0F2FE),
-                child: Icon(
-                  rec.leaveType == LeaveType.saglikRaporu
-                      ? Icons.local_hospital_rounded
-                      : Icons.beach_access_rounded,
-                  color: rec.leaveType == LeaveType.saglikRaporu
-                      ? const Color(0xFF7C3AED)
-                      : const Color(0xFF0284C7),
-                ),
-              ),
+              leading: empMap[rec.employeeId] != null
+                  ? EmployeeProfileAvatar(
+                      employee: empMap[rec.employeeId]!,
+                      size: 38,
+                    )
+                  : const CircleAvatar(child: Icon(Icons.person_outline)),
               title: Text(
                 '${empMap[rec.employeeId]?.fullName ?? "Personel #${rec.employeeId}"} • ${rec.leaveType.label}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                ),
               ),
               subtitle: Text('Tarih: ${rec.date} • Not: ${rec.note}'),
               trailing: IconButton(
@@ -1264,7 +1920,7 @@ class _LeavesAndReportsSettingsViewState
 }
 
 // ============================================================================
-// 5. PERSONEL & DEPARTMAN (ÜRETİM BÖLÜMÜ) YÖNETİMİ
+// 5. PERSONEL KARTLARI, KİŞİSEL PAROLA, PROFİL FOTOĞRAFI VE YETKİ YÖNETİMİ
 // ============================================================================
 class EmployeesManagementSettingsView extends ConsumerStatefulWidget {
   const EmployeesManagementSettingsView({super.key});
@@ -1302,7 +1958,7 @@ class _EmployeesManagementSettingsViewState
     }).toList(growable: false);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
         Wrap(
           spacing: 12,
@@ -1317,7 +1973,6 @@ class _EmployeesManagementSettingsViewState
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   labelText: 'Personel Adı, Kart No veya Bölüm Ara',
-                  border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.search_rounded),
                 ),
               ),
@@ -1327,74 +1982,150 @@ class _EmployeesManagementSettingsViewState
               children: [
                 OutlinedButton.icon(
                   onPressed: () => _showAddDepartmentDialog(context),
-                  icon: const Icon(Icons.category_rounded),
+                  icon: const Icon(Icons.category_rounded, size: 18),
                   label: const Text('Yeni Bölüm Ekle'),
                 ),
                 FilledButton.icon(
                   onPressed: () => _showEmployeeDialog(context, null),
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
                   label: const Text('Yeni Personel Ekle'),
                 ),
               ],
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         for (final item in filtered)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE2E8F0)),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${item.employee.fullName} (Kart No: #${item.employee.cardNo})',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    EmployeeProfileAvatar(
+                      employee: item.employee,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  '${item.employee.fullName} (#${item.employee.cardNo})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Parola: ${item.employee.password}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF475569),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${item.branch.name} • ${item.department.name} • ${item.employee.title} • '
+                            'Mesai: ${item.shift.name} • İzin: ${item.employee.remainingAnnualLeave} G • KPI: %${item.employee.kpiScore.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              const Text(
+                                'Yetki Alanları:',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                              for (final mod in item.employee.allowedModules)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF0F9FF),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFBAE6FD),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    mod.title,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF0369A1),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Şube: ${item.branch.name} • Bölüm: ${item.department.name} • Unvan: ${item.employee.title}\n'
-                        'Mesai: ${item.shift.name} • Yıllık İzin: ${item.employee.remainingAnnualLeave}/${item.employee.annualLeaveEntitlement} Gün • KPI: %${item.employee.kpiScore.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF475569),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: () =>
-                            _showEmployeeDialog(context, item.employee),
-                        icon: const Icon(Icons.edit_rounded, size: 16),
-                        label: const Text('Düzenle'),
-                      ),
-                      IconButton(
-                        color: const Color(0xFFDC2626),
-                        tooltip: 'Personeli Sil',
-                        onPressed: () => ref
-                            .read(pdksDashboardProvider.notifier)
-                            .deleteEmployee(item.employee.id),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          _showEmployeeDialog(context, item.employee),
+                      icon: const Icon(Icons.manage_accounts_rounded, size: 16),
+                      label: const Text('Fotoğraf, Parola & Yetki Düzenle'),
+                    ),
+                    IconButton(
+                      color: const Color(0xFFDC2626),
+                      tooltip: 'Personeli Sil',
+                      onPressed: () => ref
+                          .read(pdksDashboardProvider.notifier)
+                          .deleteEmployee(item.employee.id),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
       ],
@@ -1419,19 +2150,21 @@ class _EmployeesManagementSettingsViewState
                 controller: nameCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Bölüm Adı (örn. PAKETLEME)',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
+                isExpanded: true,
                 initialValue: selectedBranchId,
                 decoration: const InputDecoration(
                   labelText: 'Bağlı Şube',
-                  border: OutlineInputBorder(),
                 ),
                 items: [
                   for (final b in state.branches)
-                    DropdownMenuItem(value: b.id, child: Text(b.name)),
+                    DropdownMenuItem(
+                      value: b.id,
+                      child: Text(b.name, overflow: TextOverflow.ellipsis),
+                    ),
                 ],
                 onChanged: (v) {
                   if (v != null) setDialogState(() => selectedBranchId = v);
@@ -1492,6 +2225,10 @@ class _EmployeesManagementSettingsViewState
         TextEditingController(text: existing?.title ?? 'ÜRETİM PERSONELİ');
     final hireCtrl =
         TextEditingController(text: existing?.hireDate ?? '2026-10-19');
+    final passwordCtrl =
+        TextEditingController(text: existing?.password ?? '1234');
+    final photoPathCtrl =
+        TextEditingController(text: existing?.photoPath ?? '');
     final leaveEntCtrl = TextEditingController(
       text: (existing?.annualLeaveEntitlement ?? 14).toString(),
     );
@@ -1509,199 +2246,401 @@ class _EmployeesManagementSettingsViewState
     int shiftId = existing?.shiftId ??
         (state.shifts.isNotEmpty ? state.shifts.first.id : 1);
     bool sgkActive = existing?.sgkActive ?? true;
+    final Set<HasibuModule> selectedModules = <HasibuModule>{
+      ...(existing?.allowedModules ??
+          const <HasibuModule>[HasibuModule.employeePortal]),
+    };
 
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(
-            existing == null
-                ? 'Yeni Personel Kaydı'
-                : '${existing.fullName} Bilgilerini Güncelle',
-          ),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: cardCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Tenfei D35 Kart/PIN No (örn. 00064)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
+        builder: (ctx, setDialogState) {
+          final previewEmp = Employee(
+            id: nextId,
+            cardNo: cardCtrl.text,
+            fullName:
+                nameCtrl.text.isEmpty ? 'Personel' : nameCtrl.text.toUpperCase(),
+            title: titleCtrl.text,
+            departmentId: deptId,
+            branchId: branchId,
+            hireDate: hireCtrl.text,
+            photoPath: photoPathCtrl.text.trim().isEmpty
+                ? null
+                : photoPathCtrl.text.trim(),
+          );
+
+          return AlertDialog(
+            title: Text(
+              existing == null
+                  ? 'Yeni Personel, Parola & Yetki Kaydı'
+                  : '${existing.fullName} Kartını Güncelle',
+            ),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. PROFİL FOTOĞRAFI ALANI
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: nameCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Ad Soyad',
-                            border: OutlineInputBorder(),
+                      child: Row(
+                        children: [
+                          EmployeeProfileAvatar(
+                            employee: previewEmp,
+                            size: 60,
                           ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: titleCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Görev / Unvan',
-                            border: OutlineInputBorder(),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Profil Fotoğrafı & Avatar',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    if (Platform.isWindows)
+                                      OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final picked =
+                                              await EmployeeProfileAvatar
+                                                  .pickPhotoFromDesktop();
+                                          if (picked != null) {
+                                            setDialogState(
+                                              () => photoPathCtrl.text = picked,
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(
+                                          Icons.photo_camera_outlined,
+                                          size: 16,
+                                        ),
+                                        label: const Text(
+                                          'Bilgisayardan Fotoğraf Seç',
+                                        ),
+                                      ),
+                                    for (int i = 1; i <= 6; i++)
+                                      InkWell(
+                                        onTap: () => setDialogState(
+                                          () =>
+                                              photoPathCtrl.text = 'preset:$i',
+                                        ),
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: photoPathCtrl.text ==
+                                                    'preset:$i'
+                                                ? const Color(0xFFE0F2FE)
+                                                : Colors.white,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: const Color(0xFFCBD5E1),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Stil $i',
+                                            style:
+                                                const TextStyle(fontSize: 11),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: hireCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'İşe Giriş (YYYY-AA-GG)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    initialValue: branchId,
-                    decoration: const InputDecoration(
-                      labelText: 'Çalıştığı Şube / Merkez',
-                      border: OutlineInputBorder(),
                     ),
-                    items: [
-                      for (final b in state.branches)
-                        DropdownMenuItem(value: b.id, child: Text(b.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => branchId = v);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    initialValue: deptId,
-                    decoration: const InputDecoration(
-                      labelText: 'Bölüm / Departman',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: cardCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Kart / Sicil No (örn. 00064)',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: nameCtrl,
+                            onChanged: (_) => setDialogState(() {}),
+                            decoration: const InputDecoration(
+                              labelText: 'Ad Soyad',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    items: [
-                      for (final d in state.departments)
-                        DropdownMenuItem(value: d.id, child: Text(d.name)),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => deptId = v);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    initialValue: shiftId,
-                    decoration: const InputDecoration(
-                      labelText: 'Mesai Saat Aralığı (Vardiya)',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: passwordCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Kişisel Giriş Parolası',
+                              helperText: 'Personelin oturum açma parolası',
+                              prefixIcon: Icon(Icons.key_rounded, size: 18),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: titleCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Görev / Unvan',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    items: [
-                      for (final s in state.shifts)
-                        DropdownMenuItem(
-                          value: s.id,
-                          child: Text(
-                            '${s.name} (${s.startTime}-${s.endTime} • ${s.toleranceMinutes} dk tol.)',
-                          ),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) setDialogState(() => shiftId = v);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: leaveEntCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Yıllık İzin Hakkı',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
+                    const SizedBox(height: 12),
+                    // 2. PERSONEL YETKİ ALANLARI (MODÜL İZİNLERİ)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: leaveUsedCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Kullanılan İzin',
-                            border: OutlineInputBorder(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Personel Yetki Alanları (Girişte Görebileceği Modüller)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => setDialogState(() {
+                                  selectedModules.addAll(HasibuModule.values);
+                                }),
+                                child: const Text(
+                                  'Tüm Yetkileri Ver',
+                                  style: TextStyle(fontSize: 11.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final mod in HasibuModule.values)
+                                FilterChip(
+                                  selected: selectedModules.contains(mod),
+                                  label: Text(
+                                    mod.title,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onSelected: (val) {
+                                    setDialogState(() {
+                                      if (val) {
+                                        selectedModules.add(mod);
+                                      } else if (selectedModules.length > 1) {
+                                        selectedModules.remove(mod);
+                                      }
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            isExpanded: true,
+                            initialValue: branchId,
+                            decoration: const InputDecoration(
+                              labelText: 'Şube / Merkez',
+                            ),
+                            items: [
+                              for (final b in state.branches)
+                                DropdownMenuItem(
+                                  value: b.id,
+                                  child: Text(
+                                    b.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setDialogState(() => branchId = v);
+                            },
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: kpiCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'KPI Puanı (%)',
-                            border: OutlineInputBorder(),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            isExpanded: true,
+                            initialValue: deptId,
+                            decoration: const InputDecoration(
+                              labelText: 'Bölüm / Departman',
+                            ),
+                            items: [
+                              for (final d in state.departments)
+                                DropdownMenuItem(
+                                  value: d.id,
+                                  child: Text(
+                                    d.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setDialogState(() => deptId = v);
+                            },
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      initialValue: shiftId,
+                      decoration: const InputDecoration(
+                        labelText: 'Mesai Saat Aralığı (Vardiya)',
                       ),
-                    ],
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('SGK Sigortalılık Durumu Aktif'),
-                    value: sgkActive,
-                    onChanged: (v) => setDialogState(() => sgkActive = v),
-                  ),
-                ],
+                      items: [
+                        for (final s in state.shifts)
+                          DropdownMenuItem(
+                            value: s.id,
+                            child: Text(
+                              '${s.name} (${s.startTime}-${s.endTime} • ${s.toleranceMinutes} dk tol.)',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => shiftId = v);
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: leaveEntCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'İzin Hakkı',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: leaveUsedCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Kullanılan',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: kpiCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'KPI (%)',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('SGK Sigortalılık Durumu Aktif'),
+                      value: sgkActive,
+                      onChanged: (v) => setDialogState(() => sgkActive = v),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('İptal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (nameCtrl.text.trim().isEmpty) return;
-                final emp = Employee(
-                  id: nextId,
-                  cardNo: cardCtrl.text.trim().padLeft(5, '0'),
-                  fullName: nameCtrl.text.trim().toUpperCase(),
-                  title: titleCtrl.text.trim().toUpperCase(),
-                  departmentId: deptId,
-                  branchId: branchId,
-                  shiftId: shiftId,
-                  hireDate: hireCtrl.text.trim(),
-                  sgkActive: sgkActive,
-                  annualLeaveEntitlement:
-                      int.tryParse(leaveEntCtrl.text.trim()) ?? 14,
-                  usedAnnualLeave: int.tryParse(leaveUsedCtrl.text.trim()) ?? 0,
-                  kpiScore: double.tryParse(kpiCtrl.text.trim()) ?? 92.0,
-                );
-                await ref
-                    .read(pdksDashboardProvider.notifier)
-                    .saveEmployee(emp);
-                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
-              },
-              child: const Text('Kaydet'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('İptal'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (nameCtrl.text.trim().isEmpty) return;
+                  final orderedModules = HasibuModule.values
+                      .where((m) => selectedModules.contains(m))
+                      .toList(growable: false);
+                  final emp = Employee(
+                    id: nextId,
+                    cardNo: cardCtrl.text.trim().padLeft(5, '0'),
+                    fullName: nameCtrl.text.trim().toUpperCase(),
+                    title: titleCtrl.text.trim().toUpperCase(),
+                    departmentId: deptId,
+                    branchId: branchId,
+                    shiftId: shiftId,
+                    hireDate: hireCtrl.text.trim(),
+                    sgkActive: sgkActive,
+                    annualLeaveEntitlement:
+                        int.tryParse(leaveEntCtrl.text.trim()) ?? 14,
+                    usedAnnualLeave:
+                        int.tryParse(leaveUsedCtrl.text.trim()) ?? 0,
+                    kpiScore: double.tryParse(kpiCtrl.text.trim()) ?? 92.0,
+                    password: passwordCtrl.text.trim().isEmpty
+                        ? '1234'
+                        : passwordCtrl.text.trim(),
+                    allowedModules: orderedModules.isEmpty
+                        ? const <HasibuModule>[HasibuModule.employeePortal]
+                        : orderedModules,
+                    photoPath: photoPathCtrl.text.trim().isEmpty
+                        ? null
+                        : photoPathCtrl.text.trim(),
+                  );
+                  await ref
+                      .read(pdksDashboardProvider.notifier)
+                      .saveEmployee(emp);
+                  if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                },
+                child: const Text('Kaydet'),
+              ),
+            ],
+          );
+        },
       ),
     );
 
@@ -1709,6 +2648,8 @@ class _EmployeesManagementSettingsViewState
     nameCtrl.dispose();
     titleCtrl.dispose();
     hireCtrl.dispose();
+    passwordCtrl.dispose();
+    photoPathCtrl.dispose();
     leaveEntCtrl.dispose();
     leaveUsedCtrl.dispose();
     kpiCtrl.dispose();

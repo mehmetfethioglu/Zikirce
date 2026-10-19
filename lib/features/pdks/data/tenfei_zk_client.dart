@@ -6,8 +6,8 @@ import 'dart:typed_data';
 import '../domain/pdks_models.dart';
 
 /// Saf Dart ZKTeco / Tenfei D35 TCP (Port 4370) Protokol İstemcisi.
-/// Eski 32-bit zkemkeeper.dll veya SMT.exe gerektirmez; doğrudan TCP soketiyle
-/// Tenfei D35 Yüz Tanıma ve Parmak İzi Terminaline (varsayılan 192.168.9.150:4370) bağlanır.
+/// Doğrudan TCP soketiyle Tenfei D35 Yüz Tanıma ve Parmak İzi Terminaline
+/// (varsayılan 192.168.9.150:4370) bağlanarak canlı ve toplu hareketleri çeker.
 class TenfeiZkClient {
   static const int cmdConnect = 1000;
   static const int cmdExit = 1001;
@@ -416,7 +416,7 @@ class TenfeiZkClient {
     return logs;
   }
 
-  /// SMT Yedekler formatındaki (XXX,#####,$,YYYY/AA/GG,SS:DD:00) satırları çözer.
+  /// Standart metin tabanlı hareket satırlarını (XXX,#####,$,YYYY/AA/GG,SS:DD:00) çözer.
   static AttendanceLog? parseFlatLogLine(
     String line, {
     int branchId = 1,

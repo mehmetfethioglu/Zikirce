@@ -178,7 +178,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     _configureAutoPollTimer();
   }
 
-  /// Yönetici / İK Girişi doğrular.
+  /// Yönetici / İK Girişi doğrular (tüm modüllere tam yetki).
   bool loginAsAdmin({required String username, required String password}) {
     final u = username.trim().toLowerCase();
     final p = password.trim();
@@ -192,6 +192,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           username: username.trim(),
           displayName: 'Yönetim (${state.companySettings.companyName})',
           role: UserRole.admin,
+          allowedModules: HasibuModule.values,
         ),
         activeModule: HasibuModule.pdksHr,
       );
@@ -202,42 +203,51 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       authSession: state.authSession.copyWith(
         isAuthenticated: false,
         errorMessage: () =>
-            'Kullanıcı adı veya şifre hatalı (Varsayılan: $expectedUser / $expectedPass).',
+            'Kullanıcı adı veya parola hatalı (Varsayılan: $expectedUser / $expectedPass).',
       ),
     );
     return false;
   }
 
-  /// Personel Kart/Sicil No + PIN Girişi doğrular ve Personel Portalını açar.
+  /// Personel Kart/Sicil No + Kişisel Parola Girişi doğrular ve yetkili modüllerini açar.
   bool loginAsEmployee({required String cardNo, required String pin}) {
     final normalizedCard = cardNo.trim().padLeft(5, '0');
-    final expectedPin = state.companySettings.defaultEmployeePin;
+    final fallbackPin = state.companySettings.defaultEmployeePin;
 
     final matchIndex = state.dailyStatuses.indexWhere(
       (s) => s.employee.cardNo == normalizedCard,
     );
 
-    if (matchIndex >= 0 && pin.trim() == expectedPin) {
+    if (matchIndex >= 0) {
       final emp = state.dailyStatuses[matchIndex].employee;
-      state = state.copyWith(
-        authSession: AuthSession(
-          isAuthenticated: true,
-          username: emp.cardNo,
-          displayName: emp.fullName,
-          role: UserRole.employee,
-          employeeCardNo: emp.cardNo,
-        ),
-        activeSelfServiceCardNo: emp.cardNo,
-        activeModule: HasibuModule.employeePortal,
-      );
-      return true;
+      final expectedPassword =
+          emp.password.trim().isNotEmpty ? emp.password.trim() : fallbackPin;
+
+      if (pin.trim() == expectedPassword) {
+        final modules = emp.allowedModules.isNotEmpty
+            ? emp.allowedModules
+            : const <HasibuModule>[HasibuModule.employeePortal];
+        state = state.copyWith(
+          authSession: AuthSession(
+            isAuthenticated: true,
+            username: emp.cardNo,
+            displayName: emp.fullName,
+            role: UserRole.employee,
+            employeeCardNo: emp.cardNo,
+            allowedModules: modules,
+          ),
+          activeSelfServiceCardNo: emp.cardNo,
+          activeModule: modules.first,
+        );
+        return true;
+      }
     }
 
     state = state.copyWith(
       authSession: state.authSession.copyWith(
         isAuthenticated: false,
         errorMessage: () =>
-            'Personel Kart No (#$normalizedCard) veya PIN ($expectedPin) hatalı.',
+            'Personel Kart No (#$normalizedCard) veya kişisel parola hatalı.',
       ),
     );
     return false;
@@ -251,10 +261,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     );
   }
 
-  /// Üst modül seçme satırından aktif modülü değiştirir.
+  /// Üst modül seçme satırından aktif modülü değiştirir (yetki kontrolü ile).
   void selectModule(HasibuModule module) {
-    if (state.authSession.role == UserRole.employee &&
-        module != HasibuModule.employeePortal) {
+    if (!state.authSession.canAccess(module)) {
       return;
     }
     state = state.copyWith(activeModule: module);
@@ -642,6 +651,56 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       force: true,
     );
     state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Çoklu personel seçimiyle toplu giriş ve/veya çıkış saati uygular.
+  Future<int> saveBulkManualAttendance({
+    required List<Employee> employees,
+    required String dateKey,
+    String? checkInTime,
+    String? checkOutTime,
+    bool replaceExistingForDay = true,
+  }) async {
+    final affected = _db.applyBulkManualAttendance(
+      employees: employees,
+      dateKey: dateKey,
+      checkInTime: checkInTime,
+      checkOutTime: checkOutTime,
+      replaceExistingForDay: replaceExistingForDay,
+    );
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Toplu Hareket Düzeltme',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+    return affected;
+  }
+
+  /// Google (Gmail) bulut eşitleme hesabını, yerel Drive klasörünü ve varsa OAuth anahtarını kaydeder.
+  Future<void> saveGmailSyncAccount({
+    required String gmailAccount,
+    required String syncFolderPath,
+    String? accessToken,
+  }) async {
+    final updated = state.companySettings.copyWith(
+      syncGmailAccount: gmailAccount.trim(),
+      syncFolderPath: syncFolderPath.trim(),
+    );
+    _db.saveCompanySettings(updated);
+    if (accessToken != null) {
+      if (accessToken.trim().isEmpty) {
+        try {
+          await _syncService.clearTokens();
+        } catch (_) {}
+      } else {
+        try {
+          await _syncService.saveOAuthTokens(accessToken: accessToken.trim());
+        } catch (_) {}
+      }
+    }
+    refreshDashboard();
+    await syncWithGoogleDriveNow();
   }
 
   /// Cihaz olmayan şubelerde (Devteyşti, Yenişehir, Karaköprü) Mobil QR veya

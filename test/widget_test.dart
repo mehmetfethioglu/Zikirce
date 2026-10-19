@@ -131,11 +131,43 @@ void main() {
       final snapshot = db.exportCloudSnapshot(deviceName: 'Test-Laptop');
       expect(snapshot['deviceName'], 'Test-Laptop');
       expect((snapshot['shifts'] as List).length, 5);
+
+      // Kişisel parola, modül yetkisi ve profil fotoğrafı kaydı
+      final sampleEmp = db.getEmployees().first.copyWith(
+            password: '9876',
+            allowedModules: const <HasibuModule>[
+              HasibuModule.leanProduction,
+              HasibuModule.employeePortal,
+            ],
+            photoPath: () => 'preset:3',
+          );
+      db.upsertEmployee(sampleEmp);
+      final reloadedEmp =
+          db.getEmployees().firstWhere((e) => e.id == sampleEmp.id);
+      expect(reloadedEmp.password, '9876');
+      expect(
+        reloadedEmp.allowedModules,
+        containsAll(<HasibuModule>[
+          HasibuModule.leanProduction,
+          HasibuModule.employeePortal,
+        ]),
+      );
+      expect(reloadedEmp.photoPath, 'preset:3');
+
+      // Toplu Hareket Düzenleme (Bulk Attendance)
+      final affected = db.applyBulkManualAttendance(
+        employees: db.getEmployees().take(3).toList(),
+        dateKey: '2026-10-20',
+        checkInTime: '08:00',
+        checkOutTime: '18:00',
+      );
+      expect(affected, 6); // 3 personel x (giriş + çıkış)
+      expect(db.getAttendanceLogsForDate('2026-10-20').length, 6);
     });
   });
 
   testWidgets(
-      'HasibuApp enforces Login Gate, shows Top Module Ribbon, and dynamically updates Left Menu per module',
+      'HasibuApp enforces Login Gate, shows Top Module Ribbon, Bulk Attendance, and Gmail Sync Modal',
       (
     WidgetTester tester,
   ) async {
@@ -172,15 +204,29 @@ void main() {
     expect(find.text('Hareket Düzeltme'), findsOneWidget);
     expect(find.text('İzin & Rapor Girişi'), findsOneWidget);
 
-    // 4. Üst modül satırından "Yalın Üretim & KPI" modülüne tıkla -> Sol menü Yalın Üretim sekmelerine dönüşür
-    await tester.tap(find.text('Yalın Üretim & KPI'));
+    // 4. Hareket Düzeltme sekmesine tıkla -> Toplu Hareket Düzenleme paneli açılır
+    await tester.tap(find.text('Hareket Düzeltme'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Toplu Hareket Düzenleme & Çoklu Giriş/Çıkış Atama'),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('bulk_attendance_apply_button')),
+      findsOneWidget,
+    );
+
+    // 5. Üst bardaki Gmail Eşitleme butonuna tıkla -> Gmail & Google Drive kurulum penceresi açılır
+    await tester.tap(find.byKey(const ValueKey('gmail_sync_setup_button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Gmail & Google Drive Veri Eşitleme Ayarları'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Kapat'));
     await tester.pumpAndSettle();
 
-    expect(find.text('27 İstasyon Canlı Akış'), findsOneWidget);
-    expect(find.text('Personel KPI Sıralaması'), findsOneWidget);
-    expect(find.text('Canlı PDKS & Şubeler'), findsNothing);
-
-    // 5. Üst modül satırından "Sistem & Ayarlar" modülüne tıkla -> Sol menü Ayar sekmelerine dönüşür
+    // 6. Üst modül satırından "Sistem & Ayarlar" modülüne tıkla -> Sol menü Ayar sekmelerine dönüşür
     await tester.tap(find.text('Sistem & Ayarlar'));
     await tester.pumpAndSettle();
 
@@ -190,5 +236,6 @@ void main() {
     expect(find.byIcon(Icons.add_business_rounded), findsOneWidget);
   });
 }
+
 
 

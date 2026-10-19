@@ -10,6 +10,28 @@ enum HasibuModule {
   final String title;
   final String subtitle;
   const HasibuModule(this.title, this.subtitle);
+
+  static List<HasibuModule> parseCsv(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return const <HasibuModule>[HasibuModule.employeePortal];
+    }
+    final parts = raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+    final matched = HasibuModule.values
+        .where((m) => parts.contains(m.name))
+        .toList(growable: false);
+    return matched.isEmpty
+        ? const <HasibuModule>[HasibuModule.employeePortal]
+        : matched;
+  }
+
+  static String toCsv(List<HasibuModule> modules) {
+    if (modules.isEmpty) return HasibuModule.employeePortal.name;
+    return modules.map((m) => m.name).join(',');
+  }
 }
 
 enum UserRole {
@@ -27,6 +49,7 @@ class AuthSession {
   final String displayName;
   final UserRole role;
   final String? employeeCardNo;
+  final List<HasibuModule> allowedModules;
   final String? errorMessage;
 
   const AuthSession({
@@ -35,8 +58,11 @@ class AuthSession {
     this.displayName = '',
     this.role = UserRole.admin,
     this.employeeCardNo,
+    this.allowedModules = HasibuModule.values,
     this.errorMessage,
   });
+
+  bool canAccess(HasibuModule module) => allowedModules.contains(module);
 
   AuthSession copyWith({
     bool? isAuthenticated,
@@ -44,6 +70,7 @@ class AuthSession {
     String? displayName,
     UserRole? role,
     String? employeeCardNo,
+    List<HasibuModule>? allowedModules,
     String? Function()? errorMessage,
   }) {
     return AuthSession(
@@ -52,6 +79,7 @@ class AuthSession {
       displayName: displayName ?? this.displayName,
       role: role ?? this.role,
       employeeCardNo: employeeCardNo ?? this.employeeCardNo,
+      allowedModules: allowedModules ?? this.allowedModules,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
     );
   }
@@ -120,6 +148,8 @@ class CompanySettings {
   final String adminUsername;
   final String adminPassword;
   final String defaultEmployeePin;
+  final String syncGmailAccount;
+  final String syncFolderPath;
 
   const CompanySettings({
     this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
@@ -128,6 +158,8 @@ class CompanySettings {
     this.adminUsername = 'admin',
     this.adminPassword = '123',
     this.defaultEmployeePin = '1234',
+    this.syncGmailAccount = '',
+    this.syncFolderPath = '',
   });
 
   CompanySettings copyWith({
@@ -137,6 +169,8 @@ class CompanySettings {
     String? adminUsername,
     String? adminPassword,
     String? defaultEmployeePin,
+    String? syncGmailAccount,
+    String? syncFolderPath,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -145,6 +179,8 @@ class CompanySettings {
       adminUsername: adminUsername ?? this.adminUsername,
       adminPassword: adminPassword ?? this.adminPassword,
       defaultEmployeePin: defaultEmployeePin ?? this.defaultEmployeePin,
+      syncGmailAccount: syncGmailAccount ?? this.syncGmailAccount,
+      syncFolderPath: syncFolderPath ?? this.syncFolderPath,
     );
   }
 
@@ -155,6 +191,8 @@ class CompanySettings {
         'adminUsername': adminUsername,
         'adminPassword': adminPassword,
         'defaultEmployeePin': defaultEmployeePin,
+        'syncGmailAccount': syncGmailAccount,
+        'syncFolderPath': syncFolderPath,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> json) =>
@@ -166,6 +204,8 @@ class CompanySettings {
         adminUsername: json['adminUsername'] as String? ?? 'admin',
         adminPassword: json['adminPassword'] as String? ?? '123',
         defaultEmployeePin: json['defaultEmployeePin'] as String? ?? '1234',
+        syncGmailAccount: json['syncGmailAccount'] as String? ?? '',
+        syncFolderPath: json['syncFolderPath'] as String? ?? '',
       );
 }
 
@@ -341,6 +381,9 @@ class Employee {
   final int annualLeaveEntitlement;
   final int usedAnnualLeave;
   final double kpiScore;
+  final String password;
+  final List<HasibuModule> allowedModules;
+  final String? photoPath;
 
   const Employee({
     required this.id,
@@ -355,6 +398,9 @@ class Employee {
     this.annualLeaveEntitlement = 14,
     this.usedAnnualLeave = 0,
     this.kpiScore = 92.0,
+    this.password = '1234',
+    this.allowedModules = const <HasibuModule>[HasibuModule.employeePortal],
+    this.photoPath,
   });
 
   int get remainingAnnualLeave =>
@@ -373,6 +419,9 @@ class Employee {
     int? annualLeaveEntitlement,
     int? usedAnnualLeave,
     double? kpiScore,
+    String? password,
+    List<HasibuModule>? allowedModules,
+    String? Function()? photoPath,
   }) {
     return Employee(
       id: id ?? this.id,
@@ -388,6 +437,9 @@ class Employee {
           annualLeaveEntitlement ?? this.annualLeaveEntitlement,
       usedAnnualLeave: usedAnnualLeave ?? this.usedAnnualLeave,
       kpiScore: kpiScore ?? this.kpiScore,
+      password: password ?? this.password,
+      allowedModules: allowedModules ?? this.allowedModules,
+      photoPath: photoPath != null ? photoPath() : this.photoPath,
     );
   }
 
@@ -404,6 +456,9 @@ class Employee {
         'annualLeaveEntitlement': annualLeaveEntitlement,
         'usedAnnualLeave': usedAnnualLeave,
         'kpiScore': kpiScore,
+        'password': password,
+        'allowedModules': HasibuModule.toCsv(allowedModules),
+        'photoPath': photoPath,
       };
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
@@ -419,6 +474,10 @@ class Employee {
         annualLeaveEntitlement: json['annualLeaveEntitlement'] as int? ?? 14,
         usedAnnualLeave: json['usedAnnualLeave'] as int? ?? 0,
         kpiScore: (json['kpiScore'] as num?)?.toDouble() ?? 90.0,
+        password: json['password'] as String? ?? '1234',
+        allowedModules:
+            HasibuModule.parseCsv(json['allowedModules'] as String?),
+        photoPath: json['photoPath'] as String?,
       );
 }
 

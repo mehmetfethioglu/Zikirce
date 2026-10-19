@@ -38,20 +38,11 @@ class HasibuDatabase {
         auto_poll_minutes INTEGER NOT NULL DEFAULT 5,
         admin_username TEXT NOT NULL DEFAULT 'admin',
         admin_password TEXT NOT NULL DEFAULT '123',
-        default_employee_pin TEXT NOT NULL DEFAULT '1234'
+        default_employee_pin TEXT NOT NULL DEFAULT '1234',
+        sync_gmail_account TEXT NOT NULL DEFAULT '',
+        sync_folder_path TEXT NOT NULL DEFAULT ''
       );
     ''');
-
-    // Mevcut veritabanı yükseltmesi (migration)
-    for (final colSql in <String>[
-      "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'",
-      "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'",
-      "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
-    ]) {
-      try {
-        _db.execute(colSql);
-      } catch (_) {}
-    }
 
     _db.execute('''
       CREATE TABLE IF NOT EXISTS branches (
@@ -94,7 +85,10 @@ class HasibuDatabase {
         sgk_active INTEGER NOT NULL DEFAULT 1,
         annual_leave_entitlement INTEGER NOT NULL DEFAULT 14,
         used_annual_leave INTEGER NOT NULL DEFAULT 0,
-        kpi_score REAL NOT NULL DEFAULT 92.0
+        kpi_score REAL NOT NULL DEFAULT 92.0,
+        password TEXT NOT NULL DEFAULT '1234',
+        allowed_modules TEXT NOT NULL DEFAULT 'employeePortal',
+        photo_path TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_employees_card_no ON employees(card_no);
@@ -126,6 +120,22 @@ class HasibuDatabase {
       CREATE INDEX IF NOT EXISTS idx_leave_date_emp
         ON leave_records(date_key, employee_id);
     ''');
+
+    // Mevcut veritabanı yükseltmesi (migration)
+    for (final colSql in <String>[
+      "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'",
+      "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'",
+      "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
+      "ALTER TABLE company_settings ADD COLUMN sync_gmail_account TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE company_settings ADD COLUMN sync_folder_path TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT '1234'",
+      "ALTER TABLE employees ADD COLUMN allowed_modules TEXT NOT NULL DEFAULT 'employeePortal'",
+      "ALTER TABLE employees ADD COLUMN photo_path TEXT",
+    ]) {
+      try {
+        _db.execute(colSql);
+      } catch (_) {}
+    }
   }
 
   void _seedIfEmpty() {
@@ -137,8 +147,8 @@ class HasibuDatabase {
     if (settingsCount == 0) {
       _db.execute('''
         INSERT INTO company_settings
-        (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin)
-        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5, 'admin', '123', '1234')
+        (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path)
+        VALUES (1, 'HASİBU İŞLETME YÖNETİMİ', 1, 5, 'admin', '123', '1234', '', '')
       ''');
     }
 
@@ -192,14 +202,16 @@ class HasibuDatabase {
       adminUsername: r['admin_username'] as String? ?? 'admin',
       adminPassword: r['admin_password'] as String? ?? '123',
       defaultEmployeePin: r['default_employee_pin'] as String? ?? '1234',
+      syncGmailAccount: r['sync_gmail_account'] as String? ?? '',
+      syncFolderPath: r['sync_folder_path'] as String? ?? '',
     );
   }
 
   void saveCompanySettings(CompanySettings settings) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO company_settings
-      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin)
-      VALUES (1, ?, ?, ?, ?, ?, ?)
+      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       settings.companyName.trim().isEmpty
@@ -216,6 +228,8 @@ class HasibuDatabase {
       settings.defaultEmployeePin.trim().isEmpty
           ? '1234'
           : settings.defaultEmployeePin.trim(),
+      settings.syncGmailAccount.trim(),
+      settings.syncFolderPath.trim(),
     ]);
     stmt.dispose();
   }
@@ -372,6 +386,12 @@ class HasibuDatabase {
             annualLeaveEntitlement: r['annual_leave_entitlement'] as int,
             usedAnnualLeave: r['used_annual_leave'] as int,
             kpiScore: (r['kpi_score'] as num).toDouble(),
+            password: (r['password'] as String?)?.isNotEmpty == true
+                ? r['password'] as String
+                : '1234',
+            allowedModules:
+                HasibuModule.parseCsv(r['allowed_modules'] as String?),
+            photoPath: r['photo_path'] as String?,
           ),
         )
         .toList(growable: false);
@@ -380,8 +400,8 @@ class HasibuDatabase {
   void upsertEmployee(Employee e) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO employees
-      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score, password, allowed_modules, photo_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       e.id,
@@ -396,6 +416,9 @@ class HasibuDatabase {
       e.annualLeaveEntitlement,
       e.usedAnnualLeave,
       e.kpiScore,
+      e.password.trim().isEmpty ? '1234' : e.password.trim(),
+      HasibuModule.toCsv(e.allowedModules),
+      e.photoPath?.trim().isEmpty == true ? null : e.photoPath?.trim(),
     ]);
     stmt.dispose();
   }
@@ -485,6 +508,78 @@ class HasibuDatabase {
       rethrow;
     }
     return inserted;
+  }
+
+  /// Seçili personeller için belirtilen tarihte toplu giriş ve/veya çıkış hareketi uygular.
+  int applyBulkManualAttendance({
+    required List<Employee> employees,
+    required String dateKey,
+    String? checkInTime,
+    String? checkOutTime,
+    bool replaceExistingForDay = true,
+  }) {
+    if (employees.isEmpty) return 0;
+    final dp = dateKey.split('-');
+    final year = dp.isNotEmpty ? (int.tryParse(dp[0]) ?? 2026) : 2026;
+    final month = dp.length > 1 ? (int.tryParse(dp[1]) ?? 10) : 10;
+    final day = dp.length > 2 ? (int.tryParse(dp[2]) ?? 19) : 19;
+
+    int affected = 0;
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      final delStmt = _db.prepare(
+        'DELETE FROM attendance_logs WHERE card_no = ? AND date_key = ?',
+      );
+      for (final emp in employees) {
+        if (replaceExistingForDay) {
+          delStmt.execute([emp.cardNo, dateKey]);
+        }
+        if (checkInTime != null && checkInTime.trim().isNotEmpty) {
+          final tp = checkInTime.trim().split(':');
+          final h = tp.isNotEmpty ? (int.tryParse(tp[0]) ?? 8) : 8;
+          final m = tp.length > 1 ? (int.tryParse(tp[1]) ?? 0) : 0;
+          final dt = DateTime(year, month, day, h, m);
+          upsertAttendanceLog(
+            AttendanceLog(
+              id: 'BULK-IN-${emp.cardNo}-$dateKey-${h.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}',
+              cardNo: emp.cardNo,
+              branchId: emp.branchId,
+              deviceNo: 99,
+              timestamp: dt,
+              isCheckIn: true,
+              source: AttendanceSource.manual,
+              verifyMethod: VerifyMethod.password,
+            ),
+          );
+          affected++;
+        }
+        if (checkOutTime != null && checkOutTime.trim().isNotEmpty) {
+          final tp = checkOutTime.trim().split(':');
+          final h = tp.isNotEmpty ? (int.tryParse(tp[0]) ?? 18) : 18;
+          final m = tp.length > 1 ? (int.tryParse(tp[1]) ?? 0) : 0;
+          final dt = DateTime(year, month, day, h, m);
+          upsertAttendanceLog(
+            AttendanceLog(
+              id: 'BULK-OUT-${emp.cardNo}-$dateKey-${h.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}',
+              cardNo: emp.cardNo,
+              branchId: emp.branchId,
+              deviceNo: 99,
+              timestamp: dt,
+              isCheckIn: false,
+              source: AttendanceSource.manual,
+              verifyMethod: VerifyMethod.password,
+            ),
+          );
+          affected++;
+        }
+      }
+      delStmt.dispose();
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+    return affected;
   }
 
   bool upsertAttendanceLog(AttendanceLog log) {
