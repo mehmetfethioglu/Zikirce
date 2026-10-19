@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "akarworks-factory-mcp": {
+      "command": "python",
+      "args": [
+        "C:/Users/theak/source/repos/akarworks/worker/akarworks_mcp_server.py"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
