@@ -25,6 +25,10 @@ dependencies:
   crypto: ^3.0.5
   qr_flutter: ^4.1.0
 
+dependency_overrides:
+  path_provider_android: 2.2.15
+  shared_preferences_android: 2.4.7
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
