@@ -20,6 +20,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
   final int targetCount;
   final int totalCount;
   final String arabicFontFamily;
+  final ZikirShareCardTheme? initialTheme;
 
   const ZikirSharePreviewModal({
     super.key,
@@ -31,6 +32,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     required this.targetCount,
     required this.totalCount,
     this.arabicFontFamily = 'mushaf',
+    this.initialTheme,
   });
 
   static Future<void> show({
@@ -43,6 +45,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     int targetCount = 33,
     int totalCount = 0,
     String arabicFontFamily = 'mushaf',
+    ZikirShareCardTheme? initialTheme,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -59,6 +62,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
         targetCount: targetCount,
         totalCount: totalCount,
         arabicFontFamily: arabicFontFamily,
+        initialTheme: initialTheme,
       ),
     );
   }
@@ -71,9 +75,16 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
-  ZikirShareCardTheme _selectedTheme = ZikirShareCardTheme.emeraldSufi;
+  late ZikirShareCardTheme _selectedTheme;
   bool _showCounterStats = true;
   bool _isGeneratingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTheme = widget.initialTheme ??
+        ZikirShareThemeData.themeForGoalOrTask(category: widget.category);
+  }
 
   Future<void> _shareAsImage() async {
     if (_isGeneratingImage) return;
@@ -329,21 +340,23 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                       ),
                     ),
                   ),
-                  Row(
-                    children: ZikirShareCardTheme.values.map((themeOption) {
-                      final themeData = ZikirShareThemeData.fromEnum(themeOption);
-                      final isSelected = _selectedTheme == themeOption;
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: ZikirShareCardTheme.values.map((themeOption) {
+                        final themeData = ZikirShareThemeData.fromEnum(themeOption);
+                        final isSelected = _selectedTheme == themeOption;
 
-                      return Expanded(
-                        child: GestureDetector(
+                        return GestureDetector(
                           onTap: () {
                             HapticFeedback.selectionClick();
                             setState(() => _selectedTheme = themeOption);
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -368,14 +381,17 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                                     ]
                                   : null,
                             ),
-                            child: Column(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (isSelected) ...[
+                                  Icon(Icons.check_circle_rounded, size: 14, color: themeData.accentColor),
+                                  const SizedBox(width: 5),
+                                ],
                                 Text(
-                                  themeData.nameTr.split(' ').first,
-                                  textAlign: TextAlign.center,
+                                  themeData.nameTr,
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 11.5,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                     color: Colors.white,
                                   ),
@@ -383,9 +399,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                               ],
                             ),
                           ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),

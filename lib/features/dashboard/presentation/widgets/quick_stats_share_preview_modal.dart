@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/services/islamic_special_days_service.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 import 'quick_stats_share_card_widget.dart';
 
@@ -70,6 +71,25 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
   ZikirShareCardTheme _selectedTheme = ZikirShareCardTheme.emeraldSufi;
   bool _isGeneratingImage = false;
+  String _selectedGreetingMode = 'auto';
+
+  String? _resolveCurrentGreeting() {
+    switch (_selectedGreetingMode) {
+      case 'cuma':
+        return 'Hayırlı Cumalar';
+      case 'kandil':
+        return 'Kandiliniz Mübarek Olsun';
+      case 'ramazan':
+        return 'Hayırlı Ramazanlar';
+      case 'bayram':
+        return 'Bayramınız Mübarek Olsun';
+      case 'none':
+        return null;
+      case 'auto':
+      default:
+        return IslamicSpecialDaysService.getSpecialDay()?.greetingTr;
+    }
+  }
 
   Future<void> _shareAsImage() async {
     if (_isGeneratingImage) return;
@@ -99,9 +119,11 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
 
+      final greeting = _resolveCurrentGreeting();
+      final greetingPart = greeting != null ? ' — $greeting ✨' : '';
       final caption = l10n.isTurkish
-          ? '📊 İbadet & Zikir Özeti • Zikirce İslâmî Yaşam ve Zikir Asistanı'
-          : '📊 Spiritual Worship & Dhikr Summary • Zikirce Islamic Assistant';
+          ? '📊 İbadet & Zikir Özeti • Zikirce İslâmî Yaşam ve Zikir Asistanı$greetingPart'
+          : '📊 Spiritual Worship & Dhikr Summary • Zikirce Islamic Assistant$greetingPart';
 
       if (mounted) {
         await Share.shareXFiles(
@@ -130,24 +152,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   void _shareAsText() {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
+    final greeting = _resolveCurrentGreeting();
+    final greetingPart = greeting != null ? '✨ $greeting ✨\n\n' : '';
+
     final shareText = l10n.isTurkish
-        ? '📊 Zikirce İbadet & Zikir Karnem:\n\n'
-            '🟢 Bugün Zikir: ${widget.todayZikir}\n'
-            '🔵 Bu Hafta: ${widget.thisWeekZikir}\n'
-            '🟡 Günlük Ortalama: ${widget.dailyAvgZikir}\n'
-            '🟣 Toplam Zikir: ${widget.totalZikir}\n'
-            '📖 Kur\'an Okuma: ${widget.quranPages} Sayfa\n'
-            '🌱 Manevi Makam: ${widget.rankBadge} ${widget.rankName}\n\n'
-            '“Beni anın ki Ben de sizi anayım.” (Bakara, 152)\n'
-            '— Zikirce İslâmî Yaşam ve Zikir Asistanı'
-        : '📊 My Zikirce Spiritual Summary:\n\n'
-            '🟢 Today: ${widget.todayZikir}\n'
-            '🔵 This Week: ${widget.thisWeekZikir}\n'
-            '🟡 Daily Average: ${widget.dailyAvgZikir}\n'
-            '🟣 Total Dhikr: ${widget.totalZikir}\n'
-            '📖 Quran Read: ${widget.quranPages} Pages\n'
-            '🌱 Spiritual Rank: ${widget.rankBadge} ${widget.rankName}\n\n'
-            '— Zikirce Islamic Life & Dhikr Assistant';
+        ? '$greetingPart📊 Zikirce İbadet & Maneviyat Özeti\n\n🎯 Bugün: ${widget.todayZikir} Zikir\n📅 Bu Hafta: ${widget.thisWeekZikir} Zikir\n📈 Günlük Ortalama: ${widget.dailyAvgZikir} Zikir\n✨ Toplam Zikir: ${widget.totalZikir}\n📖 Kur\'an Okuma: ${widget.quranPages} Sayfa\n🌱 Manevi Makam: ${widget.rankBadge} ${widget.rankName}\n\n“Beni anın ki, Ben de sizi anayım.” (Bakara, 152)\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+        : '$greetingPart📊 Zikirce Spiritual Summary\n\n🎯 Today: ${widget.todayZikir} Dhikr\n📅 This Week: ${widget.thisWeekZikir} Dhikr\n📈 Daily Avg: ${widget.dailyAvgZikir} Dhikr\n✨ Total: ${widget.totalZikir}\n📖 Quran Reading: ${widget.quranPages} Pages\n🌱 Spiritual Rank: ${widget.rankBadge} ${widget.rankName}\n\n“Remember Me; I will remember you.” (Baqarah, 152)\n— Zikirce Islamic Life & Dhikr Assistant';
 
     Share.share(
       shareText,
@@ -159,6 +169,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final maxPreviewHeight = MediaQuery.of(context).size.height * 0.44;
+    final activeGreeting = _resolveCurrentGreeting();
 
     return Container(
       decoration: BoxDecoration(
@@ -253,7 +264,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              // Special Day Greeting Picker
+              _buildGreetingPicker(isDark),
+
+              const SizedBox(height: 14),
 
               // Interactive Live Card Preview
               ConstrainedBox(
@@ -272,6 +288,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                     rankBadge: widget.rankBadge,
                     format: _selectedFormat,
                     theme: _selectedTheme,
+                    specialDayGreeting: activeGreeting,
                   ),
                 ),
               ),
@@ -307,7 +324,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
@@ -333,19 +350,16 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                                     ]
                                   : null,
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  themeData.nameTr.split(' ').first,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              themeData.nameTr.split(' ').first,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -425,6 +439,85 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
     );
   }
 
+  Widget _buildGreetingPicker(bool isDark) {
+    final greetings = [
+      {'key': 'auto', 'label': 'Otomatik Tebrik', 'icon': '🌟'},
+      {'key': 'cuma', 'label': 'Hayırlı Cumalar', 'icon': '🕌'},
+      {'key': 'kandil', 'label': 'Kandil Tebriği', 'icon': '✨'},
+      {'key': 'ramazan', 'label': 'Ramazan', 'icon': '🌙'},
+      {'key': 'bayram', 'label': 'Bayram', 'icon': '🎉'},
+      {'key': 'none', 'label': 'Tebriksiz', 'icon': '✖'},
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            'ÖZEL GÜN TEBRİK BİLGİSİ',
+            style: GoogleFonts.outfit(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white54 : Colors.black54,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 32,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: greetings.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
+            itemBuilder: (context, index) {
+              final g = greetings[index];
+              final isSelected = _selectedGreetingMode == g['key'];
+
+              return GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _selectedGreetingMode = g['key']!);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.gold500.withValues(alpha: 0.22)
+                        : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isSelected ? AppColors.gold500 : Colors.transparent,
+                      width: 1.2,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(g['icon']!, style: const TextStyle(fontSize: 12)),
+                      const SizedBox(width: 4),
+                      Text(
+                        g['label']!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected
+                              ? AppColors.gold500
+                              : (isDark ? Colors.white70 : Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildFormatChip({
     required String title,
     required IconData icon,
@@ -436,7 +529,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark ? const Color(0xFF2B3848) : Colors.white)

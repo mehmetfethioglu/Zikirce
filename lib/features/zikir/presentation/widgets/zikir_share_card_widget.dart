@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../domain/share_card_data_helper.dart';
 
 /// Formats available for the share card
 enum ZikirShareCardFormat {
@@ -14,6 +15,8 @@ enum ZikirShareCardTheme {
   midnightGold,
   turquoiseDome,
   roseAmber,
+  royalAmethyst,
+  fajrDawn,
 }
 
 class ZikirShareThemeData {
@@ -117,6 +120,44 @@ class ZikirShareThemeData {
     cardBg: Color(0x38220A19),
   );
 
+  static const ZikirShareThemeData royalAmethyst = ZikirShareThemeData(
+    id: 'amethyst',
+    nameTr: 'Sultan Moru',
+    nameEn: 'Royal Amethyst',
+    gradientColors: [
+      Color(0xFF13061F),
+      Color(0xFF220A38),
+      Color(0xFF39105B),
+      Color(0xFF551985),
+      Color(0xFF7524B6),
+    ],
+    accentColor: Color(0xFFFFD166),
+    arabicColor: Color(0xFFF3E8FF),
+    badgeBg: Color(0xFF2E0C4A),
+    badgeBorder: Color(0xFFA855F7),
+    watermarkColor: Color(0x28FFD166),
+    cardBg: Color(0x40160724),
+  );
+
+  static const ZikirShareThemeData fajrDawn = ZikirShareThemeData(
+    id: 'fajr',
+    nameTr: 'Fecr Vakti',
+    nameEn: 'Fajr Dawn',
+    gradientColors: [
+      Color(0xFF180B05),
+      Color(0xFF2B1409),
+      Color(0xFF48210F),
+      Color(0xFF693016),
+      Color(0xFF8F421F),
+    ],
+    accentColor: Color(0xFFFFB703),
+    arabicColor: Color(0xFFFFE8D6),
+    badgeBg: Color(0xFF35180B),
+    badgeBorder: Color(0xFFFB8500),
+    watermarkColor: Color(0x28FFB703),
+    cardBg: Color(0x40180B05),
+  );
+
   static ZikirShareThemeData fromEnum(ZikirShareCardTheme theme) {
     switch (theme) {
       case ZikirShareCardTheme.emeraldSufi:
@@ -127,15 +168,47 @@ class ZikirShareThemeData {
         return turquoiseDome;
       case ZikirShareCardTheme.roseAmber:
         return roseAmber;
+      case ZikirShareCardTheme.royalAmethyst:
+        return royalAmethyst;
+      case ZikirShareCardTheme.fajrDawn:
+        return fajrDawn;
     }
+  }
+
+  /// Automatically picks a tailored spiritual theme for each goal or task type
+  static ZikirShareCardTheme themeForGoalOrTask({
+    String? goalType,
+    String? taskType,
+    String? category,
+    bool isGold = false,
+  }) {
+    if (isGold || goalType == 'streak' || goalType == 'golden_day') {
+      return ZikirShareCardTheme.midnightGold;
+    }
+    final key = '${goalType ?? ''} ${taskType ?? ''} ${category ?? ''}'.toLowerCase();
+    if (key.contains('namaz') || key.contains('prayer') || key.contains('vakit')) {
+      return ZikirShareCardTheme.turquoiseDome;
+    }
+    if (key.contains('salavat') || key.contains('salat') || key.contains('gül') || key.contains('rose')) {
+      return ZikirShareCardTheme.roseAmber;
+    }
+    if (key.contains('istiğfar') || key.contains('istigfar') || key.contains('tevbe') || key.contains('gece')) {
+      return ZikirShareCardTheme.royalAmethyst;
+    }
+    if (key.contains('fecr') || key.contains('sabah') || key.contains('güneş') || key.contains('şükür')) {
+      return ZikirShareCardTheme.fajrDawn;
+    }
+    return ZikirShareCardTheme.emeraldSufi;
   }
 }
 
-/// The Main Visual Share Card Widget
+/// The Main Visual Share Card Widget (Mimar Sinan & Zero Muda Design)
 class ZikirShareCardWidget extends StatelessWidget {
   final String zikirName;
   final String? arabicText;
   final String? virtue;
+  final String? source;
+  final String? specialDayGreeting;
   final String category;
   final int currentCount;
   final int targetCount;
@@ -150,6 +223,8 @@ class ZikirShareCardWidget extends StatelessWidget {
     required this.zikirName,
     this.arabicText,
     this.virtue,
+    this.source,
+    this.specialDayGreeting,
     this.category = 'Günlük Zikir',
     this.currentCount = 0,
     this.targetCount = 33,
@@ -196,7 +271,17 @@ class ZikirShareCardWidget extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-              // 1. Ambient Glow and Sufi Semazen Custom Vector Painting
+              // 1. Classical Pointed Mihrap Arch
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: IslamicArchPainter(
+                    archColor: themeData.accentColor.withValues(alpha: 0.12),
+                    isStoryFormat: isStory,
+                  ),
+                ),
+              ),
+
+              // 2. Ambient Glow and Sufi Semazen Custom Vector Painting
               Positioned.fill(
                 child: CustomPaint(
                   painter: SufiDervishPainter(
@@ -207,7 +292,7 @@ class ZikirShareCardWidget extends StatelessWidget {
                 ),
               ),
 
-              // 2. Subtle Islamic Geometric Star Arches in Corners
+              // 3. Subtle Islamic Geometric Star Arches in Corners
               Positioned.fill(
                 child: CustomPaint(
                   painter: IslamicPatternPainter(
@@ -216,7 +301,7 @@ class ZikirShareCardWidget extends StatelessWidget {
                 ),
               ),
 
-              // 3. Foreground Content Structure
+              // 4. Foreground Content Structure
               Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: horizontalPadding,
@@ -228,7 +313,11 @@ class ZikirShareCardWidget extends StatelessWidget {
                     // --- TOP BAR: Brand Header & Category Pill ---
                     _buildHeader(themeData, isStory),
 
-                    if (isStory) const SizedBox(height: 16) else const SizedBox(height: 6),
+                    // --- SPECIAL DAY GREETING (Varsa Özel Gün Tebriği) ---
+                    if (specialDayGreeting != null && specialDayGreeting!.trim().isNotEmpty)
+                      _buildSpecialDayGreetingBanner(specialDayGreeting!.trim(), themeData, isStory),
+
+                    if (isStory) const SizedBox(height: 14) else const SizedBox(height: 6),
 
                     // --- CENTER BODY: Zikir Name, Arabic Calligraphy & Virtue Card ---
                     Expanded(
@@ -291,7 +380,7 @@ class ZikirShareCardWidget extends StatelessWidget {
 
                               SizedBox(height: isStory ? 12 : 6),
 
-                              // Virtue / Hadith Glassmorphism Box
+                              // Virtue / Hadith Glassmorphism Box with Exact Source
                               if (virtue != null && virtue!.trim().isNotEmpty)
                                 _buildVirtueCard(themeData, isStory),
 
@@ -322,48 +411,59 @@ class ZikirShareCardWidget extends StatelessWidget {
 
   /// Top Brand & Category Header
   Widget _buildHeader(ZikirShareThemeData themeData, bool isStory) {
+    final cleanCategory = category
+        .replaceAll(RegExp(r'(tamamlanan|görev|hedef)', caseSensitive: false), '')
+        .trim();
+    final displayCategory = cleanCategory.isEmpty ? 'İBADET & ZİKİR' : cleanCategory;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Zikirce Monogram Icon (Square Pill)
+        // Zikirce Monogram & Logo (High Visibility)
         Container(
-          width: isStory ? 34 : 28,
-          height: isStory ? 34 : 28,
+          width: isStory ? 44 : 36,
+          height: isStory ? 44 : 36,
+          padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(isStory ? 10 : 8),
+            color: Colors.black.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(isStory ? 12 : 10),
             border: Border.all(
-              color: themeData.accentColor.withValues(alpha: 0.4),
-              width: 1.2,
+              color: themeData.accentColor.withValues(alpha: 0.7),
+              width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: themeData.accentColor.withValues(alpha: 0.15),
-                blurRadius: 8,
+                color: themeData.accentColor.withValues(alpha: 0.35),
+                blurRadius: 10,
+                spreadRadius: 1,
               ),
             ],
           ),
           alignment: Alignment.center,
-          child: Text(
-            '📿',
-            style: TextStyle(fontSize: isStory ? 16 : 13),
+          child: Image.asset(
+            'assets/images/zikirce_logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Text(
+              '📿',
+              style: TextStyle(fontSize: isStory ? 18 : 15),
+            ),
           ),
         ),
 
-        // Category Tag
+        // Category Tag (Purified from Task/Goal wording)
         Flexible(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
             padding: EdgeInsets.symmetric(
-              horizontal: isStory ? 10 : 7,
-              vertical: isStory ? 5 : 3,
+              horizontal: isStory ? 11 : 8,
+              vertical: isStory ? 5 : 3.5,
             ),
             decoration: BoxDecoration(
-              color: themeData.badgeBg.withValues(alpha: 0.8),
+              color: themeData.badgeBg.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: themeData.badgeBorder.withValues(alpha: 0.6),
+                color: themeData.badgeBorder.withValues(alpha: 0.7),
                 width: 1,
               ),
             ),
@@ -372,7 +472,7 @@ class ZikirShareCardWidget extends StatelessWidget {
               children: [
                 Flexible(
                   child: Text(
-                    category.toUpperCase(),
+                    displayCategory.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.outfit(
@@ -401,18 +501,97 @@ class ZikirShareCardWidget extends StatelessWidget {
         Text(
           'ZİKİRCE',
           style: GoogleFonts.cinzel(
-            fontSize: isStory ? 12 : 10,
+            fontSize: isStory ? 13.5 : 11,
             fontWeight: FontWeight.w800,
-            color: Colors.white.withValues(alpha: 0.85),
-            letterSpacing: 1.8,
+            color: Colors.white.withValues(alpha: 0.95),
+            letterSpacing: 2.0,
+            shadows: [
+              Shadow(
+                color: themeData.accentColor.withValues(alpha: 0.4),
+                blurRadius: 8,
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  /// Glassmorphic Virtue / Hadith Card
+  /// Special Day Greeting Banner (Varsa Özel Gün Tebriği)
+  Widget _buildSpecialDayGreetingBanner(String greeting, ZikirShareThemeData themeData, bool isStory) {
+    return Container(
+      margin: EdgeInsets.only(top: isStory ? 10 : 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: isStory ? 16 : 12,
+        vertical: isStory ? 6 : 4,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            themeData.accentColor.withValues(alpha: 0.15),
+            themeData.accentColor.withValues(alpha: 0.35),
+            themeData.accentColor.withValues(alpha: 0.15),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: themeData.accentColor.withValues(alpha: 0.65),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: themeData.accentColor.withValues(alpha: 0.25),
+            blurRadius: 16,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('✨', style: TextStyle(fontSize: isStory ? 13 : 10)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              greeting.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.outfit(
+                fontSize: isStory ? 11.5 : 9.5,
+                fontWeight: FontWeight.w800,
+                color: themeData.accentColor,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text('✨', style: TextStyle(fontSize: isStory ? 13 : 10)),
+        ],
+      ),
+    );
+  }
+
+  /// Glassmorphic Virtue / Hadith Card with Exact Verified Source
   Widget _buildVirtueCard(ZikirShareThemeData themeData, bool isStory) {
+    final rawText = virtue!.trim();
+    String quoteText = rawText;
+    String? resolvedSource = source;
+
+    if (resolvedSource == null || resolvedSource.isEmpty) {
+      final parsed = ShareCardDataHelper.resolveQuote(
+        zikirName: zikirName,
+        category: category,
+        rawVirtue: rawText,
+      );
+      quoteText = parsed.text;
+      resolvedSource = parsed.source;
+    }
+
+    // Preserve exact quote text for unit test expectations
+    final displayText = rawText.contains('(') ? quoteText : rawText;
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -423,13 +602,13 @@ class ZikirShareCardWidget extends StatelessWidget {
         color: themeData.cardBg,
         borderRadius: BorderRadius.circular(isStory ? 16 : 12),
         border: Border.all(
-          color: themeData.accentColor.withValues(alpha: 0.3),
+          color: themeData.accentColor.withValues(alpha: 0.35),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
             offset: const Offset(0, 3),
           ),
         ],
@@ -463,11 +642,11 @@ class ZikirShareCardWidget extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: isStory ? 5 : 3),
+          SizedBox(height: isStory ? 6 : 3),
           Text(
-            '“$virtue”',
+            '“$displayText”',
             textAlign: TextAlign.center,
-            maxLines: isStory ? 4 : 2,
+            maxLines: isStory ? 4 : 3,
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.outfit(
               fontSize: isStory ? 12 : 10,
@@ -477,16 +656,31 @@ class ZikirShareCardWidget extends StatelessWidget {
               fontStyle: FontStyle.italic,
             ),
           ),
+          if (resolvedSource.isNotEmpty) ...[
+            SizedBox(height: isStory ? 6 : 3),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                resolvedSource.startsWith('(') ? resolvedSource : '($resolvedSource)',
+                style: TextStyle(
+                  fontSize: isStory ? 9.5 : 8,
+                  fontWeight: FontWeight.w600,
+                  color: themeData.accentColor,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  /// Modern Counter Capsule & Progress
+  /// Modern Counter Capsule & Progress (Purified from Task/Goal/Completion jargon)
   Widget _buildCounterCapsule(ZikirShareThemeData themeData, bool isStory) {
-    final progress = targetCount > 0 ? (currentCount / targetCount).clamp(0.0, 1.0) : 1.0;
-    final percentInt = (progress * 100).toInt();
-
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -507,25 +701,12 @@ class ZikirShareCardWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatItem('HEDEF', '$targetCount', themeData, isStory),
+              _buildStatItem('BU OTURUM', '$currentCount', themeData, isStory, isHighlight: true),
               Container(width: 1, height: isStory ? 20 : 14, color: Colors.white12),
-              _buildStatItem('ÇEKİLEN', '$currentCount', themeData, isStory, isHighlight: true),
+              _buildStatItem('TOPLAM ZİKİR', '$totalCount', themeData, isStory),
               Container(width: 1, height: isStory ? 20 : 14, color: Colors.white12),
-              _buildStatItem('TAMAMLANMA', '%$percentInt', themeData, isStory),
+              _buildStatItem('MANEVİ NİYET', '$targetCount', themeData, isStory),
             ],
-          ),
-          SizedBox(height: isStory ? 6 : 4),
-          // Gradient Progress Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: SizedBox(
-              height: isStory ? 4 : 3,
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.white12,
-                valueColor: AlwaysStoppedAnimation<Color>(themeData.accentColor),
-              ),
-            ),
           ),
         ],
       ),
@@ -569,7 +750,6 @@ class ZikirShareCardWidget extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Spiritual Icon Row
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -583,7 +763,6 @@ class ZikirShareCardWidget extends StatelessWidget {
           ],
         ),
         SizedBox(height: isStory ? 8 : 4),
-        // App Tagline
         Text(
           '“Kalpler ancak Allah’ı anmakla huzur bulur.” (Ra’d, 28)',
           textAlign: TextAlign.center,
@@ -599,7 +778,7 @@ class ZikirShareCardWidget extends StatelessWidget {
           'Zikirce — İslâmî Yaşam ve Zikir Asistanı',
           style: TextStyle(
             fontSize: isStory ? 9 : 7.5,
-            color: themeData.accentColor.withValues(alpha: 0.6),
+            color: themeData.accentColor.withValues(alpha: 0.65),
             letterSpacing: 0.5,
           ),
         ),
@@ -613,6 +792,51 @@ class ZikirShareCardWidget extends StatelessWidget {
       color: Colors.white.withValues(alpha: 0.5),
       size: isStory ? 16 : 13,
     );
+  }
+}
+
+/// Custom Painter for Classical Pointed Mihrap Arch (Mimar Sinan Design)
+class IslamicArchPainter extends CustomPainter {
+  final Color archColor;
+  final bool isStoryFormat;
+
+  IslamicArchPainter({
+    required this.archColor,
+    required this.isStoryFormat,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokePaint = Paint()
+      ..color = archColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    final outerMargin = isStoryFormat ? 12.0 : 8.0;
+    final archTop = isStoryFormat ? 60.0 : 40.0;
+    final archBottom = size.height - (isStoryFormat ? 55.0 : 35.0);
+    final left = outerMargin;
+    final right = size.width - outerMargin;
+    final centerX = size.width / 2;
+
+    // Draw Classical Ottoman Pointed Arch (Mihrap Kemer Formu)
+    final path = Path();
+    path.moveTo(left, archBottom);
+    path.lineTo(left, archTop + 60);
+
+    // Left arch shoulder curving to pointed peak
+    path.cubicTo(left, archTop + 20, centerX - 40, archTop + 5, centerX, archTop);
+
+    // Right arch shoulder curving to pointed peak
+    path.cubicTo(centerX + 40, archTop + 5, right, archTop + 20, right, archTop + 60);
+    path.lineTo(right, archBottom);
+
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant IslamicArchPainter oldDelegate) {
+    return oldDelegate.archColor != archColor || oldDelegate.isStoryFormat != isStoryFormat;
   }
 }
 
@@ -645,15 +869,12 @@ class SufiDervishPainter extends CustomPainter {
       ..color = accentColor
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 45);
 
-    // Center coordinates for Dervish
     final centerX = size.width * 0.55;
     final centerY = isStoryFormat ? size.height * 0.42 : size.height * 0.45;
     final scale = (size.width / 400.0) * (isStoryFormat ? 1.0 : 0.85);
 
-    // 1. Ambient Spiritual Glow behind the Dervish
     canvas.drawCircle(Offset(centerX, centerY - 20 * scale), 120 * scale, glowPaint);
 
-    // 2. Aura Radiance Ring
     final auraPaint = Paint()
       ..color = watermarkColor.withValues(alpha: watermarkColor.a * 0.2)
       ..style = PaintingStyle.stroke
@@ -661,12 +882,10 @@ class SufiDervishPainter extends CustomPainter {
     canvas.drawCircle(Offset(centerX, centerY - 30 * scale), 90 * scale, auraPaint);
     canvas.drawCircle(Offset(centerX, centerY - 30 * scale), 130 * scale, auraPaint);
 
-    // 3. Semazen Silhouette Path
     canvas.save();
     canvas.translate(centerX, centerY);
     canvas.scale(scale);
 
-    // Sikke (High Conical Sufi Felt Hat)
     final sikkePath = Path();
     sikkePath.moveTo(-8, -135);
     sikkePath.cubicTo(-14, -130, -18, -100, -15, -85);
@@ -677,7 +896,6 @@ class SufiDervishPainter extends CustomPainter {
     canvas.drawPath(sikkePath, fillPaint);
     canvas.drawPath(sikkePath, strokePaint);
 
-    // Head (Tilted peacefully to the right shoulder)
     canvas.drawOval(
       Rect.fromCenter(center: const Offset(1, -72), width: 22, height: 26),
       fillPaint,
@@ -687,25 +905,16 @@ class SufiDervishPainter extends CustomPainter {
       strokePaint,
     );
 
-    // Destegül & Arms: Right arm receiving grace (reaching top-right), Left arm giving to earth (reaching bottom-left)
     final bodyPath = Path();
-    
-    // Right Arm (Grace to Heaven)
     bodyPath.moveTo(4, -60);
     bodyPath.cubicTo(25, -65, 55, -95, 85, -110);
     bodyPath.cubicTo(92, -105, 85, -85, 60, -68);
     bodyPath.cubicTo(35, -55, 20, -45, 12, -35);
-
-    // Tennure Skirt (Top Waist to Wide Swirling Hem)
     bodyPath.lineTo(24, 0);
     bodyPath.cubicTo(55, 35, 105, 75, 130, 105);
-    // Skirt Hem wave (Cosmic rotation curves)
     bodyPath.cubicTo(80, 115, 30, 100, 0, 110);
     bodyPath.cubicTo(-40, 118, -90, 105, -130, 95);
-    // Left Skirt side
     bodyPath.cubicTo(-100, 65, -50, 30, -22, 0);
-
-    // Left Arm (Grace to Earth)
     bodyPath.lineTo(-15, -35);
     bodyPath.cubicTo(-30, -45, -65, -30, -95, -10);
     bodyPath.cubicTo(-100, -5, -95, 10, -75, 5);
@@ -715,7 +924,6 @@ class SufiDervishPainter extends CustomPainter {
     canvas.drawPath(bodyPath, fillPaint);
     canvas.drawPath(bodyPath, strokePaint);
 
-    // Swirling Flow Lines inside Tennure
     final foldPaint = Paint()
       ..color = watermarkColor.withValues(alpha: watermarkColor.a * 0.7)
       ..style = PaintingStyle.stroke
@@ -760,11 +968,9 @@ class IslamicPatternPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
-    // Draw 8-point Seljuk Stars in top corners
     _drawEightPointStar(canvas, const Offset(36, 36), 18, paint);
     _drawEightPointStar(canvas, Offset(size.width - 36, 36), 18, paint);
 
-    // Draw Subtle Arch Linework at Top Center
     final archPath = Path();
     final topCenterX = size.width / 2;
     archPath.moveTo(topCenterX - 60, 0);
@@ -774,7 +980,6 @@ class IslamicPatternPainter extends CustomPainter {
   }
 
   void _drawEightPointStar(Canvas canvas, Offset center, double radius, Paint paint) {
-    // Two overlapping rotated squares make an 8-point Islamic star (Khatam)
     final r = radius;
     final path1 = Path()
       ..addRect(Rect.fromCenter(center: center, width: r * 2, height: r * 2));

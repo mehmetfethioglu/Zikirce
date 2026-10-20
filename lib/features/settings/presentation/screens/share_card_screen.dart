@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../gamification/providers/gamification_providers.dart';
+import '../../../dashboard/presentation/widgets/streak_share_preview_modal.dart';
+import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 
 class ShareCardScreen extends ConsumerWidget {
   const ShareCardScreen({super.key});
@@ -46,7 +47,23 @@ class ShareCardScreen extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.auto_awesome_rounded, color: AppColors.gold400, size: 40),
+                      Container(
+                        width: 54,
+                        height: 54,
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.gold400, width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.gold400.withValues(alpha: 0.3),
+                              blurRadius: 12,
+                            ),
+                          ],
+                        ),
+                        child: Image.asset('assets/images/zikirce_logo.png', fit: BoxFit.contain),
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         '“Kalpler ancak Allah’ı anmakla huzur bulur.”',
@@ -102,10 +119,15 @@ class ShareCardScreen extends ConsumerWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
                     icon: const Icon(Icons.share_rounded),
-                    label: const Text('Kartı Paylaş (Hikâye / Durum)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    label: const Text('Görsel Paylaşım Kartını Aç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     onPressed: () {
-                      Share.share(
-                        '“Kalpler ancak Allah’ı anmakla huzur bulur.” (Ra’d, 28)\n\n$currentStreak Günlük İbadet Serisi • Makam: $rank\n\nZikirce uygulaması ile zikir ve Kur’an takibine sen de katıl!',
+                      StreakSharePreviewModal.show(
+                        context,
+                        currentStreak: currentStreak,
+                        bestStreak: streak?.bestStreak ?? 0,
+                        totalDays: streak?.totalDays ?? 0,
+                        rankName: rank,
+                        initialTheme: ZikirShareThemeData.themeForGoalOrTask(goalType: 'streak'),
                       );
                     },
                   ),

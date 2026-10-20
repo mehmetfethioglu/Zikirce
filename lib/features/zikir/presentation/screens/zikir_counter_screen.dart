@@ -17,6 +17,7 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../providers/zikir_providers.dart';
 import '../widgets/circular_counter_painter.dart';
 import '../widgets/add_edit_zikir_sheet.dart';
+import '../widgets/zikir_share_card_widget.dart';
 import '../widgets/zikir_share_preview_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 
@@ -850,6 +851,10 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                                 targetCount: currentZikir.target,
                                 totalCount: counterState.totalCount,
                                 arabicFontFamily: arabicFont,
+                                initialTheme: ZikirShareThemeData.themeForGoalOrTask(
+                                  category: currentZikir.category,
+                                  goalType: 'zikir',
+                                ),
                               );
                             },
                             activeBg: colors.accent,

@@ -26,6 +26,7 @@ class SettingsState {
   final bool isExcusedModeEnabled;
   final bool isAutoLocalBackupEnabled;
   final bool isKeepScreenAwakeEnabled;
+  final bool isShareCardsEnabled;
   final String selectedLanguage;
   final String selectedBirdAvatar;
   final bool isZikirReminderEnabled;
@@ -71,6 +72,7 @@ class SettingsState {
     this.isExcusedModeEnabled = false,
     this.isAutoLocalBackupEnabled = true,
     this.isKeepScreenAwakeEnabled = false,
+    this.isShareCardsEnabled = true,
     this.selectedLanguage = 'tr',
     this.selectedBirdAvatar = 'Kuş 1 (Varsayılan)',
     this.isZikirReminderEnabled = true,
@@ -124,6 +126,7 @@ class SettingsState {
     bool? isExcusedModeEnabled,
     bool? isAutoLocalBackupEnabled,
     bool? isKeepScreenAwakeEnabled,
+    bool? isShareCardsEnabled,
     String? selectedLanguage,
     String? selectedBirdAvatar,
     bool? isZikirReminderEnabled,
@@ -169,6 +172,7 @@ class SettingsState {
       isExcusedModeEnabled: isExcusedModeEnabled ?? this.isExcusedModeEnabled,
       isAutoLocalBackupEnabled: isAutoLocalBackupEnabled ?? this.isAutoLocalBackupEnabled,
       isKeepScreenAwakeEnabled: isKeepScreenAwakeEnabled ?? this.isKeepScreenAwakeEnabled,
+      isShareCardsEnabled: isShareCardsEnabled ?? this.isShareCardsEnabled,
       selectedLanguage: selectedLanguage ?? this.selectedLanguage,
       selectedBirdAvatar: selectedBirdAvatar ?? this.selectedBirdAvatar,
       isZikirReminderEnabled: isZikirReminderEnabled ?? this.isZikirReminderEnabled,
@@ -273,6 +277,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final isExcused = PrefUtils.getBoolFromKeys(prefs, ['IsExcusedModeEnabled$sfx', 'IsSpecialDaysModeEnabled$sfx', 'IsZaruriHalEnabled$sfx', 'IsExcusedModeEnabled'], false);
     final isAutoLocalBackup = PrefUtils.getBoolFromKeys(prefs, ['IsAutoLocalBackupEnabled$sfx', 'IsAutoBackupEnabled$sfx', 'IsAutoLocalBackupEnabled'], true);
     final isKeepScreenAwake = PrefUtils.getBool(prefs, _sKey('IsKeepScreenAwakeEnabled', sid), false);
+    final isShareCards = PrefUtils.getBoolFromKeys(prefs, ['IsShareCardsEnabled$sfx', 'IsShareCardsEnabled'], true);
     final lang = PrefUtils.getStringFromKeys(prefs, ['SelectedLanguage$sfx', 'AppLanguage$sfx', 'app_language$sfx', 'SelectedLanguage', 'AppLanguage', 'app_language'], 'tr');
     final bird = PrefUtils.getString(prefs, _sKey('SelectedBirdAvatar', sid), 'Kuş 1 (Varsayılan)');
     final isZikirReminder = PrefUtils.getBool(prefs, _sKey('IsZikirReminderEnabled', sid), true);
@@ -318,6 +323,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       isExcusedModeEnabled: isExcused,
       isAutoLocalBackupEnabled: isAutoLocalBackup,
       isKeepScreenAwakeEnabled: isKeepScreenAwake,
+      isShareCardsEnabled: isShareCards,
       selectedLanguage: lang,
       selectedBirdAvatar: bird,
       isZikirReminderEnabled: isZikirReminder,
@@ -499,6 +505,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsKeepScreenAwakeEnabled', enabled);
     await ScreenAwakeService.setKeepAwake(enabled);
+  }
+
+  Future<void> toggleShareCards(bool enabled) async {
+    state = state.copyWith(isShareCardsEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await _setSessionPrefBool(prefs, 'IsShareCardsEnabled', enabled);
   }
 
   Future<void> setSelectedLanguage(String lang) async {

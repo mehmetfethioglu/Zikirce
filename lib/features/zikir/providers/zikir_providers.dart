@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../gamification/services/daily_streak_service.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
+import '../../dashboard/providers/share_reminder_provider.dart';
 
 // Stream of all dhikrs from DB
 final zikirListStreamProvider = StreamProvider<List<Zikir>>((ref) {
@@ -351,6 +352,20 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
         ref.read(gamificationNotifierProvider).addGold(50);
       } catch (_) {}
 
+      try {
+        ref.read(shareReminderProvider.notifier).setReminder(
+          title: zikir.name,
+          subtitle: '${state.target} zikir',
+          type: ShareReminderType.zikir,
+          metadata: {
+            'name': zikir.name,
+            'target': state.target,
+            'count': state.target,
+            'arabic': zikir.arabic,
+          },
+        );
+      } catch (_) {}
+
       _flushPending(0, nextLap, nextTotal);
       try {
         CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
@@ -377,6 +392,20 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
             ),
           );
           ref.read(gamificationNotifierProvider).addGold(50);
+        } catch (_) {}
+
+        try {
+          ref.read(shareReminderProvider.notifier).setReminder(
+            title: zikir.name,
+            subtitle: '$nextCount zikir',
+            type: ShareReminderType.zikir,
+            metadata: {
+              'name': zikir.name,
+              'target': state.target,
+              'count': nextCount,
+              'arabic': zikir.arabic,
+            },
+          );
         } catch (_) {}
       }
 
@@ -530,6 +559,19 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
                 goalTitle: 'Günlük $zikirGoal Zikir Hedefi Tamamlandı! (+1 💎, +5 🪙)',
               ),
             );
+
+            try {
+              ref.read(shareReminderProvider.notifier).setReminder(
+                title: 'Günlük Zikir Hedefi',
+                subtitle: '$totalToday / $zikirGoal zikir',
+                type: ShareReminderType.zikir,
+                metadata: {
+                  'name': 'Günlük Zikir',
+                  'target': zikirGoal,
+                  'count': totalToday,
+                },
+              );
+            } catch (_) {}
           }
         }
       } catch (_) {}

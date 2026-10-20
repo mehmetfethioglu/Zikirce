@@ -1589,6 +1589,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
+
+          // ==========================================
+          // 4.1 PAYLAŞIM KARTLARI & HATIRLATICILAR
+          // ==========================================
+          _buildCategoryHeader(l10n.isTurkish ? 'Paylaşım Kartları ve Hatırlatıcılar' : 'Share Cards & Reminders', colors.primaryText),
+          _buildContainerCard(
+            colors: colors,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.isTurkish ? 'Paylaşım Kartları ve Hatırlatıcıları' : 'Share Cards & Reminders',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.primaryText),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        l10n.isTurkish
+                            ? 'Hedef ve zikir tamamlandığında panoda bildirim baloncuğu ve manevi paylaşım kartlarını göster.'
+                            : 'Show notification reminder badge and spiritual share cards on dashboard upon milestone completion.',
+                        style: TextStyle(fontSize: 10.5, color: colors.secondaryTextAlt, height: 1.25),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: settings.isShareCardsEnabled,
+                  activeTrackColor: colors.accent,
+                  onChanged: (val) => settingsNotifier.toggleShareCards(val),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 18),
 
           // ==========================================

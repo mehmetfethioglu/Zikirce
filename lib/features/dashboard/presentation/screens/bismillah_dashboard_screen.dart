@@ -37,6 +37,9 @@ import '../../../gamification/presentation/widgets/gold_diamond_exchange_sheet.d
 import '../../../gamification/presentation/screens/streak_details_screen.dart';
 import '../widgets/streak_share_preview_modal.dart';
 import '../widgets/quick_stats_share_preview_modal.dart';
+import '../../providers/share_reminder_provider.dart';
+import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
+import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../widgets/account_switcher_sheet.dart';
 import '../../../../core/session/session_providers.dart';
 import '../../../../core/services/changelog_service.dart';
@@ -184,6 +187,47 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
       debugPrint('[BismillahDashboard] Error checking exact alarm permission: $e');
     }
   }
+  void _openShareReminder(BuildContext context, ShareReminderState reminder) {
+    HapticService.selectionClick();
+    ref.read(shareReminderProvider.notifier).clearReminder();
+
+    final streakAsync = ref.read(userStreakStreamProvider);
+    final streak = streakAsync.valueOrNull;
+    final streakDays = streak?.currentStreak ?? 0;
+    final userRank = ref.read(currentUserRankProvider);
+    final goalsStatus = ref.read(dailyGoalsStatusProvider).valueOrNull;
+    final isGold = goalsStatus?.isGoldCompleted ?? false;
+
+    if (reminder.type == ShareReminderType.zikir) {
+      final zikirName = reminder.metadata['name'] as String? ?? (reminder.title.isNotEmpty ? reminder.title : 'Günlük Zikir');
+      final target = reminder.metadata['target'] as int? ?? 33;
+      final arabic = reminder.metadata['arabic'] as String?;
+      final count = reminder.metadata['count'] as int? ?? target;
+
+      ZikirSharePreviewModal.show(
+        context: context,
+        zikirName: zikirName,
+        arabicText: arabic,
+        category: 'Zikir Paylaşımı',
+        currentCount: count,
+        targetCount: target,
+        totalCount: count,
+        initialTheme: reminder.theme,
+      );
+    } else {
+      StreakSharePreviewModal.show(
+        context,
+        currentStreak: streakDays,
+        bestStreak: streak?.bestStreak ?? 0,
+        totalDays: streak?.totalDays ?? 0,
+        rankName: userRank.name,
+        rankBadge: userRank.badge,
+        isGoldCompleted: isGold,
+        initialTheme: reminder.theme,
+      );
+    }
+  }
+
   Widget _buildAvatarImage(String imagePath) {
     if (imagePath.startsWith('/') || imagePath.contains(':\\') || (!imagePath.startsWith('assets/') && File(imagePath).existsSync())) {
       return Image.file(
@@ -440,6 +484,10 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
 
     final historyListAsync = ref.watch(zikirHistoryListProvider);
 
+    final shareReminder = ref.watch(shareReminderProvider);
+    final settings = ref.watch(userSettingsProvider);
+    final hasShareBadge = shareReminder.hasPendingReminder && settings.isShareCardsEnabled;
+
     return Scaffold(
       backgroundColor: colors.pageBackground,
       body: SafeArea(
@@ -465,10 +513,17 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Left: Avatar with theme accent border - Tap to switch account
+                  // Left: Avatar with theme accent border - Tap to switch account or open share reminder
                   GestureDetector(
-                    onTap: () => AccountSwitcherSheet.show(context),
+                    onTap: () {
+                      if (hasShareBadge) {
+                        _openShareReminder(context, shareReminder);
+                      } else {
+                        AccountSwitcherSheet.show(context);
+                      }
+                    },
                     child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         Container(
                           width: 68,
@@ -476,30 +531,94 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: colors.cardBackground,
-                            border: Border.all(color: colors.accent, width: 2.5),
+                            border: Border.all(
+                              color: hasShareBadge ? const Color(0xFFEAB308) : colors.accent,
+                              width: hasShareBadge ? 3.0 : 2.5,
+                            ),
+                            boxShadow: hasShareBadge
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFEAB308).withValues(alpha: 0.45),
+                                      blurRadius: 14,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
                           ),
                           child: ClipOval(
                             child: _buildAvatarImage(userAvatar),
                           ),
                         ),
+                        // Bottom-right: session type / switch account button
                         Positioned(
                           right: 0,
                           bottom: 0,
-                          child: Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              color: colors.accent,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 1.5),
-                            ),
-                            child: Icon(
-                              activeSession.isCloud ? Icons.cloud_done_rounded : Icons.swap_horiz_rounded,
-                              size: 13,
-                              color: Colors.white,
+                          child: GestureDetector(
+                            onTap: () => AccountSwitcherSheet.show(context),
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: colors.accent,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                              ),
+                              child: Icon(
+                                activeSession.isCloud ? Icons.cloud_done_rounded : Icons.swap_horiz_rounded,
+                                size: 13,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
+                        // Top-right notification bubble for share reminder
+                        if (hasShareBadge)
+                          Positioned(
+                            top: -6,
+                            right: -8,
+                            child: GestureDetector(
+                              onTap: () => _openShareReminder(context, shareReminder),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white, width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.6),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.share_rounded,
+                                      size: 11,
+                                      color: Colors.white,
+                                    ),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Paylaş',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -796,6 +915,7 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                                           rankName: userRank.name,
                                           rankBadge: userRank.badge,
                                           isGoldCompleted: isGold,
+                                          initialTheme: ZikirShareThemeData.themeForGoalOrTask(goalType: 'streak', isGold: isGold),
                                         );
                                       },
                                       child: Container(
@@ -948,6 +1068,7 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                                   quranPages: quickStats?.formattedQuranToday ?? '0',
                                   rankName: userRank.name,
                                   rankBadge: userRank.badge,
+                                  initialTheme: ZikirShareThemeData.themeForGoalOrTask(category: 'İbadet Karnesi'),
                                 );
                               },
                               child: Container(

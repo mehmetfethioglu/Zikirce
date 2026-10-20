@@ -52,8 +52,9 @@ void main() {
     expect(find.text('SUBHANALLAH'), findsOneWidget);
     expect(find.text('سُبْحَانَ اللهِ'), findsOneWidget);
     expect(find.text('“Her namazın peşinden otuz üç defa tesbih edin.”'), findsOneWidget);
-    expect(find.text('HEDEF'), findsOneWidget);
-    expect(find.text('ÇEKİLEN'), findsOneWidget);
+    expect(find.text('BU OTURUM'), findsOneWidget);
+    expect(find.text('TOPLAM ZİKİR'), findsOneWidget);
+    expect(find.text('MANEVİ NİYET'), findsOneWidget);
     expect(find.text('ZİKİRCE'), findsOneWidget);
   });
 
@@ -101,7 +102,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Theme selector tap
-    await tester.tap(find.text('Gece'));
+    await tester.tap(find.text('Gece Seması'));
     await tester.pumpAndSettle();
   });
 }

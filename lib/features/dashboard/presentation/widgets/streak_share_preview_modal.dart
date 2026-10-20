@@ -19,6 +19,7 @@ class StreakSharePreviewModal extends ConsumerStatefulWidget {
   final String rankName;
   final String rankBadge;
   final bool isGoldCompleted;
+  final ZikirShareCardTheme? initialTheme;
 
   const StreakSharePreviewModal({
     super.key,
@@ -28,6 +29,7 @@ class StreakSharePreviewModal extends ConsumerStatefulWidget {
     this.rankName = 'Mübtedi',
     this.rankBadge = '🌱',
     this.isGoldCompleted = false,
+    this.initialTheme,
   });
 
   static Future<void> show(
@@ -38,6 +40,7 @@ class StreakSharePreviewModal extends ConsumerStatefulWidget {
     String rankName = 'Mübtedi',
     String rankBadge = '🌱',
     bool isGoldCompleted = false,
+    ZikirShareCardTheme? initialTheme,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -52,6 +55,7 @@ class StreakSharePreviewModal extends ConsumerStatefulWidget {
         rankName: rankName,
         rankBadge: rankBadge,
         isGoldCompleted: isGoldCompleted,
+        initialTheme: initialTheme,
       ),
     );
   }
@@ -64,8 +68,17 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
-  ZikirShareCardTheme _selectedTheme = ZikirShareCardTheme.emeraldSufi;
+  late ZikirShareCardTheme _selectedTheme;
   bool _isGeneratingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTheme = widget.initialTheme ??
+        (widget.isGoldCompleted
+            ? ZikirShareCardTheme.midnightGold
+            : ZikirShareThemeData.themeForGoalOrTask(goalType: 'streak'));
+  }
 
   Future<void> _shareAsImage() async {
     if (_isGeneratingImage) return;
@@ -274,21 +287,23 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                       ),
                     ),
                   ),
-                  Row(
-                    children: ZikirShareCardTheme.values.map((themeOption) {
-                      final themeData = ZikirShareThemeData.fromEnum(themeOption);
-                      final isSelected = _selectedTheme == themeOption;
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: ZikirShareCardTheme.values.map((themeOption) {
+                        final themeData = ZikirShareThemeData.fromEnum(themeOption);
+                        final isSelected = _selectedTheme == themeOption;
 
-                      return Expanded(
-                        child: GestureDetector(
+                        return GestureDetector(
                           onTap: () {
                             HapticFeedback.selectionClick();
                             setState(() => _selectedTheme = themeOption);
                           },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -313,14 +328,17 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                                     ]
                                   : null,
                             ),
-                            child: Column(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                if (isSelected) ...[
+                                  Icon(Icons.check_circle_rounded, size: 14, color: themeData.accentColor),
+                                  const SizedBox(width: 5),
+                                ],
                                 Text(
                                   themeData.nameTr.split(' ').first,
-                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 11.5,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                     color: Colors.white,
                                   ),
@@ -328,9 +346,9 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                               ],
                             ),
                           ),
-                        ),
-                      );
-                    }).toList(),
+                        );
+                      }).toList(),
+                    ),
                   ),
                 ],
               ),

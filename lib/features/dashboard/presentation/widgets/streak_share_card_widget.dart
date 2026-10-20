@@ -223,38 +223,50 @@ class StreakShareCardWidget extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Zikirce Monogram Icon
+        // Zikirce Monogram & Logo (High Visibility)
         Container(
-          width: isStory ? 34 : 28,
-          height: isStory ? 34 : 28,
+          width: isStory ? 44 : 36,
+          height: isStory ? 44 : 36,
+          padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(isStory ? 10 : 8),
+            color: Colors.black.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(isStory ? 12 : 10),
             border: Border.all(
-              color: themeData.accentColor.withValues(alpha: 0.4),
-              width: 1.2,
+              color: themeData.accentColor.withValues(alpha: 0.7),
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: themeData.accentColor.withValues(alpha: 0.35),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
           ),
           alignment: Alignment.center,
-          child: Text(
-            '📿',
-            style: TextStyle(fontSize: isStory ? 16 : 13),
+          child: Image.asset(
+            'assets/images/zikirce_logo.png',
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => Text(
+              '📿',
+              style: TextStyle(fontSize: isStory ? 18 : 15),
+            ),
           ),
         ),
 
-        // Category Tag
+        // Category Tag (Purified from Task/Goal wording)
         Flexible(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 8),
             padding: EdgeInsets.symmetric(
-              horizontal: isStory ? 10 : 7,
-              vertical: isStory ? 5 : 3,
+              horizontal: isStory ? 11 : 8,
+              vertical: isStory ? 5 : 3.5,
             ),
             decoration: BoxDecoration(
-              color: themeData.badgeBg.withValues(alpha: 0.8),
+              color: themeData.badgeBg.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: themeData.badgeBorder.withValues(alpha: 0.6),
+                color: themeData.badgeBorder.withValues(alpha: 0.7),
                 width: 1,
               ),
             ),
@@ -292,10 +304,16 @@ class StreakShareCardWidget extends StatelessWidget {
         Text(
           'ZİKİRCE',
           style: GoogleFonts.cinzel(
-            fontSize: isStory ? 12 : 10,
+            fontSize: isStory ? 13.5 : 11,
             fontWeight: FontWeight.w800,
-            color: Colors.white.withValues(alpha: 0.85),
-            letterSpacing: 1.8,
+            color: Colors.white.withValues(alpha: 0.95),
+            letterSpacing: 2.0,
+            shadows: [
+              Shadow(
+                color: themeData.accentColor.withValues(alpha: 0.4),
+                blurRadius: 8,
+              ),
+            ],
           ),
         ),
       ],
