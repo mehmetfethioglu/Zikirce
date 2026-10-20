@@ -472,6 +472,12 @@ class LeanKpiLeaderboardView extends ConsumerWidget {
               border: Border.all(color: pal.border),
             ),
             child: ListTile(
+              onTap: () => showEmployeeHistoryAndDossierDialog(
+                context,
+                ref,
+                sorted[i].employee,
+                initialTabIndex: 0,
+              ),
               leading: EmployeeProfileAvatar(
                 employee: sorted[i].employee,
                 size: 40,
@@ -603,6 +609,12 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
               border: Border.all(color: pal.border),
             ),
             child: ListTile(
+              onTap: () => showEmployeeHistoryAndDossierDialog(
+                context,
+                ref,
+                item.employee,
+                initialTabIndex: 0,
+              ),
               leading: EmployeeProfileAvatar(
                 employee: item.employee,
                 size: 38,

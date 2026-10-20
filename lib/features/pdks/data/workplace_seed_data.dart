@@ -183,6 +183,35 @@ class WorkplaceSeedData {
     Employee(id: 2066, cardNo: '01723', fullName: 'LUEY İBRAHİM', title: 'SATIŞ DANIŞMANI', departmentId: 40, branchId: 40, shiftId: 3, hireDate: '2023-03-16', annualLeaveEntitlement: 14, usedAnnualLeave: 1, kpiScore: 90.0),
   ];
 
+  /// 17.10.2026 tarihinde Tenfei D35 (192.168.9.150) cihazından çekilen gerçek giriş kayıtları.
+  static const List<String> rawLogs20261017 = <String>[
+    '001,00062,1,2026/10/17,05:21:00',
+    '001,01576,1,2026/10/17,05:22:00',
+    '001,00046,1,2026/10/17,05:24:00',
+    '001,01650,1,2026/10/17,05:25:00',
+    '001,00072,1,2026/10/17,05:26:00',
+    '001,01698,1,2026/10/17,05:31:00',
+    '001,00063,1,2026/10/17,05:45:00',
+    '001,00043,1,2026/10/17,05:55:00',
+    '001,00040,1,2026/10/17,05:58:00',
+    '001,01628,1,2026/10/17,05:38:00',
+    '001,00036,1,2026/10/17,05:45:00',
+    '001,01131,1,2026/10/17,05:45:00',
+    '001,00017,1,2026/10/17,05:47:00',
+    '001,01134,1,2026/10/17,05:50:00',
+    '001,00056,1,2026/10/17,05:50:00',
+    '001,01406,1,2026/10/17,05:52:00',
+    '001,00015,1,2026/10/17,05:52:00',
+    '001,01585,1,2026/10/17,05:54:00',
+    '001,01663,1,2026/10/17,05:54:00',
+    '001,00064,1,2026/10/17,05:55:00',
+    '001,01215,1,2026/10/17,05:55:00',
+    '001,01497,1,2026/10/17,05:55:00',
+    '001,00082,1,2026/10/17,05:56:00',
+    '001,00003,1,2026/10/17,06:18:00',
+    '001,01152,1,2026/10/17,06:04:00',
+  ];
+
   /// 19.10.2026 sabahı Tenfei D35 (192.168.9.150) cihazından çekilen gerçek giriş kayıtları.
   static const List<String> rawLogs20261019 = <String>[
     '001,00062,1,2026/10/19,05:26:00',
@@ -228,11 +257,64 @@ class WorkplaceSeedData {
     '001,01567,1,2026/10/19,06:35:00',
     '001,00036,1,2026/10/19,06:36:00',
     '001,00171,1,2026/10/19,06:40:00',
+    '001,00082,1,2026/10/19,11:38:17',
+    '001,00058,1,2026/10/19,11:43:30',
+  ];
+
+  /// 20.10.2026 sabahı Tenfei D35 (192.168.9.150:4370) cihazından canlı çekilen gerçek giriş kayıtları.
+  static const List<String> rawLogs20261020 = <String>[
+    '001,00062,1,2026/10/20,05:22:58',
+    '001,00058,1,2026/10/20,05:29:14',
+    '001,01576,1,2026/10/20,05:29:36',
+    '001,01131,1,2026/10/20,05:39:16',
+    '001,00036,1,2026/10/20,05:39:25',
+    '001,00034,1,2026/10/20,05:42:42',
+    '001,01134,1,2026/10/20,05:43:08',
+    '001,01498,1,2026/10/20,05:43:23',
+    '001,00120,1,2026/10/20,05:43:59',
+    '001,00056,1,2026/10/20,05:44:34',
+    '001,00157,1,2026/10/20,05:47:33',
+    '001,01663,1,2026/10/20,05:49:29',
+    '001,00046,1,2026/10/20,05:49:40',
+    '001,00015,1,2026/10/20,05:51:24',
+    '001,01585,1,2026/10/20,05:53:14',
+    '001,01401,1,2026/10/20,05:53:20',
+    '001,01497,1,2026/10/20,05:53:34',
+    '001,00008,1,2026/10/20,05:53:49',
+    '001,01650,1,2026/10/20,05:53:54',
+    '001,00072,1,2026/10/20,05:54:02',
+    '001,01423,1,2026/10/20,05:54:58',
+    '001,01698,1,2026/10/20,05:56:17',
+    '001,01215,1,2026/10/20,05:56:22',
+    '001,01406,1,2026/10/20,05:56:30',
+    '001,00043,1,2026/10/20,05:57:38',
+    '001,01110,1,2026/10/20,05:58:05',
+    '001,00040,1,2026/10/20,05:58:12',
+    '001,01567,1,2026/10/20,05:59:41',
+    '001,00055,1,2026/10/20,06:02:54',
+    '001,01313,1,2026/10/20,06:03:23',
+    '001,01429,1,2026/10/20,06:04:56',
+    '001,00368,1,2026/10/20,06:05:00',
+    '001,01483,1,2026/10/20,06:05:09',
+    '001,00063,1,2026/10/20,06:05:27',
+    '001,01464,1,2026/10/20,06:07:42',
+    '001,00003,1,2026/10/20,06:08:40',
+    '001,01152,1,2026/10/20,06:09:53',
+    '001,00006,1,2026/10/20,06:15:58',
+    '001,01369,1,2026/10/20,06:16:09',
+    '001,00082,1,2026/10/20,06:16:48',
+    '001,00011,1,2026/10/20,06:25:19',
+    '001,01140,1,2026/10/20,06:45:46',
+    '001,01628,1,2026/10/20,06:46:50',
   ];
 
   static List<AttendanceLog> buildInitialAttendanceLogs() {
     final result = <AttendanceLog>[];
-    for (final line in rawLogs20261019) {
+    for (final line in <String>[
+      ...rawLogs20261017,
+      ...rawLogs20261019,
+      ...rawLogs20261020,
+    ]) {
       final parsed = TenfeiZkClient.parseFlatLogLine(line, branchId: 1);
       if (parsed != null) {
         result.add(parsed);
@@ -308,5 +390,45 @@ class WorkplaceSeedData {
         note: 'Şube Haftalık İzin Günü',
       ),
     ];
+  }
+
+  static List<PersonnelDocument> buildInitialPersonnelDocuments() {
+    final docs = <PersonnelDocument>[
+      const PersonnelDocument(
+        id: 'doc_2144_saglik',
+        employeeId: 2144,
+        category: PersonnelDocumentCategory.saglikRaporu,
+        title: 'Gıda Üretim & Hijyen Ağır İş Sağlık Raporu',
+        filePath: 'Dijital_Arsiv/00064_OSGB_Saglik_Raporu.pdf',
+        uploadDate: '2025-12-22',
+        notes: 'OSGB İşyeri Hekimi onaylı.',
+      ),
+    ];
+
+    for (final emp in activeEmployees) {
+      docs.add(
+        PersonnelDocument(
+          id: 'doc_${emp.id}_kimlik',
+          employeeId: emp.id,
+          category: PersonnelDocumentCategory.kimlikFotokopisi,
+          title: 'T.C. Kimlik Kartı Dijital Kopyası',
+          filePath: 'Dijital_Arsiv/${emp.cardNo}_Kimlik_Fotokopisi.pdf',
+          uploadDate: emp.hireDate,
+          notes: 'İşe girişte aslı gibidir onaylandı.',
+        ),
+      );
+      docs.add(
+        PersonnelDocument(
+          id: 'doc_${emp.id}_sgk',
+          employeeId: emp.id,
+          category: PersonnelDocumentCategory.sgkIseGirisBildirgesi,
+          title: 'SGK 4A İşe Giriş Bildirgesi',
+          filePath: 'Dijital_Arsiv/${emp.cardNo}_SGK_Ise_Giris_Bildirgesi.pdf',
+          uploadDate: emp.hireDate,
+          notes: 'Barkodlu e-Devlet SGK bildirgesi.',
+        ),
+      );
+    }
+    return docs;
   }
 }

@@ -210,20 +210,24 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                 ),
               ),
             ),
-            if (screenWidth >= 520) ...[
+            if (screenWidth >= 1020) ...[
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: pal.chip,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  authSession.displayName,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: pal.textSecondary,
+              Flexible(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: pal.chip,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    authSession.displayName,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: pal.textSecondary,
+                    ),
                   ),
                 ),
               ),
@@ -508,6 +512,8 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
     );
     final isPolling =
         ref.watch(pdksDashboardProvider.select((s) => s.isPollingTerminal));
+    final lastReachable =
+        ref.watch(pdksDashboardProvider.select((s) => s.lastTerminalReachable));
     final pal = HasibuPalette.of(context);
 
     final Color dotColor;
@@ -524,9 +530,33 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
         dotColor = const Color(0xFF94A3B8);
     }
 
+    final Color termDotColor = switch (lastReachable) {
+      true => const Color(0xFF10B981),
+      false => const Color(0xFFEF4444),
+      null => const Color(0xFF0284C7),
+    };
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        OutlinedButton.icon(
+          key: const ValueKey('appbar_terminal_diag_button'),
+          style: OutlinedButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            side: BorderSide(color: pal.border),
+          ),
+          onPressed: () => showTerminalDiagnosticsDialog(context, ref),
+          icon: Icon(
+            Icons.radar_rounded,
+            size: 15,
+            color: termDotColor,
+          ),
+          label: Text(
+            compact ? 'Cihaz Test' : 'Bağlantı Kontrolü',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+        const SizedBox(width: 6),
         if (!compact) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
@@ -681,23 +711,42 @@ class _LiveAttendanceDashboardViewState
                           ),
                         ],
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
-                            Icons.calendar_today_rounded,
-                            size: 15,
-                            color: pal.textSecondary,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Tarih: $selectedDate',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: pal.textPrimary,
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () =>
+                                showTerminalDiagnosticsDialog(context, ref),
+                            icon: const Icon(
+                              Icons.network_check_rounded,
+                              size: 15,
+                            ),
+                            label: const Text(
+                              'Cihaz Bağlantı Kontrolü',
+                              style: TextStyle(fontSize: 11.5),
                             ),
                           ),
+                          for (final d in const [
+                            '2026-10-20',
+                            '2026-10-19',
+                            '2026-10-17',
+                          ])
+                            ChoiceChip(
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                d == '2026-10-20' ? '$d (Bugün)' : d,
+                                style: const TextStyle(fontSize: 11.5),
+                              ),
+                              selected: selectedDate == d,
+                              onSelected: (_) => ref
+                                  .read(pdksDashboardProvider.notifier)
+                                  .setSelectedDate(d),
+                            ),
                         ],
                       ),
                     ],
@@ -715,7 +764,7 @@ class _LiveAttendanceDashboardViewState
                       .setSearchQuery(val),
                   decoration: InputDecoration(
                     hintText:
-                        'Personel adı, kart no (örn. 00064) veya üretim bölümü ara...',
+                        'Personel adı, kart no (örn. 00064) veya bölüm ara... (Personel geçmişi & özlük dosyası için karta dokunun)',
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     fillColor: pal.card,
                   ),
@@ -999,123 +1048,234 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
       checkInText = item.leaveRecord?.note ?? 'Giriş Yok';
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: pal.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: pal.border),
+    final docCount = ref.watch(
+      pdksDashboardProvider.select(
+        (s) => s.documentsForEmployee(item.employee.id).length,
       ),
-      child: Row(
-        children: [
-          EmployeeProfileAvatar(
-            employee: item.employee,
-            size: 42,
-            borderColor: badgeColor.withValues(alpha: 0.45),
+    );
+
+    return Material(
+      color: pal.card,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        key: ValueKey('employee_card_${item.employee.cardNo}'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => showEmployeeHistoryAndDossierDialog(
+          context,
+          ref,
+          item.employee,
+          initialTabIndex: 0,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: pal.border),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          child: Row(
+            children: [
+              EmployeeProfileAvatar(
+                employee: item.employee,
+                size: 42,
+                borderColor: badgeColor.withValues(alpha: 0.45),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        item.employee.fullName,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13.5,
-                          color: pal.textPrimary,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.employee.fullName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13.5,
+                              color: pal.textPrimary,
+                            ),
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: pal.chip,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '#${item.employee.cardNo}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: pal.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${item.branch.name} • ${item.department.name} • Mesai: ${item.shift.startTime}-${item.shift.endTime}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: pal.textSecondary,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: pal.chip,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '#${item.employee.cardNo}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: pal.textSecondary,
+                    const SizedBox(height: 5),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        InkWell(
+                          key: ValueKey(
+                            'employee_history_btn_${item.employee.cardNo}',
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => showEmployeeHistoryAndDossierDialog(
+                            context,
+                            ref,
+                            item.employee,
+                            initialTabIndex: 0,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0284C7)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.history_rounded,
+                                  size: 12,
+                                  color: Color(0xFF0284C7),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Personel Geçmişi',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0284C7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
+                        InkWell(
+                          key: ValueKey(
+                            'employee_dossier_btn_${item.employee.cardNo}',
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => showEmployeeHistoryAndDossierDialog(
+                            context,
+                            ref,
+                            item.employee,
+                            initialTabIndex: 1,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.folder_shared_rounded,
+                                  size: 12,
+                                  color: Color(0xFF059669),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Özlük Dosyası ($docCount Evrak)',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${item.branch.name} • ${item.department.name} • Mesai: ${item.shift.startTime}-${item.shift.endTime}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: pal.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  item.lateMinutes > 0
-                      ? '${item.state.label} (+${item.lateMinutes} dk)'
-                      : item.state.label,
-                  style: TextStyle(
-                    color: badgeColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11.5,
-                  ),
-                ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                checkInText,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      item.lateMinutes > 0
+                          ? '${item.state.label} (+${item.lateMinutes} dk)'
+                          : item.state.label,
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    checkInText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: pal.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 6),
+              PopupMenuButton<LeaveType>(
+                tooltip: 'İzin / Rapor Durumu Ata',
+                icon: Icon(
+                  Icons.more_horiz_rounded,
                   color: pal.textSecondary,
                 ),
+                onSelected: (leaveType) {
+                  ref.read(pdksDashboardProvider.notifier).assignLeaveOrReport(
+                        employeeId: item.employee.id,
+                        leaveType: leaveType,
+                        note: '${leaveType.label} (Hızlı Atama)',
+                      );
+                },
+                itemBuilder: (_) => [
+                  for (final lt in LeaveType.values)
+                    PopupMenuItem<LeaveType>(
+                      value: lt,
+                      child: Text('${lt.label} Olarak İşaretle'),
+                    ),
+                ],
               ),
             ],
           ),
-          const SizedBox(width: 6),
-          PopupMenuButton<LeaveType>(
-            tooltip: 'İzin / Rapor Durumu Ata',
-            icon: Icon(
-              Icons.more_horiz_rounded,
-              color: pal.textSecondary,
-            ),
-            onSelected: (leaveType) {
-              ref.read(pdksDashboardProvider.notifier).assignLeaveOrReport(
-                    employeeId: item.employee.id,
-                    leaveType: leaveType,
-                    note: '${leaveType.label} (Hızlı Atama)',
-                  );
-            },
-            itemBuilder: (_) => [
-              for (final lt in LeaveType.values)
-                PopupMenuItem<LeaveType>(
-                  value: lt,
-                  child: Text('${lt.label} Olarak İşaretle'),
-                ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1219,7 +1379,17 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                     ),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 8,
                       children: [
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              showTerminalDiagnosticsDialog(context, ref),
+                          icon: const Icon(
+                            Icons.radar_rounded,
+                            size: 16,
+                          ),
+                          label: const Text('Cihaz Bağlantı Kontrolü'),
+                        ),
                         OutlinedButton.icon(
                           onPressed: () =>
                               showGmailDriveSyncDialog(context, ref),
@@ -1288,11 +1458,25 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                     : 'Mobil QR / GPS Geofence Modu (${b.geofenceRadiusMeters.round()}m) • IP: ${b.terminalIp}:${b.terminalPort}',
                 style: TextStyle(fontSize: 12, color: pal.textSecondary),
               ),
-              trailing: FilledButton.tonal(
-                onPressed: () => ref
-                    .read(pdksDashboardProvider.notifier)
-                    .pullFromTenfeiTerminals(onlyBranchId: b.id),
-                child: const Text('Şimdi Çek'),
+              trailing: Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => showTerminalDiagnosticsDialog(
+                      context,
+                      ref,
+                      initialBranch: b,
+                    ),
+                    icon: const Icon(Icons.network_check_rounded, size: 16),
+                    label: const Text('Bağlantı Kontrolü'),
+                  ),
+                  FilledButton.tonal(
+                    onPressed: () => ref
+                        .read(pdksDashboardProvider.notifier)
+                        .pullFromTenfeiTerminals(onlyBranchId: b.id),
+                    child: const Text('Şimdi Çek'),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1757,6 +1941,33 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                     subValue: current.firstCheckIn != null
                         ? 'Giriş: ${current.firstCheckIn!.timeFormatted}'
                         : '${current.shift.startTime}-${current.shift.endTime}',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => showEmployeeHistoryAndDossierDialog(
+                      context,
+                      ref,
+                      emp,
+                      initialTabIndex: 0,
+                    ),
+                    icon: const Icon(Icons.history_rounded, size: 18),
+                    label: const Text('Giriş-Çıkış Geçmişini Aç'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => showEmployeeHistoryAndDossierDialog(
+                      context,
+                      ref,
+                      emp,
+                      initialTabIndex: 1,
+                    ),
+                    icon: const Icon(Icons.folder_shared_rounded, size: 18),
+                    label: const Text('Özlük Dosyası & Resmi Evraklar'),
                   ),
                 ],
               ),

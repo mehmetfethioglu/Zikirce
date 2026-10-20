@@ -656,3 +656,113 @@ class EmployeeDailyStatus {
     this.lateMinutes = 0,
   });
 }
+
+enum PersonnelDocumentCategory {
+  kimlikFotokopisi('Kimlik Fotokopisi / Nüfus Cüzdanı', true),
+  sgkIseGirisBildirgesi('SGK İşe Giriş Bildirgesi', true),
+  adliSicilKaydi('Adli Sicil / Sabıka Kaydı', true),
+  saglikRaporu('İşe Giriş Sağlık Raporu', true),
+  ikametgahBelgesi('İkametgah / Yerleşim Yeri Belgesi', true),
+  isSozlesmesi('Belirsiz Süreli İş Sözleşmesi & KVKK', true),
+  diplomaSertifika('Diploma / Ustalık & Hijyen Belgesi', false),
+  digerEvrak('Diğer Resmi Evrak / Tutanak', false);
+
+  final String label;
+  final bool isMandatory;
+  const PersonnelDocumentCategory(this.label, this.isMandatory);
+
+  static PersonnelDocumentCategory fromName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return PersonnelDocumentCategory.digerEvrak;
+    }
+    for (final c in PersonnelDocumentCategory.values) {
+      if (c.name == raw.trim()) return c;
+    }
+    return PersonnelDocumentCategory.digerEvrak;
+  }
+}
+
+@immutable
+class PersonnelDocument {
+  final String id;
+  final int employeeId;
+  final PersonnelDocumentCategory category;
+  final String title;
+  final String filePath; // Dijital kopya dosya yolu (.pdf, .jpg, .png vb.)
+  final String uploadDate; // YYYY-MM-DD
+  final String notes;
+
+  const PersonnelDocument({
+    required this.id,
+    required this.employeeId,
+    required this.category,
+    required this.title,
+    required this.filePath,
+    required this.uploadDate,
+    this.notes = '',
+  });
+
+  PersonnelDocument copyWith({
+    String? id,
+    int? employeeId,
+    PersonnelDocumentCategory? category,
+    String? title,
+    String? filePath,
+    String? uploadDate,
+    String? notes,
+  }) {
+    return PersonnelDocument(
+      id: id ?? this.id,
+      employeeId: employeeId ?? this.employeeId,
+      category: category ?? this.category,
+      title: title ?? this.title,
+      filePath: filePath ?? this.filePath,
+      uploadDate: uploadDate ?? this.uploadDate,
+      notes: notes ?? this.notes,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'employeeId': employeeId,
+        'category': category.name,
+        'title': title,
+        'filePath': filePath,
+        'uploadDate': uploadDate,
+        'notes': notes,
+      };
+
+  factory PersonnelDocument.fromJson(Map<String, dynamic> json) =>
+      PersonnelDocument(
+        id: json['id'] as String,
+        employeeId: json['employeeId'] as int,
+        category:
+            PersonnelDocumentCategory.fromName(json['category'] as String?),
+        title: json['title'] as String? ?? 'Resmi Evrak',
+        filePath: json['filePath'] as String? ?? '',
+        uploadDate: json['uploadDate'] as String? ?? '2026-10-20',
+        notes: json['notes'] as String? ?? '',
+      );
+}
+
+@immutable
+class EmployeeHistoryDayEntry {
+  final String dateKey; // YYYY-MM-DD
+  final DailyAttendanceState state;
+  final AttendanceLog? firstCheckIn;
+  final AttendanceLog? lastCheckOut;
+  final List<AttendanceLog> allLogs;
+  final LeaveRecord? leaveRecord;
+  final int lateMinutes;
+
+  const EmployeeHistoryDayEntry({
+    required this.dateKey,
+    required this.state,
+    this.firstCheckIn,
+    this.lastCheckOut,
+    this.allLogs = const <AttendanceLog>[],
+    this.leaveRecord,
+    this.lateMinutes = 0,
+  });
+}
+

@@ -122,6 +122,19 @@ class HasibuDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_leave_date_emp
         ON leave_records(date_key, employee_id);
+
+      CREATE TABLE IF NOT EXISTS employee_documents (
+        id TEXT PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        category TEXT NOT NULL,
+        title TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        upload_date TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT ''
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_emp_docs_emp_id
+        ON employee_documents(employee_id);
     ''');
 
     // Mevcut veritabanı yükseltmesi (migration)
@@ -168,6 +181,28 @@ class HasibuDatabase {
       }
     }
 
+    // 2b. Mevcut veritabanı yükseltmelerinde özlük evrakları ve geçmiş gün hareketleri yoksa tamamla
+    final docsCount = _db
+            .select('SELECT COUNT(*) AS cnt FROM employee_documents')
+            .first['cnt'] as int? ??
+        0;
+    if (docsCount == 0) {
+      for (final doc in WorkplaceSeedData.buildInitialPersonnelDocuments()) {
+        upsertPersonnelDocument(doc);
+      }
+    }
+    final histCount = _db
+            .select(
+              "SELECT COUNT(*) AS cnt FROM attendance_logs WHERE date_key = '2026-10-17'",
+            )
+            .first['cnt'] as int? ??
+        0;
+    if (histCount == 0) {
+      for (final log in WorkplaceSeedData.buildInitialAttendanceLogs()) {
+        upsertAttendanceLog(log);
+      }
+    }
+
     // 3. Personeller doluysa diğer tohumlamaları atla
     final countRow = _db.select('SELECT COUNT(*) AS cnt FROM employees');
     final int count = countRow.first['cnt'] as int? ?? 0;
@@ -189,6 +224,9 @@ class HasibuDatabase {
       }
       for (final lv in WorkplaceSeedData.buildInitialLeaves()) {
         upsertLeaveRecord(lv);
+      }
+      for (final doc in WorkplaceSeedData.buildInitialPersonnelDocuments()) {
+        upsertPersonnelDocument(doc);
       }
       _db.execute('COMMIT;');
     } catch (_) {
@@ -480,7 +518,7 @@ class HasibuDatabase {
       SELECT * FROM attendance_logs
       WHERE card_no = ?
       ORDER BY timestamp_iso DESC
-      LIMIT 60
+      LIMIT 300
     ''');
     final rows = stmt.select([cardNo]);
     final list = rows
@@ -687,6 +725,98 @@ class HasibuDatabase {
     stmt.dispose();
   }
 
+  List<LeaveRecord> getLeaveRecordsForEmployee(int employeeId) {
+    final stmt = _db.prepare('''
+      SELECT * FROM leave_records
+      WHERE employee_id = ?
+      ORDER BY date_key DESC
+      LIMIT 200
+    ''');
+    final rows = stmt.select([employeeId]);
+    final list = rows
+        .map(
+          (r) => LeaveRecord(
+            id: r['id'] as String,
+            employeeId: r['employee_id'] as int,
+            date: r['date_key'] as String,
+            leaveType: LeaveType.fromCode(r['leave_code'] as int),
+            note: r['note'] as String,
+          ),
+        )
+        .toList(growable: false);
+    stmt.dispose();
+    return list;
+  }
+
+  List<PersonnelDocument> getAllPersonnelDocuments() {
+    final rows = _db.select(
+      'SELECT * FROM employee_documents ORDER BY upload_date DESC, id DESC',
+    );
+    return rows
+        .map(
+          (r) => PersonnelDocument(
+            id: r['id'] as String,
+            employeeId: r['employee_id'] as int,
+            category:
+                PersonnelDocumentCategory.fromName(r['category'] as String?),
+            title: r['title'] as String,
+            filePath: r['file_path'] as String,
+            uploadDate: r['upload_date'] as String,
+            notes: r['notes'] as String? ?? '',
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  List<PersonnelDocument> getDocumentsForEmployee(int employeeId) {
+    final stmt = _db.prepare('''
+      SELECT * FROM employee_documents
+      WHERE employee_id = ?
+      ORDER BY upload_date DESC, id DESC
+    ''');
+    final rows = stmt.select([employeeId]);
+    final list = rows
+        .map(
+          (r) => PersonnelDocument(
+            id: r['id'] as String,
+            employeeId: r['employee_id'] as int,
+            category:
+                PersonnelDocumentCategory.fromName(r['category'] as String?),
+            title: r['title'] as String,
+            filePath: r['file_path'] as String,
+            uploadDate: r['upload_date'] as String,
+            notes: r['notes'] as String? ?? '',
+          ),
+        )
+        .toList(growable: false);
+    stmt.dispose();
+    return list;
+  }
+
+  void upsertPersonnelDocument(PersonnelDocument doc) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO employee_documents
+      (id, employee_id, category, title, file_path, upload_date, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      doc.id.trim(),
+      doc.employeeId,
+      doc.category.name,
+      doc.title.trim(),
+      doc.filePath.trim(),
+      doc.uploadDate.trim(),
+      doc.notes.trim(),
+    ]);
+    stmt.dispose();
+  }
+
+  void deletePersonnelDocument(String id) {
+    final stmt = _db.prepare('DELETE FROM employee_documents WHERE id = ?');
+    stmt.execute([id]);
+    stmt.dispose();
+  }
+
   /// Zikirce_ Bulut Senkronizasyon standardında tüm yerel durumu JSON paketi olarak dışa aktarır.
   Map<String, dynamic> exportCloudSnapshot({required String deviceName}) {
     final allLogsRows = _db.select(
@@ -728,7 +858,7 @@ class HasibuDatabase {
         .toList(growable: false);
 
     return <String, dynamic>{
-      'schemaVersion': 2,
+      'schemaVersion': 3,
       'exportedAt': DateTime.now().toIso8601String(),
       'deviceName': deviceName,
       'companySettings': getCompanySettings().toJson(),
@@ -740,6 +870,9 @@ class HasibuDatabase {
           getEmployees().map((e) => e.toJson()).toList(growable: false),
       'attendanceLogs': logs,
       'leaveRecords': leaves,
+      'personnelDocuments': getAllPersonnelDocuments()
+          .map((e) => e.toJson())
+          .toList(growable: false),
     };
   }
 
@@ -795,6 +928,14 @@ class HasibuDatabase {
       for (final item in rawLeaves) {
         if (item is Map<String, dynamic>) {
           upsertLeaveRecord(LeaveRecord.fromJson(item));
+        }
+      }
+
+      final rawDocs =
+          snapshot['personnelDocuments'] as List<dynamic>? ?? const [];
+      for (final item in rawDocs) {
+        if (item is Map<String, dynamic>) {
+          upsertPersonnelDocument(PersonnelDocument.fromJson(item));
         }
       }
       _db.execute('COMMIT;');

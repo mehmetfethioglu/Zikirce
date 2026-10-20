@@ -8,12 +8,16 @@ import '../domain/pdks_models.dart';
 /// Saf Dart ZKTeco / Tenfei D35 TCP (Port 4370) Protokol İstemcisi.
 /// Doğrudan TCP soketiyle Tenfei D35 Yüz Tanıma ve Parmak İzi Terminaline
 /// (varsayılan 192.168.9.150:4370) bağlanarak canlı ve toplu hareketleri çeker.
+/// Cihaz `CMD_ACK_UNAUTH (2005)` döndürdüğünde otomatik olarak `CMD_AUTH (1102)`
+/// el sıkışmasını (handshake) tamamlar.
 class TenfeiZkClient {
   static const int cmdConnect = 1000;
   static const int cmdExit = 1001;
   static const int cmdEnableDevice = 1002;
   static const int cmdDisableDevice = 1003;
+  static const int cmdAuth = 1102;
   static const int cmdAckOk = 2000;
+  static const int cmdAckUnauth = 2005;
   static const int cmdPrepareData = 1500;
   static const int cmdData = 1501;
   static const int cmdFreeData = 1502;
@@ -27,6 +31,7 @@ class TenfeiZkClient {
   final int port;
   final int branchId;
   final int machineNo;
+  final int commKey;
   final Duration timeout;
 
   Socket? _socket;
@@ -46,7 +51,8 @@ class TenfeiZkClient {
     this.port = 4370,
     this.branchId = 1,
     this.machineNo = 1,
-    this.timeout = const Duration(seconds: 4),
+    this.commKey = 0,
+    this.timeout = const Duration(seconds: 5),
   });
 
   bool get isConnected => _isConnected;
@@ -55,29 +61,46 @@ class TenfeiZkClient {
   Stream<AttendanceLog> get realtimeAttendanceStream =>
       _realtimeLogController.stream;
 
-  /// Cihazın TCP 4370 portuna erişilebilirliği ve protokol el sıkışmasını test eder.
-  Future<TenfeiConnectionDiagnostics> testConnection() async {
+  /// Cihazın TCP 4370 portuna erişilebilirliği, ZKTeco/Tenfei CMD_AUTH el sıkışmasını
+  /// ve cihaz hafızasındaki mevcut hareket sayısını test eder.
+  Future<TenfeiConnectionDiagnostics> testConnection({
+    bool checkRecordCount = true,
+  }) async {
     final sw = Stopwatch()..start();
     try {
       await connect();
+      final handshakeMs = sw.elapsedMilliseconds;
+      int recordCount = 0;
+      if (checkRecordCount) {
+        try {
+          final logs = await fetchAttendanceLogs();
+          recordCount = logs.length;
+        } catch (_) {}
+      }
       sw.stop();
       await disconnect();
       return TenfeiConnectionDiagnostics(
         isReachable: true,
-        latencyMs: sw.elapsedMilliseconds,
-        message: 'Tenfei D35 ($host:$port) bağlantısı başarılı (${sw.elapsedMilliseconds} ms).',
+        latencyMs: handshakeMs,
+        recordCount: recordCount,
+        message: checkRecordCount
+            ? 'Tenfei D35 ($host:$port) bağlantısı başarılı ($handshakeMs ms) • Cihaz hafızasında $recordCount hareket kaydı hazır.'
+            : 'Tenfei D35 ($host:$port) bağlantısı başarılı ($handshakeMs ms).',
       );
     } catch (e) {
       sw.stop();
       return TenfeiConnectionDiagnostics(
         isReachable: false,
         latencyMs: sw.elapsedMilliseconds,
-        message: 'Cihaza ulaşılamadı ($host:$port) — Aynı yerel ağda (192.168.9.x) olduğunuzdan emin olun.',
+        recordCount: 0,
+        message:
+            'Cihaza bağlanılamadı ($host:$port) — IP adresini ve cihazın açık olduğunu kontrol edin ($e).',
       );
     }
   }
 
   /// Tenfei D35 terminaline TCP 4370 üzerinden bağlanır ve oturum açar.
+  /// Cihaz `CMD_ACK_UNAUTH (2005)` yanıtı dönerse `CMD_AUTH (1102)` ile kimlik doğrular.
   Future<void> connect() async {
     if (_isConnected) return;
     _socket = await Socket.connect(host, port, timeout: timeout);
@@ -93,6 +116,20 @@ class TenfeiZkClient {
     );
 
     final resp = await _sendCommand(cmdConnect);
+    if (resp.command == cmdAckUnauth) {
+      _sessionId = resp.sessionId;
+      final authPayload = makeCommKey(commKey, _sessionId);
+      final authResp = await _sendCommand(cmdAuth, authPayload);
+      if (authResp.command != cmdAckOk) {
+        await disconnect();
+        throw SocketException(
+          'Tenfei D35 iletişim parolası reddedildi (Kod: ${authResp.command})',
+        );
+      }
+      _isConnected = true;
+      return;
+    }
+
     if (resp.command != cmdAckOk) {
       await disconnect();
       throw SocketException(
@@ -120,10 +157,17 @@ class TenfeiZkClient {
     }
 
     try {
-      await _sendCommand(cmdDisableDevice);
+      try {
+        await _sendCommand(cmdDisableDevice);
+      } catch (_) {}
+
       final resp = await _sendCommand(cmdAttLogRrq);
       final Uint8List rawLogs = await _readBulkPayload(resp);
-      await _sendCommand(cmdEnableDevice);
+
+      try {
+        await _sendCommand(cmdEnableDevice);
+      } catch (_) {}
+
       return decodeAttendanceBuffer(
         rawLogs,
         branchId: branchId,
@@ -159,7 +203,19 @@ class TenfeiZkClient {
       }
     }
 
-    await _sendCommand(cmdFreeData);
+    // Tenfei D35 CMD_DATA paketlerinden hemen sonra sonlandırıcı bir CMD_ACK_OK (2000) gönderir.
+    try {
+      await _packetController.stream.first.timeout(
+        const Duration(milliseconds: 350),
+      );
+    } catch (_) {}
+
+    try {
+      await _sendCommand(cmdFreeData).timeout(
+        const Duration(milliseconds: 800),
+      );
+    } catch (_) {}
+
     return builder.takeBytes();
   }
 
@@ -266,7 +322,7 @@ class TenfeiZkClient {
   Future<void> disconnect() async {
     if (_isConnected && _socket != null) {
       try {
-        await _sendCommand(cmdExit).timeout(const Duration(milliseconds: 800));
+        await _sendCommand(cmdExit).timeout(const Duration(milliseconds: 600));
       } catch (_) {}
     }
     _isConnected = false;
@@ -280,6 +336,31 @@ class TenfeiZkClient {
     await disconnect();
     await _packetController.close();
     await _realtimeLogController.close();
+  }
+
+  /// ZKTeco / Tenfei D35 `CMD_AUTH (1102)` oturum anahtarı şifrelemesi.
+  static Uint8List makeCommKey(int key, int sessionId, {int ticks = 50}) {
+    int k = 0;
+    for (int i = 0; i < 32; i++) {
+      if ((key & (1 << i)) != 0) {
+        k = ((k << 1) | 1) & 0xFFFFFFFF;
+      } else {
+        k = (k << 1) & 0xFFFFFFFF;
+      }
+    }
+    k = (k + sessionId) & 0xFFFFFFFF;
+
+    final int b1 = ((k >> 8) & 0xFF) ^ 0x4B; // 'K'
+    final int b2 = ((k >> 16) & 0xFF) ^ 0x53; // 'S'
+    final int b3 = ((k >> 24) & 0xFF) ^ 0x4F; // 'O'
+
+    final int b = ticks & 0xFF;
+    return Uint8List.fromList(<int>[
+      b2 ^ b,
+      b3 ^ b,
+      b,
+      b1 ^ b,
+    ]);
   }
 
   /// ZKTeco TCP çerçevesi (8 byte TCP başlığı + 8 byte ZK başlığı + payload) üretir.
@@ -364,20 +445,34 @@ class TenfeiZkClient {
   }
 
   /// Tenfei D35 / ZKTeco 40-byte ikili hareket kayıtlarını [AttendanceLog] listesine çözer.
+  /// Cihazdan gelen `CMD_DATA` tamponunun başındaki 4-byte tablo uzunluk başlığını
+  /// otomatik ayıklar ve 2 dakika içindeki mükerrer kamera okumalarını filtreler.
   static List<AttendanceLog> decodeAttendanceBuffer(
     Uint8List raw, {
     int branchId = 1,
     int deviceNo = 1,
   }) {
     if (raw.isEmpty) return const <AttendanceLog>[];
-    final logs = <AttendanceLog>[];
 
-    // Standart 40-byte ZKTeco SSR/Face terminal kaydı
+    Uint8List recordsBytes = raw;
+    if (raw.length >= 44) {
+      final int innerLen =
+          ByteData.sublistView(raw, 0, 4).getUint32(0, Endian.little);
+      if (innerLen == raw.length - 4 || (raw.length % 40 == 4)) {
+        recordsBytes = Uint8List.sublistView(raw, 4);
+      }
+    }
+
+    final logs = <AttendanceLog>[];
+    final lastScanByCard = <String, DateTime>{};
+    final firstScanOfDayByCard = <String, DateTime>{};
+
     const int recordSize = 40;
     for (int offset = 0;
-        offset + recordSize <= raw.length;
+        offset + recordSize <= recordsBytes.length;
         offset += recordSize) {
-      final slice = Uint8List.sublistView(raw, offset, offset + recordSize);
+      final slice =
+          Uint8List.sublistView(recordsBytes, offset, offset + recordSize);
       final bd = ByteData.sublistView(slice);
 
       // Byte 2..26: Kullanıcı/Kart PIN (ASCII null-terminated)
@@ -397,12 +492,34 @@ class TenfeiZkClient {
       final int status = slice[31];
       final DateTime timestamp = decodeZkTime(packedTime);
 
-      // Ayarlar.ini: Girisler=4,0,2 / Cikislar=1,5,3
-      final bool isCheckIn = status == 0 || status == 2 || status == 4;
+      // Kamera önünde 2 dakika (120 sn) içinde art arda oluşan mükerrer okumaları filtrele
+      final prevScan = lastScanByCard[cardNo];
+      if (prevScan != null &&
+          timestamp.difference(prevScan).inSeconds.abs() < 120) {
+        continue;
+      }
+      lastScanByCard[cardNo] = timestamp;
+
+      final String dayKey =
+          '${cardNo}_${timestamp.year}-${timestamp.month}-${timestamp.day}';
+      final firstOfDay = firstScanOfDayByCard[dayKey];
+
+      // Cihazda tuşa basılmadan okutulduğunda status=0 gelir; aynı gün ilk okuma
+      // üzerinden en az 30 dakika geçmişse ve status=0 ise Çıkış olarak değerlendirilir.
+      bool isCheckIn;
+      if (status == 1 || status == 3 || status == 5) {
+        isCheckIn = false;
+      } else if (firstOfDay != null &&
+          timestamp.difference(firstOfDay).inMinutes >= 30) {
+        isCheckIn = false;
+      } else {
+        isCheckIn = true;
+        firstScanOfDayByCard[dayKey] = timestamp;
+      }
 
       logs.add(
         AttendanceLog(
-          id: '${branchId}_${cardNo}_${timestamp.millisecondsSinceEpoch}',
+          id: '${branchId}_${cardNo}_${timestamp.year}${timestamp.month.toString().padLeft(2, '0')}${timestamp.day.toString().padLeft(2, '0')}_${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}',
           cardNo: cardNo,
           branchId: branchId,
           deviceNo: deviceNo,
@@ -438,7 +555,8 @@ class TenfeiZkClient {
     final int day = int.tryParse(dateParts[2]) ?? 1;
     final int hour = int.tryParse(timeParts[0]) ?? 0;
     final int minute = int.tryParse(timeParts[1]) ?? 0;
-    final int second = timeParts.length > 2 ? (int.tryParse(timeParts[2]) ?? 0) : 0;
+    final int second =
+        timeParts.length > 2 ? (int.tryParse(timeParts[2]) ?? 0) : 0;
 
     final dt = DateTime(year, month, day, hour, minute, second);
     final bool isCheckIn = ioFlag == 1 || ioFlag == 0 || ioFlag == 4;
@@ -467,11 +585,13 @@ class TenfeiZkClient {
 class TenfeiConnectionDiagnostics {
   final bool isReachable;
   final int latencyMs;
+  final int recordCount;
   final String message;
 
   const TenfeiConnectionDiagnostics({
     required this.isReachable,
     required this.latencyMs,
+    this.recordCount = 0,
     required this.message,
   });
 }

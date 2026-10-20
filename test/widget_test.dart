@@ -93,6 +93,128 @@ void main() {
       expect(logs.first.isCheckIn, isTrue);
       expect(logs.first.timestamp, DateTime(2026, 10, 19, 5, 45, 0));
     });
+
+    test(
+        'TenfeiZkClient authenticates CMD_ACK_UNAUTH (2005) via CMD_AUTH (1102) and parses 4-byte length-prefixed CMD_DATA with trailing CMD_ACK_OK',
+        () async {
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+
+      // Build 2 records (morning check-in + evening check-out) prefixed by 4-byte inner table length (80)
+      final payload84 = Uint8List(84);
+      final pBd = ByteData.sublistView(payload84);
+      pBd.setUint32(0, 80, Endian.little);
+
+      final pinBytes = ascii.encode('00064');
+      // Record 1 at offset 4: 05:25 check-in
+      pBd.setUint16(4, 1, Endian.little);
+      payload84.setRange(6, 6 + pinBytes.length, pinBytes);
+      payload84[4 + 26] = 15;
+      pBd.setUint32(
+        4 + 27,
+        TenfeiZkClient.encodeZkTime(DateTime(2026, 10, 20, 5, 25, 0)),
+        Endian.little,
+      );
+      payload84[4 + 31] = 0;
+
+      // Record 2 at offset 44: 17:10 second scan (classified as check-out)
+      pBd.setUint16(44, 1, Endian.little);
+      payload84.setRange(46, 46 + pinBytes.length, pinBytes);
+      payload84[44 + 26] = 15;
+      pBd.setUint32(
+        44 + 27,
+        TenfeiZkClient.encodeZkTime(DateTime(2026, 10, 20, 17, 10, 0)),
+        Endian.little,
+      );
+      payload84[44 + 31] = 0;
+
+      bool authenticated = false;
+
+      server.listen((Socket clientSocket) {
+        clientSocket.listen((Uint8List data) {
+          if (data.length < 16) return;
+          final inBd = ByteData.sublistView(data);
+          final cmd = inBd.getUint16(8, Endian.little);
+          final replyId = inBd.getUint16(14, Endian.little);
+
+          if (cmd == TenfeiZkClient.cmdConnect) {
+            // Return 2005 (CMD_ACK_UNAUTH) like the live Tenfei D35 at 192.168.9.150
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdAckUnauth,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: Uint8List(0),
+              ),
+            );
+          } else if (cmd == TenfeiZkClient.cmdAuth) {
+            authenticated = true;
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdAckOk,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: Uint8List(0),
+              ),
+            );
+          } else if (cmd == TenfeiZkClient.cmdDisableDevice ||
+              cmd == TenfeiZkClient.cmdEnableDevice ||
+              cmd == TenfeiZkClient.cmdFreeData ||
+              cmd == TenfeiZkClient.cmdExit) {
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdAckOk,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: Uint8List(0),
+              ),
+            );
+          } else if (cmd == TenfeiZkClient.cmdAttLogRrq && authenticated) {
+            final sizePayload = ByteData(4)..setUint32(0, 84, Endian.little);
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdPrepareData,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: sizePayload.buffer.asUint8List(),
+              ),
+            );
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdData,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: payload84,
+              ),
+            );
+            clientSocket.add(
+              TenfeiZkClient.buildTcpFrame(
+                command: TenfeiZkClient.cmdAckOk,
+                sessionId: 4999,
+                replyId: replyId,
+                payload: Uint8List(0),
+              ),
+            );
+          }
+        });
+      });
+
+      final client = TenfeiZkClient(
+        host: InternetAddress.loopbackIPv4.address,
+        port: server.port,
+        branchId: 1,
+        machineNo: 1,
+      );
+      addTearDown(client.dispose);
+
+      final logs = await client.fetchAttendanceLogs();
+      expect(authenticated, isTrue);
+      expect(logs.length, 2);
+      expect(logs[0].cardNo, '00064');
+      expect(logs[0].isCheckIn, isTrue);
+      expect(logs[1].cardNo, '00064');
+      expect(logs[1].isCheckIn, isFalse);
+    });
   });
 
   group('HasibuDatabase & Settings CRUD Tests', () {
@@ -164,12 +286,38 @@ void main() {
       // Toplu Hareket Düzenleme (Bulk Attendance)
       final affected = db.applyBulkManualAttendance(
         employees: db.getEmployees().take(3).toList(),
-        dateKey: '2026-10-20',
+        dateKey: '2026-10-25',
         checkInTime: '08:00',
         checkOutTime: '18:00',
       );
       expect(affected, 6); // 3 personel x (giriş + çıkış)
-      expect(db.getAttendanceLogsForDate('2026-10-20').length, 6);
+      expect(db.getAttendanceLogsForDate('2026-10-25').length, 6);
+
+      // Özlük Dosyası & Resmi Evraklar CRUD
+      final initialDocs = db.getDocumentsForEmployee(sampleEmp.id);
+      expect(initialDocs.isNotEmpty, isTrue);
+
+      db.upsertPersonnelDocument(
+        PersonnelDocument(
+          id: 'doc_test_999',
+          employeeId: sampleEmp.id,
+          category: PersonnelDocumentCategory.sgkIseGirisBildirgesi,
+          title: 'SGK İşe Giriş Bildirgesi (E-Bildirge)',
+          filePath: r'C:\Hasibu_Ozluk_Arsivi\00064_SGK_Bildirge.pdf',
+          uploadDate: '2026-10-20',
+          notes: 'E-Devlet barkodlu kopya',
+        ),
+      );
+      final updatedDocs = db.getDocumentsForEmployee(sampleEmp.id);
+      expect(
+        updatedDocs.any((d) => d.id == 'doc_test_999'),
+        isTrue,
+      );
+      db.deletePersonnelDocument('doc_test_999');
+      expect(
+        db.getDocumentsForEmployee(sampleEmp.id).any((d) => d.id == 'doc_test_999'),
+        isFalse,
+      );
     });
   });
 
@@ -228,6 +376,43 @@ void main() {
     expect(find.text('Şube QR / GPS Yoklama'), findsOneWidget);
     expect(find.text('Hareket Düzeltme'), findsOneWidget);
     expect(find.text('İzin & Rapor Girişi'), findsOneWidget);
+
+    // 4b. Personel kartına dokununca Personel Geçmişi ve Özlük Dosyası (Resmi Evraklar) açılır
+    expect(find.byKey(const ValueKey('employee_card_01406')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('employee_card_01406')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('employee_detail_tab_selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Personel Geçmişi ('),
+      findsOneWidget,
+    );
+
+    // Özlük Dosyası sekmesine geç ve resmi evrak ekleme formunu doğrula
+    await tester.tap(find.textContaining('Özlük Dosyası & Resmi Evraklar'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('dossier_add_document_button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Kapat'));
+    await tester.pumpAndSettle();
+
+    // 4c. Üst bardaki Cihaz Bağlantı Kontrolü butonuna tıkla -> Bağlantı Tanılama penceresi açılır
+    await tester.tap(find.byKey(const ValueKey('appbar_terminal_diag_button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('run_terminal_diag_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('diag_pull_terminal_logs_button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Kapat'));
+    await tester.pumpAndSettle();
 
     // 5. Hareket Düzeltme sekmesine tıkla -> Toplu Hareket Düzenleme paneli açılır
     await tester.tap(find.text('Hareket Düzeltme'));

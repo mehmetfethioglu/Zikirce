@@ -35,7 +35,9 @@ class PdksDashboardState {
   final List<Department> departments;
   final List<EmployeeDailyStatus> dailyStatuses;
   final List<LeaveRecord> allLeaveRecords;
+  final List<PersonnelDocument> allPersonnelDocuments;
   final bool isPollingTerminal;
+  final bool? lastTerminalReachable;
   final bool autoPollEnabled;
   final int autoPollMinutes;
   final String terminalStatusMessage;
@@ -55,7 +57,9 @@ class PdksDashboardState {
     this.departments = const <Department>[],
     this.dailyStatuses = const <EmployeeDailyStatus>[],
     this.allLeaveRecords = const <LeaveRecord>[],
+    this.allPersonnelDocuments = const <PersonnelDocument>[],
     this.isPollingTerminal = false,
+    this.lastTerminalReachable,
     this.autoPollEnabled = true,
     this.autoPollMinutes = 5,
     this.terminalStatusMessage =
@@ -63,6 +67,11 @@ class PdksDashboardState {
     this.syncStatus = const DriveSyncStatus(),
     this.activeSelfServiceCardNo = '00064',
   });
+
+  List<PersonnelDocument> documentsForEmployee(int employeeId) =>
+      allPersonnelDocuments
+          .where((d) => d.employeeId == employeeId)
+          .toList(growable: false);
 
   int get totalCount => filteredByBranch.length;
 
@@ -139,7 +148,9 @@ class PdksDashboardState {
     List<Department>? departments,
     List<EmployeeDailyStatus>? dailyStatuses,
     List<LeaveRecord>? allLeaveRecords,
+    List<PersonnelDocument>? allPersonnelDocuments,
     bool? isPollingTerminal,
+    bool? Function()? lastTerminalReachable,
     bool? autoPollEnabled,
     int? autoPollMinutes,
     String? terminalStatusMessage,
@@ -162,7 +173,12 @@ class PdksDashboardState {
       departments: departments ?? this.departments,
       dailyStatuses: dailyStatuses ?? this.dailyStatuses,
       allLeaveRecords: allLeaveRecords ?? this.allLeaveRecords,
+      allPersonnelDocuments:
+          allPersonnelDocuments ?? this.allPersonnelDocuments,
       isPollingTerminal: isPollingTerminal ?? this.isPollingTerminal,
+      lastTerminalReachable: lastTerminalReachable != null
+          ? lastTerminalReachable()
+          : this.lastTerminalReachable,
       autoPollEnabled: autoPollEnabled ?? this.autoPollEnabled,
       autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
       terminalStatusMessage:
@@ -292,6 +308,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final logs = _db.getAttendanceLogsForDate(state.selectedDate);
     final leaves = _db.getLeaveRecordsForDate(state.selectedDate);
     final allLeaves = _db.getAllLeaveRecords();
+    final allDocs = _db.getAllPersonnelDocuments();
 
     final branchMap = {for (final b in branches) b.id: b};
     final deptMap = {for (final d in departments) d.id: d};
@@ -377,6 +394,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       departments: departments,
       dailyStatuses: statuses,
       allLeaveRecords: allLeaves,
+      allPersonnelDocuments: allDocs,
     );
   }
 
@@ -472,6 +490,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     int totalFetched = 0;
     int newInserted = 0;
+    bool anyReachable = false;
+    String? latestPulledDateKey;
     final messages = <String>[];
 
     for (final branch in targetBranches) {
@@ -485,18 +505,30 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
       try {
         final logs = await client.fetchAttendanceLogs();
+        anyReachable = true;
         totalFetched += logs.length;
         newInserted += _db.upsertAttendanceLogsBatch(logs);
+        for (final l in logs) {
+          if (latestPulledDateKey == null ||
+              l.dateKey.compareTo(latestPulledDateKey) > 0) {
+            latestPulledDateKey = l.dateKey;
+          }
+        }
         messages.add(
-          '${branch.name} ($ip:${branch.terminalPort}): ${logs.length} kayıt',
+          '${branch.name} ($ip:${branch.terminalPort}): ${logs.length} kayıt çekildi',
         );
       } catch (_) {
         messages.add(
-          '${branch.name} ($ip:${branch.terminalPort}): Yerel ağ dışı — önbellek aktif',
+          '${branch.name} ($ip:${branch.terminalPort}): Cihaza ulaşılamadı',
         );
       } finally {
         await client.dispose();
       }
+    }
+
+    if (latestPulledDateKey != null &&
+        latestPulledDateKey != state.selectedDate) {
+      state = state.copyWith(selectedDate: latestPulledDateKey);
     }
 
     refreshDashboard();
@@ -506,11 +538,43 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     state = state.copyWith(
       isPollingTerminal: false,
+      lastTerminalReachable: () => anyReachable,
       terminalStatusMessage: messages.isEmpty
           ? 'Aktif terminal tanımlı değil.'
           : '${messages.join(' | ')} ($newInserted yeni, toplam $totalFetched)',
       syncStatus: syncResult,
     );
+  }
+
+  /// Tüm aktif terminallerde TCP 4370 + ZKTeco CMD_AUTH bağlantı kontrolünü çalıştırır.
+  Future<List<TenfeiConnectionDiagnostics>> testAllTerminalsConnection() async {
+    final targetBranches = state.branches
+        .where((b) => b.hasTerminal && (b.terminalIp?.isNotEmpty ?? false))
+        .toList(growable: false);
+    if (targetBranches.isEmpty && state.branches.isNotEmpty) {
+      final firstDiag =
+          await testBranchTerminalConnection(state.branches.first);
+      state = state.copyWith(
+        lastTerminalReachable: () => firstDiag.isReachable,
+        terminalStatusMessage: firstDiag.message,
+      );
+      return <TenfeiConnectionDiagnostics>[firstDiag];
+    }
+
+    final results = <TenfeiConnectionDiagnostics>[];
+    bool anyReachable = false;
+    for (final b in targetBranches) {
+      final diag = await testBranchTerminalConnection(b);
+      if (diag.isReachable) anyReachable = true;
+      results.add(diag);
+    }
+    state = state.copyWith(
+      lastTerminalReachable: () => anyReachable,
+      terminalStatusMessage: results.isEmpty
+          ? 'Test edilecek terminal bulunamadı.'
+          : results.map((r) => r.message).join(' | '),
+    );
+    return results;
   }
 
   Future<TenfeiConnectionDiagnostics> testBranchTerminalConnection(
@@ -531,7 +595,12 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       machineNo: branch.machineNo,
     );
     try {
-      return await client.testConnection();
+      final diag = await client.testConnection();
+      state = state.copyWith(
+        lastTerminalReachable: () => diag.isReachable,
+        terminalStatusMessage: diag.message,
+      );
+      return diag;
     } finally {
       await client.dispose();
     }
@@ -845,6 +914,111 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     refreshDashboard();
     final syncResult = await _syncService.pushToCloud(
       deviceName: 'Hasibu İK İzin/Rapor Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Personelin tüm tarihlerdeki giriş-çıkış, geç kalma ve izin/rapor geçmişini kronolojik olarak döndürür.
+  List<EmployeeHistoryDayEntry> getEmployeeHistory(Employee emp) {
+    final logs = _db.getAttendanceLogsForEmployee(emp.cardNo);
+    final leaves = _db.getLeaveRecordsForEmployee(emp.id);
+    final shift = state.shifts.firstWhere(
+      (s) => s.id == emp.shiftId,
+      orElse: () => state.shifts.isNotEmpty
+          ? state.shifts.first
+          : WorkplaceSeedData.shifts.first,
+    );
+
+    final logsByDate = <String, List<AttendanceLog>>{};
+    for (final l in logs) {
+      logsByDate.putIfAbsent(l.dateKey, () => <AttendanceLog>[]).add(l);
+    }
+    final leaveByDate = <String, LeaveRecord>{
+      for (final lv in leaves) lv.date: lv,
+    };
+
+    final allDates = <String>{
+      ...logsByDate.keys,
+      ...leaveByDate.keys,
+      state.selectedDate,
+    }.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final entries = <EmployeeHistoryDayEntry>[];
+    for (final dKey in allDates) {
+      final dayLogs = List<AttendanceLog>.from(
+        logsByDate[dKey] ?? const <AttendanceLog>[],
+      )..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      final lv = leaveByDate[dKey];
+
+      final checkIns =
+          dayLogs.where((l) => l.isCheckIn).toList(growable: false);
+      final checkOuts =
+          dayLogs.where((l) => !l.isCheckIn).toList(growable: false);
+
+      final AttendanceLog? firstIn = checkIns.isNotEmpty
+          ? checkIns.first
+          : (dayLogs.isNotEmpty ? dayLogs.first : null);
+      final AttendanceLog? lastOut = checkOuts.isNotEmpty
+          ? checkOuts.last
+          : (dayLogs.length > 1 ? dayLogs.last : null);
+
+      DailyAttendanceState dayState;
+      int lateMins = 0;
+      if (firstIn != null) {
+        lateMins = _calculateLateMinutes(
+          firstIn.timestamp,
+          shift.startTime,
+          shift.toleranceMinutes,
+        );
+        dayState = lateMins > 0
+            ? DailyAttendanceState.late
+            : DailyAttendanceState.present;
+      } else if (lv != null) {
+        if (lv.leaveType == LeaveType.saglikRaporu) {
+          dayState = DailyAttendanceState.sickReport;
+        } else if (lv.leaveType == LeaveType.devamsiz) {
+          dayState = DailyAttendanceState.absent;
+        } else {
+          dayState = DailyAttendanceState.onLeave;
+        }
+      } else {
+        dayState = DailyAttendanceState.absent;
+      }
+
+      entries.add(
+        EmployeeHistoryDayEntry(
+          dateKey: dKey,
+          state: dayState,
+          firstCheckIn: firstIn,
+          lastCheckOut: lastOut,
+          allLogs: dayLogs,
+          leaveRecord: lv,
+          lateMinutes: lateMins,
+        ),
+      );
+    }
+    return entries;
+  }
+
+  /// Personelin özlük dosyasına resmi evrak dijital kopyası ekler veya günceller.
+  Future<void> savePersonnelDocument(PersonnelDocument doc) async {
+    _db.upsertPersonnelDocument(doc);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Özlük Dosyası Yönetimi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// Personelin özlük dosyasından dijital evrak kaydını siler.
+  Future<void> deletePersonnelDocument(String docId) async {
+    _db.deletePersonnelDocument(docId);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Özlük Dosyası Yönetimi',
       force: true,
     );
     state = state.copyWith(syncStatus: syncResult);
