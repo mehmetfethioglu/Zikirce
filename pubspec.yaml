@@ -1,7 +1,7 @@
 name: zikirce
 description: "Zikirce - Modern, yüksek performanslı İslami yaşam ve zikir asistanı."
 publish_to: 'none'
-version: 2.1.6+61
+version: 2.1.7+62
 
 environment:
   sdk: ^3.5.0

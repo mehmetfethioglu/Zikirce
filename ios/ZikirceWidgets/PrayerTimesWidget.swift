@@ -982,12 +982,146 @@ struct PrayerAnalogClockWidget: Widget {
 }
 
 
-// MARK: - 6. PrayerNextWidget (Next Prayer + Following Prayer Card)
+// MARK: - 6. PrayerNextWidget (Next Prayer + Following Prayer Card + Lock Screen Support)
+#if swift(>=5.7)
+@available(iOS 16.0, *)
+struct PrayerNextAccessoryRectangularView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 4) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text("SIRADAKİ VAKİT")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            Text("\(entry.nextPrayerName) • \(entry.nextPrayerTime)")
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .lineLimit(1)
+            HStack(spacing: 3) {
+                Text("Kalan:")
+                    .font(.system(size: 9, weight: .medium))
+                    .opacity(0.8)
+                LivePrayerCountdownText(
+                    startDate: entry.date,
+                    targetDate: entry.nextPrayerDate,
+                    font: .system(size: 11, weight: .bold, design: .monospaced),
+                    alignment: .leading
+                )
+            }
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct PrayerNextAccessoryCircularView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 1) {
+                Image(systemName: "bell.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(entry.nextPrayerName)
+                    .font(.system(size: 9, weight: .bold))
+                    .lineLimit(1)
+                Text(entry.nextPrayerTime)
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct PrayerNextAccessoryInlineView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        Text("🔔 \(entry.nextPrayerName): \(entry.nextPrayerTime)")
+    }
+}
+
+@available(iOS 16.0, *)
+struct PrayerMiniAccessoryCircularView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 1) {
+                Image(systemName: "moon.stars.fill")
+                    .font(.system(size: 11))
+                Text(entry.nextPrayerName)
+                    .font(.system(size: 9, weight: .bold))
+                    .lineLimit(1)
+                Text(entry.nextPrayerTime)
+                    .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                    .lineLimit(1)
+            }
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct PrayerMiniAccessoryRectangularView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("VAKİT: \(entry.nextPrayerName)")
+                    .font(.system(size: 10, weight: .bold))
+                Text(entry.nextPrayerTime)
+                    .font(.system(size: 16, weight: .heavy, design: .monospaced))
+                Text(entry.city)
+                    .font(.system(size: 9, weight: .medium))
+                    .opacity(0.8)
+            }
+            Spacer()
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct PrayerMiniAccessoryInlineView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        Text("🕌 \(entry.nextPrayerName): \(entry.nextPrayerTime)")
+    }
+}
+#endif
+
 struct PrayerNextWidgetEntryView: View {
     var entry: PrayerTimesEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryRectangular:
+                PrayerNextAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryCircular:
+                PrayerNextAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                PrayerNextAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = WidgetThemePalette(colorScheme: colorScheme)
         ZStack {
             LinearGradient(colors: [p.cardBgStart, p.cardBgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -1035,23 +1169,53 @@ struct PrayerNextWidgetEntryView: View {
 struct PrayerNextWidget: Widget {
     let kind: String = "PrayerNextWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .accessoryRectangular, .accessoryCircular, .accessoryInline]
+        } else {
+            return [.systemSmall]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerNextWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Sıradaki Vakit Kartı")
         .description("Sıradaki namaz vaktini, saatini ve canlı geri sayımını gösterir.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }
 
-// MARK: - 7. PrayerMiniWidget (Minimalist 1x1 / Small Pill Widget)
+// MARK: - 7. PrayerMiniWidget (Minimalist 1x1 / Small Pill Widget + Lock Screen Support)
 struct PrayerMiniWidgetEntryView: View {
     var entry: PrayerTimesEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryCircular:
+                PrayerMiniAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryRectangular:
+                PrayerMiniAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                PrayerMiniAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = WidgetThemePalette(colorScheme: colorScheme)
         ZStack {
             LinearGradient(colors: [p.cardBgStart, p.cardBgEnd], startPoint: .top, endPoint: .bottom)
@@ -1082,13 +1246,21 @@ struct PrayerMiniWidgetEntryView: View {
 struct PrayerMiniWidget: Widget {
     let kind: String = "PrayerMiniWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerMiniWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Minimal Vakit")
         .description("Kompakt sıradaki vakit saati ve canlı geri sayım.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }

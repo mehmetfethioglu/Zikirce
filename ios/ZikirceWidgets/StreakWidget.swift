@@ -71,12 +71,271 @@ private struct SpiritualPalette {
 }
 
 
-// MARK: - 8. HijriCalendarWidget (Hijri & Gregorian Date + Next Prayer Countdown)
+// MARK: - 8. HijriCalendarWidget (Hijri & Gregorian Date + Next Prayer Countdown + Lock Screen Support)
+#if swift(>=5.7)
+@available(iOS 16.0, *)
+struct HijriCalendarAccessoryRectangularView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 9, weight: .bold))
+                Text("HİCRİ TAKVİM")
+                    .font(.system(size: 9, weight: .bold))
+                Spacer()
+                Text(entry.city)
+                    .font(.system(size: 9, weight: .medium))
+                    .opacity(0.8)
+            }
+            Text(entry.hijriDate)
+                .font(.system(size: 12, weight: .bold, design: .serif))
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text("\(entry.nextPrayerName): \(entry.nextPrayerTime)")
+                    .font(.system(size: 10, weight: .semibold))
+                Spacer()
+                LivePrayerCountdownText(
+                    startDate: entry.date,
+                    targetDate: entry.nextPrayerDate,
+                    font: .system(size: 10, weight: .bold, design: .monospaced),
+                    alignment: .trailing
+                )
+            }
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct HijriCalendarAccessoryInlineView: View {
+    var entry: PrayerTimesEntry
+
+    var body: some View {
+        Text("🌙 \(entry.hijriDate)")
+    }
+}
+
+@available(iOS 16.0, *)
+struct KazaAccessoryCircularView: View {
+    var entry: KazaEntry
+
+    var body: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 1) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 10))
+                Text("\(entry.totalDebt)")
+                    .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                Text("KAZA")
+                    .font(.system(size: 8, weight: .bold))
+            }
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct KazaAccessoryRectangularView: View {
+    var entry: KazaEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 10))
+                Text("Kaza Borcu")
+                    .font(.system(size: 11, weight: .bold))
+                Spacer()
+                Text("\(entry.totalDebt)")
+                    .font(.system(size: 11, weight: .heavy, design: .monospaced))
+            }
+            Text("En Çok: \(entry.highestPrayerName) (\(entry.highestPrayerCount))")
+                .font(.system(size: 9, weight: .medium))
+                .opacity(0.8)
+            Text(entry.hasCompletedToday ? "Bugün kaza kılındı ✓" : "Bugünkü kaza bekleniyor")
+                .font(.system(size: 9, weight: .semibold))
+                .opacity(0.9)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct KazaAccessoryInlineView: View {
+    var entry: KazaEntry
+
+    var body: some View {
+        Text("📋 Kaza Borcu: \(entry.totalDebt) Vakit")
+    }
+}
+
+@available(iOS 16.0, *)
+struct KalpSagligiAccessoryCircularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Gauge(value: min(1.0, max(0.0, entry.progress)), in: 0...1) {
+            Image(systemName: "heart.fill")
+        } currentValueLabel: {
+            Text("%\(Int(entry.progress * 100))")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+}
+
+@available(iOS 16.0, *)
+struct KalpSagligiAccessoryRectangularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Manevi Kalp")
+                    .font(.system(size: 11, weight: .bold))
+                Spacer()
+                Text("%\(Int(entry.progress * 100))")
+                    .font(.system(size: 11, weight: .heavy, design: .rounded))
+            }
+            ProgressView(value: min(1.0, max(0.0, entry.progress)))
+            Text("\(entry.streakCount) Gün Kesintisiz Seri")
+                .font(.system(size: 9, weight: .medium))
+                .opacity(0.8)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct KalpSagligiAccessoryInlineView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Text("❤️ Kalp Sağlığı: %\(Int(entry.progress * 100)) • \(entry.streakCount) Gün")
+    }
+}
+
+@available(iOS 16.0, *)
+struct ZikirCounterAccessoryCircularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Gauge(value: min(1.0, max(0.0, entry.progress)), in: 0...1) {
+            Image(systemName: "circle.hexagongrid.fill")
+        } currentValueLabel: {
+            Text("\(entry.todayCount)")
+                .font(.system(size: 11, weight: .heavy, design: .rounded))
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+}
+
+@available(iOS 16.0, *)
+struct ZikirCounterAccessoryRectangularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "circle.hexagongrid.fill")
+                    .font(.system(size: 10, weight: .bold))
+                Text("Günlük Zikir")
+                    .font(.system(size: 11, weight: .bold))
+                Spacer()
+                Text("\(entry.todayCount)")
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+            }
+            ProgressView(value: min(1.0, max(0.0, entry.progress)))
+            Text("Hedef: \(entry.dailyGoal) zikir")
+                .font(.system(size: 9, weight: .medium))
+                .opacity(0.8)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct ZikirCounterAccessoryInlineView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Text("📿 Zikir: \(entry.todayCount) / \(entry.dailyGoal)")
+    }
+}
+
+@available(iOS 16.0, *)
+struct StreakAccessoryCircularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Gauge(value: min(1.0, max(0.0, entry.progress)), in: 0...1) {
+            Image(systemName: "flame.fill")
+        } currentValueLabel: {
+            Text("\(entry.streakCount)")
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+}
+
+@available(iOS 16.0, *)
+struct StreakAccessoryRectangularView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 10, weight: .bold))
+                Text("\(entry.streakCount) Gün Seri")
+                    .font(.system(size: 11, weight: .bold))
+                Spacer()
+                Text("\(entry.todayCount)/\(entry.dailyGoal)")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+            }
+            ProgressView(value: min(1.0, max(0.0, entry.progress)))
+            Text(entry.isCompleted ? "Bugünkü hedef tamamlandı ✨" : "Hedefe kalan: \(max(0, entry.dailyGoal - entry.todayCount))")
+                .font(.system(size: 9, weight: .medium))
+                .opacity(0.8)
+                .lineLimit(1)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct StreakAccessoryInlineView: View {
+    var entry: StreakEntry
+
+    var body: some View {
+        Text("🔥 \(entry.streakCount) Gün Seri (\(entry.todayCount)/\(entry.dailyGoal))")
+    }
+}
+#endif
+
 struct HijriCalendarWidgetEntryView: View {
     var entry: PrayerTimesEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryRectangular:
+                HijriCalendarAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                HijriCalendarAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = SpiritualPalette(colorScheme: colorScheme)
         let gregorianFormatter: DateFormatter = {
             let df = DateFormatter()
@@ -141,13 +400,21 @@ struct HijriCalendarWidgetEntryView: View {
 struct HijriCalendarWidget: Widget {
     let kind: String = "HijriCalendarWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .systemMedium, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall, .systemMedium]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             HijriCalendarWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Hicri Takvim")
         .description("Hicri ve Miladi takvim ile sıradaki namaz vaktine geri sayım.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }
@@ -220,12 +487,34 @@ struct PrayerKazaWidget: Widget {
     }
 }
 
-// MARK: - 10. KazaQuickWidget (Compact Kaza Summary)
+// MARK: - 10. KazaQuickWidget (Compact Kaza Summary + Lock Screen Support)
 struct KazaQuickWidgetEntryView: View {
     var entry: KazaEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryCircular:
+                KazaAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryRectangular:
+                KazaAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                KazaAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = SpiritualPalette(colorScheme: colorScheme)
         ZStack {
             LinearGradient(colors: [p.bgStart, p.bgEnd], startPoint: .top, endPoint: .bottom)
@@ -264,23 +553,53 @@ struct KazaQuickWidgetEntryView: View {
 struct KazaQuickWidget: Widget {
     let kind: String = "KazaQuickWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: KazaTimelineProvider()) { entry in
             KazaQuickWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Hızlı Kaza Özeti")
         .description("Toplam kalan kaza borcu ve günlük tamamlanma durumu.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }
 
-// MARK: - 11. KalpSagligiWidget (Spiritual Heart Health / Manevi Kalp)
+// MARK: - 11. KalpSagligiWidget (Spiritual Heart Health / Manevi Kalp + Lock Screen Support)
 struct KalpSagligiWidgetEntryView: View {
     var entry: StreakEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryCircular:
+                KalpSagligiAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryRectangular:
+                KalpSagligiAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                KalpSagligiAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = SpiritualPalette(colorScheme: colorScheme)
         ZStack {
             LinearGradient(colors: [p.bgStart, p.bgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -322,23 +641,53 @@ struct KalpSagligiWidgetEntryView: View {
 struct KalpSagligiWidget: Widget {
     let kind: String = "KalpSagligiWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             KalpSagligiWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Manevi Kalp Sağlığı")
         .description("Günlük zikir hedefinize göre manevi kalp doluluk oranı.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }
 
-// MARK: - 12. ZikirCounterWidget (Daily Zikir Goal Progress)
+// MARK: - 12. ZikirCounterWidget (Daily Zikir Goal Progress + Lock Screen Support)
 struct ZikirCounterWidgetEntryView: View {
     var entry: StreakEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryCircular:
+                ZikirCounterAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryRectangular:
+                ZikirCounterAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                ZikirCounterAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = SpiritualPalette(colorScheme: colorScheme)
         ZStack {
             LinearGradient(colors: [p.bgStart, p.bgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -379,23 +728,53 @@ struct ZikirCounterWidgetEntryView: View {
 struct ZikirCounterWidget: Widget {
     let kind: String = "ZikirCounterWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall, .systemMedium]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             ZikirCounterWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Zikir Sayacı")
         .description("Günlük çekilen zikir sayısı ve hedef ilerleme çubuğu.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }
 
-// MARK: - 13. StreakWidget (Weekly Streak & Chain Tracker)
+// MARK: - 13. StreakWidget (Weekly Streak & Chain Tracker + Lock Screen Support)
 struct StreakWidgetEntryView: View {
     var entry: StreakEntry
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
 
     var body: some View {
+        if #available(iOS 16.0, *) {
+            switch family {
+            case .accessoryCircular:
+                StreakAccessoryCircularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryRectangular:
+                StreakAccessoryRectangularView(entry: entry)
+                    .widgetBackground(Color.clear)
+            case .accessoryInline:
+                StreakAccessoryInlineView(entry: entry)
+                    .widgetBackground(Color.clear)
+            default:
+                defaultContent
+            }
+        } else {
+            defaultContent
+        }
+    }
+
+    @ViewBuilder
+    private var defaultContent: some View {
         let p = SpiritualPalette(colorScheme: colorScheme)
         let days = ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz"]
 
@@ -446,13 +825,21 @@ struct StreakWidgetEntryView: View {
 struct StreakWidget: Widget {
     let kind: String = "StreakWidget"
 
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall, .systemMedium]
+        }
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             StreakWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Zikir Zinciri (Seri)")
         .description("Haftalık zikir zinciri ve kesintisiz seri takibi.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
 }

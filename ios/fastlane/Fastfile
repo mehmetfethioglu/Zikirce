@@ -169,6 +169,12 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.1.7 Yenilikleri:
+      • iOS Kilit Ekranı (Lock Screen) Araçları: Namaz vakitleri, canlı geri sayım, günlük zikir sayacı, zikir zinciri ve hicri takvim için dairesel, dikdörtgen ve satır içi kilit ekranı araçları eklendi.
+
+      What's New in v2.1.7:
+      • iOS Lock Screen Widgets: Added circular, rectangular, and inline Lock Screen widget support for Prayer Times, Live Countdown, Dhikr Counter, Streak Tracker, and Hijri Calendar.
+
       Zikirce v2.1.6 Yenilikleri:
       • iOS Arka Planda Kesintisiz Kur'an & Talim Dinleme: Kelime Takipli Dinleme Talimi, Mukabele ve Mushaf ekranlarında uygulama arka plana alındığında veya ekran kilitlendiğinde ayetler arası kesintisiz geçiş sağlandı.
       • iOS Kilit Ekranı & Dynamic Island Medya Kontrolleri: Okunan sûre/âyet bilgisi ve oynat/duraklat/ileri/geri kontrolleri iOS Kilit Ekranı ve Denetim Merkezi'ne eklendi.

@@ -48,11 +48,27 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 61;
-  static const String currentVersionName = '2.1.6';
+  static const int currentVersionCode = 62;
+  static const String currentVersionName = '2.1.7';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 62,
+      versionName: '2.1.7',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'iOS Kilit Ekranı (Lock Screen) Araçları Desteği',
+          titleEn: 'iOS Lock Screen Widgets Support',
+          descTr: 'Namaz vakitleri, sıradaki vakit geri sayımı, günlük zikir sayısı, zikir zinciri (seri), manevi kalp ve hicri takvim kilit ekranına eklenebilir araçlar (dairesel, dikdörtgen ve satır içi) olarak entegre edildi.',
+          descEn: 'Prayer times, live countdowns, daily dhikr counters, streak chains, spiritual heart metrics, and Hijri calendar are now available as native iOS Lock Screen widgets (circular, rectangular, and inline).',
+          icon: Icons.lock_clock_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 61,
       versionName: '2.1.6',
