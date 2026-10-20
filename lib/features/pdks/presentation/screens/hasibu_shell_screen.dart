@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/services/google_drive_sync_service.dart';
+import '../../../../router.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
 import 'hasibu_enterprise_modules_view.dart';
@@ -240,6 +241,12 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
             _CloudSyncAppBarBadge(compact: !isWide),
           const SizedBox(width: 6),
           const UserThemeSelectorBar(compact: true),
+          IconButton(
+            key: const ValueKey('appbar_mobile_mode_button'),
+            tooltip: 'Özel Mobil Görünüm',
+            icon: const Icon(Icons.smartphone_rounded, size: 20),
+            onPressed: () => HasibuRouter.navigateToMobile(context),
+          ),
           if (authSession.canAccess(HasibuModule.systemSettings))
             IconButton(
               tooltip: 'Ayarlar & Yönetim',
@@ -344,16 +351,11 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                   for (final t in tabs)
                     NavigationDestination(
                       icon: Icon(t.icon, color: pal.textSecondary, size: 20),
-                      selectedIcon: const Icon(
-                        Icons.circle,
-                        size: 0,
-                      ).icon == null
-                          ? Icon(t.selectedIcon)
-                          : Icon(
-                              t.selectedIcon,
-                              color: const Color(0xFF0284C7),
-                              size: 20,
-                            ),
+                      selectedIcon: Icon(
+                        t.selectedIcon,
+                        color: const Color(0xFF0284C7),
+                        size: 20,
+                      ),
                       label: t.label,
                     ),
                 ],
@@ -842,16 +844,22 @@ class _KpiSummaryCards extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.selectedStateFilter));
     final pal = HasibuPalette.of(context);
 
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 600;
+        final cardWidth = isNarrow ? (constraints.maxWidth - 10) / 2 : 152.0;
+
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
         _StatFilterCard(
           title: 'Toplam Kadro',
           count: total,
           color: pal.isDark ? const Color(0xFF38BDF8) : const Color(0xFF0F172A),
           icon: Icons.groups_rounded,
           isSelected: activeFilter == null,
+          width: cardWidth,
           onTap: () =>
               ref.read(pdksDashboardProvider.notifier).setStateFilter(null),
         ),
@@ -861,6 +869,7 @@ class _KpiSummaryCards extends ConsumerWidget {
           color: const Color(0xFF059669),
           icon: Icons.check_circle_rounded,
           isSelected: activeFilter == DailyAttendanceState.present,
+          width: cardWidth,
           onTap: () => ref
               .read(pdksDashboardProvider.notifier)
               .setStateFilter(DailyAttendanceState.present),
@@ -871,6 +880,7 @@ class _KpiSummaryCards extends ConsumerWidget {
           color: const Color(0xFFD97706),
           icon: Icons.schedule_rounded,
           isSelected: activeFilter == DailyAttendanceState.late,
+          width: cardWidth,
           onTap: () => ref
               .read(pdksDashboardProvider.notifier)
               .setStateFilter(DailyAttendanceState.late),
@@ -881,6 +891,7 @@ class _KpiSummaryCards extends ConsumerWidget {
           color: const Color(0xFFDC2626),
           icon: Icons.person_off_rounded,
           isSelected: activeFilter == DailyAttendanceState.absent,
+          width: cardWidth,
           onTap: () => ref
               .read(pdksDashboardProvider.notifier)
               .setStateFilter(DailyAttendanceState.absent),
@@ -891,6 +902,7 @@ class _KpiSummaryCards extends ConsumerWidget {
           color: const Color(0xFF0284C7),
           icon: Icons.beach_access_rounded,
           isSelected: activeFilter == DailyAttendanceState.onLeave,
+          width: cardWidth,
           onTap: () => ref
               .read(pdksDashboardProvider.notifier)
               .setStateFilter(DailyAttendanceState.onLeave),
@@ -901,11 +913,14 @@ class _KpiSummaryCards extends ConsumerWidget {
           color: const Color(0xFF7C3AED),
           icon: Icons.medical_services_rounded,
           isSelected: activeFilter == DailyAttendanceState.sickReport,
+          width: cardWidth,
           onTap: () => ref
               .read(pdksDashboardProvider.notifier)
               .setStateFilter(DailyAttendanceState.sickReport),
         ),
       ],
+    );
+      },
     );
   }
 }
@@ -916,6 +931,7 @@ class _StatFilterCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final bool isSelected;
+  final double width;
   final VoidCallback onTap;
 
   const _StatFilterCard({
@@ -924,6 +940,7 @@ class _StatFilterCard extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.isSelected,
+    this.width = 152.0,
     required this.onTap,
   });
 
@@ -935,7 +952,7 @@ class _StatFilterCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
-        width: 152,
+        width: width,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? color.withValues(alpha: 0.12) : pal.card,

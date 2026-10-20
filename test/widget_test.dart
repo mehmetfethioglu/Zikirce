@@ -9,6 +9,11 @@ import 'package:hasibu/core/database/hasibu_database.dart';
 import 'package:hasibu/features/pdks/data/tenfei_zk_client.dart';
 import 'package:hasibu/features/pdks/domain/pdks_models.dart';
 import 'package:hasibu/main.dart';
+import 'package:hasibu/features/pdks/presentation/providers/pdks_providers.dart';
+import 'package:hasibu/providers/mobil_arayuz_iyilestirme_provider.dart';
+import 'package:hasibu/router.dart';
+import 'package:hasibu/screens/mobil_arayuz_iyilestirme_screen.dart';
+
 
 void main() {
   group('Tenfei D35 ZKTeco TCP 4370 Protocol Tests', () {
@@ -452,5 +457,97 @@ void main() {
       find.byKey(const ValueKey('settings_theme_segmented_button')),
       findsOneWidget,
     );
+  });
+
+  group('Mobil Arayüz İyileştirmeleri & Durum Yönetimi (Antigravity 2.0)', () {
+    test('MobileUiNotifier updates density mode, quick filters and search query deterministically', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final notifier = container.read(mobileUiProvider.notifier);
+      expect(container.read(mobileUiProvider).densityMode, equals(MobileDensityMode.comfortable));
+      expect(container.read(mobileUiProvider).isCompact, isFalse);
+
+      notifier.toggleDensityMode();
+      expect(container.read(mobileUiProvider).densityMode, equals(MobileDensityMode.compact));
+      expect(container.read(mobileUiProvider).isCompact, isTrue);
+
+      notifier.setQuickFilter(DailyAttendanceState.late);
+      expect(container.read(mobileUiProvider).activeQuickFilter, equals(DailyAttendanceState.late));
+
+      notifier.setQuickFilter(DailyAttendanceState.late);
+      expect(container.read(mobileUiProvider).activeQuickFilter, isNull);
+
+      notifier.setQuickSearchQuery('00064');
+      expect(container.read(mobileUiProvider).quickSearchQuery, equals('00064'));
+
+      notifier.clearSearch();
+      expect(container.read(mobileUiProvider).quickSearchQuery, isEmpty);
+    });
+
+    test('HasibuRouter generates valid routes for mobile dashboard, login, settings and home', () {
+      final homeRoute = HasibuRouter.generateRoute(const RouteSettings(name: HasibuRoutes.home));
+      expect(homeRoute, isA<MaterialPageRoute>());
+
+      final mobileRoute = HasibuRouter.generateRoute(const RouteSettings(name: HasibuRoutes.mobileDashboard));
+      expect(mobileRoute, isA<MaterialPageRoute>());
+
+      final loginRoute = HasibuRouter.generateRoute(const RouteSettings(name: HasibuRoutes.login));
+      expect(loginRoute, isA<MaterialPageRoute>());
+
+      final settingsRoute = HasibuRouter.generateRoute(const RouteSettings(name: HasibuRoutes.settings));
+      expect(settingsRoute, isA<MaterialPageRoute>());
+    });
+
+    testWidgets('MobilArayuzIyilestirmeScreen renders on smartphone viewport with responsive 2-column KPI grid and quick menu',
+        (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final db = HasibuDatabase.inMemory();
+      addTearDown(db.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            hasibuDatabaseProvider.overrideWithValue(db),
+          ],
+          child: const MaterialApp(
+            home: MobilArayuzIyilestirmeScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Mobil başlık ve marka bileşenleri
+      expect(find.byKey(const ValueKey('mobile_company_logo_badge')), findsOneWidget);
+      expect(find.text('Mobil PDKS & Saha Yönetimi'), findsOneWidget);
+
+      // Responsive 2-kolon KPI kartları
+      expect(find.text('Toplam Kadro'), findsOneWidget);
+      expect(find.text('Zamanında'), findsOneWidget);
+      expect(find.text('Geç Kalan'), findsOneWidget);
+      expect(find.text('Devamsız'), findsOneWidget);
+
+      // Görünüm yoğunluğu değiştirme (Ferah -> Kompakt)
+      expect(find.byTooltip('Kompakt Liste'), findsOneWidget);
+      await tester.tap(find.byTooltip('Kompakt Liste'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Ferah Kart Görünümü'), findsOneWidget);
+
+      // Geri al
+      await tester.tap(find.byTooltip('Ferah Kart Görünümü'));
+      await tester.pumpAndSettle();
+
+      // Mobil Hızlı Menü (Bottom Sheet)
+      await tester.tap(find.byTooltip('Hızlı İşlemler'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cihaz Bağlantı Tanılama (Tenfei D35)'), findsOneWidget);
+      expect(find.text('Google Drive & Gmail Eşitleme'), findsOneWidget);
+      expect(find.text('Sistem & Firma Parametreleri'), findsOneWidget);
+    });
   });
 }

@@ -6,6 +6,7 @@ import 'core/database/hasibu_database.dart';
 import 'features/pdks/domain/pdks_models.dart';
 import 'features/pdks/presentation/providers/pdks_providers.dart';
 import 'features/pdks/presentation/screens/hasibu_shell_screen.dart';
+import 'router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -161,6 +162,7 @@ class HasibuApp extends ConsumerWidget {
       theme: _buildLightTheme(),
       darkTheme: _buildDarkTheme(),
       home: const HasibuShellScreen(),
+      onGenerateRoute: HasibuRouter.generateRoute,
     );
   }
 }
