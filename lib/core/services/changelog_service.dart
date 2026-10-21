@@ -48,11 +48,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 62;
-  static const String currentVersionName = '2.1.7';
+  static const int currentVersionCode = 63;
+  static const String currentVersionName = '2.1.8';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 63,
+      versionName: '2.1.8',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Manevi Paylaşım Stüdyosu & Ayet-Hadis Kartları',
+          titleEn: 'Spiritual Sharing Studio & Verse-Hadith Cards',
+          descTr: 'Zikir, seri (streak) ve hızlı istatistik kartlarına zengin ayet ve hadis-i şerif entegrasyonu, İslami özel gün & Cuma tebrik rozetleri ve Selçuklu yaldız detayları eklendi.',
+          descEn: 'Dynamic Quran verses, Hadiths, Islamic special day/Friday greeting badges, and refined Seljuk golden geometry added to dhikr, streak, and statistics share cards.',
+          icon: Icons.share_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Hedef Tamamlama & Paylaşım Bildirimi',
+          titleEn: 'Goal Completion & Sharing Celebration',
+          descTr: 'Namaz, Kur\'an, zikir ve ezber hedeflerine ulaşıldığında doğrudan manevi tebrik kartı oluşturma ve Ayarlar\'dan yönetilebilir paylaşım hatırlatıcısı sunuldu.',
+          descEn: 'Celebration prompts and instant sharing card studio upon completing prayer, Quran, dhikr, or memorization goals, with toggleable settings.',
+          icon: Icons.emoji_events_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'iOS Kilit Ekranı (Lock Screen) Araçları İyileştirmeleri',
+          titleEn: 'iOS Lock Screen Widget Optimizations',
+          descTr: 'Namaz vakti sayacı, zikir zinciri ve hicri takvim kilit ekranı araçlarının senkronizasyon hassasiyeti ve görsel uyumu artırıldı.',
+          descEn: 'Enhanced synchronization precision and visual alignment for Prayer Times, Dhikr streak, and Hijri Calendar Lock Screen widgets.',
+          icon: Icons.lock_clock_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 62,
       versionName: '2.1.7',

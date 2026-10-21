@@ -1,0 +1,15 @@
+# ==============================================================================
+# Zikirce Android & iOS v2.1.8 (Build 63) Release Notes / Sürüm Notları
+# ==============================================================================
+
+[tr-TR] (Google Play Console / App Store - Maks. 500 Karakter)
+Zikirce v2.1.8 Yenilikleri:
+• Manevi Paylaşım Stüdyosu: Zikir, seri ve istatistik kartlarına ayet-hadis entegrasyonu, Cuma/Kandil tebrikleri ve Selçuklu altın yaldız motifleri eklendi.
+• Hedef Tamamlama Kutlaması: Namaz, Kur'an, zikir ve ezber hedeflerine ulaşıldığında anlık paylaşım kartı ve tebrik sistemi sunuldu.
+• iOS Kilit Ekranı Araçları: Namaz vakti, canlı geri sayım, zikir zinciri ve hicri takvim kilit ekranı araçları optimize edildi.
+
+[en-US] (Google Play Console / App Store - Max. 500 Characters)
+Zikirce v2.1.8 What's New:
+• Spiritual Sharing Studio: Dynamic Quran verses, Hadiths, Friday/Kandil greetings, and refined Seljuk golden geometric frames for dhikr & streak cards.
+• Goal Completion Triggers: Instant sharing cards and celebration prompts upon completing daily prayer, Quran, dhikr, or memorization targets.
+• iOS Lock Screen Widgets: Enhanced synchronization and visual polish for Prayer Times, Live Countdown, Dhikr Counter, and Hijri Calendar.

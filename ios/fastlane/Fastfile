@@ -169,6 +169,16 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.1.8 Yenilikleri:
+      • Manevi Paylaşım Stüdyosu & Ayet-Hadis Kartları: Zikir, seri ve istatistik kartlarına ayet-hadis entegrasyonu, Cuma ve Kandil özel gün tebrikleri ile Selçuklu hat sanatı detayları eklendi.
+      • Hedef Tamamlama & Paylaşım Bildirimi: Namaz, Kur'an, zikir ve ezber hedeflerine ulaşıldığında doğrudan paylaşım kartı oluşturma ve tebrik desteği sunuldu.
+      • iOS Kilit Ekranı (Lock Screen) Araçları: Namaz vakitleri, canlı geri sayım, günlük zikir sayacı, zikir zinciri ve hicri takvim kilit ekranı araçları optimize edildi.
+
+      What's New in v2.1.8:
+      • Spiritual Sharing Studio & Verse-Hadith Cards: Dynamic Quran verses, Hadiths, Islamic special day/Friday greetings, and refined Seljuk geometric frames for dhikr and streak cards.
+      • Goal Completion & Sharing Triggers: Instant sharing cards and celebration prompts upon completing daily prayer, Quran, dhikr, and memorization goals.
+      • iOS Lock Screen Widgets: Enhanced circular, rectangular, and inline Lock Screen widgets for Prayer Times, Live Countdown, Dhikr Counter, Streak, and Hijri Calendar.
+
       Zikirce v2.1.7 Yenilikleri:
       • iOS Kilit Ekranı (Lock Screen) Araçları: Namaz vakitleri, canlı geri sayım, günlük zikir sayacı, zikir zinciri ve hicri takvim için dairesel, dikdörtgen ve satır içi kilit ekranı araçları eklendi.
 
