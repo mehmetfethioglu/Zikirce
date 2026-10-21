@@ -4,7 +4,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../dashboard/presentation/widgets/streak_share_preview_modal.dart';
+import '../../../zikir/domain/share_card_data_helper.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
+import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 
 class ShareCardScreen extends ConsumerWidget {
   const ShareCardScreen({super.key});
@@ -16,7 +18,7 @@ class ShareCardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
-        title: Text('Paylaşım Kartı', style: AppTypography.headingSmall(color: Colors.white)),
+        title: Text('Manevi Paylaşım Stüdyosu', style: AppTypography.headingSmall(color: Colors.white)),
       ),
       body: streakAsync.when(
         data: (streak) {
@@ -75,31 +77,32 @@ class ShareCardScreen extends ConsumerWidget {
                         '(Ra’d Sûresi, 28)',
                         style: TextStyle(color: AppColors.gold300, fontSize: 13),
                       ),
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black26,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.gold500.withValues(alpha: 0.4)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('🔥', style: TextStyle(fontSize: 18)),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                '$currentStreak Günlük İbadet Serisi • Makam: $rank',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                       const SizedBox(height: 20),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: ShareCardDataHelper.goalPresets.take(6).map((preset) {
+                          return ActionChip(
+                            backgroundColor: Colors.black26,
+                            side: BorderSide(color: AppColors.gold500.withValues(alpha: 0.4)),
+                            label: Text(
+                              '${preset.emoji} ${preset.labelTr}',
+                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                            ),
+                            onPressed: () {
+                              ZikirSharePreviewModal.show(
+                                context: context,
+                                zikirName: preset.badgeTitleTr,
+                                category: preset.labelTr,
+                                initialTheme: ZikirShareThemeData.themeForGoalOrTask(goalType: preset.id),
+                                initialShowCounterStats: false,
+                              );
+                            },
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
                       const Text(
                         'Zikirce — İslâmî Yaşam ve Zikir Asistanı',
                         style: TextStyle(color: Color(0xFFD4EBE4), fontSize: 11),
@@ -108,7 +111,7 @@ class ShareCardScreen extends ConsumerWidget {
                   ),
                 ),
                 const Spacer(),
-                // Share Button
+                // Share Studio Button (All Goals)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -118,8 +121,31 @@ class ShareCardScreen extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                     ),
-                    icon: const Icon(Icons.share_rounded),
-                    label: const Text('Görsel Paylaşım Kartını Aç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                    label: const Text('Manevi Paylaşım Stüdyosunu Aç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    onPressed: () {
+                      ZikirSharePreviewModal.show(
+                        context: context,
+                        zikirName: 'Günlük Zikir & Kalbin Huzuru',
+                        category: 'Zikir',
+                        initialTheme: ZikirShareCardTheme.emeraldSufi,
+                        initialShowCounterStats: false,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: AppColors.gold500.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('İstikrar & Seri Kartını Aç', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                     onPressed: () {
                       StreakSharePreviewModal.show(
                         context,
@@ -132,7 +158,7 @@ class ShareCardScreen extends ConsumerWidget {
                     },
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
               ],
             ),
           );

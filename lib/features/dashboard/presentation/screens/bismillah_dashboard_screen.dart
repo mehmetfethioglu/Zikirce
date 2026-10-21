@@ -189,7 +189,9 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
   }
   void _openShareReminder(BuildContext context, ShareReminderState reminder) {
     HapticService.selectionClick();
-    ref.read(shareReminderProvider.notifier).clearReminder();
+    if (reminder.hasPendingReminder) {
+      ref.read(shareReminderProvider.notifier).clearReminder();
+    }
 
     final streakAsync = ref.read(userStreakStreamProvider);
     final streak = streakAsync.valueOrNull;
@@ -197,24 +199,10 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
     final userRank = ref.read(currentUserRankProvider);
     final goalsStatus = ref.read(dailyGoalsStatusProvider).valueOrNull;
     final isGold = goalsStatus?.isGoldCompleted ?? false;
+    final quickStats = ref.read(quickStatsProvider).valueOrNull;
+    final totalZikirVal = ref.read(totalZikirCountProvider).valueOrNull ?? 0;
 
-    if (reminder.type == ShareReminderType.zikir) {
-      final zikirName = reminder.metadata['name'] as String? ?? (reminder.title.isNotEmpty ? reminder.title : 'Günlük Zikir');
-      final target = reminder.metadata['target'] as int? ?? 33;
-      final arabic = reminder.metadata['arabic'] as String?;
-      final count = reminder.metadata['count'] as int? ?? target;
-
-      ZikirSharePreviewModal.show(
-        context: context,
-        zikirName: zikirName,
-        arabicText: arabic,
-        category: 'Zikir Paylaşımı',
-        currentCount: count,
-        targetCount: target,
-        totalCount: count,
-        initialTheme: reminder.theme,
-      );
-    } else {
+    if (reminder.hasPendingReminder && reminder.type == ShareReminderType.streak) {
       StreakSharePreviewModal.show(
         context,
         currentStreak: streakDays,
@@ -225,6 +213,113 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
         isGoldCompleted: isGold,
         initialTheme: reminder.theme,
       );
+      return;
+    }
+
+    if (reminder.hasPendingReminder && reminder.type == ShareReminderType.quickStats) {
+      QuickStatsSharePreviewModal.show(
+        context: context,
+        todayZikir: quickStats?.formattedToday ?? '0',
+        thisWeekZikir: quickStats?.formattedThisWeek ?? '0',
+        dailyAvgZikir: quickStats?.formattedDailyAverage ?? '0',
+        totalZikir: quickStats?.formattedTotal ?? formatCompactNumber(totalZikirVal),
+        quranPages: quickStats?.formattedQuranToday ?? '0',
+        rankName: userRank.name,
+        rankBadge: userRank.badge,
+        initialTheme: reminder.theme,
+      );
+      return;
+    }
+
+    String goalName = 'Günlük Zikir & Kalbin Huzuru';
+    String category = 'Zikir';
+    String? arabic;
+    int count = 33;
+    int target = 33;
+    bool showCounter = false;
+    ZikirShareCardTheme theme = ZikirShareCardTheme.emeraldSufi;
+
+    if (reminder.hasPendingReminder) {
+      goalName = reminder.metadata['name'] as String? ??
+          (reminder.title.isNotEmpty ? reminder.title : 'Günlük Zikir & Kalbin Huzuru');
+      category = reminder.metadata['category'] as String? ?? _categoryForReminderType(reminder.type);
+      arabic = reminder.metadata['arabic'] as String?;
+      target = reminder.metadata['target'] as int? ?? 33;
+      count = reminder.metadata['count'] as int? ?? target;
+      showCounter = reminder.type == ShareReminderType.zikir;
+      theme = reminder.theme;
+    } else if (goalsStatus != null) {
+      if (goalsStatus.isGoldCompleted) {
+        goalName = 'Altın Gün & İbadette İstikamet';
+        category = 'Altın Gün';
+        count = goalsStatus.completedGoalsCount;
+        target = goalsStatus.totalActiveGoals;
+        theme = ZikirShareCardTheme.midnightGold;
+      } else if (goalsStatus.isZikirGoalEnabled && goalsStatus.isZikirMet && goalsStatus.todayZikirCount > 0) {
+        goalName = 'Günlük Zikir & Kalbin Huzuru';
+        category = 'Zikir';
+        count = goalsStatus.todayZikirCount;
+        target = goalsStatus.zikirGoal;
+        showCounter = true;
+        theme = ZikirShareCardTheme.emeraldSufi;
+      } else if (goalsStatus.isKuranGoalEnabled && goalsStatus.isKuranMet && goalsStatus.todayKuranPages > 0) {
+        goalName = 'Kur’an-ı Kerim Tilaveti';
+        category = 'Kur’an';
+        count = goalsStatus.todayKuranPages;
+        target = goalsStatus.kuranGoal;
+        theme = ZikirShareCardTheme.fajrDawn;
+      } else if (goalsStatus.isPrayersMet) {
+        goalName = '5 Vakit Namaz & Secde Huzuru';
+        category = 'Namaz';
+        count = goalsStatus.completedPrayersCount;
+        target = 5;
+        theme = ZikirShareCardTheme.turquoiseDome;
+      } else if (goalsStatus.isEzberGoalEnabled && goalsStatus.isEzberMet) {
+        goalName = 'Ezber & Hafızlık Gayreti';
+        category = 'Ezber';
+        count = goalsStatus.todayEzberCount;
+        target = goalsStatus.ezberGoal;
+        theme = ZikirShareCardTheme.royalAmethyst;
+      } else if (goalsStatus.isKazaGoalEnabled && goalsStatus.isKazaMet) {
+        goalName = 'Kaza Telafisi & İstiğfar';
+        category = 'Kaza & Tövbe';
+        count = goalsStatus.todayKazaCount;
+        target = goalsStatus.kazaGoal;
+        theme = ZikirShareCardTheme.roseAmber;
+      }
+    }
+
+    ZikirSharePreviewModal.show(
+      context: context,
+      zikirName: goalName,
+      arabicText: arabic,
+      category: category,
+      currentCount: count,
+      targetCount: target,
+      totalCount: count,
+      initialTheme: theme,
+      initialShowCounterStats: showCounter,
+    );
+  }
+
+  String _categoryForReminderType(ShareReminderType type) {
+    switch (type) {
+      case ShareReminderType.prayers:
+        return 'Namaz';
+      case ShareReminderType.zikir:
+        return 'Zikir';
+      case ShareReminderType.kuran:
+        return 'Kur’an';
+      case ShareReminderType.ezber:
+        return 'Ezber';
+      case ShareReminderType.kaza:
+        return 'Kaza & Tövbe';
+      case ShareReminderType.goldenDay:
+      case ShareReminderType.streak:
+        return 'Altın Gün';
+      case ShareReminderType.quickStats:
+      case ShareReminderType.general:
+        return 'Zikir';
     }
   }
 
@@ -484,9 +579,21 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
 
     final historyListAsync = ref.watch(zikirHistoryListProvider);
 
+    ref.listen<AsyncValue<DailyGoalsStatus>>(dailyGoalsStatusProvider, (prev, next) {
+      final status = next.valueOrNull;
+      if (status != null) {
+        ref.read(shareReminderProvider.notifier).syncWithDailyGoals(status);
+      }
+    });
+
     final shareReminder = ref.watch(shareReminderProvider);
     final settings = ref.watch(userSettingsProvider);
-    final hasShareBadge = shareReminder.hasPendingReminder && settings.isShareCardsEnabled;
+    final hasCompletedAnyGoal = (goalsStatus?.completedGoalsCount ?? 0) > 0;
+    final hasShareBadge = (shareReminder.hasPendingReminder || hasCompletedAnyGoal) && settings.isShareCardsEnabled;
+    final isGoldGoalState = (goalsStatus?.isGoldCompleted ?? false) ||
+        (shareReminder.hasPendingReminder && shareReminder.type == ShareReminderType.goldenDay);
+    final badgePrimaryColor = isGoldGoalState ? const Color(0xFFF59E0B) : colors.accent;
+    final badgeSecondaryColor = isGoldGoalState ? const Color(0xFFD97706) : const Color(0xFF0D9488);
 
     return Scaffold(
       backgroundColor: colors.pageBackground,
@@ -532,13 +639,13 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                             shape: BoxShape.circle,
                             color: colors.cardBackground,
                             border: Border.all(
-                              color: hasShareBadge ? const Color(0xFFEAB308) : colors.accent,
+                              color: hasShareBadge ? badgePrimaryColor : colors.accent,
                               width: hasShareBadge ? 3.0 : 2.5,
                             ),
                             boxShadow: hasShareBadge
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFFEAB308).withValues(alpha: 0.45),
+                                      color: badgePrimaryColor.withValues(alpha: 0.45),
                                       blurRadius: 14,
                                       spreadRadius: 2,
                                     ),
@@ -571,7 +678,7 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                             ),
                           ),
                         ),
-                        // Top-right notification bubble for share reminder
+                        // Top-right notification bubble for share reminder (all goals supported)
                         if (hasShareBadge)
                           Positioned(
                             top: -6,
@@ -581,8 +688,8 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                                  gradient: LinearGradient(
+                                    colors: [badgePrimaryColor, badgeSecondaryColor],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                   ),
@@ -590,7 +697,7 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
                                   border: Border.all(color: Colors.white, width: 1.5),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFFF59E0B).withValues(alpha: 0.6),
+                                      color: badgePrimaryColor.withValues(alpha: 0.6),
                                       blurRadius: 8,
                                       offset: const Offset(0, 2),
                                     ),

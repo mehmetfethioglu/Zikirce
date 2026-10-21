@@ -7,8 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../../core/services/islamic_special_days_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../domain/share_card_data_helper.dart';
 import 'zikir_share_card_widget.dart';
 
 class ZikirSharePreviewModal extends ConsumerStatefulWidget {
@@ -21,6 +23,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
   final int totalCount;
   final String arabicFontFamily;
   final ZikirShareCardTheme? initialTheme;
+  final bool initialShowCounterStats;
 
   const ZikirSharePreviewModal({
     super.key,
@@ -33,6 +36,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     required this.totalCount,
     this.arabicFontFamily = 'mushaf',
     this.initialTheme,
+    this.initialShowCounterStats = true,
   });
 
   static Future<void> show({
@@ -46,6 +50,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     int totalCount = 0,
     String arabicFontFamily = 'mushaf',
     ZikirShareCardTheme? initialTheme,
+    bool initialShowCounterStats = true,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -63,6 +68,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
         totalCount: totalCount,
         arabicFontFamily: arabicFontFamily,
         initialTheme: initialTheme,
+        initialShowCounterStats: initialShowCounterStats,
       ),
     );
   }
@@ -76,14 +82,61 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
   late ZikirShareCardTheme _selectedTheme;
-  bool _showCounterStats = true;
+  ZikirShareTypographyStyle _selectedTypography = ZikirShareTypographyStyle.modernOutfit;
+  ZikirSharePatternStyle _selectedPattern = ZikirSharePatternStyle.mihrapSufi;
+
+  late String _activeZikirName;
+  late String _activeCategory;
+  String? _activeArabicText;
+  String? _activeVirtue;
+  int _quoteIndex = 0;
+
+  late bool _showCounterStats;
+  bool _showArabicText = true;
+  String? _selectedGreeting;
+  int _selectedNoteIndex = 0;
   bool _isGeneratingImage = false;
 
   @override
   void initState() {
     super.initState();
+    _activeZikirName = widget.zikirName;
+    _activeCategory = widget.category;
+    _activeArabicText = widget.arabicText;
+    _activeVirtue = widget.virtue;
+    _showCounterStats = widget.initialShowCounterStats;
     _selectedTheme = widget.initialTheme ??
-        ZikirShareThemeData.themeForGoalOrTask(category: widget.category);
+        ZikirShareThemeData.themeForGoalOrTask(
+          goalType: widget.zikirName,
+          category: widget.category,
+        );
+    final autoDay = IslamicSpecialDaysService.detectSpecialDay();
+    _selectedGreeting = autoDay?.greetingTr;
+  }
+
+  void _selectGoalPreset(ShareGoalPreset preset, bool isTurkish) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _activeZikirName = isTurkish ? preset.badgeTitleTr : preset.badgeTitleEn;
+      _activeCategory = isTurkish ? preset.labelTr : preset.labelEn;
+      _activeArabicText = null;
+      _activeVirtue = null;
+      _quoteIndex = 0;
+      _selectedTheme = ZikirShareThemeData.themeForGoalOrTask(
+        goalType: preset.id,
+        category: preset.topic,
+      );
+    });
+  }
+
+  void _cycleNextQuote() {
+    HapticFeedback.lightImpact();
+    final topicQuotes = ShareCardDataHelper.getQuotesForTopic('$_activeZikirName $_activeCategory');
+    setState(() {
+      _activeVirtue = null;
+      _activeArabicText = null;
+      _quoteIndex = (_quoteIndex + 1) % topicQuotes.length;
+    });
   }
 
   Future<void> _shareAsImage() async {
@@ -94,7 +147,6 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     HapticFeedback.mediumImpact();
 
     try {
-      // Small delay to ensure render tree is fully painted
       await Future.delayed(const Duration(milliseconds: 60));
 
       final boundary = _cardRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
@@ -102,7 +154,6 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
-      // 3.0 pixel ratio for high-density sharp image (e.g. 1080x1920)
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
@@ -116,15 +167,26 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
 
+      final resolvedQuote = ShareCardDataHelper.resolveQuote(
+        zikirName: _activeZikirName,
+        category: _activeCategory,
+        rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
+        quoteIndex: _quoteIndex,
+      );
+
+      final greetingPart = (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
+          ? '✨ ${_selectedGreeting!}\n'
+          : '';
+
       final caption = l10n.isTurkish
-          ? '📿 ${widget.zikirName} — Zikirce İslâmî Yaşam ve Zikir Asistanı'
-          : '📿 ${widget.zikirName} — Zikirce Islamic Life & Dhikr Assistant';
+          ? '$greetingPart“${resolvedQuote.text}” (${resolvedQuote.source})\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+          : '$greetingPart“${resolvedQuote.text}” (${resolvedQuote.source})\n— Zikirce Islamic Life & Dhikr Assistant';
 
       if (mounted) {
         await Share.shareXFiles(
           [XFile(file.path)],
           text: caption,
-          subject: '${widget.zikirName} - Zikirce',
+          subject: '$_activeZikirName - Zikirce',
         );
       }
     } catch (e) {
@@ -147,27 +209,45 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   void _shareAsText() {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
-    final arabicPart = (widget.arabicText != null && widget.arabicText!.isNotEmpty)
-        ? '\n${widget.arabicText!}\n'
+    final resolvedQuote = ShareCardDataHelper.resolveQuote(
+      zikirName: _activeZikirName,
+      category: _activeCategory,
+      rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
+      quoteIndex: _quoteIndex,
+    );
+
+    final greetingPart = (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
+        ? '✨ ${_selectedGreeting!}\n\n'
         : '';
-    final virtuePart = (widget.virtue != null && widget.virtue!.isNotEmpty)
-        ? '\n💡 ${l10n.isTurkish ? "Fazileti" : "Virtue"}: ${widget.virtue}\n'
+    final arabicPart = (resolvedQuote.arabic != null && resolvedQuote.arabic!.isNotEmpty)
+        ? '${resolvedQuote.arabic!}\n\n'
         : '';
 
     final shareText = l10n.isTurkish
-        ? '📿 ${widget.zikirName}$arabicPart\n🎯 Hedef: ${widget.targetCount}\n✅ Çekilen: ${widget.currentCount}\n📊 Toplam: ${widget.totalCount}$virtuePart\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
-        : '📿 ${widget.zikirName}$arabicPart\n🎯 Target: ${widget.targetCount}\n✅ Recited: ${widget.currentCount}\n📊 Total: ${widget.totalCount}$virtuePart\n— Zikirce Islamic Life & Dhikr Assistant';
+        ? '$greetingPart$arabicPart“${resolvedQuote.text}”\n📖 (${resolvedQuote.source})\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+        : '$greetingPart$arabicPart“${resolvedQuote.text}”\n📖 (${resolvedQuote.source})\n\n— Zikirce Islamic Life & Dhikr Assistant';
 
     Share.share(
       shareText,
-      subject: '${widget.zikirName} - Zikirce',
+      subject: '$_activeZikirName - Zikirce',
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.44;
+    final isTurkish = context.l10n.isTurkish;
+    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.40;
+
+    final activePreset = ShareCardDataHelper.resolvePreset(
+      zikirName: _activeZikirName,
+      category: _activeCategory,
+    );
+    final topicQuotes = ShareCardDataHelper.getQuotesForTopic('$_activeZikirName $_activeCategory');
+    final activeNoteList = isTurkish
+        ? ShareCardDataHelper.spiritualNotesTr
+        : ShareCardDataHelper.spiritualNotesEn;
+    final activeSpiritualNote = activeNoteList[_selectedNoteIndex.clamp(0, activeNoteList.length - 1)];
 
     return Container(
       decoration: BoxDecoration(
@@ -184,7 +264,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -197,9 +277,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
 
-              // Title Row
+              // Title Row + Quote Cycler Button
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -217,22 +297,109 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                       ),
                     ],
                   ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                    color: isDark ? Colors.white54 : Colors.black54,
-                    visualDensity: VisualDensity.compact,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Quote Switcher Pill (YouVersion / Ayah Style)
+                      InkWell(
+                        onTap: _cycleNextQuote,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.gold500.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppColors.gold500.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.autorenew_rounded, size: 14, color: AppColors.gold500),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Ayet/Hadis (${(_quoteIndex % topicQuotes.length) + 1}/${topicQuotes.length})',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? AppColors.gold400 : const Color(0xFF92400E),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                        color: isDark ? Colors.white54 : Colors.black54,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
 
-              // Controls Bar: Format Selector & Stats Switch
+              // 1. GOAL / TOPIC PRESET BAR (Her Hedef İçin Özel Konsept Seçici)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: ShareCardDataHelper.goalPresets.map((preset) {
+                    final isSelected = activePreset.id == preset.id;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: GestureDetector(
+                        onTap: () => _selectGoalPreset(preset, isTurkish),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.gold500.withValues(alpha: 0.22)
+                                : (isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7)),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.gold500
+                                  : (isDark ? Colors.white12 : Colors.black12),
+                              width: isSelected ? 1.4 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(preset.emoji, style: const TextStyle(fontSize: 12)),
+                              const SizedBox(width: 5),
+                              Text(
+                                isTurkish ? preset.labelTr : preset.labelEn,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected
+                                      ? (isDark ? AppColors.gold400 : const Color(0xFF92400E))
+                                      : (isDark ? Colors.white70 : Colors.black87),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // 2. Controls Bar: Format Selector, Arabic Toggle & Stats Switch
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -250,7 +417,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                           },
                           isDark: isDark,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                         _buildFormatChip(
                           title: 'Kare (1:1)',
                           icon: Icons.crop_square_rounded,
@@ -264,42 +431,77 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                       ],
                     ),
 
-                    // Stats Toggle
-                    InkWell(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() => _showCounterStats = !_showCounterStats);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _showCounterStats ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                              color: _showCounterStats ? AppColors.gold500 : (isDark ? Colors.white38 : Colors.black38),
-                              size: 20,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Arabic Toggle
+                        InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _showArabicText = !_showArabicText);
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _showArabicText ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                  color: _showArabicText ? AppColors.gold500 : (isDark ? Colors.white38 : Colors.black38),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Arapça',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Sayaç',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white70 : Colors.black87,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 4),
+                        // Stats Toggle
+                        InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _showCounterStats = !_showCounterStats);
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _showCounterStats ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                  color: _showCounterStats ? AppColors.gold500 : (isDark ? Colors.white38 : Colors.black38),
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Sayaç',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // Interactive Live Card Preview (Framed inside RepaintBoundary)
+              // 3. Interactive Live Card Preview (Framed inside RepaintBoundary)
               ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: maxPreviewHeight,
@@ -307,33 +509,154 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 child: RepaintBoundary(
                   key: _cardRepaintKey,
                   child: ZikirShareCardWidget(
-                    zikirName: widget.zikirName,
-                    arabicText: widget.arabicText,
-                    virtue: widget.virtue,
-                    category: widget.category,
+                    zikirName: _activeZikirName,
+                    arabicText: _activeArabicText,
+                    virtue: _activeVirtue,
+                    specialDayGreeting: _selectedGreeting,
+                    spiritualNote: activeSpiritualNote,
+                    category: _activeCategory,
                     currentCount: widget.currentCount,
                     targetCount: widget.targetCount,
                     totalCount: widget.totalCount,
+                    quoteIndex: _quoteIndex,
                     format: _selectedFormat,
                     theme: _selectedTheme,
+                    typographyStyle: _selectedTypography,
+                    patternStyle: _selectedPattern,
                     showCounterStats: _showCounterStats,
+                    showArabicText: _showArabicText,
                     arabicFontFamily: widget.arabicFontFamily,
                   ),
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
 
-              // Theme Palette Row
+              // 4. Typography & Artistic Pattern Studio Row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    _buildSmallStudioChip(
+                      label: 'Modern Yazı',
+                      icon: Icons.text_format_rounded,
+                      isSelected: _selectedTypography == ZikirShareTypographyStyle.modernOutfit,
+                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.modernOutfit),
+                      isDark: isDark,
+                    ),
+                    _buildSmallStudioChip(
+                      label: 'Klasik Kitap',
+                      icon: Icons.menu_book_rounded,
+                      isSelected: _selectedTypography == ZikirShareTypographyStyle.classicAmiri,
+                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.classicAmiri),
+                      isDark: isDark,
+                    ),
+                    _buildSmallStudioChip(
+                      label: 'Kitabe',
+                      icon: Icons.account_balance_rounded,
+                      isSelected: _selectedTypography == ZikirShareTypographyStyle.royalCinzel,
+                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.royalCinzel),
+                      isDark: isDark,
+                    ),
+                    Container(
+                      width: 1,
+                      height: 18,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      color: isDark ? Colors.white24 : Colors.black12,
+                    ),
+                    _buildSmallStudioChip(
+                      label: 'Mihrap & Sufi',
+                      icon: Icons.mosque_rounded,
+                      isSelected: _selectedPattern == ZikirSharePatternStyle.mihrapSufi,
+                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.mihrapSufi),
+                      isDark: isDark,
+                    ),
+                    _buildSmallStudioChip(
+                      label: 'Selçuklu',
+                      icon: Icons.star_border_purple500_rounded,
+                      isSelected: _selectedPattern == ZikirSharePatternStyle.seljukStar,
+                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.seljukStar),
+                      isDark: isDark,
+                    ),
+                    _buildSmallStudioChip(
+                      label: 'Yalın Nur',
+                      icon: Icons.blur_on_rounded,
+                      isSelected: _selectedPattern == ZikirSharePatternStyle.minimalGlow,
+                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.minimalGlow),
+                      isDark: isDark,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // 5. Special Day Greeting & Dua Note Chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: Row(
+                  children: [
+                    ...IslamicSpecialDaysService.presetGreetings(isTurkish: isTurkish).map((preset) {
+                      final isSelected = _selectedGreeting == preset.greeting;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(
+                            preset.label,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            ),
+                          ),
+                          selected: isSelected,
+                          selectedColor: AppColors.gold500.withValues(alpha: 0.25),
+                          onSelected: (_) {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selectedGreeting = preset.greeting);
+                          },
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }),
+                    // Spiritual Dua Footer Toggle Chip
+                    ChoiceChip(
+                      label: Text(
+                        _selectedNoteIndex == 0
+                            ? '🤲 Dua Notu Ekle'
+                            : '🤲 Dua Notu ($_selectedNoteIndex/${activeNoteList.length - 1})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: _selectedNoteIndex > 0 ? FontWeight.bold : FontWeight.w500,
+                        ),
+                      ),
+                      selected: _selectedNoteIndex > 0,
+                      selectedColor: AppColors.gold500.withValues(alpha: 0.25),
+                      onSelected: (_) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _selectedNoteIndex = (_selectedNoteIndex + 1) % activeNoteList.length;
+                        });
+                      },
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // 6. Theme Palette Row
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 8),
+                    padding: const EdgeInsets.only(left: 4, bottom: 6),
                     child: Text(
                       'TEMA SEÇİMİ',
                       style: GoogleFonts.outfit(
-                        fontSize: 11,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.w700,
                         color: isDark ? Colors.white54 : Colors.black54,
                         letterSpacing: 1.0,
@@ -356,7 +679,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -406,12 +729,12 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 ],
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: 16),
 
               // Action Buttons
               SizedBox(
                 width: double.infinity,
-                height: 52,
+                height: 50,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.gold500,
@@ -450,7 +773,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
 
               // Text Share Fallback Button
               TextButton.icon(
@@ -467,6 +790,57 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                     fontWeight: FontWeight.w600,
                     color: isDark ? Colors.white60 : Colors.black54,
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSmallStudioChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? AppColors.gold500.withValues(alpha: 0.2)
+                : (isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? AppColors.gold500 : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: isSelected ? AppColors.gold500 : (isDark ? Colors.white54 : Colors.black54),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected
+                      ? (isDark ? Colors.white : Colors.black87)
+                      : (isDark ? Colors.white60 : Colors.black54),
                 ),
               ),
             ],

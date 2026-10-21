@@ -15,6 +15,7 @@ import '../services/badge_service.dart';
 import '../services/custom_badge_service.dart';
 import '../services/daily_streak_service.dart';
 import '../services/golden_day_service.dart';
+import '../../dashboard/providers/share_reminder_provider.dart';
 
 final userStreakStreamProvider = StreamProvider<UserStreak?>((ref) {
   final db = ref.watch(databaseProvider);
@@ -807,6 +808,20 @@ class GamificationNotifier extends StateNotifier<void> {
 
     // Trigger refresh
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
+
+    try {
+      ref.read(shareReminderProvider.notifier).setReminder(
+        title: '${surah.name} Sûresi Tilaveti',
+        subtitle: '${curPages + surahPageSpan} sayfa okundu 📖',
+        type: ShareReminderType.kuran,
+        metadata: {
+          'name': '${surah.name} Sûresi Tilaveti',
+          'category': 'Kur’an',
+          'count': curPages + surahPageSpan,
+          'target': surahPageSpan,
+        },
+      );
+    } catch (_) {}
 
     return SurahCompletionResult(
       surah: surah,

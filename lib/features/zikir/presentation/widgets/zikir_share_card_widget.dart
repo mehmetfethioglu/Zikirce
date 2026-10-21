@@ -19,6 +19,20 @@ enum ZikirShareCardTheme {
   fajrDawn,
 }
 
+/// Typography presets inspired by YouVersion & Ayah Share Studio
+enum ZikirShareTypographyStyle {
+  modernOutfit,
+  classicAmiri,
+  royalCinzel,
+}
+
+/// Artistic background pattern layer presets (Mimar Sinan)
+enum ZikirSharePatternStyle {
+  mihrapSufi,
+  seljukStar,
+  minimalGlow,
+}
+
 class ZikirShareThemeData {
   final String id;
   final String nameTr;
@@ -182,14 +196,21 @@ class ZikirShareThemeData {
     String? category,
     bool isGold = false,
   }) {
-    if (isGold || goalType == 'streak' || goalType == 'golden_day') {
+    if (isGold || goalType == 'streak' || goalType == 'goldenDay' || goalType == 'golden_day' || goalType == 'devamlilik') {
       return ZikirShareCardTheme.midnightGold;
     }
     final key = '${goalType ?? ''} ${taskType ?? ''} ${category ?? ''}'.toLowerCase();
     if (key.contains('namaz') || key.contains('prayer') || key.contains('vakit')) {
+      if (key.contains('kaza')) return ZikirShareCardTheme.roseAmber;
       return ZikirShareCardTheme.turquoiseDome;
     }
-    if (key.contains('salavat') || key.contains('salat') || key.contains('gül') || key.contains('rose')) {
+    if (key.contains('kuran') || key.contains('kur\'an') || key.contains('kur’an') || key.contains('hatim') || key.contains('tilavet')) {
+      return ZikirShareCardTheme.fajrDawn;
+    }
+    if (key.contains('ezber') || key.contains('hafız') || key.contains('hafiz')) {
+      return ZikirShareCardTheme.royalAmethyst;
+    }
+    if (key.contains('kaza') || key.contains('telafi') || key.contains('salavat') || key.contains('salat') || key.contains('gül') || key.contains('rose')) {
       return ZikirShareCardTheme.roseAmber;
     }
     if (key.contains('istiğfar') || key.contains('istigfar') || key.contains('tevbe') || key.contains('gece')) {
@@ -209,13 +230,18 @@ class ZikirShareCardWidget extends StatelessWidget {
   final String? virtue;
   final String? source;
   final String? specialDayGreeting;
+  final String? spiritualNote;
   final String category;
   final int currentCount;
   final int targetCount;
   final int totalCount;
+  final int quoteIndex;
   final ZikirShareCardFormat format;
   final ZikirShareCardTheme theme;
+  final ZikirShareTypographyStyle typographyStyle;
+  final ZikirSharePatternStyle patternStyle;
   final bool showCounterStats;
+  final bool showArabicText;
   final String arabicFontFamily;
 
   const ZikirShareCardWidget({
@@ -225,20 +251,76 @@ class ZikirShareCardWidget extends StatelessWidget {
     this.virtue,
     this.source,
     this.specialDayGreeting,
+    this.spiritualNote,
     this.category = 'Günlük Zikir',
     this.currentCount = 0,
     this.targetCount = 33,
     this.totalCount = 0,
+    this.quoteIndex = 0,
     this.format = ZikirShareCardFormat.story9x16,
     this.theme = ZikirShareCardTheme.emeraldSufi,
+    this.typographyStyle = ZikirShareTypographyStyle.modernOutfit,
+    this.patternStyle = ZikirSharePatternStyle.mihrapSufi,
     this.showCounterStats = true,
+    this.showArabicText = true,
     this.arabicFontFamily = 'mushaf',
   });
+
+  TextStyle _resolveQuoteTextStyle({
+    required bool isStory,
+  }) {
+    final fontSize = isStory ? 12.5 : 10.5;
+    switch (typographyStyle) {
+      case ZikirShareTypographyStyle.classicAmiri:
+        return GoogleFonts.amiri(
+          fontSize: fontSize + 1.5,
+          fontWeight: FontWeight.w500,
+          color: Colors.white.withValues(alpha: 0.96),
+          height: 1.4,
+          fontStyle: FontStyle.italic,
+        );
+      case ZikirShareTypographyStyle.royalCinzel:
+        return GoogleFonts.cinzel(
+          fontSize: fontSize - 0.5,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.95),
+          height: 1.35,
+        );
+      case ZikirShareTypographyStyle.modernOutfit:
+        return GoogleFonts.outfit(
+          fontSize: isStory ? 12.0 : 10.0,
+          fontWeight: FontWeight.w400,
+          color: Colors.white.withValues(alpha: 0.95),
+          height: 1.35,
+          fontStyle: FontStyle.italic,
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final themeData = ZikirShareThemeData.fromEnum(theme);
     final isStory = format == ZikirShareCardFormat.story9x16;
+
+    // Resolve quote & optional Arabic from helper if not explicitly provided
+    final resolvedQuote = ShareCardDataHelper.resolveQuote(
+      zikirName: zikirName,
+      category: category,
+      rawVirtue: (quoteIndex == 0) ? virtue : null,
+      quoteIndex: quoteIndex,
+    );
+
+    final effectiveArabic = (arabicText != null && arabicText!.trim().isNotEmpty && quoteIndex == 0)
+        ? arabicText!.trim()
+        : (resolvedQuote.arabic ?? arabicText ?? '');
+
+    final effectiveVirtue = (virtue != null && virtue!.trim().isNotEmpty && quoteIndex == 0)
+        ? virtue!.trim()
+        : resolvedQuote.text;
+
+    final effectiveSource = (source != null && source!.trim().isNotEmpty && quoteIndex == 0)
+        ? source!.trim()
+        : resolvedQuote.source;
 
     // Fixed base logical coordinates for ultra crisp scaling
     const double baseWidth = 400;
@@ -271,32 +353,38 @@ class ZikirShareCardWidget extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
-              // 1. Classical Pointed Mihrap Arch
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: IslamicArchPainter(
-                    archColor: themeData.accentColor.withValues(alpha: 0.12),
-                    isStoryFormat: isStory,
+              // 1. Classical Pointed Mihrap Arch (shown in mihrapSufi & seljukStar)
+              if (patternStyle != ZikirSharePatternStyle.minimalGlow)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: IslamicArchPainter(
+                      archColor: themeData.accentColor.withValues(
+                        alpha: patternStyle == ZikirSharePatternStyle.seljukStar ? 0.22 : 0.12,
+                      ),
+                      isStoryFormat: isStory,
+                    ),
                   ),
                 ),
-              ),
 
               // 2. Ambient Glow and Sufi Semazen Custom Vector Painting
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: SufiDervishPainter(
-                    watermarkColor: themeData.watermarkColor,
-                    accentColor: themeData.accentColor.withValues(alpha: 0.15),
-                    isStoryFormat: isStory,
+              if (patternStyle == ZikirSharePatternStyle.mihrapSufi)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: SufiDervishPainter(
+                      watermarkColor: themeData.watermarkColor,
+                      accentColor: themeData.accentColor.withValues(alpha: 0.15),
+                      isStoryFormat: isStory,
+                    ),
                   ),
                 ),
-              ),
 
               // 3. Subtle Islamic Geometric Star Arches in Corners
               Positioned.fill(
                 child: CustomPaint(
                   painter: IslamicPatternPainter(
-                    patternColor: themeData.accentColor.withValues(alpha: 0.08),
+                    patternColor: themeData.accentColor.withValues(
+                      alpha: patternStyle == ZikirSharePatternStyle.seljukStar ? 0.20 : 0.08,
+                    ),
                   ),
                 ),
               ),
@@ -319,7 +407,7 @@ class ZikirShareCardWidget extends StatelessWidget {
 
                     if (isStory) const SizedBox(height: 14) else const SizedBox(height: 6),
 
-                    // --- CENTER BODY: Zikir Name, Arabic Calligraphy & Virtue Card ---
+                    // --- CENTER BODY: Zikir/Goal Name, Arabic Calligraphy & Virtue Card ---
                     Expanded(
                       child: Center(
                         child: SingleChildScrollView(
@@ -329,15 +417,15 @@ class ZikirShareCardWidget extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               // Arabic Calligraphy
-                              if (arabicText != null && arabicText!.trim().isNotEmpty) ...[
+                              if (showArabicText && effectiveArabic.trim().isNotEmpty) ...[
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
-                                    arabicText!,
+                                    effectiveArabic,
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontFamily: arabicFontFamily,
-                                      fontSize: isStory ? 34 : 26,
+                                      fontSize: isStory ? 32 : 24,
                                       color: themeData.arabicColor,
                                       height: 1.3,
                                       shadows: [
@@ -364,7 +452,7 @@ class ZikirShareCardWidget extends StatelessWidget {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.outfit(
-                                  fontSize: isStory ? 22 : 17,
+                                  fontSize: isStory ? 21 : 16.5,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
                                   letterSpacing: 1.3,
@@ -381,12 +469,47 @@ class ZikirShareCardWidget extends StatelessWidget {
                               SizedBox(height: isStory ? 12 : 6),
 
                               // Virtue / Hadith Glassmorphism Box with Exact Source
-                              if (virtue != null && virtue!.trim().isNotEmpty)
-                                _buildVirtueCard(themeData, isStory),
+                              if (effectiveVirtue.isNotEmpty)
+                                _buildVirtueCard(
+                                  themeData: themeData,
+                                  isStory: isStory,
+                                  rawText: effectiveVirtue,
+                                  resolvedSource: effectiveSource,
+                                  quoteType: resolvedQuote.type,
+                                ),
+
+                              // Optional Personal Spiritual Note (Dua / Tefekkür Notu)
+                              if (spiritualNote != null && spiritualNote!.trim().isNotEmpty) ...[
+                                SizedBox(height: isStory ? 8 : 4),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isStory ? 12 : 8,
+                                    vertical: isStory ? 5 : 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.14),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    spiritualNote!.trim(),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: isStory ? 10.5 : 8.5,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                ),
+                              ],
 
                               // Counter Statistics Card (Optional)
                               if (showCounterStats) ...[
-                                SizedBox(height: isStory ? 12 : 6),
+                                SizedBox(height: isStory ? 10 : 5),
                                 _buildCounterCapsule(themeData, isStory),
                               ],
                             ],
@@ -574,23 +697,27 @@ class ZikirShareCardWidget extends StatelessWidget {
   }
 
   /// Glassmorphic Virtue / Hadith Card with Exact Verified Source
-  Widget _buildVirtueCard(ZikirShareThemeData themeData, bool isStory) {
-    final rawText = virtue!.trim();
+  Widget _buildVirtueCard({
+    required ZikirShareThemeData themeData,
+    required bool isStory,
+    required String rawText,
+    required String resolvedSource,
+    required SpiritualQuoteType quoteType,
+  }) {
     String quoteText = rawText;
-    String? resolvedSource = source;
-
-    if (resolvedSource == null || resolvedSource.isEmpty) {
+    if (rawText.contains('(') && (source == null || source!.isEmpty)) {
       final parsed = ShareCardDataHelper.resolveQuote(
         zikirName: zikirName,
         category: category,
         rawVirtue: rawText,
       );
       quoteText = parsed.text;
-      resolvedSource = parsed.source;
     }
 
-    // Preserve exact quote text for unit test expectations
     final displayText = rawText.contains('(') ? quoteText : rawText;
+    final headerTitle = quoteType == SpiritualQuoteType.ayet
+        ? 'ÂYET-İ KERÎME & HİKMETİ'
+        : 'FAZİLET VE BEREKETİ';
 
     return Container(
       width: double.infinity,
@@ -626,7 +753,7 @@ class ZikirShareCardWidget extends StatelessWidget {
               ),
               const SizedBox(width: 5),
               Text(
-                'FAZİLET VE BEREKETİ',
+                headerTitle,
                 style: GoogleFonts.outfit(
                   fontSize: isStory ? 10 : 8.5,
                   fontWeight: FontWeight.w700,
@@ -648,13 +775,7 @@ class ZikirShareCardWidget extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: isStory ? 4 : 3,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.outfit(
-              fontSize: isStory ? 12 : 10,
-              fontWeight: FontWeight.w400,
-              color: Colors.white.withValues(alpha: 0.95),
-              height: 1.35,
-              fontStyle: FontStyle.italic,
-            ),
+            style: _resolveQuoteTextStyle(isStory: isStory),
           ),
           if (resolvedSource.isNotEmpty) ...[
             SizedBox(height: isStory ? 6 : 3),

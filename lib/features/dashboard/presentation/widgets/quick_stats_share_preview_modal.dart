@@ -21,6 +21,7 @@ class QuickStatsSharePreviewModal extends ConsumerStatefulWidget {
   final String quranPages;
   final String rankName;
   final String rankBadge;
+  final ZikirShareCardTheme? initialTheme;
 
   const QuickStatsSharePreviewModal({
     super.key,
@@ -31,6 +32,7 @@ class QuickStatsSharePreviewModal extends ConsumerStatefulWidget {
     this.quranPages = '0',
     this.rankName = 'Mübtedi',
     this.rankBadge = '🌱',
+    this.initialTheme,
   });
 
   static Future<void> show({
@@ -42,6 +44,7 @@ class QuickStatsSharePreviewModal extends ConsumerStatefulWidget {
     String quranPages = '0',
     String rankName = 'Mübtedi',
     String rankBadge = '🌱',
+    ZikirShareCardTheme? initialTheme,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -57,6 +60,7 @@ class QuickStatsSharePreviewModal extends ConsumerStatefulWidget {
         quranPages: quranPages,
         rankName: rankName,
         rankBadge: rankBadge,
+        initialTheme: initialTheme,
       ),
     );
   }
@@ -69,9 +73,15 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
-  ZikirShareCardTheme _selectedTheme = ZikirShareCardTheme.emeraldSufi;
+  late ZikirShareCardTheme _selectedTheme;
   bool _isGeneratingImage = false;
   String _selectedGreetingMode = 'auto';
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTheme = widget.initialTheme ?? ZikirShareCardTheme.emeraldSufi;
+  }
 
   String? _resolveCurrentGreeting() {
     switch (_selectedGreetingMode) {

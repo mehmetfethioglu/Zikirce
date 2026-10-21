@@ -32,6 +32,7 @@ import '../widgets/tilavet_secdesi_exit_dialog.dart';
 import '../widgets/tilavet_secdesi_guide_sheet.dart';
 import '../../../gamification/services/custom_badge_service.dart';
 import '../widgets/add_custom_quran_badge_sheet.dart';
+import '../../../dashboard/providers/share_reminder_provider.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
   final int initialPage;
@@ -424,6 +425,20 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             ),
           );
         }
+
+        try {
+          ref.read(shareReminderProvider.notifier).setReminder(
+            title: 'Kur’an-ı Kerim Tilaveti',
+            subtitle: '${curToday + delta} / $kuranGoal sayfa okundu 📖',
+            type: ShareReminderType.kuran,
+            metadata: {
+              'name': 'Kur’an-ı Kerim Tilaveti',
+              'category': 'Kur’an',
+              'count': curToday + delta,
+              'target': kuranGoal,
+            },
+          );
+        } catch (_) {}
 
         ref.read(badgeRefreshTriggerProvider.notifier).state++;
         CloudSyncEngine.instance

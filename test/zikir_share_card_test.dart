@@ -104,5 +104,18 @@ void main() {
     // Theme selector tap
     await tester.tap(find.text('Gece Seması'));
     await tester.pumpAndSettle();
+
+    // Switch goal presets (Namaz, Kur'an, Ezber)
+    await tester.tap(find.text('Namaz'));
+    await tester.pumpAndSettle();
+    expect(find.text('5 VAKIT NAMAZ & SECDE HUZURU'), findsOneWidget);
+
+    await tester.tap(find.text('Kur’an'));
+    await tester.pumpAndSettle();
+    expect(find.text('KUR’AN-I KERIM TILAVETI'), findsOneWidget);
+
+    // Cycle to next Ayet/Hadis
+    await tester.tap(find.byIcon(Icons.autorenew_rounded));
+    await tester.pumpAndSettle();
   });
 }

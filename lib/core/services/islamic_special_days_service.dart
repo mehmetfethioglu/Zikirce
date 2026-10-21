@@ -240,4 +240,40 @@ class IslamicSpecialDaysService {
 
     return null;
   }
+
+  /// Alias for getSpecialDay
+  static IslamicSpecialDay? detectSpecialDay([DateTime? date]) => getSpecialDay(date);
+
+  /// Quick preset greetings for the Share Studio selector
+  static List<({String label, String? greeting})> presetGreetings({bool isTurkish = true}) {
+    final autoDay = getSpecialDay();
+    final autoGreeting = isTurkish ? autoDay?.greetingTr : autoDay?.greetingEn;
+    return [
+      if (autoDay != null)
+        (
+          label: isTurkish ? '${autoDay.emoji} Otomatik (${autoDay.titleTr})' : '${autoDay.emoji} Auto (${autoDay.titleEn})',
+          greeting: autoGreeting,
+        ),
+      (
+        label: isTurkish ? '🕌 Cuma' : '🕌 Friday',
+        greeting: isTurkish ? IslamicSpecialDay.cuma.greetingTr : IslamicSpecialDay.cuma.greetingEn,
+      ),
+      (
+        label: isTurkish ? '✨ Kandil' : '✨ Kandil',
+        greeting: isTurkish ? IslamicSpecialDay.kandil.greetingTr : IslamicSpecialDay.kandil.greetingEn,
+      ),
+      (
+        label: isTurkish ? '🌙 Ramazan' : '🌙 Ramadan',
+        greeting: isTurkish ? IslamicSpecialDay.ramazan.greetingTr : IslamicSpecialDay.ramazan.greetingEn,
+      ),
+      (
+        label: isTurkish ? '🎉 Bayram' : '🎉 Eid',
+        greeting: isTurkish ? IslamicSpecialDay.ramazanBayrami.greetingTr : IslamicSpecialDay.ramazanBayrami.greetingEn,
+      ),
+      (
+        label: isTurkish ? 'Tebriksiz' : 'No Greeting',
+        greeting: null,
+      ),
+    ];
+  }
 }

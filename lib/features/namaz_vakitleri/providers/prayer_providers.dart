@@ -7,6 +7,7 @@ import '../../../../core/services/local_notification_service.dart';
 import '../../../../core/services/prayer_tracking_service.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/providers/database_provider.dart';
+import '../../dashboard/providers/share_reminder_provider.dart';
 import '../../gamification/providers/gamification_providers.dart';
 import '../../gamification/services/daily_streak_service.dart';
 import '../../gamification/services/golden_day_service.dart';
@@ -328,6 +329,20 @@ class KazaNotifier extends StateNotifier<void> {
       ref.invalidate(todayPrayersProvider);
       ref.invalidate(kazaSummaryProvider);
       ref.invalidate(dailyGoalsStatusProvider);
+
+      try {
+        ref.read(shareReminderProvider.notifier).setReminder(
+          title: 'Kaza Telafisi & İstiğfar',
+          subtitle: '$prayerType kaza telafisi kaydedildi ⚖️',
+          type: ShareReminderType.kaza,
+          metadata: {
+            'name': 'Kaza Telafisi & İstiğfar',
+            'category': 'Kaza & Tövbe',
+            'count': row.completedCount + 1,
+            'target': 1,
+          },
+        );
+      } catch (_) {}
     }
   }
 }

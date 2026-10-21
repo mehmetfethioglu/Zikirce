@@ -3,6 +3,8 @@ import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/utils/spaced_repetition_sm2.dart';
+import '../../dashboard/providers/share_reminder_provider.dart';
+import '../../gamification/providers/gamification_providers.dart';
 
 final memorizationPlansStreamProvider = StreamProvider<List<MemorizationPlan>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -43,8 +45,11 @@ class EzberNotifier extends StateNotifier<void> {
     );
 
     int newState = 1; // Learning
-    if (result.repetitions >= 4) newState = 3; // Mastered
-    else if (result.repetitions >= 1) newState = 2; // Review
+    if (result.repetitions >= 4) {
+      newState = 3; // Mastered
+    } else if (result.repetitions >= 1) {
+      newState = 2; // Review
+    }
 
     await (db.update(db.memorizationPlans)..where((t) => t.pageId.equals(pageId))).write(
       MemorizationPlansCompanion(
@@ -56,6 +61,22 @@ class EzberNotifier extends StateNotifier<void> {
         state: Value(newState),
       ),
     );
+
+    try {
+      ref.read(badgeRefreshTriggerProvider.notifier).state++;
+      ref.invalidate(dailyGoalsStatusProvider);
+      ref.read(shareReminderProvider.notifier).setReminder(
+        title: 'Ezber & Hafızlık Gayreti',
+        subtitle: 'Sayfa $pageId ezber tekrarı tamamlandı 🧠',
+        type: ShareReminderType.ezber,
+        metadata: {
+          'name': 'Ezber & Hafızlık Gayreti',
+          'category': 'Ezber',
+          'count': result.repetitions,
+          'target': 1,
+        },
+      );
+    } catch (_) {}
   }
 
   Future<void> addPageToPlan(int pageId, int? surahId) async {
@@ -100,6 +121,24 @@ class EzberNotifier extends StateNotifier<void> {
         ),
       );
     }
+
+    try {
+      ref.read(badgeRefreshTriggerProvider.notifier).state++;
+      ref.invalidate(dailyGoalsStatusProvider);
+      if (isDone) {
+        ref.read(shareReminderProvider.notifier).setReminder(
+          title: 'Ezber & Hafızlık Gayreti',
+          subtitle: 'Hafızlık virdi tamamlandı 🧠',
+          type: ShareReminderType.ezber,
+          metadata: {
+            'name': 'Ezber & Hafızlık Gayreti',
+            'category': 'Ezber',
+            'count': 1,
+            'target': 1,
+          },
+        );
+      }
+    } catch (_) {}
   }
 }
 

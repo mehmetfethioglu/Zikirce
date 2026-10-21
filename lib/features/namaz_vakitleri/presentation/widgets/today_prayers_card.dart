@@ -6,8 +6,11 @@ import '../../../../core/services/haptic_service.dart';
 import '../../../../core/services/prayer_times_service.dart';
 import '../../../../core/services/prayer_tracking_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../dashboard/providers/share_reminder_provider.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/services/golden_day_service.dart';
+import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
+import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../../providers/prayer_providers.dart';
 
 class TodayPrayersCard extends ConsumerWidget {
@@ -162,6 +165,35 @@ class TodayPrayersCard extends ConsumerWidget {
                 const SizedBox(width: 12),
                 const _PrayerCountdownTickerText(),
               ],
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () {
+                  HapticService.selectionClick();
+                  ZikirSharePreviewModal.show(
+                    context: context,
+                    zikirName: l10n.isTurkish ? '5 Vakit Namaz & Secde Huzuru' : '5 Daily Prayers & Prostration',
+                    category: 'Namaz',
+                    currentCount: completedCount,
+                    targetCount: 5,
+                    totalCount: completedCount,
+                    initialTheme: ZikirShareCardTheme.turquoiseDome,
+                    initialShowCounterStats: false,
+                  );
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: colors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.share_rounded,
+                    size: 16,
+                    color: colors.accent,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -172,7 +204,7 @@ class TodayPrayersCard extends ConsumerWidget {
             children: prayers.map((item) {
               final timeStr = _getPrayerTime(timings, item.prayerName);
               final isUpcoming = _isUpcoming(item.prayerName, nextPrayerName);
-              return _buildPrayerItem(context, ref, item, timeStr, isUpcoming, colors, isDark);
+              return _buildPrayerItem(context, ref, item, timeStr, isUpcoming, completedCount, colors, isDark);
             }).toList(),
           ),
         ],
@@ -186,6 +218,7 @@ class TodayPrayersCard extends ConsumerWidget {
     TodayPrayerStatusItem item,
     String timeStr,
     bool isUpcoming,
+    int completedCount,
     AppThemeColors colors,
     bool isDark,
   ) {
@@ -207,6 +240,22 @@ class TodayPrayersCard extends ConsumerWidget {
           ref.invalidate(namazStreakProvider);
           ref.invalidate(dailyGoalsStatusProvider);
           ref.read(badgeRefreshTriggerProvider.notifier).state++;
+
+          if (!isDone) {
+            try {
+              ref.read(shareReminderProvider.notifier).setReminder(
+                title: '${item.prayerName} Namazı & Secde Huzuru',
+                subtitle: '${completedCount + 1} / 5 vakit kılındı 🕌',
+                type: ShareReminderType.prayers,
+                metadata: {
+                  'name': '5 Vakit Namaz & Secde Huzuru',
+                  'category': 'Namaz',
+                  'count': completedCount + 1,
+                  'target': 5,
+                },
+              );
+            } catch (_) {}
+          }
 
           if (transferredGold > 0 && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
