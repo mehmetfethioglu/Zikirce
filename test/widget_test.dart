@@ -549,5 +549,128 @@ void main() {
       expect(find.text('Google Drive & Gmail Eşitleme'), findsOneWidget);
       expect(find.text('Sistem & Firma Parametreleri'), findsOneWidget);
     });
+
+    test('Anti-Passback debounce, overtime/early-leave calculation, missing check-out completion & Puantaj CSV work deterministically', () async {
+      final db = HasibuDatabase.inMemory();
+      addTearDown(db.dispose);
+
+      final container = ProviderContainer(
+        overrides: [
+          hasibuDatabaseProvider.overrideWithValue(db),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final statuses = container.read(pdksDashboardProvider).dailyStatuses;
+
+      // 00064 (Mehmet Sinan Cenan): 05:45 giriş, 05:46 mükerrer okuma (Anti-Passback ile filtrelenmeli), 16:30 çıkış -> +90 dk fazla mesai
+      final sinanStatus = statuses.firstWhere((s) => s.employee.cardNo == '00064');
+      expect(sinanStatus.duplicateScansFiltered, equals(1));
+      expect(sinanStatus.overtimeMinutes, equals(90));
+      expect(sinanStatus.hasMissingCheckOut, isFalse);
+
+      // 00046: 05:48 giriş, 14:10 çıkış (15:00 vardiya bitişi) -> 50 dk erken çıkış
+      final harunStatus = statuses.firstWhere((s) => s.employee.cardNo == '00046');
+      expect(harunStatus.earlyLeaveMinutes, equals(50));
+      expect(harunStatus.hasMissingCheckOut, isFalse);
+
+      // 00058: Sadece giriş var, çıkış yok -> eksik çıkış anomalisi
+      final missingOutBefore = statuses.firstWhere((s) => s.employee.cardNo == '00058');
+      expect(missingOutBefore.hasMissingCheckOut, isTrue);
+
+      // Tek tıkla eksik çıkış tamamlama
+      await container
+          .read(pdksDashboardProvider.notifier)
+          .quickCompleteMissingCheckOut(missingOutBefore);
+
+      final statusesAfter = container.read(pdksDashboardProvider).dailyStatuses;
+      final missingOutAfter = statusesAfter.firstWhere((s) => s.employee.cardNo == '00058');
+      expect(missingOutAfter.hasMissingCheckOut, isFalse);
+      expect(missingOutAfter.lastCheckOut, isNotNull);
+      expect(missingOutAfter.lastCheckOut!.timestamp.hour, equals(15));
+      expect(missingOutAfter.lastCheckOut!.timestamp.minute, equals(0));
+
+      // Toplu eksik çıkış tamamlama
+      final batchCount = await container
+          .read(pdksDashboardProvider.notifier)
+          .batchCompleteAllMissingCheckOuts();
+      expect(batchCount, greaterThan(0));
+      final remainingMissing = container
+          .read(pdksDashboardProvider)
+          .dailyStatuses
+          .where((s) => s.hasMissingCheckOut)
+          .length;
+      expect(remainingMissing, equals(0));
+
+      // Resmi Puantaj CSV çıktısı doğrulaması
+      final csv = container.read(pdksDashboardProvider.notifier).generateDailyPuantajCsv();
+      expect(csv, contains('Tarih;Kart No;Ad Soyad'));
+      expect(csv, contains('00064;MEHMET SİNAN CENAN'));
+    });
+
+    test('HrRequest workflow (leave & missing punch auto-processing) and 4857 Md. 53 statutory leave sync work accurately', () async {
+      final db = HasibuDatabase.inMemory();
+      addTearDown(db.dispose);
+
+      final container = ProviderContainer(
+        overrides: [
+          hasibuDatabaseProvider.overrideWithValue(db),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final initialPending = container.read(pdksDashboardProvider).pendingHrRequestsCount;
+      expect(initialPending, equals(3));
+
+      // Eksik çıkış düzeltme talebini (req_2125_missing_out_20261019 - 01110 Müslüm Öncel) onayla -> otomatik AttendanceLog oluşmalı
+      final req1 = container
+          .read(pdksDashboardProvider)
+          .allHrRequests
+          .firstWhere((r) => r.id == 'req_2125_missing_out_20261019');
+      await container.read(pdksDashboardProvider.notifier).reviewHrRequest(
+            request: req1,
+            approve: true,
+            reviewerNote: 'Kamera kaydı ile doğrulandı.',
+          );
+
+      final muslumStatus = container
+          .read(pdksDashboardProvider)
+          .dailyStatuses
+          .firstWhere((s) => s.employee.cardNo == '01110');
+      expect(muslumStatus.hasMissingCheckOut, isFalse);
+      expect(muslumStatus.lastCheckOut, isNotNull);
+
+      // İzin talebini (req_1620_leave_20261022 - 01406 Abdullah Yıldız) onayla -> otomatik LeaveRecord oluşmalı
+      final req2 = container
+          .read(pdksDashboardProvider)
+          .allHrRequests
+          .firstWhere((r) => r.id == 'req_1620_leave_20261022');
+      final leavesBefore = container
+          .read(pdksDashboardProvider)
+          .allLeaveRecords
+          .where((l) => l.employeeId == req2.employeeId)
+          .length;
+      await container.read(pdksDashboardProvider.notifier).reviewHrRequest(
+            request: req2,
+            approve: true,
+            reviewerNote: 'Mazeret izni onaylandı.',
+          );
+      final leavesAfter = container
+          .read(pdksDashboardProvider)
+          .allLeaveRecords
+          .where((l) => l.employeeId == req2.employeeId)
+          .length;
+      expect(leavesAfter, greaterThan(leavesBefore));
+
+      // 4857 Sayılı İş Kanunu Md. 53 kıdeme göre yasal izin senkronizasyonu
+      final updatedCount = await container
+          .read(pdksDashboardProvider.notifier)
+          .syncStatutoryLeaveEntitlements();
+      expect(updatedCount, greaterThanOrEqualTo(0));
+      final mismatchesAfter = container
+          .read(pdksDashboardProvider)
+          .statutoryLeaveMismatchCount;
+      expect(mismatchesAfter, equals(0));
+    });
   });
 }

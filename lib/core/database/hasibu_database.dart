@@ -135,6 +135,27 @@ class HasibuDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_emp_docs_emp_id
         ON employee_documents(employee_id);
+
+      CREATE TABLE IF NOT EXISTS hr_requests (
+        id TEXT PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        employee_card_no TEXT NOT NULL,
+        employee_name TEXT NOT NULL,
+        request_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        target_date TEXT NOT NULL,
+        end_date TEXT,
+        requested_time TEXT,
+        is_checkin_correction INTEGER NOT NULL DEFAULT 0,
+        overtime_minutes INTEGER NOT NULL DEFAULT 0,
+        leave_code INTEGER NOT NULL DEFAULT 5,
+        reason TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        reviewer_note TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_hr_requests_status
+        ON hr_requests(status, target_date);
     ''');
 
     // Mevcut veritabanı yükseltmesi (migration)
@@ -203,6 +224,16 @@ class HasibuDatabase {
       }
     }
 
+    final reqCount = _db
+            .select('SELECT COUNT(*) AS cnt FROM hr_requests')
+            .first['cnt'] as int? ??
+        0;
+    if (reqCount == 0) {
+      for (final req in WorkplaceSeedData.buildInitialHrRequests()) {
+        upsertHrRequest(req);
+      }
+    }
+
     // 3. Personeller doluysa diğer tohumlamaları atla
     final countRow = _db.select('SELECT COUNT(*) AS cnt FROM employees');
     final int count = countRow.first['cnt'] as int? ?? 0;
@@ -227,6 +258,9 @@ class HasibuDatabase {
       }
       for (final doc in WorkplaceSeedData.buildInitialPersonnelDocuments()) {
         upsertPersonnelDocument(doc);
+      }
+      for (final req in WorkplaceSeedData.buildInitialHrRequests()) {
+        upsertHrRequest(req);
       }
       _db.execute('COMMIT;');
     } catch (_) {
@@ -817,6 +851,65 @@ class HasibuDatabase {
     stmt.dispose();
   }
 
+  List<HrRequest> getAllHrRequests() {
+    final rows = _db.select(
+      'SELECT * FROM hr_requests ORDER BY CASE WHEN status = \'pending\' THEN 0 ELSE 1 END, created_at DESC',
+    );
+    return rows
+        .map(
+          (r) => HrRequest(
+            id: r['id'] as String,
+            employeeId: r['employee_id'] as int,
+            employeeCardNo: r['employee_card_no'] as String,
+            employeeName: r['employee_name'] as String,
+            type: HrRequestType.fromName(r['request_type'] as String?),
+            status: HrRequestStatus.fromName(r['status'] as String?),
+            targetDate: r['target_date'] as String,
+            endDate: r['end_date'] as String?,
+            requestedTime: r['requested_time'] as String?,
+            isCheckInCorrection: (r['is_checkin_correction'] as int? ?? 0) == 1,
+            overtimeMinutes: r['overtime_minutes'] as int? ?? 0,
+            leaveType: LeaveType.fromCode(r['leave_code'] as int? ?? 5),
+            reason: r['reason'] as String? ?? '',
+            createdAt: r['created_at'] as String? ?? '',
+            reviewerNote: r['reviewer_note'] as String?,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  void upsertHrRequest(HrRequest req) {
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO hr_requests
+      (id, employee_id, employee_card_no, employee_name, request_type, status, target_date, end_date, requested_time, is_checkin_correction, overtime_minutes, leave_code, reason, created_at, reviewer_note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      req.id.trim(),
+      req.employeeId,
+      req.employeeCardNo.trim().padLeft(5, '0'),
+      req.employeeName.trim().toUpperCase(),
+      req.type.name,
+      req.status.name,
+      req.targetDate.trim(),
+      req.endDate?.trim(),
+      req.requestedTime?.trim(),
+      req.isCheckInCorrection ? 1 : 0,
+      req.overtimeMinutes,
+      req.leaveType.code,
+      req.reason.trim(),
+      req.createdAt.trim(),
+      req.reviewerNote?.trim(),
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteHrRequest(String id) {
+    final stmt = _db.prepare('DELETE FROM hr_requests WHERE id = ?');
+    stmt.execute([id]);
+    stmt.dispose();
+  }
+
   /// Zikirce_ Bulut Senkronizasyon standardında tüm yerel durumu JSON paketi olarak dışa aktarır.
   Map<String, dynamic> exportCloudSnapshot({required String deviceName}) {
     final allLogsRows = _db.select(
@@ -873,6 +966,8 @@ class HasibuDatabase {
       'personnelDocuments': getAllPersonnelDocuments()
           .map((e) => e.toJson())
           .toList(growable: false),
+      'hrRequests':
+          getAllHrRequests().map((e) => e.toJson()).toList(growable: false),
     };
   }
 
@@ -936,6 +1031,13 @@ class HasibuDatabase {
       for (final item in rawDocs) {
         if (item is Map<String, dynamic>) {
           upsertPersonnelDocument(PersonnelDocument.fromJson(item));
+        }
+      }
+
+      final rawReqs = snapshot['hrRequests'] as List<dynamic>? ?? const [];
+      for (final item in rawReqs) {
+        if (item is Map<String, dynamic>) {
+          upsertHrRequest(HrRequest.fromJson(item));
         }
       }
       _db.execute('COMMIT;');

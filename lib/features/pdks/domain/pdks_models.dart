@@ -365,6 +365,22 @@ class ShiftPlan {
     this.toleranceMinutes = 15,
   });
 
+  /// Gece vardiyası (örn. 19:00 - 07:00) dahil planlanan vardiya süresi (dakika).
+  int get plannedDurationMinutes {
+    final sp = startTime.split(':');
+    final ep = endTime.split(':');
+    final sh = int.tryParse(sp.isNotEmpty ? sp[0] : '8') ?? 8;
+    final sm = int.tryParse(sp.length > 1 ? sp[1] : '0') ?? 0;
+    final eh = int.tryParse(ep.isNotEmpty ? ep[0] : '18') ?? 18;
+    final em = int.tryParse(ep.length > 1 ? ep[1] : '0') ?? 0;
+    final startMins = sh * 60 + sm;
+    final endMins = eh * 60 + em;
+    if (endMins <= startMins) {
+      return (24 * 60 - startMins) + endMins;
+    }
+    return endMins - startMins;
+  }
+
   ShiftPlan copyWith({
     int? id,
     String? name,
@@ -438,6 +454,31 @@ class Employee {
 
   int get remainingAnnualLeave =>
       (annualLeaveEntitlement - usedAnnualLeave).clamp(0, 365);
+
+  /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdem yılı hesabı.
+  int tenureYearsAt([DateTime? referenceDate]) {
+    final ref = referenceDate ?? DateTime(2026, 10, 20);
+    final parsed = DateTime.tryParse(hireDate);
+    if (parsed == null || parsed.isAfter(ref)) return 0;
+    int years = ref.year - parsed.year;
+    if (ref.month < parsed.month ||
+        (ref.month == parsed.month && ref.day < parsed.day)) {
+      years--;
+    }
+    return years.clamp(0, 60);
+  }
+
+  /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdeme göre asgari yıllık ücretli izin hakkı:
+  /// 1-5 yıl (dahil): 14 gün | 5-15 yıl: 20 gün | 15 yıl ve üzeri: 26 gün.
+  int get statutoryAnnualLeaveEntitlement {
+    final yrs = tenureYearsAt();
+    if (yrs >= 15) return 26;
+    if (yrs > 5) return 20;
+    return 14;
+  }
+
+  bool get hasStatutoryLeaveMismatch =>
+      annualLeaveEntitlement < statutoryAnnualLeaveEntitlement;
 
   Employee copyWith({
     int? id,
@@ -630,6 +671,17 @@ class LeaveRecord {
       );
 }
 
+enum PdksAnomalyFilter {
+  all('Tüm Kadro'),
+  missingCheckOut('Eksik Çıkış (Tek Okuma)'),
+  overtime('Fazla Mesai (+Mesai)'),
+  earlyLeave('Erken Çıkış'),
+  missingDocs('Eksik Özlük Evrakı');
+
+  final String label;
+  const PdksAnomalyFilter(this.label);
+}
+
 @immutable
 class EmployeeDailyStatus {
   final Employee employee;
@@ -642,6 +694,11 @@ class EmployeeDailyStatus {
   final List<AttendanceLog> allLogsOfDay;
   final LeaveRecord? leaveRecord;
   final int lateMinutes;
+  final int workedMinutes;
+  final int overtimeMinutes;
+  final int earlyLeaveMinutes;
+  final bool hasMissingCheckOut;
+  final int duplicateScansFiltered;
 
   const EmployeeDailyStatus({
     required this.employee,
@@ -654,7 +711,19 @@ class EmployeeDailyStatus {
     this.allLogsOfDay = const <AttendanceLog>[],
     this.leaveRecord,
     this.lateMinutes = 0,
+    this.workedMinutes = 0,
+    this.overtimeMinutes = 0,
+    this.earlyLeaveMinutes = 0,
+    this.hasMissingCheckOut = false,
+    this.duplicateScansFiltered = 0,
   });
+
+  String get workedDurationFormatted {
+    if (workedMinutes <= 0) return '-';
+    final h = workedMinutes ~/ 60;
+    final m = workedMinutes % 60;
+    return m > 0 ? '${h}s ${m}dk' : '${h}s';
+  }
 }
 
 enum PersonnelDocumentCategory {
@@ -754,6 +823,10 @@ class EmployeeHistoryDayEntry {
   final List<AttendanceLog> allLogs;
   final LeaveRecord? leaveRecord;
   final int lateMinutes;
+  final int workedMinutes;
+  final int overtimeMinutes;
+  final int earlyLeaveMinutes;
+  final bool hasMissingCheckOut;
 
   const EmployeeHistoryDayEntry({
     required this.dateKey,
@@ -763,6 +836,162 @@ class EmployeeHistoryDayEntry {
     this.allLogs = const <AttendanceLog>[],
     this.leaveRecord,
     this.lateMinutes = 0,
+    this.workedMinutes = 0,
+    this.overtimeMinutes = 0,
+    this.earlyLeaveMinutes = 0,
+    this.hasMissingCheckOut = false,
   });
+
+  String get workedDurationFormatted {
+    if (workedMinutes <= 0) return '-';
+    final h = workedMinutes ~/ 60;
+    final m = workedMinutes % 60;
+    return m > 0 ? '${h}s ${m}dk' : '${h}s';
+  }
+}
+
+enum HrRequestType {
+  annualLeave('Yıllık / Mazeret İzni Talebi'),
+  missingPunchCorrection('Unutulan Giriş/Çıkış Bildirimi'),
+  overtimeApproval('Fazla Mesai Onay Talebi'),
+  advancePayment('Maaş Avans / Özlük Talebi');
+
+  final String label;
+  const HrRequestType(this.label);
+
+  static HrRequestType fromName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return HrRequestType.annualLeave;
+    for (final t in HrRequestType.values) {
+      if (t.name == raw.trim()) return t;
+    }
+    return HrRequestType.annualLeave;
+  }
+}
+
+enum HrRequestStatus {
+  pending('Onay Bekliyor'),
+  approved('İK Onayladı'),
+  rejected('Reddedildi');
+
+  final String label;
+  const HrRequestStatus(this.label);
+
+  static HrRequestStatus fromName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return HrRequestStatus.pending;
+    for (final s in HrRequestStatus.values) {
+      if (s.name == raw.trim()) return s;
+    }
+    return HrRequestStatus.pending;
+  }
+}
+
+@immutable
+class HrRequest {
+  final String id;
+  final int employeeId;
+  final String employeeCardNo;
+  final String employeeName;
+  final HrRequestType type;
+  final HrRequestStatus status;
+  final String targetDate; // YYYY-MM-DD
+  final String? endDate; // YYYY-MM-DD (çok günlü izin için)
+  final String? requestedTime; // HH:mm (unutulan giriş/çıkış saati)
+  final bool isCheckInCorrection;
+  final int overtimeMinutes;
+  final LeaveType leaveType;
+  final String reason;
+  final String createdAt; // YYYY-MM-DD HH:mm
+  final String? reviewerNote;
+
+  const HrRequest({
+    required this.id,
+    required this.employeeId,
+    required this.employeeCardNo,
+    required this.employeeName,
+    required this.type,
+    this.status = HrRequestStatus.pending,
+    required this.targetDate,
+    this.endDate,
+    this.requestedTime,
+    this.isCheckInCorrection = false,
+    this.overtimeMinutes = 0,
+    this.leaveType = LeaveType.yillikIzin,
+    required this.reason,
+    required this.createdAt,
+    this.reviewerNote,
+  });
+
+  HrRequest copyWith({
+    String? id,
+    int? employeeId,
+    String? employeeCardNo,
+    String? employeeName,
+    HrRequestType? type,
+    HrRequestStatus? status,
+    String? targetDate,
+    String? Function()? endDate,
+    String? Function()? requestedTime,
+    bool? isCheckInCorrection,
+    int? overtimeMinutes,
+    LeaveType? leaveType,
+    String? reason,
+    String? createdAt,
+    String? Function()? reviewerNote,
+  }) {
+    return HrRequest(
+      id: id ?? this.id,
+      employeeId: employeeId ?? this.employeeId,
+      employeeCardNo: employeeCardNo ?? this.employeeCardNo,
+      employeeName: employeeName ?? this.employeeName,
+      type: type ?? this.type,
+      status: status ?? this.status,
+      targetDate: targetDate ?? this.targetDate,
+      endDate: endDate != null ? endDate() : this.endDate,
+      requestedTime:
+          requestedTime != null ? requestedTime() : this.requestedTime,
+      isCheckInCorrection: isCheckInCorrection ?? this.isCheckInCorrection,
+      overtimeMinutes: overtimeMinutes ?? this.overtimeMinutes,
+      leaveType: leaveType ?? this.leaveType,
+      reason: reason ?? this.reason,
+      createdAt: createdAt ?? this.createdAt,
+      reviewerNote: reviewerNote != null ? reviewerNote() : this.reviewerNote,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'employeeId': employeeId,
+        'employeeCardNo': employeeCardNo,
+        'employeeName': employeeName,
+        'type': type.name,
+        'status': status.name,
+        'targetDate': targetDate,
+        'endDate': endDate,
+        'requestedTime': requestedTime,
+        'isCheckInCorrection': isCheckInCorrection,
+        'overtimeMinutes': overtimeMinutes,
+        'leaveTypeCode': leaveType.code,
+        'reason': reason,
+        'createdAt': createdAt,
+        'reviewerNote': reviewerNote,
+      };
+
+  factory HrRequest.fromJson(Map<String, dynamic> json) => HrRequest(
+        id: json['id'] as String,
+        employeeId: json['employeeId'] as int? ?? 0,
+        employeeCardNo: json['employeeCardNo'] as String? ?? '00000',
+        employeeName: json['employeeName'] as String? ?? 'Personel',
+        type: HrRequestType.fromName(json['type'] as String?),
+        status: HrRequestStatus.fromName(json['status'] as String?),
+        targetDate: json['targetDate'] as String? ?? '2026-10-20',
+        endDate: json['endDate'] as String?,
+        requestedTime: json['requestedTime'] as String?,
+        isCheckInCorrection: json['isCheckInCorrection'] as bool? ?? false,
+        overtimeMinutes: json['overtimeMinutes'] as int? ?? 0,
+        leaveType: LeaveType.fromCode(json['leaveTypeCode'] as int? ?? 5),
+        reason: json['reason'] as String? ?? '',
+        createdAt: json['createdAt'] as String? ?? '2026-10-20 08:30',
+        reviewerNote: json['reviewerNote'] as String?,
+      );
 }
 

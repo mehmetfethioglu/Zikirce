@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -68,6 +71,12 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
             selectedIcon: Icons.medical_information_rounded,
             label: 'İzin & Rapor Girişi',
             view: LeavesAndReportsSettingsView(),
+          ),
+          _ModuleNavTab(
+            icon: Icons.fact_check_outlined,
+            selectedIcon: Icons.fact_check_rounded,
+            label: 'İK Talep & Uyum Radarı',
+            view: HrRequestsAndComplianceView(),
           ),
         ];
 
@@ -344,11 +353,11 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen> {
                 backgroundColor: pal.card,
                 indicatorColor:
                     const Color(0xFF0284C7).withValues(alpha: 0.15),
-                selectedIndex: safeIndex,
+                selectedIndex: safeIndex.clamp(0, (tabs.length > 5 ? 5 : tabs.length) - 1),
                 onDestinationSelected: (idx) =>
                     setState(() => _tabIndexByModule[activeModule] = idx),
                 destinations: [
-                  for (final t in tabs)
+                  for (final t in tabs.take(5))
                     NavigationDestination(
                       icon: Icon(t.icon, color: pal.textSecondary, size: 20),
                       selectedIcon: Icon(
@@ -666,6 +675,9 @@ class _LiveAttendanceDashboardViewState
         ref.watch(pdksDashboardProvider.select((s) => s.selectedDate));
     final terminalMsg =
         ref.watch(pdksDashboardProvider.select((s) => s.terminalStatusMessage));
+    final pendingReqCount = ref.watch(
+      pdksDashboardProvider.select((s) => s.pendingHrRequestsCount),
+    );
     final pal = HasibuPalette.of(context);
 
     return CustomScrollView(
@@ -719,6 +731,46 @@ class _LiveAttendanceDashboardViewState
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           OutlinedButton.icon(
+                            key: const ValueKey('open_hr_requests_modal_button'),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: pendingReqCount > 0
+                                  ? const Color(0xFFD97706)
+                                  : null,
+                            ),
+                            onPressed: () =>
+                                showHrRequestsAndComplianceDialog(context, ref),
+                            icon: const Icon(
+                              Icons.fact_check_outlined,
+                              size: 15,
+                            ),
+                            label: Text(
+                              pendingReqCount > 0
+                                  ? 'İK Talepleri ($pendingReqCount Bekleyen)'
+                                  : 'İK Talep & Uyum',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            key: const ValueKey('export_puantaj_csv_button'),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () =>
+                                showPuantajCsvExportDialog(context, ref),
+                            icon: const Icon(
+                              Icons.table_view_rounded,
+                              size: 15,
+                            ),
+                            label: const Text(
+                              'Puantaj CSV / Excel',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                          OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
                             ),
@@ -732,6 +784,15 @@ class _LiveAttendanceDashboardViewState
                               'Cihaz Bağlantı Kontrolü',
                               style: TextStyle(fontSize: 11.5),
                             ),
+                          ),
+                          IconButton(
+                            key: const ValueKey('prev_day_button'),
+                            tooltip: 'Önceki Gün',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => ref
+                                .read(pdksDashboardProvider.notifier)
+                                .shiftSelectedDateByDays(-1),
+                            icon: const Icon(Icons.chevron_left_rounded, size: 18),
                           ),
                           for (final d in const [
                             '2026-10-20',
@@ -749,6 +810,15 @@ class _LiveAttendanceDashboardViewState
                                   .read(pdksDashboardProvider.notifier)
                                   .setSelectedDate(d),
                             ),
+                          IconButton(
+                            key: const ValueKey('next_day_button'),
+                            tooltip: 'Sonraki Gün',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => ref
+                                .read(pdksDashboardProvider.notifier)
+                                .shiftSelectedDateByDays(1),
+                            icon: const Icon(Icons.chevron_right_rounded, size: 18),
+                          ),
                         ],
                       ),
                     ],
@@ -758,6 +828,8 @@ class _LiveAttendanceDashboardViewState
                 const _BranchSelectorChips(),
                 const SizedBox(height: 12),
                 const _KpiSummaryCards(),
+                const SizedBox(height: 10),
+                const _PdksAnomalyFilterRibbon(),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _searchController,
@@ -1004,6 +1076,180 @@ class _StatFilterCard extends StatelessWidget {
   }
 }
 
+class _PdksAnomalyFilterRibbon extends ConsumerWidget {
+  const _PdksAnomalyFilterRibbon();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeAnomaly = ref.watch(
+      pdksDashboardProvider.select((s) => s.selectedAnomalyFilter),
+    );
+    final missingOutCount = ref.watch(
+      pdksDashboardProvider.select((s) => s.missingCheckOutCount),
+    );
+    final overtimeCount = ref.watch(
+      pdksDashboardProvider.select((s) => s.overtimeStaffCount),
+    );
+    final totalOvertimeMins = ref.watch(
+      pdksDashboardProvider.select((s) => s.totalOvertimeMinutes),
+    );
+    final earlyLeaveCount = ref.watch(
+      pdksDashboardProvider.select((s) => s.earlyLeaveCount),
+    );
+    final missingDocsCount = ref.watch(
+      pdksDashboardProvider.select((s) => s.missingDocsStaffCount),
+    );
+    final pal = HasibuPalette.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: pal.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Icon(
+                Icons.radar_rounded,
+                size: 16,
+                color: pal.textSecondary,
+              ),
+              Text(
+                'Anomali & Mesai Radarı:',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: pal.textSecondary,
+                ),
+              ),
+              ChoiceChip(
+                key: const ValueKey('anomaly_filter_all'),
+                visualDensity: VisualDensity.compact,
+                label: const Text(
+                  'Tüm Kadro',
+                  style: TextStyle(fontSize: 11.5),
+                ),
+                selected: activeAnomaly == PdksAnomalyFilter.all,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setAnomalyFilter(PdksAnomalyFilter.all),
+              ),
+              ChoiceChip(
+                key: const ValueKey('anomaly_filter_missing_out'),
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: Color(0xFFD97706),
+                ),
+                label: Text(
+                  'Eksik Çıkış ($missingOutCount)',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                selected: activeAnomaly == PdksAnomalyFilter.missingCheckOut,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setAnomalyFilter(PdksAnomalyFilter.missingCheckOut),
+              ),
+              ChoiceChip(
+                key: const ValueKey('anomaly_filter_overtime'),
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(
+                  Icons.more_time_rounded,
+                  size: 14,
+                  color: Color(0xFF059669),
+                ),
+                label: Text(
+                  'Fazla Mesai ($overtimeCount Kişi • +$totalOvertimeMins dk)',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                selected: activeAnomaly == PdksAnomalyFilter.overtime,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setAnomalyFilter(PdksAnomalyFilter.overtime),
+              ),
+              ChoiceChip(
+                key: const ValueKey('anomaly_filter_early_leave'),
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(
+                  Icons.directions_run_rounded,
+                  size: 14,
+                  color: Color(0xFFDC2626),
+                ),
+                label: Text(
+                  'Erken Çıkış ($earlyLeaveCount)',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                selected: activeAnomaly == PdksAnomalyFilter.earlyLeave,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setAnomalyFilter(PdksAnomalyFilter.earlyLeave),
+              ),
+              ChoiceChip(
+                key: const ValueKey('anomaly_filter_missing_docs'),
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(
+                  Icons.folder_off_outlined,
+                  size: 14,
+                  color: Color(0xFF7C3AED),
+                ),
+                label: Text(
+                  'Eksik Evrak ($missingDocsCount)',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                selected: activeAnomaly == PdksAnomalyFilter.missingDocs,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setAnomalyFilter(PdksAnomalyFilter.missingDocs),
+              ),
+            ],
+          ),
+          if (missingOutCount > 0)
+            FilledButton.tonalIcon(
+              key: const ValueKey('batch_complete_missing_out_button'),
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () async {
+                final count = await ref
+                    .read(pdksDashboardProvider.notifier)
+                    .batchCompleteAllMissingCheckOuts();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '$count personelin eksik çıkış hareketi vardiya bitiş saatine göre tamamlandı.',
+                      ),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.auto_fix_high_rounded, size: 15),
+              label: Text(
+                'Eksik Çıkışları Vardiya Sonuna Tamamla ($missingOutCount)',
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmployeeDailyStatusSliverList extends ConsumerWidget {
   const _EmployeeDailyStatusSliverList();
 
@@ -1231,6 +1477,129 @@ class _EmployeeStatusRowCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        if (item.workedMinutes > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: pal.chip,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Net Çalışma: ${item.workedDurationFormatted}',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: pal.textPrimary,
+                              ),
+                            ),
+                          ),
+                        if (item.overtimeMinutes > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669)
+                                  .withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '+${item.overtimeMinutes} dk Fazla Mesai',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF059669),
+                              ),
+                            ),
+                          ),
+                        if (item.earlyLeaveMinutes > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626)
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '-${item.earlyLeaveMinutes} dk Erken Çıkış',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFDC2626),
+                              ),
+                            ),
+                          ),
+                        if (item.duplicateScansFiltered > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF7C3AED)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'Anti-Passback: ${item.duplicateScansFiltered} Mükerrer Elendi',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF7C3AED),
+                              ),
+                            ),
+                          ),
+                        if (item.hasMissingCheckOut)
+                          InkWell(
+                            key: ValueKey(
+                              'quick_complete_out_${item.employee.cardNo}',
+                            ),
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () => ref
+                                .read(pdksDashboardProvider.notifier)
+                                .quickCompleteMissingCheckOut(item),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD97706)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: const Color(0xFFD97706)
+                                      .withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.bolt_rounded,
+                                    size: 12,
+                                    color: Color(0xFFD97706),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    'Eksik Çıkış (${item.shift.endTime} Tamamla)',
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFFD97706),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -1948,15 +2317,16 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                     subValue: 'Bölüm: ${current.department.name}',
                   ),
                   _SelfServiceMetricTile(
-                    label: 'İşe Giriş Tarihi',
-                    value: emp.hireDate,
-                    subValue: 'Kart No: #${emp.cardNo}',
+                    label: 'İşe Giriş & Kıdem (4857)',
+                    value: '${emp.tenureYearsAt()} Yıl Kıdem',
+                    subValue:
+                        'Giriş: ${emp.hireDate} • Yasal Hak: ${emp.statutoryAnnualLeaveEntitlement} Gün',
                   ),
                   _SelfServiceMetricTile(
                     label: 'Bugünkü Durum',
                     value: current.state.label,
                     subValue: current.firstCheckIn != null
-                        ? 'Giriş: ${current.firstCheckIn!.timeFormatted}'
+                        ? 'Giriş: ${current.firstCheckIn!.timeFormatted}${current.lastCheckOut != null ? " • Çıkış: ${current.lastCheckOut!.timeFormatted}" : ""}'
                         : '${current.shift.startTime}-${current.shift.endTime}',
                   ),
                 ],
@@ -1966,6 +2336,18 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
+                  FilledButton.icon(
+                    key: const ValueKey('self_service_new_request_button'),
+                    onPressed: () => showCreateHrRequestDialog(
+                      context,
+                      ref,
+                      employee: emp,
+                    ),
+                    icon: const Icon(Icons.add_task_rounded, size: 18),
+                    label: const Text(
+                      'Yeni İK Talebi Oluştur (İzin / Mesai / Hareket)',
+                    ),
+                  ),
                   FilledButton.tonalIcon(
                     onPressed: () => showEmployeeHistoryAndDossierDialog(
                       context,
@@ -1988,6 +2370,8 @@ class _EmployeeSelfServicePortalView extends ConsumerWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 18),
+              _EmployeeSelfServiceRequestsSection(employeeId: emp.id),
               const SizedBox(height: 18),
               // HER KULLANICIYA ÖZGÜ KİŞİSEL TEMA SEÇİCİ (Açık / Koyu / Sistem)
               const UserThemeSelectorBar(),
@@ -2046,4 +2430,877 @@ class _SelfServiceMetricTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EmployeeSelfServiceRequestsSection extends ConsumerWidget {
+  final int employeeId;
+
+  const _EmployeeSelfServiceRequestsSection({required this.employeeId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final reqs = ref.watch(
+      pdksDashboardProvider.select((s) => s.requestsForEmployee(employeeId)),
+    );
+    final pal = HasibuPalette.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: pal.subtle,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'İK Taleplerim & Onay Durumu (${reqs.length})',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.5,
+                  color: pal.textPrimary,
+                ),
+              ),
+              Text(
+                'Onaylanan talepler puantaja otomatik işlenir',
+                style: TextStyle(fontSize: 11.5, color: pal.textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (reqs.isEmpty)
+            Text(
+              'Henüz oluşturduğunuz bir izin, fazla mesai veya hareket düzeltme talebi bulunmuyor.',
+              style: TextStyle(fontSize: 12, color: pal.textSecondary),
+            ),
+          for (final r in reqs)
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: pal.card,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: pal.border),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${r.type.label} (${r.targetDate}${r.endDate != null ? " - ${r.endDate}" : ""})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                            color: pal.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          r.reason,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: pal.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: switch (r.status) {
+                        HrRequestStatus.pending =>
+                          const Color(0xFFD97706).withValues(alpha: 0.15),
+                        HrRequestStatus.approved =>
+                          const Color(0xFF059669).withValues(alpha: 0.15),
+                        HrRequestStatus.rejected =>
+                          const Color(0xFFDC2626).withValues(alpha: 0.15),
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      r.status.label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: switch (r.status) {
+                          HrRequestStatus.pending => const Color(0xFFD97706),
+                          HrRequestStatus.approved => const Color(0xFF059669),
+                          HrRequestStatus.rejected => const Color(0xFFDC2626),
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// YENİ REKABETÇİ MODÜL: İK TALEP ONAY MERKEZİ & 4857 UYUM RADARI
+// ============================================================================
+class HrRequestsAndComplianceView extends ConsumerStatefulWidget {
+  const HrRequestsAndComplianceView({super.key});
+
+  @override
+  ConsumerState<HrRequestsAndComplianceView> createState() =>
+      _HrRequestsAndComplianceViewState();
+}
+
+class _HrRequestsAndComplianceViewState
+    extends ConsumerState<HrRequestsAndComplianceView> {
+  String? _lastFeedback;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(pdksDashboardProvider);
+    final pal = HasibuPalette.of(context);
+    final requests = state.allHrRequests;
+    final pendingCount = state.pendingHrRequestsCount;
+    final mismatchCount = state.statutoryLeaveMismatchCount;
+    final missingOutCount = state.missingCheckOutCount;
+    final missingDocsCount = state.missingDocsStaffCount;
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: pal.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: pal.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'İK Talep Onay Merkezi & 4857 İş Kanunu Uyum Radarı',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          color: pal.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Personel portalından gelen izin, fazla mesai ve unutulan giriş/çıkış taleplerini tek tıkla onaylayın; onaylanan kayıtlar doğrudan puantaja işlenir.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: pal.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('hr_radar_new_request_button'),
+                        onPressed: () {
+                          if (state.dailyStatuses.isNotEmpty) {
+                            showCreateHrRequestDialog(
+                              context,
+                              ref,
+                              employee: state.dailyStatuses.first.employee,
+                              allowEmployeeSwitch: true,
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.add_task_rounded, size: 16),
+                        label: const Text('Yeni Talep Kaydı Aç'),
+                      ),
+                      FilledButton.tonalIcon(
+                        key: const ValueKey('sync_4857_leave_button'),
+                        onPressed: () async {
+                          final updated = await ref
+                              .read(pdksDashboardProvider.notifier)
+                              .syncStatutoryLeaveEntitlements();
+                          if (mounted) {
+                            setState(() {
+                              _lastFeedback = updated > 0
+                                  ? '4857 İş Kanunu Md. 53 uyarınca $updated personelin yıllık izin hakedişi kıdem yılına göre güncellendi.'
+                                  : 'Tüm personellerin yıllık izin hakedişleri 4857 İş Kanunu kıdem süreleriyle tam uyumlu.';
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.gavel_rounded, size: 16),
+                        label: Text(
+                          mismatchCount > 0
+                              ? '4857 Kıdem İzinlerini Eşitle ($mismatchCount)'
+                              : '4857 Kıdem İzin Uyumunu Denetle',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _SelfServiceMetricTile(
+                    label: 'Onay Bekleyen Talepler',
+                    value: '$pendingCount Talep',
+                    subValue: 'Toplam Kayıt: ${requests.length}',
+                  ),
+                  _SelfServiceMetricTile(
+                    label: 'Bugün Eksik Çıkış (Tek Okuma)',
+                    value: '$missingOutCount Kişi',
+                    subValue: 'Tarih: ${state.selectedDate}',
+                  ),
+                  _SelfServiceMetricTile(
+                    label: 'Eksik Zorunlu Özlük Evrakı',
+                    value: '$missingDocsCount Personel',
+                    subValue: '6 zorunlu resmi evrak denetimi',
+                  ),
+                  _SelfServiceMetricTile(
+                    label: '4857 Kıdem İzin Farkı',
+                    value: '$mismatchCount Personel',
+                    subValue: '1-5y: 14g • 5-15y: 20g • 15+y: 26g',
+                  ),
+                ],
+              ),
+              if (_lastFeedback != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF059669).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _lastFeedback!,
+                    style: const TextStyle(
+                      color: Color(0xFF059669),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Personel İzin, Fazla Mesai & Hareket Düzeltme Talepleri (${requests.length})',
+          style: TextStyle(
+            fontSize: 14.5,
+            fontWeight: FontWeight.w700,
+            color: pal.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final req in requests)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: pal.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: req.status == HrRequestStatus.pending
+                    ? const Color(0xFFD97706).withValues(alpha: 0.45)
+                    : pal.border,
+              ),
+            ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            '${req.employeeName} (#${req.employeeCardNo})',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13.5,
+                              color: pal.textPrimary,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0284C7)
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              req.type.label,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF0284C7),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: switch (req.status) {
+                                HrRequestStatus.pending =>
+                                  const Color(0xFFD97706).withValues(alpha: 0.15),
+                                HrRequestStatus.approved =>
+                                  const Color(0xFF059669).withValues(alpha: 0.15),
+                                HrRequestStatus.rejected =>
+                                  const Color(0xFFDC2626).withValues(alpha: 0.15),
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              req.status.label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: switch (req.status) {
+                                  HrRequestStatus.pending =>
+                                    const Color(0xFFD97706),
+                                  HrRequestStatus.approved =>
+                                    const Color(0xFF059669),
+                                  HrRequestStatus.rejected =>
+                                    const Color(0xFFDC2626),
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tarih: ${req.targetDate}${req.endDate != null ? " -> ${req.endDate}" : ""}'
+                        '${req.requestedTime != null ? " • Saat: ${req.requestedTime}" : ""}'
+                        '${req.overtimeMinutes > 0 ? " • Süre: +${req.overtimeMinutes} dk" : ""}'
+                        ' • Açıklama: ${req.reason}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: pal.textSecondary,
+                        ),
+                      ),
+                      if (req.reviewerNote != null &&
+                          req.reviewerNote!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          'İK Notu: ${req.reviewerNote}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: pal.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (req.status == HrRequestStatus.pending)
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        key: ValueKey('approve_hr_req_${req.id}'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF059669),
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () async {
+                          final msg = await ref
+                              .read(pdksDashboardProvider.notifier)
+                              .reviewHrRequest(
+                                request: req,
+                                approve: true,
+                              );
+                          if (mounted) {
+                            setState(() => _lastFeedback = msg);
+                          }
+                        },
+                        icon: const Icon(Icons.check_rounded, size: 16),
+                        label: const Text('Onayla & Puantaja İşle'),
+                      ),
+                      OutlinedButton.icon(
+                        key: ValueKey('reject_hr_req_${req.id}'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFDC2626),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () async {
+                          final msg = await ref
+                              .read(pdksDashboardProvider.notifier)
+                              .reviewHrRequest(
+                                request: req,
+                                approve: false,
+                              );
+                          if (mounted) {
+                            setState(() => _lastFeedback = msg);
+                          }
+                        },
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        label: const Text('Reddet'),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Future<void> showHrRequestsAndComplianceDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      title: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Flexible(
+            child: Text(
+              'İK Talep Onay Merkezi & 4857 Uyum Radarı',
+              style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800),
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ],
+      ),
+      content: const SizedBox(
+        width: 860,
+        height: 540,
+        child: HrRequestsAndComplianceView(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogCtx).pop(),
+          child: const Text('Kapat'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<void> showCreateHrRequestDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required Employee employee,
+  bool allowEmployeeSwitch = false,
+}) async {
+  final state = ref.read(pdksDashboardProvider);
+  Employee selectedEmp = employee;
+  HrRequestType selectedType = HrRequestType.annualLeave;
+  LeaveType selectedLeaveType = LeaveType.yillikIzin;
+  bool isCheckInCorrection = false;
+
+  final targetDateCtrl = TextEditingController(text: state.selectedDate);
+  final endDateCtrl = TextEditingController(text: state.selectedDate);
+  final timeCtrl = TextEditingController(text: '18:00');
+  final overtimeCtrl = TextEditingController(text: '90');
+  final reasonCtrl = TextEditingController(
+    text: 'Resmi mazeret / vardiya bildirim talebi',
+  );
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (ctx, setDialogState) => AlertDialog(
+        title: const Text(
+          'Yeni İK Talebi Oluştur (İzin / Mesai / Hareket Düzeltme)',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (allowEmployeeSwitch) ...[
+                  DropdownButtonFormField<int>(
+                    isExpanded: true,
+                    initialValue: selectedEmp.id,
+                    decoration: const InputDecoration(
+                      labelText: 'Personel Seçin',
+                    ),
+                    items: [
+                      for (final s in state.dailyStatuses)
+                        DropdownMenuItem<int>(
+                          value: s.employee.id,
+                          child: Text(
+                            '${s.employee.fullName} (#${s.employee.cardNo})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (empId) {
+                      if (empId == null) return;
+                      final match = state.dailyStatuses.where(
+                        (s) => s.employee.id == empId,
+                      );
+                      if (match.isNotEmpty) {
+                        setDialogState(
+                          () => selectedEmp = match.first.employee,
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                DropdownButtonFormField<HrRequestType>(
+                  key: const ValueKey('hr_req_type_dropdown'),
+                  isExpanded: true,
+                  initialValue: selectedType,
+                  decoration: const InputDecoration(
+                    labelText: 'Talep Türü',
+                  ),
+                  items: [
+                    for (final t in HrRequestType.values)
+                      DropdownMenuItem(
+                        value: t,
+                        child: Text(t.label, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => selectedType = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                if (selectedType == HrRequestType.annualLeave) ...[
+                  DropdownButtonFormField<LeaveType>(
+                    isExpanded: true,
+                    initialValue: selectedLeaveType,
+                    decoration: const InputDecoration(
+                      labelText: 'İzin Türü',
+                    ),
+                    items: [
+                      for (final lt in LeaveType.values)
+                        DropdownMenuItem(
+                          value: lt,
+                          child: Text(lt.label),
+                        ),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => selectedLeaveType = v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: targetDateCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Başlangıç (YYYY-AA-GG)',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: endDateCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Bitiş (YYYY-AA-GG)',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: targetDateCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'İlgili Tarih (YYYY-AA-GG)',
+                    ),
+                  ),
+                ],
+                if (selectedType == HrRequestType.missingPunchCorrection) ...[
+                  const SizedBox(height: 10),
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: true, label: Text('Unutulan Giriş')),
+                      ButtonSegment(
+                        value: false,
+                        label: Text('Unutulan Çıkış'),
+                      ),
+                    ],
+                    selected: {isCheckInCorrection},
+                    onSelectionChanged: (s) => setDialogState(
+                      () => isCheckInCorrection = s.first,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: timeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Gerçekleşen Saat (SS:DD)',
+                      hintText: '18:00',
+                    ),
+                  ),
+                ],
+                if (selectedType == HrRequestType.overtimeApproval) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: overtimeCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Fazla Mesai Süresi (Dakika)',
+                      hintText: '90',
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('hr_req_reason_field'),
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Talep Açıklaması / Gerekçe',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('İptal'),
+          ),
+          FilledButton.icon(
+            key: const ValueKey('submit_hr_request_button'),
+            onPressed: () async {
+              final req = HrRequest(
+                id: 'req_${selectedEmp.id}_${DateTime.now().millisecondsSinceEpoch}',
+                employeeId: selectedEmp.id,
+                employeeCardNo: selectedEmp.cardNo,
+                employeeName: selectedEmp.fullName,
+                type: selectedType,
+                status: HrRequestStatus.pending,
+                targetDate: targetDateCtrl.text.trim(),
+                endDate: selectedType == HrRequestType.annualLeave
+                    ? endDateCtrl.text.trim()
+                    : null,
+                requestedTime:
+                    selectedType == HrRequestType.missingPunchCorrection
+                        ? timeCtrl.text.trim()
+                        : null,
+                isCheckInCorrection: isCheckInCorrection,
+                overtimeMinutes: selectedType == HrRequestType.overtimeApproval
+                    ? (int.tryParse(overtimeCtrl.text.trim()) ?? 60)
+                    : 0,
+                leaveType: selectedLeaveType,
+                reason: reasonCtrl.text.trim().isEmpty
+                    ? selectedType.label
+                    : reasonCtrl.text.trim(),
+                createdAt: '${state.selectedDate} 09:00',
+              );
+              await ref
+                  .read(pdksDashboardProvider.notifier)
+                  .submitHrRequest(req);
+              if (dialogCtx.mounted) {
+                Navigator.of(dialogCtx).pop();
+              }
+            },
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Talebi İK Onayına Gönder'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  targetDateCtrl.dispose();
+  endDateCtrl.dispose();
+  timeCtrl.dispose();
+  overtimeCtrl.dispose();
+  reasonCtrl.dispose();
+}
+
+Future<void> showPuantajCsvExportDialog(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final state = ref.read(pdksDashboardProvider);
+  final notifier = ref.read(pdksDashboardProvider.notifier);
+  final csvContent = notifier.generateDailyPuantajCsv();
+  final filePathCtrl = TextEditingController(
+    text: 'Hasibu_Puantaj_${state.selectedDate}.csv',
+  );
+  String? exportFeedback;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => StatefulBuilder(
+      builder: (ctx, setDialogState) {
+        final pal = HasibuPalette.of(ctx);
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.table_view_rounded, color: Color(0xFF059669)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Resmi PDKS & Puantaj Çizelgesi Dışa Aktarım (${state.selectedDate})',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 680,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Logo, Mikro, Netsis ve Excel ile doğrudan uyumlu (; ayraçlı) resmi puantaj verisi. Ek modül ücreti olmadan kopyalayabilir veya dosya olarak kaydedebilirsiniz.',
+                  style: TextStyle(fontSize: 12, color: pal.textSecondary),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('puantaj_export_path_field'),
+                  controller: filePathCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Kaydedilecek Dosya Adı / Yolu (.csv)',
+                    prefixIcon: Icon(Icons.save_alt_rounded, size: 18),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  height: 240,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: pal.subtle,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: pal.border),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      csvContent,
+                      style: TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 11.5,
+                        color: pal.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+                if (exportFeedback != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    exportFeedback!,
+                    style: const TextStyle(
+                      color: Color(0xFF059669),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: const Text('Kapat'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('copy_puantaj_csv_button'),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: csvContent));
+                if (dialogCtx.mounted) {
+                  setDialogState(() {
+                    exportFeedback =
+                        'Puantaj tablosu (${state.filteredByBranch.length} personel satırı) panoya kopyalandı.';
+                  });
+                }
+              },
+              icon: const Icon(Icons.copy_all_rounded, size: 16),
+              label: const Text('Panoya Kopyala'),
+            ),
+            FilledButton.icon(
+              key: const ValueKey('save_puantaj_csv_file_button'),
+              onPressed: () async {
+                try {
+                  final targetPath = filePathCtrl.text.trim().isEmpty
+                      ? 'Hasibu_Puantaj_${state.selectedDate}.csv'
+                      : filePathCtrl.text.trim();
+                  final f = File(targetPath);
+                  // UTF-8 BOM ekleyerek Türkçe karakterlerin Excel'de bozulmasını önle
+                  await f.writeAsString('\uFEFF$csvContent');
+                  if (dialogCtx.mounted) {
+                    setDialogState(() {
+                      exportFeedback =
+                          'Excel uyumlu CSV dosyası kaydedildi: ${f.path}';
+                    });
+                  }
+                } catch (_) {
+                  if (dialogCtx.mounted) {
+                    setDialogState(() {
+                      exportFeedback =
+                          'Panoya kopyalama hazır (Dosya yazma izni kısıtlı).';
+                    });
+                  }
+                }
+              },
+              icon: const Icon(Icons.download_done_rounded, size: 16),
+              label: const Text('CSV Olarak Kaydet'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  filePathCtrl.dispose();
 }

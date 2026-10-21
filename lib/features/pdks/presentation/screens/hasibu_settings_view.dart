@@ -1127,6 +1127,8 @@ Future<void> showEmployeeHistoryAndDossierDialog(
             .length;
         final int totalLateMins =
             historyEntries.fold<int>(0, (sum, e) => sum + e.lateMinutes);
+        final int totalOvertimeMins =
+            historyEntries.fold<int>(0, (sum, e) => sum + e.overtimeMinutes);
         final int leaveOrSickDays = historyEntries
             .where(
               (e) =>
@@ -1256,6 +1258,11 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                             color: const Color(0xFFD97706),
                           ),
                           _EmployeeHistorySummaryChip(
+                            label: 'Toplam Fazla Mesai',
+                            value: '+$totalOvertimeMins dk',
+                            color: const Color(0xFF059669),
+                          ),
+                          _EmployeeHistorySummaryChip(
                             label: 'İzinli / Raporlu',
                             value: '$leaveOrSickDays Gün',
                             color: const Color(0xFF0284C7),
@@ -1330,7 +1337,10 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Vardiya: ${currentStatus.shift.name} (${currentStatus.shift.startTime}-${currentStatus.shift.endTime}) • Toplam Okuma: ${entry.allLogs.length}',
+                                      'Vardiya: ${currentStatus.shift.name} (${currentStatus.shift.startTime}-${currentStatus.shift.endTime}) • '
+                                      'Net Çalışma: ${entry.workedDurationFormatted}'
+                                      '${entry.overtimeMinutes > 0 ? " • +${entry.overtimeMinutes} dk Mesai" : ""}'
+                                      '${entry.earlyLeaveMinutes > 0 ? " • -${entry.earlyLeaveMinutes} dk Erken Çıkış" : ""}',
                                       style: TextStyle(
                                         fontSize: 11.5,
                                         color: pal.textSecondary,

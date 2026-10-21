@@ -362,6 +362,57 @@ class WorkplaceSeedData {
         source: AttendanceSource.mobileQr,
         verifyMethod: VerifyMethod.mobileQr,
       ),
+      // Örnek çıkış & fazla mesai ve mükerrer okuma (Anti-Passback) kayıtları (19.10.2026)
+      AttendanceLog(
+        id: '1_00064_20261019_0546_DUP',
+        cardNo: '00064',
+        branchId: 1,
+        deviceNo: 1,
+        timestamp: DateTime(2026, 10, 19, 5, 46), // 1 dk sonra mükerrer okuma
+        isCheckIn: true,
+        source: AttendanceSource.tenfeiD35,
+        verifyMethod: VerifyMethod.face,
+      ),
+      AttendanceLog(
+        id: '1_00064_20261019_1630_OUT',
+        cardNo: '00064',
+        branchId: 1,
+        deviceNo: 1,
+        timestamp: DateTime(2026, 10, 19, 16, 30), // +90 dk fazla mesai
+        isCheckIn: false,
+        source: AttendanceSource.tenfeiD35,
+        verifyMethod: VerifyMethod.face,
+      ),
+      AttendanceLog(
+        id: '1_01406_20261019_1615_OUT',
+        cardNo: '01406',
+        branchId: 1,
+        deviceNo: 1,
+        timestamp: DateTime(2026, 10, 19, 16, 15), // +75 dk fazla mesai
+        isCheckIn: false,
+        source: AttendanceSource.tenfeiD35,
+        verifyMethod: VerifyMethod.face,
+      ),
+      AttendanceLog(
+        id: '1_00062_20261019_1505_OUT',
+        cardNo: '00062',
+        branchId: 1,
+        deviceNo: 1,
+        timestamp: DateTime(2026, 10, 19, 15, 5), // Normal çıkış
+        isCheckIn: false,
+        source: AttendanceSource.tenfeiD35,
+        verifyMethod: VerifyMethod.face,
+      ),
+      AttendanceLog(
+        id: '1_00046_20261019_1410_OUT',
+        cardNo: '00046',
+        branchId: 1,
+        deviceNo: 1,
+        timestamp: DateTime(2026, 10, 19, 14, 10), // 50 dk erken çıkış
+        isCheckIn: false,
+        source: AttendanceSource.tenfeiD35,
+        verifyMethod: VerifyMethod.face,
+      ),
     ]);
     return result;
   }
@@ -430,5 +481,48 @@ class WorkplaceSeedData {
       );
     }
     return docs;
+  }
+
+  static List<HrRequest> buildInitialHrRequests() {
+    return const <HrRequest>[
+      HrRequest(
+        id: 'req_2144_overtime_20261019',
+        employeeId: 2144,
+        employeeCardNo: '00064',
+        employeeName: 'MEHMET SİNAN CENAN',
+        type: HrRequestType.overtimeApproval,
+        status: HrRequestStatus.pending,
+        targetDate: '2026-10-19',
+        overtimeMinutes: 90,
+        reason: 'Fıstık sarma bayram siparişi sevkiyat hazırlığı (+90 dk mesai)',
+        createdAt: '2026-10-19 16:35',
+      ),
+      HrRequest(
+        id: 'req_2125_missing_out_20261019',
+        employeeId: 2125,
+        employeeCardNo: '01110',
+        employeeName: 'MÜSLÜM ÖNCEL',
+        type: HrRequestType.missingPunchCorrection,
+        status: HrRequestStatus.pending,
+        targetDate: '2026-10-19',
+        requestedTime: '15:05',
+        isCheckInCorrection: false,
+        reason: 'Vardiya çıkışında eldivenli olduğum için yüz okuma ekranını atladım',
+        createdAt: '2026-10-19 17:10',
+      ),
+      HrRequest(
+        id: 'req_1620_leave_20261022',
+        employeeId: 1620,
+        employeeCardNo: '01406',
+        employeeName: 'ABDULLAH YILDIZ',
+        type: HrRequestType.annualLeave,
+        status: HrRequestStatus.pending,
+        targetDate: '2026-10-22',
+        endDate: '2026-10-23',
+        leaveType: LeaveType.mazeretIzni,
+        reason: 'Tapu müdürlüğü resmi işlem mazeret izni (2 Gün)',
+        createdAt: '2026-10-20 09:15',
+      ),
+    ];
   }
 }

@@ -29,6 +29,7 @@ class PdksDashboardState {
   final String selectedDate; // YYYY-MM-DD
   final int? selectedBranchId; // null => Tüm Şubeler
   final DailyAttendanceState? selectedStateFilter; // null => Tümü
+  final PdksAnomalyFilter selectedAnomalyFilter;
   final String searchQuery;
   final List<Branch> branches;
   final List<ShiftPlan> shifts;
@@ -36,6 +37,7 @@ class PdksDashboardState {
   final List<EmployeeDailyStatus> dailyStatuses;
   final List<LeaveRecord> allLeaveRecords;
   final List<PersonnelDocument> allPersonnelDocuments;
+  final List<HrRequest> allHrRequests;
   final bool isPollingTerminal;
   final bool? lastTerminalReachable;
   final bool autoPollEnabled;
@@ -51,6 +53,7 @@ class PdksDashboardState {
     required this.selectedDate,
     this.selectedBranchId,
     this.selectedStateFilter,
+    this.selectedAnomalyFilter = PdksAnomalyFilter.all,
     this.searchQuery = '',
     this.branches = const <Branch>[],
     this.shifts = const <ShiftPlan>[],
@@ -58,6 +61,7 @@ class PdksDashboardState {
     this.dailyStatuses = const <EmployeeDailyStatus>[],
     this.allLeaveRecords = const <LeaveRecord>[],
     this.allPersonnelDocuments = const <PersonnelDocument>[],
+    this.allHrRequests = const <HrRequest>[],
     this.isPollingTerminal = false,
     this.lastTerminalReachable,
     this.autoPollEnabled = true,
@@ -72,6 +76,25 @@ class PdksDashboardState {
       allPersonnelDocuments
           .where((d) => d.employeeId == employeeId)
           .toList(growable: false);
+
+  List<HrRequest> requestsForEmployee(int employeeId) => allHrRequests
+      .where((r) => r.employeeId == employeeId)
+      .toList(growable: false);
+
+  int get pendingHrRequestsCount =>
+      allHrRequests.where((r) => r.status == HrRequestStatus.pending).length;
+
+  bool hasMissingMandatoryDocuments(int employeeId) {
+    final mandatoryCount = PersonnelDocumentCategory.values
+        .where((c) => c.isMandatory)
+        .length;
+    final uploadedMandatory = allPersonnelDocuments
+        .where((d) => d.employeeId == employeeId && d.category.isMandatory)
+        .map((d) => d.category)
+        .toSet()
+        .length;
+    return uploadedMandatory < mandatoryCount;
+  }
 
   int get totalCount => filteredByBranch.length;
 
@@ -120,10 +143,42 @@ class PdksDashboardState {
       .where((s) => s.state == DailyAttendanceState.sickReport)
       .length;
 
+  int get missingCheckOutCount =>
+      filteredByBranch.where((s) => s.hasMissingCheckOut).length;
+
+  int get overtimeStaffCount =>
+      filteredByBranch.where((s) => s.overtimeMinutes > 0).length;
+
+  int get totalOvertimeMinutes =>
+      filteredByBranch.fold<int>(0, (sum, s) => sum + s.overtimeMinutes);
+
+  int get earlyLeaveCount =>
+      filteredByBranch.where((s) => s.earlyLeaveMinutes > 0).length;
+
+  int get missingDocsStaffCount => filteredByBranch
+      .where((s) => hasMissingMandatoryDocuments(s.employee.id))
+      .length;
+
+  int get statutoryLeaveMismatchCount => filteredByBranch
+      .where((s) => s.employee.hasStatutoryLeaveMismatch)
+      .length;
+
   List<EmployeeDailyStatus> get visibleStatuses {
     return filteredByBranch.where((item) {
       if (selectedStateFilter != null && item.state != selectedStateFilter) {
         return false;
+      }
+      switch (selectedAnomalyFilter) {
+        case PdksAnomalyFilter.all:
+          break;
+        case PdksAnomalyFilter.missingCheckOut:
+          if (!item.hasMissingCheckOut) return false;
+        case PdksAnomalyFilter.overtime:
+          if (item.overtimeMinutes <= 0) return false;
+        case PdksAnomalyFilter.earlyLeave:
+          if (item.earlyLeaveMinutes <= 0) return false;
+        case PdksAnomalyFilter.missingDocs:
+          if (!hasMissingMandatoryDocuments(item.employee.id)) return false;
       }
       if (searchQuery.isNotEmpty) {
         final q = searchQuery.toUpperCase();
@@ -142,6 +197,7 @@ class PdksDashboardState {
     String? selectedDate,
     int? Function()? selectedBranchId,
     DailyAttendanceState? Function()? selectedStateFilter,
+    PdksAnomalyFilter? selectedAnomalyFilter,
     String? searchQuery,
     List<Branch>? branches,
     List<ShiftPlan>? shifts,
@@ -149,6 +205,7 @@ class PdksDashboardState {
     List<EmployeeDailyStatus>? dailyStatuses,
     List<LeaveRecord>? allLeaveRecords,
     List<PersonnelDocument>? allPersonnelDocuments,
+    List<HrRequest>? allHrRequests,
     bool? isPollingTerminal,
     bool? Function()? lastTerminalReachable,
     bool? autoPollEnabled,
@@ -167,6 +224,8 @@ class PdksDashboardState {
       selectedStateFilter: selectedStateFilter != null
           ? selectedStateFilter()
           : this.selectedStateFilter,
+      selectedAnomalyFilter:
+          selectedAnomalyFilter ?? this.selectedAnomalyFilter,
       searchQuery: searchQuery ?? this.searchQuery,
       branches: branches ?? this.branches,
       shifts: shifts ?? this.shifts,
@@ -175,6 +234,7 @@ class PdksDashboardState {
       allLeaveRecords: allLeaveRecords ?? this.allLeaveRecords,
       allPersonnelDocuments:
           allPersonnelDocuments ?? this.allPersonnelDocuments,
+      allHrRequests: allHrRequests ?? this.allHrRequests,
       isPollingTerminal: isPollingTerminal ?? this.isPollingTerminal,
       lastTerminalReachable: lastTerminalReachable != null
           ? lastTerminalReachable()
@@ -309,6 +369,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final leaves = _db.getLeaveRecordsForDate(state.selectedDate);
     final allLeaves = _db.getAllLeaveRecords();
     final allDocs = _db.getAllPersonnelDocuments();
+    final allRequests = _db.getAllHrRequests();
 
     final branchMap = {for (final b in branches) b.id: b};
     final deptMap = {for (final d in departments) d.id: d};
@@ -333,41 +394,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       final empLogs = logsByCard[emp.cardNo] ?? const <AttendanceLog>[];
       final leave = leaveMap[emp.id];
 
-      final checkIns =
-          empLogs.where((l) => l.isCheckIn).toList(growable: false);
-      final checkOuts =
-          empLogs.where((l) => !l.isCheckIn).toList(growable: false);
-
-      final AttendanceLog? firstIn = checkIns.isNotEmpty
-          ? checkIns.first
-          : (empLogs.isNotEmpty ? empLogs.first : null);
-      final AttendanceLog? lastOut = checkOuts.isNotEmpty
-          ? checkOuts.last
-          : (empLogs.length > 1 ? empLogs.last : null);
-
-      DailyAttendanceState dailyState;
-      int lateMins = 0;
-
-      if (firstIn != null) {
-        lateMins = _calculateLateMinutes(
-          firstIn.timestamp,
-          shift.startTime,
-          shift.toleranceMinutes,
-        );
-        dailyState = lateMins > 0
-            ? DailyAttendanceState.late
-            : DailyAttendanceState.present;
-      } else if (leave != null) {
-        if (leave.leaveType == LeaveType.saglikRaporu) {
-          dailyState = DailyAttendanceState.sickReport;
-        } else if (leave.leaveType == LeaveType.devamsiz) {
-          dailyState = DailyAttendanceState.absent;
-        } else {
-          dailyState = DailyAttendanceState.onLeave;
-        }
-      } else {
-        dailyState = DailyAttendanceState.absent;
-      }
+      final eval = _evaluateDayLogs(
+        rawDayLogs: empLogs,
+        shift: shift,
+        leave: leave,
+      );
 
       statuses.add(
         EmployeeDailyStatus(
@@ -375,12 +406,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           department: dept,
           branch: branch,
           shift: shift,
-          state: dailyState,
-          firstCheckIn: firstIn,
-          lastCheckOut: lastOut,
+          state: eval.state,
+          firstCheckIn: eval.firstIn,
+          lastCheckOut: eval.lastOut,
           allLogsOfDay: empLogs,
           leaveRecord: leave,
-          lateMinutes: lateMins,
+          lateMinutes: eval.lateMinutes,
+          workedMinutes: eval.workedMinutes,
+          overtimeMinutes: eval.overtimeMinutes,
+          earlyLeaveMinutes: eval.earlyLeaveMinutes,
+          hasMissingCheckOut: eval.hasMissingCheckOut,
+          duplicateScansFiltered: eval.duplicateScansFiltered,
         ),
       );
     }
@@ -395,6 +431,148 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       dailyStatuses: statuses,
       allLeaveRecords: allLeaves,
       allPersonnelDocuments: allDocs,
+      allHrRequests: allRequests,
+    );
+  }
+
+  /// Anti-Passback (15 dk mükerrer okuma filtresi) + Fazla Mesai / Erken Çıkış / Eksik Çıkış motoru.
+  static ({
+    DailyAttendanceState state,
+    AttendanceLog? firstIn,
+    AttendanceLog? lastOut,
+    int lateMinutes,
+    int workedMinutes,
+    int overtimeMinutes,
+    int earlyLeaveMinutes,
+    bool hasMissingCheckOut,
+    int duplicateScansFiltered,
+  }) _evaluateDayLogs({
+    required List<AttendanceLog> rawDayLogs,
+    required ShiftPlan shift,
+    required LeaveRecord? leave,
+  }) {
+    if (rawDayLogs.isEmpty) {
+      final DailyAttendanceState st;
+      if (leave != null) {
+        if (leave.leaveType == LeaveType.saglikRaporu) {
+          st = DailyAttendanceState.sickReport;
+        } else if (leave.leaveType == LeaveType.devamsiz) {
+          st = DailyAttendanceState.absent;
+        } else {
+          st = DailyAttendanceState.onLeave;
+        }
+      } else {
+        st = DailyAttendanceState.absent;
+      }
+      return (
+        state: st,
+        firstIn: null,
+        lastOut: null,
+        lateMinutes: 0,
+        workedMinutes: 0,
+        overtimeMinutes: 0,
+        earlyLeaveMinutes: 0,
+        hasMissingCheckOut: false,
+        duplicateScansFiltered: 0,
+      );
+    }
+
+    final sorted = List<AttendanceLog>.from(rawDayLogs)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    // 15 dakika içerisindeki aynı yönlü veya ardışık mükerrer okumaları filtrele (Anti-Passback Debounce)
+    final debounced = <AttendanceLog>[];
+    int duplicatesFiltered = 0;
+    for (final log in sorted) {
+      if (debounced.isEmpty) {
+        debounced.add(log);
+        continue;
+      }
+      final prev = debounced.last;
+      final diffMins = log.timestamp.difference(prev.timestamp).inMinutes.abs();
+      if (diffMins < 15 && log.isCheckIn == prev.isCheckIn) {
+        duplicatesFiltered++;
+        continue;
+      }
+      debounced.add(log);
+    }
+
+    final explicitIns =
+        debounced.where((l) => l.isCheckIn).toList(growable: false);
+    final explicitOuts =
+        debounced.where((l) => !l.isCheckIn).toList(growable: false);
+
+    final AttendanceLog firstIn =
+        explicitIns.isNotEmpty ? explicitIns.first : debounced.first;
+
+    AttendanceLog? lastOut;
+    if (explicitOuts.isNotEmpty) {
+      final candidate = explicitOuts.last;
+      if (candidate.id != firstIn.id &&
+          candidate.timestamp.isAfter(firstIn.timestamp)) {
+        lastOut = candidate;
+      }
+    } else if (debounced.length > 1) {
+      final candidate = debounced.last;
+      if (candidate.id != firstIn.id &&
+          candidate.timestamp.difference(firstIn.timestamp).inMinutes >= 30) {
+        lastOut = candidate;
+      }
+    }
+
+    final int lateMins = _calculateLateMinutes(
+      firstIn.timestamp,
+      shift.startTime,
+      shift.toleranceMinutes,
+    );
+    final DailyAttendanceState dailyState = lateMins > 0
+        ? DailyAttendanceState.late
+        : DailyAttendanceState.present;
+
+    int workedMins = 0;
+    int overtimeMins = 0;
+    int earlyLeaveMins = 0;
+    final bool missingOut = lastOut == null;
+
+    if (lastOut != null) {
+      workedMins =
+          lastOut.timestamp.difference(firstIn.timestamp).inMinutes.clamp(0, 1440);
+
+      final endParts = shift.endTime.split(':');
+      final int eh = int.tryParse(endParts[0]) ?? 18;
+      final int em = endParts.length > 1 ? (int.tryParse(endParts[1]) ?? 0) : 0;
+      DateTime shiftEnd = DateTime(
+        firstIn.timestamp.year,
+        firstIn.timestamp.month,
+        firstIn.timestamp.day,
+        eh,
+        em,
+      );
+      // Gece vardiyası (örn. 19:00 -> 07:00) için bitiş ertesi gündür
+      final startParts = shift.startTime.split(':');
+      final int sh = int.tryParse(startParts[0]) ?? 8;
+      if (eh < sh) {
+        shiftEnd = shiftEnd.add(const Duration(days: 1));
+      }
+
+      final outDiff = lastOut.timestamp.difference(shiftEnd).inMinutes;
+      if (outDiff >= 15) {
+        overtimeMins = outDiff;
+      } else if (outDiff < -shift.toleranceMinutes) {
+        earlyLeaveMins = (-outDiff);
+      }
+    }
+
+    return (
+      state: dailyState,
+      firstIn: firstIn,
+      lastOut: lastOut,
+      lateMinutes: lateMins,
+      workedMinutes: workedMins,
+      overtimeMinutes: overtimeMins,
+      earlyLeaveMinutes: earlyLeaveMins,
+      hasMissingCheckOut: missingOut,
+      duplicateScansFiltered: duplicatesFiltered,
     );
   }
 
@@ -423,12 +601,25 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     refreshDashboard();
   }
 
+  void shiftSelectedDateByDays(int deltaDays) {
+    final current =
+        DateTime.tryParse(state.selectedDate) ?? DateTime(2026, 10, 19);
+    final shifted = current.add(Duration(days: deltaDays));
+    final nextKey =
+        '${shifted.year.toString().padLeft(4, '0')}-${shifted.month.toString().padLeft(2, '0')}-${shifted.day.toString().padLeft(2, '0')}';
+    setSelectedDate(nextKey);
+  }
+
   void setBranchFilter(int? branchId) {
     state = state.copyWith(selectedBranchId: () => branchId);
   }
 
   void setStateFilter(DailyAttendanceState? filter) {
     state = state.copyWith(selectedStateFilter: () => filter);
+  }
+
+  void setAnomalyFilter(PdksAnomalyFilter filter) {
+    state = state.copyWith(selectedAnomalyFilter: filter);
   }
 
   void setSearchQuery(String query) {
@@ -952,54 +1143,220 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       )..sort((a, b) => a.timestamp.compareTo(b.timestamp));
       final lv = leaveByDate[dKey];
 
-      final checkIns =
-          dayLogs.where((l) => l.isCheckIn).toList(growable: false);
-      final checkOuts =
-          dayLogs.where((l) => !l.isCheckIn).toList(growable: false);
-
-      final AttendanceLog? firstIn = checkIns.isNotEmpty
-          ? checkIns.first
-          : (dayLogs.isNotEmpty ? dayLogs.first : null);
-      final AttendanceLog? lastOut = checkOuts.isNotEmpty
-          ? checkOuts.last
-          : (dayLogs.length > 1 ? dayLogs.last : null);
-
-      DailyAttendanceState dayState;
-      int lateMins = 0;
-      if (firstIn != null) {
-        lateMins = _calculateLateMinutes(
-          firstIn.timestamp,
-          shift.startTime,
-          shift.toleranceMinutes,
-        );
-        dayState = lateMins > 0
-            ? DailyAttendanceState.late
-            : DailyAttendanceState.present;
-      } else if (lv != null) {
-        if (lv.leaveType == LeaveType.saglikRaporu) {
-          dayState = DailyAttendanceState.sickReport;
-        } else if (lv.leaveType == LeaveType.devamsiz) {
-          dayState = DailyAttendanceState.absent;
-        } else {
-          dayState = DailyAttendanceState.onLeave;
-        }
-      } else {
-        dayState = DailyAttendanceState.absent;
-      }
+      final eval = _evaluateDayLogs(
+        rawDayLogs: dayLogs,
+        shift: shift,
+        leave: lv,
+      );
 
       entries.add(
         EmployeeHistoryDayEntry(
           dateKey: dKey,
-          state: dayState,
-          firstCheckIn: firstIn,
-          lastCheckOut: lastOut,
+          state: eval.state,
+          firstCheckIn: eval.firstIn,
+          lastCheckOut: eval.lastOut,
           allLogs: dayLogs,
           leaveRecord: lv,
-          lateMinutes: lateMins,
+          lateMinutes: eval.lateMinutes,
+          workedMinutes: eval.workedMinutes,
+          overtimeMinutes: eval.overtimeMinutes,
+          earlyLeaveMinutes: eval.earlyLeaveMinutes,
+          hasMissingCheckOut: eval.hasMissingCheckOut,
         ),
       );
     }
     return entries;
+  }
+
+  /// Tek tıkla eksik çıkış (Tek Okuma) anomalisini personelin vardiya bitiş saatine göre tamamlar.
+  Future<void> quickCompleteMissingCheckOut(EmployeeDailyStatus item) async {
+    await saveOrUpdateAttendanceLog(
+      employee: item.employee,
+      dateKey: state.selectedDate,
+      timeHhMm: item.shift.endTime,
+      isCheckIn: false,
+      source: AttendanceSource.manual,
+      verifyMethod: VerifyMethod.password,
+    );
+  }
+
+  /// Seçili tarihte çıkış basmayı unutan tüm personellerin çıkış saatini kendi vardiya bitiş saatlerine göre toplu tamamlar.
+  Future<int> batchCompleteAllMissingCheckOuts() async {
+    final targets = state.filteredByBranch
+        .where((s) => s.hasMissingCheckOut)
+        .toList(growable: false);
+    if (targets.isEmpty) return 0;
+
+    final dParts = state.selectedDate.split('-');
+    final year = int.tryParse(dParts[0]) ?? 2026;
+    final month = dParts.length > 1 ? (int.tryParse(dParts[1]) ?? 10) : 10;
+    final day = dParts.length > 2 ? (int.tryParse(dParts[2]) ?? 19) : 19;
+
+    final logsToInsert = <AttendanceLog>[];
+    for (final item in targets) {
+      final tParts = item.shift.endTime.split(':');
+      final h = int.tryParse(tParts[0]) ?? 18;
+      final m = tParts.length > 1 ? (int.tryParse(tParts[1]) ?? 0) : 0;
+      final dt = DateTime(year, month, day, h, m);
+      logsToInsert.add(
+        AttendanceLog(
+          id: 'AUTO_OUT_${item.employee.cardNo}_${state.selectedDate}_${h.toString().padLeft(2, '0')}${m.toString().padLeft(2, '0')}',
+          cardNo: item.employee.cardNo,
+          branchId: item.employee.branchId,
+          deviceNo: 99,
+          timestamp: dt,
+          isCheckIn: false,
+          source: AttendanceSource.manual,
+          verifyMethod: VerifyMethod.password,
+        ),
+      );
+    }
+
+    _db.upsertAttendanceLogsBatch(logsToInsert);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Eksik Çıkış Otomasyonu',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+    return logsToInsert.length;
+  }
+
+  /// Personel Portalı veya İK üzerinden yeni talep (İzin, Fazla Mesai, Eksik Hareket, Avans) oluşturur.
+  Future<void> submitHrRequest(HrRequest request) async {
+    _db.upsertHrRequest(request);
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu Personel Talep Merkezi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+  }
+
+  /// İK Yöneticisi personel talebini Tek Tıkla Onaylar veya Reddeder.
+  /// Onaylandığında izin veya unutulan giriş/çıkış hareketi otomatik olarak puantaja işlenir!
+  Future<String> reviewHrRequest({
+    required HrRequest request,
+    required bool approve,
+    String? reviewerNote,
+  }) async {
+    final updated = request.copyWith(
+      status: approve ? HrRequestStatus.approved : HrRequestStatus.rejected,
+      reviewerNote: () => reviewerNote?.trim().isEmpty == true
+          ? (approve ? 'İK tarafından onaylandı ve puantaja işlendi' : 'İK tarafından reddedildi')
+          : reviewerNote?.trim(),
+    );
+    _db.upsertHrRequest(updated);
+
+    String actionSummary = approve
+        ? '${request.employeeName} talebi onaylandı.'
+        : '${request.employeeName} talebi reddedildi.';
+
+    if (approve) {
+      if (request.type == HrRequestType.annualLeave) {
+        final start =
+            DateTime.tryParse(request.targetDate) ?? DateTime(2026, 10, 19);
+        final end = DateTime.tryParse(request.endDate ?? request.targetDate) ??
+            start;
+        final days = await assignLeaveDateRange(
+          employeeId: request.employeeId,
+          startDate: start,
+          endDate: end,
+          leaveType: request.leaveType,
+          note: '${request.leaveType.label} (Talep Onayı: ${request.reason})',
+        );
+        actionSummary =
+            '${request.employeeName} için $days günlük ${request.leaveType.label} onaylandı ve puantaja işlendi.';
+      } else if (request.type == HrRequestType.missingPunchCorrection) {
+        final empStatus = state.dailyStatuses
+            .where((s) => s.employee.id == request.employeeId)
+            .toList(growable: false);
+        if (empStatus.isNotEmpty) {
+          final emp = empStatus.first.employee;
+          final timeStr = request.requestedTime ??
+              (request.isCheckInCorrection
+                  ? empStatus.first.shift.startTime
+                  : empStatus.first.shift.endTime);
+          await saveOrUpdateAttendanceLog(
+            employee: emp,
+            dateKey: request.targetDate,
+            timeHhMm: timeStr,
+            isCheckIn: request.isCheckInCorrection,
+            source: AttendanceSource.manual,
+            verifyMethod: VerifyMethod.password,
+          );
+          actionSummary =
+              '${request.employeeName} için ${request.targetDate} $timeStr ${request.isCheckInCorrection ? "Giriş" : "Çıkış"} hareketi onaylanıp eklendi.';
+        }
+      }
+    }
+
+    refreshDashboard();
+    final syncResult = await _syncService.pushToCloud(
+      deviceName: 'Hasibu İK Onay Merkezi',
+      force: true,
+    );
+    state = state.copyWith(syncStatus: syncResult);
+    return actionSummary;
+  }
+
+  /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdem yılına göre eksik tanımlanmış yıllık izin haklarını otomatik günceller.
+  Future<int> syncStatutoryLeaveEntitlements() async {
+    final employees = _db.getEmployees();
+    int updatedCount = 0;
+    for (final emp in employees) {
+      if (emp.hasStatutoryLeaveMismatch) {
+        _db.upsertEmployee(
+          emp.copyWith(
+            annualLeaveEntitlement: emp.statutoryAnnualLeaveEntitlement,
+          ),
+        );
+        updatedCount++;
+      }
+    }
+    if (updatedCount > 0) {
+      refreshDashboard();
+      final syncResult = await _syncService.pushToCloud(
+        deviceName: 'Hasibu 4857 İzin Hakediş Eşitleme',
+        force: true,
+      );
+      state = state.copyWith(syncStatus: syncResult);
+    }
+    return updatedCount;
+  }
+
+  /// Seçili tarihteki resmi PDKS & Puantaj çizelgesini Excel uyumlu (; ayraçlı) CSV metni olarak üretir.
+  String generateDailyPuantajCsv({bool onlyVisible = false}) {
+    final rows =
+        onlyVisible ? state.visibleStatuses : state.filteredByBranch;
+    final buf = StringBuffer();
+    buf.writeln(
+      'Tarih;Kart No;Ad Soyad;Şube;Bölüm;Vardiya;İlk Giriş;Son Çıkış;Net Çalışma (Dk);Gecikme (Dk);Fazla Mesai (Dk);Erken Çıkış (Dk);Eksik Çıkış;Durum;Doğrulama',
+    );
+    for (final item in rows) {
+      final inStr = item.firstCheckIn?.timeFormatted ?? '-';
+      final outStr = item.lastCheckOut?.timeFormatted ?? '-';
+      final verifyStr = item.firstCheckIn?.verifyMethod.label ??
+          (item.leaveRecord?.leaveType.label ?? '-');
+      buf.writeln(
+        '${state.selectedDate};'
+        '${item.employee.cardNo};'
+        '${item.employee.fullName};'
+        '${item.branch.name};'
+        '${item.department.name};'
+        '${item.shift.startTime}-${item.shift.endTime};'
+        '$inStr;'
+        '$outStr;'
+        '${item.workedMinutes};'
+        '${item.lateMinutes};'
+        '${item.overtimeMinutes};'
+        '${item.earlyLeaveMinutes};'
+        '${item.hasMissingCheckOut ? "EVET" : "HAYIR"};'
+        '${item.state.label};'
+        '$verifyStr',
+      );
+    }
+    return buf.toString();
   }
 
   /// Personelin özlük dosyasına resmi evrak dijital kopyası ekler veya günceller.
