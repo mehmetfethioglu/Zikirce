@@ -15,6 +15,7 @@ import '../../features/namaz_vakitleri/presentation/screens/prayer_times_screen.
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/privacy_policy_screen.dart';
 import '../../features/settings/presentation/screens/session_management_screen.dart';
+import '../../features/settings/presentation/screens/user_guide_screen.dart';
 import '../../features/ezber/presentation/screens/memorization_screen.dart';
 import '../../features/namaz_vakitleri/presentation/screens/fiqh_library_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -116,6 +117,11 @@ final appRouter = GoRouter(
       path: '/privacy',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const PrivacyPolicyScreen(),
+    ),
+    GoRoute(
+      path: '/guide',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const UserGuideScreen(),
     ),
     GoRoute(
       path: '/fiqh',

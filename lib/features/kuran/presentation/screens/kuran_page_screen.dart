@@ -6,10 +6,12 @@ import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/models/badge_models.dart';
 import '../../../hatim/presentation/screens/mukabele_hatim_screen.dart';
 import '../../../hatim/presentation/widgets/hatim_sync_gate.dart';
+import '../../../hatim/presentation/widgets/hatim_duasi_modal.dart';
 import '../../../hatim/providers/hatim_providers.dart';
 import '../../../ezber/providers/ezber_providers.dart';
 import '../widgets/quick_surah_bottom_sheet.dart';
@@ -20,9 +22,10 @@ import '../widgets/quran_talim_detail_bottom_sheet.dart';
 import '../widgets/quran_top_icon_ribbon.dart';
 import '../widgets/quick_access_card_wrapper.dart';
 import '../widgets/quick_access_management_sheet.dart';
+import '../widgets/mushaf_page_widget.dart';
+import '../widgets/tahrir_bookshelf_section.dart';
 import '../../providers/quick_access_cards_provider.dart';
 import '../../providers/kuran_providers.dart';
-import '../../../settings/providers/settings_provider.dart';
 import 'mushaf_screen.dart';
 import '../../../ezber/presentation/screens/memorization_screen.dart';
 import '../../../ezber/presentation/screens/interactive_talim_screen.dart';
@@ -49,6 +52,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     Hatim? activeHatim,
     SureItem? targetSurah,
     String? streakKey,
+    bool initialMealOnlyMode = false,
+    MushafReadingMode? initialReadingMode,
   }) {
     Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
@@ -57,6 +62,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           activeHatim: activeHatim,
           targetSurah: targetSurah,
           streakKey: streakKey,
+          initialMealOnlyMode: initialMealOnlyMode,
+          initialReadingMode: initialReadingMode,
         ),
       ),
     );
@@ -188,6 +195,31 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                 filled: true,
               ),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFB57D15),
+                  side: BorderSide(
+                    color: const Color(0xFFD4AF37).withValues(alpha: 0.65),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  HatimDuasiModal.show(context);
+                },
+                icon: const Text('🤲', style: TextStyle(fontSize: 15)),
+                label: const Text(
+                  'Sadece Hatim Duası Oku (Harici Hatim)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
           ],
         ),
         actions: [
@@ -281,6 +313,11 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   const SizedBox(height: 16),
 
                   // ==========================================
+                  // 0.5 TAHRİR 2 RAFLI İSLÂMÎ İLİMLER KÜTÜPHANESİ (HIZLI ERİŞİMİN HEMEN ÜSTÜ)
+                  // ==========================================
+                  const TahrirBookshelfSection(),
+
+                  // ==========================================
                   // 1. HIZLI ERİŞİM & HATİMLER YATAY KARTLARI
                   // ==========================================
                   Row(
@@ -333,18 +370,31 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   // ==========================================
                   // 2. CÜZLER BÖLÜMÜ
                   // ==========================================
-                  Text(
-                    context.l10n.quranPageJuzs,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextColor,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        context.l10n.quranPageJuzs,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                      Text(
+                        '30 Cüz • Basılı tutarak dinle',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: secondaryTextColor,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
 
                   SizedBox(
-                    height: 76,
+                    height: 82,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
@@ -368,7 +418,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   const SizedBox(height: 20),
 
                   // ==========================================
-                  // 3. SURELER BÖLÜMÜ (Sure Ara Sağda)
+                  // 3. SURELER BÖLÜMÜ (2 Satırlı Yatay Izgara + Sure Ara)
                   // ==========================================
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -376,29 +426,34 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                       Text(
                         context.l10n.quranPageSurahs,
                         style: TextStyle(
-                          fontSize: 14.5,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
                           color: primaryTextColor,
                         ),
                       ),
                       InkWell(
                         onTap: _showQuickSurahSheet,
                         borderRadius: BorderRadius.circular(12),
-                        child: Padding(
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: accentGreen.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: Row(
                             children: [
+                              Icon(Icons.search_rounded,
+                                  size: 14, color: accentGreen),
+                              const SizedBox(width: 4),
                               Text(
                                 context.l10n.quranPageSearchSurah,
                                 style: TextStyle(
                                   fontSize: 11.5,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w700,
                                   color: accentGreen,
                                 ),
                               ),
-                              const SizedBox(width: 4),
-                              const Text('🔍', style: TextStyle(fontSize: 12)),
                             ],
                           ),
                         ),
@@ -408,12 +463,18 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   const SizedBox(height: 10),
 
                   SizedBox(
-                    height: 76,
-                    child: ListView.separated(
+                    height: 156,
+                    child: GridView.builder(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 10,
+                        crossAxisSpacing: 10,
+                        mainAxisExtent: 186,
+                      ),
                       itemCount: SurahDataProvider.surahs.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
                         final surah = SurahDataProvider.surahs[index];
                         return _buildSurahCard(
@@ -784,6 +845,16 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
       ));
     }
 
+    // 2.5 Standalone Matbu Hatim Duası Card (Sadece Hatim Duası Okuma)
+    allEntries.add((
+      id: 'card_hatim_duasi',
+      title: 'Matbû Kur’ân Hatim Duası',
+      icon: '🤲',
+      isHatim: false,
+      hatimId: null,
+      widget: _buildHatimDuasiQuickCard(),
+    ));
+
     // 3. Dynamic Surah Card
     allEntries.add((
       id: 'card_dynamic_surah',
@@ -1052,7 +1123,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: accentColor.withOpacity(0.3),
+                color: accentColor.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1196,7 +1267,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF2D7D76).withOpacity(0.25),
+                color: const Color(0xFF2D7D76).withValues(alpha: 0.25),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1330,7 +1401,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             border: Border.all(color: const Color(0xFFD4AF37), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0E4334).withOpacity(0.4),
+                color: const Color(0xFF0E4334).withValues(alpha: 0.4),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1341,8 +1412,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Top Row: Mosque Icon + Mukabele
-              Row(
-                children: const [
+              const Row(
+                children: [
                   Text('🕌', style: TextStyle(fontSize: 14)),
                   SizedBox(width: 5),
                   Text(
@@ -1434,9 +1505,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 5),
                     alignment: Alignment.center,
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      children: [
                         Text(
                           'Mukabeleye Devam',
                           style: TextStyle(
@@ -1477,10 +1548,10 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             ),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-                color: const Color(0xFFD4AF37).withOpacity(0.8), width: 1.2),
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.8), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF0E4334).withOpacity(0.3),
+                color: const Color(0xFF0E4334).withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1490,8 +1561,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: const [
+              const Row(
+                children: [
                   Text('🕌', style: TextStyle(fontSize: 15)),
                   SizedBox(width: 6),
                   Text(
@@ -1503,9 +1574,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   ),
                 ],
               ),
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Mukabele Başlat',
                     style: TextStyle(
@@ -1529,9 +1600,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Text(
                           'Mukabele Başlat',
                           style: TextStyle(
@@ -1691,6 +1762,21 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   }
                 },
               ),
+              const SizedBox(height: 12),
+
+              // Option 4: Standalone Hatim Duası (Harici Hatim)
+              _buildMukabeleOptionTile(
+                iconEmoji: '🤲',
+                title: 'Sadece Hatim Duası Oku',
+                subtitle: 'Matbû Kur’ân sonundaki hatim ve bağışlama duası',
+                badge: 'Harici Hatim',
+                accentColor: const Color(0xFFD97706),
+                isDark: isDark,
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  HatimDuasiModal.show(context);
+                },
+              ),
             ],
           ),
         );
@@ -1726,7 +1812,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: accentColor.withOpacity(0.15),
+                color: accentColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Text(iconEmoji, style: const TextStyle(fontSize: 22)),
@@ -1754,7 +1840,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: accentColor.withOpacity(0.2),
+                          color: accentColor.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -1833,7 +1919,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                               : const Color(0xFFF4EFE6),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: const Color(0xFFD4AF37).withOpacity(0.5)),
+                              color: const Color(0xFFD4AF37).withValues(alpha: 0.5)),
                         ),
                         alignment: Alignment.center,
                         child: Text(
@@ -1890,7 +1976,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: coralBg.withOpacity(0.3),
+                color: coralBg.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -1972,9 +2058,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 9, vertical: 4),
-                        child: Row(
+                        child: const Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: const [
+                          children: [
                             Text(
                               'Oku ↗',
                               style: TextStyle(
@@ -2008,6 +2094,131 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     );
   }
 
+  Widget _buildHatimDuasiQuickCard() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => HatimDuasiModal.show(context),
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          width: 162,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1F4E3D), Color(0xFF102A21)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFFD4AF37).withValues(alpha: 0.85),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1F4E3D).withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Text('🤲', style: TextStyle(fontSize: 15)),
+                  SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Matbû Mushaf',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFFE082),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hatim Duası',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Sadece Hatim Duası Oku',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFE0EBE7),
+                    ),
+                  ),
+                  SizedBox(height: 1),
+                  Text(
+                    'Arapça • Okunuş • Meâl',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      color: Color(0xFFFFD54F),
+                    ),
+                  ),
+                ],
+              ),
+              Material(
+                color: const Color(0xFFD4AF37),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: () => HatimDuasiModal.show(context),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    alignment: Alignment.center,
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Duayı Oku',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF14241E),
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(
+                          Icons.auto_stories_rounded,
+                          size: 12,
+                          color: Color(0xFF14241E),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildShortcutCard() {
     const goldBg = Color(0xFFF5B853);
     return Material(
@@ -2023,7 +2234,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: goldBg.withOpacity(0.3),
+                color: goldBg.withValues(alpha: 0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -2033,8 +2244,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: const [
+              const Row(
+                children: [
                   Text('✨', style: TextStyle(fontSize: 15)),
                   SizedBox(width: 5),
                   Text(
@@ -2046,9 +2257,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   ),
                 ],
               ),
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
                     'Yeni Hatim',
                     style: TextStyle(
@@ -2072,9 +2283,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: const [
+                      children: [
                         Text(
                           'Başla',
                           style: TextStyle(
@@ -2334,15 +2545,16 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          width: 72,
-          height: 72,
+          width: 82,
+          height: 82,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
           decoration: BoxDecoration(
             color: cardBg,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: borderStroke),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -2352,20 +2564,29 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '$juzNo.',
+                '$juzNo. ${context.l10n.isTurkish ? 'Cüz' : 'Juz'}',
+                maxLines: 1,
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
                   color: accentColor,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                context.l10n.isTurkish ? 'Cüz' : 'Juz',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  color: secondaryTextColor,
+              const SizedBox(height: 5),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'S. $startPage',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: secondaryTextColor,
+                  ),
                 ),
               ),
             ],
@@ -2442,8 +2663,8 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
         onTap: () => _openMushafPage(surah.startPage, targetSurah: surah),
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          width: 154,
-          height: 72,
+          width: 176,
+          height: 76,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: cardBg,
@@ -2451,7 +2672,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             border: Border.all(color: borderStroke),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -2464,7 +2685,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: borderStroke.withOpacity(0.7),
+                  color: borderStroke.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
@@ -2484,21 +2705,40 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      surah.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextColor,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            surah.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                        ),
+                        if (surah.nameArabic.isNotEmpty)
+                          Text(
+                            QuranWordHighlighter.formatArabicTextForFont(
+                              surah.nameArabic,
+                              ref.watch(arabicFontFamilyProvider),
+                            ),
+                            style: TextStyle(
+                              fontFamily: ref.watch(arabicFontFamilyProvider),
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: accentColor,
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Row(
                       children: [
                         Text(
-                          surah.type,
+                          '${surah.ayetSayisi} Âyet',
                           style: TextStyle(
                               fontSize: 9.5, color: secondaryTextColor),
                         ),
@@ -2508,9 +2748,12 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                               fontSize: 9.5, color: secondaryTextColor),
                         ),
                         Text(
-                          '${surah.ayetSayisi} Ayet',
+                          'S. ${surah.startPage}',
                           style: TextStyle(
-                              fontSize: 9.5, color: secondaryTextColor),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: accentColor,
+                          ),
                         ),
                       ],
                     ),
@@ -2551,7 +2794,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
             border: Border.all(color: borderColor, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: borderColor.withOpacity(0.18),
+                color: borderColor.withValues(alpha: 0.18),
                 blurRadius: 8,
                 offset: const Offset(0, 4),
               ),
@@ -2597,7 +2840,7 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 9.5,
-                      color: accentColor.withOpacity(0.85),
+                      color: accentColor.withValues(alpha: 0.85),
                     ),
                   ),
                 ],
@@ -2640,198 +2883,10 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
   // ==========================================
 
   void _showCompletedHatimModal(Hatim hatim) {
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final cardBg = isDark ? const Color(0xFF1E2128) : Colors.white;
-        final primaryTextColor =
-            isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
-        final secondaryTextColor =
-            isDark ? const Color(0xFFA89888) : const Color(0xFF506861);
-        final accent =
-            isDark ? const Color(0xFF3EA388) : const Color(0xFF2D7D76);
-
-        final isMukabele = hatim.id.startsWith('mukabele_') ||
-            hatim.title.toLowerCase().contains('mukabele');
-
-        return Container(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-          ),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-          ),
-          child: SafeArea(
-            top: false,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFD97706).withValues(alpha: 0.4),
-                          blurRadius: 18,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      isMukabele ? '👑' : '🏆',
-                      style: const TextStyle(fontSize: 36),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    hatim.title,
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextColor,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      '✅ Hatm-i Şerif Başarıyla Tamamlandı (604 Sayfa)',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF10B981),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: primaryTextColor.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(20),
-                      border:
-                          Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('🤲 ', style: TextStyle(fontSize: 18)),
-                            Text(
-                              'Kuran-ı Kerim Hatim Duası',
-                              style: TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.bold,
-                                color: primaryTextColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'اللَّهُمَّ ارْحَمْنَا بِالقُرْآنِ، وَاجْعَلْهُ لَنَا إِمَاماً وَنُوراً وَهُدًى وَرَحْمَةً، اللَّهُمَّ ذَكِّرْنَا مِنْهُ مَا نَسِينَا، وَعَلِّمْنَا مِنْهُ مَا جَهِلْنَا، وَارْزُقْنَا تِلاَوَتَهُ آنَاءَ اللَّيْلِ وَأَطْرَافَ النَّهَارِ، وَاجْعَلْهُ لَنَا حُجَّةً يَا رَبَّ العَالَمِينَ.',
-                          textAlign: TextAlign.right,
-                          textDirection: TextDirection.rtl,
-                          style: TextStyle(
-                            fontFamily: ref.watch(arabicFontFamilyProvider),
-                            fontSize: 16,
-                            height: 1.8,
-                            letterSpacing: -0.1,
-                            color: const Color(0xFFD97706),
-                            fontWeight: ref.watch(isBoldArabicProvider) ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '\"Allah\'ım! Bize Kur\'ân ile merhamet eyle. Onu bizim için bir rehber, bir nûr, bir hidâyet ve bir rahmet kıl. Allah\'ım! Ondan unuttuklarımızı bize hatırlat, bilmediklerimizi bize öğret. Gece vakitlerinde ve gündüzün taraflarında onu okumayı bize nasip eyle. Onu lehimize hüccet kıl, ey Âlemlerin Rabbi!\"',
-                          style: TextStyle(
-                            fontSize: 13,
-                            height: 1.5,
-                            color: secondaryTextColor,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: primaryTextColor,
-                            side: BorderSide(
-                                color: Colors.grey.withValues(alpha: 0.3)),
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                          ),
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          child: const Text('Kapat'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: accent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                          ),
-                          onPressed: () {
-                            Navigator.of(ctx).pop();
-                            _openMushafPage(1, activeHatim: hatim);
-                          },
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Yeniden Oku',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+    HatimDuasiModal.show(
+      context,
+      completedHatim: hatim,
+      onRestartHatim: () => _openMushafPage(1, activeHatim: hatim),
     );
   }
 

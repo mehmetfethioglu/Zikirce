@@ -67,6 +67,9 @@ class AudioDownloadService {
   bool _isPaused = false;
   bool _isDownloading = false;
 
+  /// Prevents concurrent downloads of the same verse from colliding on .tmp files
+  static final Map<String, Future<bool>> _inFlightDownloads = {};
+
   final StreamController<AudioDownloadProgress> _progressController =
       StreamController<AudioDownloadProgress>.broadcast();
 
@@ -92,30 +95,70 @@ class AudioDownloadService {
     return p.join(soundsDir.path, 'audio_${surahId}_$ayahId.mp3');
   }
 
+  /// Validates that a local MP3 file exists, is non-empty, and is an authentic
+  /// Diyanet Hafız Osman Şahin recording (not a cached EveryAyah Alafasy or Mehmet Çevik file).
+  static bool isValidDiyanetAudioFile(File file) {
+    try {
+      if (!file.existsSync()) return false;
+      final len = file.lengthSync();
+      if (len <= 500) return false;
+      final raf = file.openSync(mode: FileMode.read);
+      try {
+        final header = raf.readSync(4);
+        if (header.length >= 4) {
+          final isEveryAyahCrc = header[0] == 0xFF && header[1] == 0xFA;
+          final isWrongBitrate = header[0] == 0xFF &&
+              header[1] == 0xFB &&
+              (header[2] & 0xF0) != 0x50;
+          final isMehmetCevikId3v23 = header[0] == 0x49 &&
+              header[1] == 0x44 &&
+              header[2] == 0x33 &&
+              header[3] == 0x03;
+
+          if (isEveryAyahCrc || isWrongBitrate || isMehmetCevikId3v23) {
+            try {
+              raf.closeSync();
+              file.deleteSync();
+            } catch (_) {}
+            return false;
+          }
+        }
+      } finally {
+        try {
+          raf.closeSync();
+        } catch (_) {}
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Synchronously checks if audio file exists if sounds directory is known
   static bool isAudioFileDownloaded(String soundsDirPath, int surahId, int ayahId) {
     final filePath = p.join(soundsDirPath, 'audio_${surahId}_$ayahId.mp3');
-    final file = File(filePath);
-    return file.existsSync() && file.lengthSync() > 0;
+    return isValidDiyanetAudioFile(File(filePath));
   }
 
   /// Checks if a verse audio is downloaded locally
   static Future<bool> isAudioDownloaded(int surahId, int ayahId) async {
     final path = await getLocalAudioPath(surahId, ayahId);
-    final file = File(path);
-    return file.existsSync() && file.lengthSync() > 0;
+    return isValidDiyanetAudioFile(File(path));
   }
 
-  /// Returns the primary Diyanet CDN URL for a verse
+  /// Returns the primary Diyanet CDN URL for a verse (always ar_osmanSahin for 100% reciter & word-sync consistency)
   static String getDiyanetAudioUrl(int surahId, int ayahId, {int? pageId}) {
-    final isMehmetCevik = (pageId != null && pageId >= 289 && pageId <= 292);
-    final baseUrl = isMehmetCevik
-        ? 'https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_mehmetCevik'
-        : 'https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin';
+    const baseUrl = 'https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin';
     return '$baseUrl/${surahId}_$ayahId.mp3';
   }
 
-  /// Returns EveryAyah fallback URL if Diyanet CDN fails
+  /// Returns secondary Diyanet CDN URL (ar_mehmetCevik) if primary CDN node fails
+  static String getDiyanetSecondaryAudioUrl(int surahId, int ayahId) {
+    const baseUrl = 'https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_mehmetCevik';
+    return '$baseUrl/${surahId}_$ayahId.mp3';
+  }
+
+  /// Returns EveryAyah fallback URL if Diyanet CDN is completely unreachable for streaming
   static String getFallbackAudioUrl(int surahId, int ayahId) {
     final s = surahId.toString().padLeft(3, '0');
     final a = ayahId.toString().padLeft(3, '0');
@@ -461,27 +504,42 @@ class AudioDownloadService {
     return isFullyCompleted;
   }
 
-  /// Downloads a single verse file with atomic .tmp write and multi-CDN fallback support
+  /// Downloads a single verse file with atomic .tmp write and in-flight lock
   Future<bool> _downloadSingleVerseFile(VerseAudioInfo verse, String soundsDirPath) async {
-    final finalPath = p.join(soundsDirPath, 'audio_${verse.surahId}_${verse.ayahId}.mp3');
-    final tmpPath = '$finalPath.tmp';
+    final key = '${verse.surahId}_${verse.ayahId}';
+    final existingFuture = _inFlightDownloads[key];
+    if (existingFuture != null) {
+      return existingFuture;
+    }
 
-    if (File(finalPath).existsSync() && File(finalPath).lengthSync() > 500) {
+    final future = _performSingleVerseDownload(verse, soundsDirPath);
+    _inFlightDownloads[key] = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightDownloads.remove(key);
+    }
+  }
+
+  Future<bool> _performSingleVerseDownload(VerseAudioInfo verse, String soundsDirPath) async {
+    final finalPath = p.join(soundsDirPath, 'audio_${verse.surahId}_${verse.ayahId}.mp3');
+    final tmpPath = '$finalPath.${DateTime.now().microsecondsSinceEpoch}.tmp';
+
+    if (isValidDiyanetAudioFile(File(finalPath))) {
       return true;
     }
 
     final diyanetUrl = getDiyanetAudioUrl(verse.surahId, verse.ayahId, pageId: verse.pageId);
-    final fallbackUrl = getFallbackAudioUrl(verse.surahId, verse.ayahId);
 
-    // 1. Primary: Diyanet CDN (Osman Şahin / Mehmet Çevik) - EXACT MATCH FOR WORD TIMESTAMPS
+    // Strictly use Diyanet CDN (Hafız Osman Şahin) so audio 100% matches ZikirceAudioSync.db word timestamps
     bool downloaded = await _tryDownloadUrl(diyanetUrl, tmpPath, timeoutSec: 15);
     if (!downloaded) {
-      // 2. Secondary Retry with Diyanet CDN
-      downloaded = await _tryDownloadUrl(diyanetUrl, tmpPath, timeoutSec: 10);
+      await Future.delayed(const Duration(milliseconds: 250));
+      downloaded = await _tryDownloadUrl(diyanetUrl, tmpPath, timeoutSec: 12);
     }
     if (!downloaded) {
-      // 3. Fallback to EveryAyah (Alafasy) only if Diyanet CDN is completely unreachable
-      downloaded = await _tryDownloadUrl(fallbackUrl, tmpPath, timeoutSec: 8);
+      await Future.delayed(const Duration(milliseconds: 500));
+      downloaded = await _tryDownloadUrl(diyanetUrl, tmpPath, timeoutSec: 15);
     }
 
     if (downloaded && File(tmpPath).existsSync() && File(tmpPath).lengthSync() > 500) {
@@ -496,6 +554,9 @@ class AudioDownloadService {
         return true;
       } catch (e) {
         debugPrint('[AudioDownloadService] Rename tmp failed: $e');
+        try {
+          tmpFile.deleteSync();
+        } catch (_) {}
         return false;
       }
     } else {
@@ -517,6 +578,10 @@ class AudioDownloadService {
           url,
           tmpPath,
           options: Options(
+            headers: const {
+              'Connection': 'close',
+              'User-Agent': 'Mozilla/5.0',
+            },
             responseType: ResponseType.bytes,
             followRedirects: true,
             receiveTimeout: Duration(seconds: timeoutSec),
@@ -529,7 +594,7 @@ class AudioDownloadService {
         }
       } catch (_) {
         if (retry == 0) {
-          await Future.delayed(const Duration(milliseconds: 150));
+          await Future.delayed(const Duration(milliseconds: 200));
         }
       }
     }
@@ -541,7 +606,7 @@ class AudioDownloadService {
     try {
       final soundsDir = await getSoundsDirectory();
       final localPath = p.join(soundsDir.path, 'audio_${surahId}_$ayahId.mp3');
-      if (File(localPath).existsSync() && File(localPath).lengthSync() > 0) {
+      if (isValidDiyanetAudioFile(File(localPath))) {
         return localPath;
       }
 
@@ -551,7 +616,7 @@ class AudioDownloadService {
         soundsDir.path,
       );
 
-      if (success && File(localPath).existsSync()) {
+      if (success && isValidDiyanetAudioFile(File(localPath))) {
         return localPath;
       }
     } catch (e) {

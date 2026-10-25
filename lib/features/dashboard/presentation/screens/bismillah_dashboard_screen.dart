@@ -274,13 +274,13 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
         count = goalsStatus.completedPrayersCount;
         target = 5;
         theme = ZikirShareCardTheme.turquoiseDome;
-      } else if (goalsStatus.isEzberGoalEnabled && goalsStatus.isEzberMet) {
+      } else if (goalsStatus.isEzberGoalEnabled && goalsStatus.isEzberMet && goalsStatus.todayEzberCount > 0) {
         goalName = 'Ezber & Hafızlık Gayreti';
         category = 'Ezber';
         count = goalsStatus.todayEzberCount;
         target = goalsStatus.ezberGoal;
         theme = ZikirShareCardTheme.royalAmethyst;
-      } else if (goalsStatus.isKazaGoalEnabled && goalsStatus.isKazaMet) {
+      } else if (goalsStatus.isKazaGoalEnabled && goalsStatus.isKazaMet && goalsStatus.todayKazaCount > 0) {
         goalName = 'Kaza Telafisi & İstiğfar';
         category = 'Kaza & Tövbe';
         count = goalsStatus.todayKazaCount;

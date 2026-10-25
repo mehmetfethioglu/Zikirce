@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/services/islamic_special_days_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../domain/share_card_data_helper.dart';
 import 'zikir_share_card_widget.dart';
 
@@ -17,6 +18,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
   final String zikirName;
   final String? arabicText;
   final String? virtue;
+  final String? customSource;
   final String category;
   final int currentCount;
   final int targetCount;
@@ -30,11 +32,12 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     required this.zikirName,
     this.arabicText,
     this.virtue,
+    this.customSource,
     required this.category,
     required this.currentCount,
     required this.targetCount,
     required this.totalCount,
-    this.arabicFontFamily = 'mushaf',
+    this.arabicFontFamily = 'AmasyaAbay',
     this.initialTheme,
     this.initialShowCounterStats = true,
   });
@@ -44,11 +47,12 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     required String zikirName,
     String? arabicText,
     String? virtue,
+    String? customSource,
     String category = 'Günlük Zikir',
     int currentCount = 0,
     int targetCount = 33,
     int totalCount = 0,
-    String arabicFontFamily = 'mushaf',
+    String arabicFontFamily = 'AmasyaAbay',
     ZikirShareCardTheme? initialTheme,
     bool initialShowCounterStats = true,
   }) {
@@ -62,6 +66,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
         zikirName: zikirName,
         arabicText: arabicText,
         virtue: virtue,
+        customSource: customSource,
         category: category,
         currentCount: currentCount,
         targetCount: targetCount,
@@ -89,6 +94,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   late String _activeCategory;
   String? _activeArabicText;
   String? _activeVirtue;
+  String? _activeSource;
   int _quoteIndex = 0;
 
   late bool _showCounterStats;
@@ -104,6 +110,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     _activeCategory = widget.category;
     _activeArabicText = widget.arabicText;
     _activeVirtue = widget.virtue;
+    _activeSource = widget.customSource;
     _showCounterStats = widget.initialShowCounterStats;
     _selectedTheme = widget.initialTheme ??
         ZikirShareThemeData.themeForGoalOrTask(
@@ -121,6 +128,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       _activeCategory = isTurkish ? preset.labelTr : preset.labelEn;
       _activeArabicText = null;
       _activeVirtue = null;
+      _activeSource = null;
       _quoteIndex = 0;
       _selectedTheme = ZikirShareThemeData.themeForGoalOrTask(
         goalType: preset.id,
@@ -135,6 +143,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     setState(() {
       _activeVirtue = null;
       _activeArabicText = null;
+      _activeSource = null;
       _quoteIndex = (_quoteIndex + 1) % topicQuotes.length;
     });
   }
@@ -154,7 +163,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
@@ -171,6 +180,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
         zikirName: _activeZikirName,
         category: _activeCategory,
         rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
+        customSource: (_quoteIndex == 0) ? _activeSource : null,
+        customArabic: (_quoteIndex == 0) ? _activeArabicText : null,
         quoteIndex: _quoteIndex,
       );
 
@@ -213,6 +224,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       zikirName: _activeZikirName,
       category: _activeCategory,
       rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
+      customSource: (_quoteIndex == 0) ? _activeSource : null,
+      customArabic: (_quoteIndex == 0) ? _activeArabicText : null,
       quoteIndex: _quoteIndex,
     );
 
@@ -243,6 +256,12 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       zikirName: _activeZikirName,
       category: _activeCategory,
     );
+    final isEzberGoalEnabled = ref.watch(
+      userSettingsProvider.select((s) => s.isHafizlikRepeatGoalEnabled),
+    );
+    final visibleGoalPresets = ShareCardDataHelper.goalPresets
+        .where((p) => p.id != 'ezber' || isEzberGoalEnabled || activePreset.id == 'ezber')
+        .toList();
     final topicQuotes = ShareCardDataHelper.getQuotesForTopic('$_activeZikirName $_activeCategory');
     final activeNoteList = isTurkish
         ? ShareCardDataHelper.spiritualNotesTr
@@ -348,7 +367,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 child: Row(
-                  children: ShareCardDataHelper.goalPresets.map((preset) {
+                  children: visibleGoalPresets.map((preset) {
                     final isSelected = activePreset.id == preset.id;
                     return Padding(
                       padding: const EdgeInsets.only(right: 6),
@@ -512,6 +531,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                     zikirName: _activeZikirName,
                     arabicText: _activeArabicText,
                     virtue: _activeVirtue,
+                    source: (_quoteIndex == 0) ? _activeSource : null,
                     specialDayGreeting: _selectedGreeting,
                     spiritualNote: activeSpiritualNote,
                     category: _activeCategory,

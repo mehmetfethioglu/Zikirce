@@ -18,6 +18,8 @@ import '../../../../core/session/session_providers.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/services/custom_badge_service.dart';
 import '../../../kuran/presentation/widgets/add_custom_quran_badge_sheet.dart';
+import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
+import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 
 enum TalimTargetType { page, surah, juz, ashr }
 
@@ -109,6 +111,12 @@ class _KelimeTakipliDinlemeScreenState
   bool _isCurrentScopeDownloaded = false;
   bool _hasMarkedSurahAsCompleted = false;
   int _lastHandledQueueIndex = -1;
+  int _queueGeneration = 0;
+  bool _isAdvancingWindowsItem = false;
+  DateTime _lastQueueTransitionTime = DateTime.fromMillisecondsSinceEpoch(0);
+  final Stopwatch _verseStopwatch = Stopwatch();
+  double _verseSeekAnchorMs = 0.0;
+  Timer? _wordSyncTimer;
 
   StreamSubscription? _posSub;
   StreamSubscription? _playerStateSub;
@@ -250,67 +258,201 @@ class _KelimeTakipliDinlemeScreenState
     }
   }
 
+  void _resetVerseClock({int seekMs = 0, bool isPlaying = true}) {
+    _verseSeekAnchorMs = seekMs.toDouble();
+    _verseStopwatch.reset();
+    final isReady = _player.processingState == ProcessingState.ready;
+    if (isPlaying && !_isAudioBuffering && isReady) {
+      _verseStopwatch.start();
+    }
+  }
+
+  double _currentEffectivePositionMs() {
+    if (_player.processingState == ProcessingState.loading ||
+        _player.processingState == ProcessingState.buffering ||
+        _player.processingState == ProcessingState.idle) {
+      return _verseSeekAnchorMs;
+    }
+
+    final stopwatchMs = _verseSeekAnchorMs +
+        (_verseStopwatch.elapsedMilliseconds * _playbackSpeed);
+    final playerMs = _player.position.inMilliseconds.toDouble();
+    final timeSinceTransitionMs =
+        DateTime.now().difference(_lastQueueTransitionTime).inMilliseconds;
+
+    // Handle LoopMode.one wrap-around when repeating a single verse
+    if ((_repeatMode == 0 || _isScopeLoopEnabled) &&
+        stopwatchMs > 1800 &&
+        playerMs >= 0 &&
+        playerMs < 600 &&
+        timeSinceTransitionMs > 1500) {
+      _verseSeekAnchorMs = playerMs;
+      _verseStopwatch.reset();
+      if (_isPlaying && !_isAudioBuffering) {
+        _verseStopwatch.start();
+      }
+      return playerMs;
+    }
+
+    if (!Platform.isWindows) {
+      if (timeSinceTransitionMs < 350 && playerMs > 1200 && _verseSeekAnchorMs == 0) {
+        return 0.0;
+      }
+      return playerMs.clamp(0.0, 600000.0);
+    }
+
+    if (timeSinceTransitionMs < 350 && playerMs > stopwatchMs + 300) {
+      return stopwatchMs.clamp(0.0, 600000.0);
+    }
+    if ((playerMs - stopwatchMs).abs() <= 280 && playerMs >= 0) {
+      return playerMs;
+    }
+    return stopwatchMs.clamp(0.0, 600000.0);
+  }
+
+  void _applyQueueIndexTransition(int qIdx) {
+    if (qIdx < 0 || qIdx >= _playlistItems.length || qIdx == _lastHandledQueueIndex) {
+      return;
+    }
+    _lastHandledQueueIndex = qIdx;
+    _lastQueueTransitionTime = DateTime.now();
+    final meta = _playlistItems[qIdx];
+    final prevVerseIndex = _currentVerseIndex;
+    final wasPlayingBesmele = _isPlayingBesmele;
+    _isPlayingBesmele = meta.isBesmele;
+    _currentVerseIndex = meta.verseIndex;
+    _resetVerseClock(seekMs: 0, isPlaying: _player.playing);
+
+    if (mounted) {
+      setState(() {
+        _activeWordOrder = meta.isBesmele ? 0 : 1;
+      });
+    }
+
+    if (!meta.isBesmele && (prevVerseIndex != _currentVerseIndex || wasPlayingBesmele)) {
+      _scrollToActiveVerse();
+      _prefetchUpcomingVerses(_currentVerseIndex);
+    }
+    _syncNowPlaying();
+  }
+
+  void _tickWordSync() {
+    if (!mounted) return;
+    if (!Platform.isWindows) {
+      final currentQIdx = _player.currentIndex;
+      if (currentQIdx != null && currentQIdx != _lastHandledQueueIndex) {
+        _applyQueueIndexTransition(currentQIdx);
+      }
+    }
+    if (_isPlayingBesmele) {
+      // 1_1.mp3 speech finishes at 6270ms ("er-Rahîm"); trim only trailing silence after 6380ms
+      final besmeleMs = _currentEffectivePositionMs();
+      if (besmeleMs >= 6380 &&
+          _lastHandledQueueIndex >= 0 &&
+          _lastHandledQueueIndex + 1 < _playlistItems.length) {
+        final nextIdx = _lastHandledQueueIndex + 1;
+        if (Platform.isWindows) {
+          if (!_isAdvancingWindowsItem) {
+            _isAdvancingWindowsItem = true;
+            unawaited(_playWindowsSingleQueueItem(nextIdx));
+          }
+        } else if (_player.hasNext) {
+          _applyQueueIndexTransition(nextIdx);
+          unawaited(_player.seek(Duration.zero, index: nextIdx));
+        }
+      }
+      return;
+    }
+    if (!_isPlaying && !_player.playing) return;
+    if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return;
+
+    final currentVerse = _verses[_currentVerseIndex];
+    final ms = _currentEffectivePositionMs();
+    final wordCount = _parseAyahWords(currentVerse.ayetText).length;
+
+    final activeWord = AudioSyncService.getActiveWordOrder(
+      currentVerse.sureId,
+      currentVerse.ayetId,
+      ms,
+      renderedWordCount: wordCount,
+    );
+
+    if (activeWord != _activeWordOrder && mounted) {
+      setState(() {
+        _activeWordOrder = activeWord;
+      });
+      _scrollToActiveWord();
+    }
+  }
+
   void _initAudioListeners() {
     _currentIndexSub = _player.currentIndexStream.listen((qIdx) {
-      if (qIdx == null ||
-          qIdx < 0 ||
-          qIdx >= _playlistItems.length ||
-          qIdx == _lastHandledQueueIndex) {
-        return;
-      }
-      _lastHandledQueueIndex = qIdx;
-      final meta = _playlistItems[qIdx];
-      final prevVerseIndex = _currentVerseIndex;
-      _isPlayingBesmele = meta.isBesmele;
-      _currentVerseIndex = meta.verseIndex;
-
-      if (mounted) {
-        setState(() {
-          _activeWordOrder = 0;
-        });
-      }
-
-      if (!meta.isBesmele && prevVerseIndex != _currentVerseIndex) {
-        _scrollToActiveVerse();
-        _prefetchUpcomingVerses(_currentVerseIndex);
-      }
-      _syncNowPlaying();
+      if (Platform.isWindows || qIdx == null) return;
+      _applyQueueIndexTransition(qIdx);
     });
 
-    _posSub = _player.positionStream.listen((pos) {
-      if (_isPlayingBesmele) return;
-      if (_verses.isEmpty || _currentVerseIndex >= _verses.length) return;
-      final currentVerse = _verses[_currentVerseIndex];
-      final ms = pos.inMilliseconds.toDouble();
+    _posSub = _player
+        .createPositionStream(
+          steps: 1000,
+          minPeriod: const Duration(milliseconds: 16),
+          maxPeriod: const Duration(milliseconds: 24),
+        )
+        .listen((_) => _tickWordSync());
 
-      final activeWord = AudioSyncService.getActiveWordOrder(
-        currentVerse.sureId,
-        currentVerse.ayetId,
-        ms,
-      );
-
-      if (activeWord != _activeWordOrder && mounted) {
-        setState(() {
-          _activeWordOrder = activeWord;
-        });
-        _scrollToActiveWord();
-      }
-    });
+    _wordSyncTimer?.cancel();
+    _wordSyncTimer = Timer.periodic(
+      const Duration(milliseconds: 20),
+      (_) => _tickWordSync(),
+    );
 
     _playerStateSub = _player.playerStateStream.listen((state) {
       if (!mounted) return;
       final wasPlaying = _isPlaying;
+      final isBuffering = state.processingState == ProcessingState.buffering ||
+          state.processingState == ProcessingState.loading;
+      final isReady = state.processingState == ProcessingState.ready;
+
+      if (state.playing && isReady) {
+        if (!_verseStopwatch.isRunning) {
+          _verseStopwatch.start();
+        }
+      } else {
+        if (_verseStopwatch.isRunning) {
+          _verseStopwatch.stop();
+        }
+      }
+
       setState(() {
         _isPlaying = state.playing;
-        _isAudioBuffering = state.processingState == ProcessingState.buffering ||
-            state.processingState == ProcessingState.loading;
+        _isAudioBuffering = isBuffering;
       });
       if (wasPlaying != state.playing) {
         _syncNowPlaying();
       }
 
       if (state.processingState == ProcessingState.completed) {
-        _handlePlaylistCompleted();
+        if (Platform.isWindows) {
+          if (!_isAdvancingWindowsItem &&
+              _verseStopwatch.elapsedMilliseconds > 220) {
+            _isAdvancingWindowsItem = true;
+            if (_repeatMode == 0 && !_isPlayingBesmele) {
+              unawaited(_playWindowsSingleQueueItem(_lastHandledQueueIndex));
+            } else if (_lastHandledQueueIndex >= 0 &&
+                _lastHandledQueueIndex + 1 < _playlistItems.length) {
+              unawaited(_playWindowsSingleQueueItem(_lastHandledQueueIndex + 1));
+            } else {
+              _isAdvancingWindowsItem = false;
+              _handlePlaylistCompleted();
+            }
+          }
+        } else {
+          final atLastQueueItem = _playlistItems.isEmpty ||
+              ((_player.currentIndex ?? _lastHandledQueueIndex) >=
+                  _playlistItems.length - 1);
+          if (atLastQueueItem && _verseStopwatch.elapsedMilliseconds > 350) {
+            _handlePlaylistCompleted();
+          }
+        }
       }
     });
   }
@@ -699,12 +841,14 @@ class _KelimeTakipliDinlemeScreenState
   }) {
     final localPath = '$soundsDirPath${Platform.pathSeparator}audio_${surahId}_$ayahId.mp3';
     final localFile = File(localPath);
-    if (localFile.existsSync() && localFile.lengthSync() > 1024) {
+    if (AudioDownloadService.isValidDiyanetAudioFile(localFile)) {
       return AudioSource.file(localPath);
     }
-    final url = useFallbackCdn
-        ? AudioDownloadService.getFallbackAudioUrl(surahId, ayahId)
-        : AudioDownloadService.getDiyanetAudioUrl(surahId, ayahId, pageId: pageId);
+    final url = AudioDownloadService.getDiyanetAudioUrl(
+      surahId,
+      ayahId,
+      pageId: pageId,
+    );
     return AudioSource.uri(Uri.parse(url));
   }
 
@@ -722,6 +866,92 @@ class _KelimeTakipliDinlemeScreenState
     }
   }
 
+  Future<void> _playWindowsSingleQueueItem(
+    int qIdx, {
+    int seekMs = 0,
+    bool useFallbackCdn = false,
+  }) async {
+    if (qIdx < 0 || qIdx >= _playlistItems.length || _verses.isEmpty) {
+      _isAdvancingWindowsItem = false;
+      return;
+    }
+
+    final myGen = ++_queueGeneration;
+    _isAdvancingWindowsItem = true;
+    final meta = _playlistItems[qIdx];
+    final prevVerseIndex = _currentVerseIndex;
+    final wasPlayingBesmele = _isPlayingBesmele;
+
+    _lastHandledQueueIndex = qIdx;
+    _lastQueueTransitionTime = DateTime.now();
+    _isPlayingBesmele = meta.isBesmele;
+    _currentVerseIndex = meta.verseIndex;
+    _resetVerseClock(seekMs: seekMs, isPlaying: false);
+
+    if (mounted) {
+      setState(() {
+        _activeWordOrder = meta.isBesmele ? 0 : 1;
+      });
+    }
+
+    try {
+      final soundsDir = await AudioDownloadService.getSoundsDirectory();
+      final soundsDirPath = soundsDir.path;
+      final verse = _verses[meta.verseIndex];
+      final targetSurah = meta.isBesmele ? 1 : verse.sureId;
+      final targetAyah = meta.isBesmele ? 1 : verse.ayetId;
+      final targetPage = meta.isBesmele ? 1 : verse.page;
+
+      await AudioDownloadService.ensureVerseDownloaded(
+        targetSurah,
+        targetAyah,
+        pageId: targetPage,
+      ).timeout(const Duration(milliseconds: 1800), onTimeout: () => null);
+
+      if (!mounted || myGen != _queueGeneration) return;
+
+      final source = _createAyahAudioSource(
+        soundsDirPath,
+        targetSurah,
+        targetAyah,
+        pageId: targetPage,
+        useFallbackCdn: useFallbackCdn,
+      );
+
+      await _player.setLoopMode(LoopMode.off);
+      await _player.setAudioSource(
+        source,
+        initialPosition:
+            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+      );
+
+      if (!mounted || myGen != _queueGeneration) return;
+
+      await _player.setSpeed(_playbackSpeed);
+      _lastQueueTransitionTime = DateTime.now();
+      _isAdvancingWindowsItem = false;
+      _resetVerseClock(seekMs: seekMs, isPlaying: true);
+      unawaited(_player.play());
+
+      if (!meta.isBesmele &&
+          (prevVerseIndex != _currentVerseIndex || wasPlayingBesmele)) {
+        _scrollToActiveVerse();
+        _prefetchUpcomingVerses(_currentVerseIndex);
+      }
+      _syncNowPlaying();
+    } catch (e) {
+      _isAdvancingWindowsItem = false;
+      debugPrint('[KelimeTakipliDinlemeScreen] Windows single item error: $e');
+      if (!useFallbackCdn && myGen == _queueGeneration) {
+        await _playWindowsSingleQueueItem(
+          qIdx,
+          seekMs: seekMs,
+          useFallbackCdn: true,
+        );
+      }
+    }
+  }
+
   Future<void> _buildAndPlayQueue(
     int startVerseIndex, {
     required bool includeInitialBesmele,
@@ -731,6 +961,8 @@ class _KelimeTakipliDinlemeScreenState
     if (_verses.isEmpty || startVerseIndex < 0 || startVerseIndex >= _verses.length) {
       return;
     }
+
+    final myQueueGen = ++_queueGeneration;
 
     if (mounted) {
       setState(() {
@@ -752,6 +984,32 @@ class _KelimeTakipliDinlemeScreenState
     try {
       final soundsDir = await AudioDownloadService.getSoundsDirectory();
       final soundsDirPath = soundsDir.path;
+
+      final startVerse = _verses[startVerseIndex];
+      final startWantsBesmele = includeInitialBesmele &&
+          seekMs == 0 &&
+          _shouldPlayBesmeleForVerse(startVerse, isSessionStart: true);
+      final preloadTasks = <Future<void>>[];
+      if (startWantsBesmele) {
+        preloadTasks.add(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
+      }
+      for (int offset = 0; offset < 6; offset++) {
+        final idx = startVerseIndex + offset;
+        if (idx < _verses.length) {
+          final pv = _verses[idx];
+          preloadTasks.add(AudioDownloadService.ensureVerseDownloaded(
+            pv.sureId,
+            pv.ayetId,
+            pageId: pv.page,
+          ));
+        }
+      }
+      await Future.wait(preloadTasks).timeout(
+        const Duration(milliseconds: 2200),
+        onTimeout: () => const [],
+      );
+
+      if (!mounted || myQueueGen != _queueGeneration) return;
 
       final children = <AudioSource>[];
       final metas = <_PlaylistItemMeta>[];
@@ -811,12 +1069,22 @@ class _KelimeTakipliDinlemeScreenState
 
       _playlistItems = metas;
       _lastHandledQueueIndex = initialQueueIndex;
+      _lastQueueTransitionTime = DateTime.now();
       final initialMeta = metas[initialQueueIndex];
       _isPlayingBesmele = initialMeta.isBesmele;
       _currentVerseIndex = initialMeta.verseIndex;
 
       if (mounted) {
         setState(() {});
+      }
+
+      if (Platform.isWindows) {
+        await _playWindowsSingleQueueItem(
+          initialQueueIndex,
+          seekMs: seekMs,
+          useFallbackCdn: useFallbackCdn,
+        );
+        return;
       }
 
       if (_repeatMode == 0) {
@@ -838,14 +1106,24 @@ class _KelimeTakipliDinlemeScreenState
         initialPosition:
             seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
       );
+
+      if (!mounted || myQueueGen != _queueGeneration) return;
+
+      _lastHandledQueueIndex = initialQueueIndex;
+      _lastQueueTransitionTime = DateTime.now();
+      _isPlayingBesmele = initialMeta.isBesmele;
+      _currentVerseIndex = initialMeta.verseIndex;
+      _resetVerseClock(seekMs: seekMs, isPlaying: true);
+
       await _player.setSpeed(_playbackSpeed);
-      await _player.play();
+      unawaited(_player.play());
+      _resetVerseClock(seekMs: seekMs, isPlaying: true);
       _syncNowPlaying();
       _scrollToActiveVerse();
       _prefetchUpcomingVerses(_currentVerseIndex);
     } catch (e) {
       debugPrint('[KelimeTakipliDinlemeScreen] Playlist playback error: $e');
-      if (!useFallbackCdn) {
+      if (!useFallbackCdn && myQueueGen == _queueGeneration) {
         await _buildAndPlayQueue(
           startVerseIndex,
           includeInitialBesmele: includeInitialBesmele,
@@ -867,35 +1145,43 @@ class _KelimeTakipliDinlemeScreenState
     if (verseIndex < 0 || verseIndex >= _verses.length) return;
 
     // Seek directly within active native queue if already loaded
-    if (_playlistItems.isNotEmpty &&
-        _player.audioSource != null &&
-        _player.processingState != ProcessingState.idle &&
-        _player.processingState != ProcessingState.completed) {
+    if (_playlistItems.isNotEmpty) {
       final targetQIdx = _playlistItems.indexWhere(
         (m) => m.verseIndex == verseIndex && !m.isBesmele && m.repeatIteration == 0,
       );
       if (targetQIdx != -1) {
-        _lastHandledQueueIndex = targetQIdx;
-        _isPlayingBesmele = false;
-        _currentVerseIndex = verseIndex;
-        if (mounted) {
-          setState(() {
-            _activeWordOrder = 0;
-          });
-        }
-        try {
-          await _player.seek(
-            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
-            index: targetQIdx,
-          );
-          if (!_player.playing) {
-            await _player.play();
-          }
-          _syncNowPlaying();
-          _scrollToActiveVerse();
-          _prefetchUpcomingVerses(verseIndex);
+        if (Platform.isWindows) {
+          await _playWindowsSingleQueueItem(targetQIdx, seekMs: seekMs);
           return;
-        } catch (_) {}
+        }
+        if (_player.audioSource != null &&
+            _player.processingState != ProcessingState.idle &&
+            _player.processingState != ProcessingState.completed) {
+          _lastHandledQueueIndex = targetQIdx;
+          _lastQueueTransitionTime = DateTime.now();
+          _isPlayingBesmele = false;
+          _currentVerseIndex = verseIndex;
+          _resetVerseClock(seekMs: seekMs, isPlaying: true);
+          if (mounted) {
+            setState(() {
+              _activeWordOrder = 0;
+            });
+          }
+          try {
+            await _player.seek(
+              seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
+              index: targetQIdx,
+            );
+            if (!_player.playing) {
+              unawaited(_player.play());
+            }
+            _resetVerseClock(seekMs: seekMs, isPlaying: true);
+            _syncNowPlaying();
+            _scrollToActiveVerse();
+            _prefetchUpcomingVerses(verseIndex);
+            return;
+          } catch (_) {}
+        }
       }
     }
 
@@ -952,6 +1238,7 @@ class _KelimeTakipliDinlemeScreenState
 
   void _togglePlayPause() {
     if (_isPlaying) {
+      _verseStopwatch.stop();
       _player.pause();
     } else {
       if (_player.processingState == ProcessingState.completed ||
@@ -959,6 +1246,7 @@ class _KelimeTakipliDinlemeScreenState
         _buildAndPlayQueue(_currentVerseIndex, includeInitialBesmele: false);
       } else {
         AudioSyncService.configureAudioSession();
+        _verseStopwatch.start();
         _player.play();
       }
     }
@@ -968,6 +1256,11 @@ class _KelimeTakipliDinlemeScreenState
     const speeds = [0.75, 1.0, 1.25, 1.5];
     final nextIndex = (speeds.indexOf(_playbackSpeed) + 1) % speeds.length;
     final newSpeed = speeds[nextIndex];
+    _verseSeekAnchorMs = _currentEffectivePositionMs();
+    _verseStopwatch.reset();
+    if (_isPlaying && !_isAudioBuffering) {
+      _verseStopwatch.start();
+    }
     setState(() {
       _playbackSpeed = newSpeed;
     });
@@ -1007,6 +1300,10 @@ class _KelimeTakipliDinlemeScreenState
     if (verseIndex == _currentVerseIndex && _player.duration != null) {
       if (ts != null) {
         final seekTarget = (ts.startTime - 25.0).clamp(0.0, 999999.0).toInt();
+        _resetVerseClock(seekMs: seekTarget, isPlaying: true);
+        setState(() {
+          _activeWordOrder = wordOrder;
+        });
         _player.seek(Duration(milliseconds: seekTarget));
         if (!_isPlaying) _player.play();
       }
@@ -1139,6 +1436,8 @@ class _KelimeTakipliDinlemeScreenState
   void dispose() {
     IosNowPlayingService.setRemoteCommandCallback(null);
     IosNowPlayingService.clearNowPlaying();
+    _wordSyncTimer?.cancel();
+    _verseStopwatch.stop();
     _currentIndexSub?.cancel();
     _posSub?.cancel();
     _playerStateSub?.cancel();
@@ -1227,7 +1526,7 @@ class _KelimeTakipliDinlemeScreenState
           ),
           IconButton(
             icon: Icon(
-              _showMeal ? Icons.translate_rounded : Icons.g_translate_rounded,
+              _showMeal ? Icons.auto_stories_rounded : Icons.menu_book_outlined,
               color: _showMeal ? accentTeal : secondaryTextColor,
               size: 22,
             ),
@@ -1353,21 +1652,55 @@ class _KelimeTakipliDinlemeScreenState
                                     ),
                                   ],
                                 ),
-                                IconButton(
-                                  icon: Icon(
-                                    isCurrentVerse && _isPlaying
-                                        ? Icons.pause_circle_filled_rounded
-                                        : Icons.play_circle_fill_rounded,
-                                    color: isCurrentVerse ? accentTeal : secondaryTextColor,
-                                    size: 28,
-                                  ),
-                                  onPressed: () {
-                                    if (isCurrentVerse) {
-                                      _togglePlayPause();
-                                    } else {
-                                      _goToVerse(vIdx);
-                                    }
-                                  },
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.share_rounded,
+                                        color: isCurrentVerse ? accentTeal : secondaryTextColor,
+                                        size: 20,
+                                      ),
+                                      tooltip: 'Ayet ve Mealini Paylaş',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () {
+                                        HapticService.selectionClick();
+                                        final surahTitle =
+                                            verse.sure?.sureNameTurkish ?? '${verse.sureId}. Sûre';
+                                        ZikirSharePreviewModal.show(
+                                          context: context,
+                                          zikirName: '$surahTitle • ${verse.ayetId}. Âyet',
+                                          arabicText: QuranWordHighlighter.cleanArabicText(verse.ayetText),
+                                          virtue: (mealText != null && mealText.isNotEmpty)
+                                              ? mealText
+                                              : verse.ayetText,
+                                          customSource: '$surahTitle Sûresi, ${verse.ayetId}. Âyet',
+                                          category: 'Kur’an',
+                                          currentCount: verse.page,
+                                          targetCount: 604,
+                                          totalCount: verse.page,
+                                          initialTheme: ZikirShareCardTheme.emeraldSufi,
+                                          initialShowCounterStats: false,
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        isCurrentVerse && _isPlaying
+                                            ? Icons.pause_circle_filled_rounded
+                                            : Icons.play_circle_fill_rounded,
+                                        color: isCurrentVerse ? accentTeal : secondaryTextColor,
+                                        size: 28,
+                                      ),
+                                      onPressed: () {
+                                        if (isCurrentVerse) {
+                                          _togglePlayPause();
+                                        } else {
+                                          _goToVerse(vIdx);
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1473,6 +1806,9 @@ class _KelimeTakipliDinlemeScreenState
     final divineColor = QuranWordHighlighter.getDivineWordColor(isDark);
     final waqfColor = isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
+    final isArrowTracking = ref.watch(
+      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -1497,6 +1833,12 @@ class _KelimeTakipliDinlemeScreenState
                 final stops = wordData.stops;
                 final isDivine = pureWord.isNotEmpty && QuranWordHighlighter.isDivineWord(pureWord);
 
+                final activeArrowTextColor = isDivine
+                    ? divineColor
+                    : (isDark
+                        ? const Color(0xFFFBBF24)
+                        : const Color(0xFF047857));
+
                 return Row(
                   key: isWordActive ? _activeWordKey : null,
                   mainAxisSize: MainAxisSize.min,
@@ -1507,15 +1849,21 @@ class _KelimeTakipliDinlemeScreenState
                         onTap: () => _onWordTapped(verseIndex, wordOrder),
                         borderRadius: BorderRadius.circular(10),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          duration: const Duration(milliseconds: 45),
+                          padding: isArrowTracking
+                              ? const EdgeInsets.fromLTRB(6, 2, 6, 13)
+                              : const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
-                            color: isWordActive
+                            color: (!isArrowTracking && isWordActive)
                                 ? (isDark ? const Color(0xFF059669) : const Color(0xFF10B981))
-                                : Colors.transparent,
+                                : (isArrowTracking && isWordActive
+                                    ? (isDark
+                                        ? const Color(0xFFFBBF24).withValues(alpha: 0.08)
+                                        : const Color(0xFF10B981).withValues(alpha: 0.08))
+                                    : Colors.transparent),
                             borderRadius: BorderRadius.circular(10),
                             boxShadow: [
-                              if (isWordActive)
+                              if (!isArrowTracking && isWordActive)
                                 BoxShadow(
                                   color: const Color(0xFF10B981).withValues(alpha: 0.6),
                                   blurRadius: 12,
@@ -1524,18 +1872,43 @@ class _KelimeTakipliDinlemeScreenState
                                 ),
                             ],
                           ),
-                          child: Text(
-                            isMasked ? '••••' : pureWord,
-                            style: TextStyle(
-                              fontFamily: fontFamily,
-                              fontSize: _fontSize,
-                              fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                              color: isWordActive
-                                  ? Colors.white
-                                  : (isDivine ? divineColor : (isDark ? Colors.white : const Color(0xFF1E2B27))),
-                              height: 1.6,
-                              letterSpacing: -0.1,
-                            ),
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.bottomCenter,
+                            children: [
+                              Text(
+                                isMasked ? '••••' : pureWord,
+                                style: TextStyle(
+                                  fontFamily: fontFamily,
+                                  fontSize: _fontSize,
+                                  fontWeight: (isBoldArabic ||
+                                          (isArrowTracking && isWordActive))
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isWordActive
+                                      ? (isArrowTracking
+                                          ? activeArrowTextColor
+                                          : Colors.white)
+                                      : (isDivine
+                                          ? divineColor
+                                          : (isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E2B27))),
+                                  height: 1.6,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                              if (isArrowTracking && isWordActive)
+                                Positioned(
+                                  bottom: -11,
+                                  left: 0,
+                                  right: 0,
+                                  child: QuranWordTrackingPointer(
+                                    isDark: isDark,
+                                    height: 11.0,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ),

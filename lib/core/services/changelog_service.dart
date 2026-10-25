@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum ChangelogType {
@@ -48,11 +51,51 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 63;
-  static const String currentVersionName = '2.1.8';
+  static const int currentVersionCode = 64;
+  static const String currentVersionName = '2.1.9';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 64,
+      versionName: '2.1.9',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Matbû Kur’ân-ı Kerîm Hatim Duası & Mushaf Sahife Görünümü',
+          titleEn: 'Printed Mushaf Khatm Prayer & Illuminated Page Layout',
+          descTr: 'Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi’l-Kur’âni’l-Azîm), varsayılan Matbû Arapça sahife görünümü, Kur’ân okuma sayfasıyla birebir aynı Diyanet hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.',
+          descEn: 'Added the complete traditional Khatm al-Quran Prayer with default Printed Mushaf Arabic layout, authentic Diyanet calligraphy, Divine Name highlighting, and Seljuk rosette verse markers.',
+          icon: Icons.menu_book_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '4 Modlu Kur’ân Okuma, 7 Meâl Kıyaslama & 5 Klasik Tefsir',
+          titleEn: '4-Mode Quran Reader, 7 Translations & 5 Classical Tafseers',
+          descTr: 'Mushaf, Âyet+Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir modları; 7 Türkçe meâl karşılaştırması ve Kur’ân Yolu, Beyzâvî, Mâtürîdî, Keşşâf ve Râzî tam metin tefsir kütüphanesi entegre edildi.',
+          descEn: 'Introduced 4 reading modes (Mushaf, Verse+Translation, Flowing Book, In-Page Tafseer), 7 comparative Turkish translations, and 5 full-text classical Tafseer works.',
+          icon: Icons.auto_stories_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '23 Eserlik İslami Külliyat & Ok ile Kelime Takibi',
+          titleEn: '23-Volume Islamic Library & Arrow Word Tracking',
+          descTr: 'Kütüb-i Sitte, Riyâzü’s-Sâlihîn ve Risale-i Nur Külliyatı tek raflı Külliyat kütüphanesine eklendi; sesli tilâvette "Ok ile Takip" işaretçisi ve 6.236 âyetlik hassas akustik senkronizasyon sunuldu.',
+          descEn: 'Added a 23-volume Islamic Library (Kutub al-Sittah, Riyad as-Salihin, Risale-i Nur) and introduced the "Arrow Pointer" word-tracking mode with acoustic sync across all 6,236 verses.',
+          icon: Icons.collections_bookmark_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'İnteraktif Kullanım Kılavuzu & 146 Zikir Sahih Hadis Kaynakları',
+          titleEn: 'Interactive User Guide & Authentic Hadith References',
+          descTr: 'Ayarlar’a anlık aramalı kapsamlı Kullanım Kılavuzu eklendi; 99 Esmâü’l-Hüsnâ ve tüm zikirler Kütüb-i Sitte sahih hadis kaynaklarıyla zenginleştirildi.',
+          descEn: 'Added an interactive searchable User Guide in Settings and enriched all 146 default dhikrs and 99 Names of Allah with authentic Hadith citations.',
+          icon: Icons.help_center_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 63,
       versionName: '2.1.8',
@@ -459,6 +502,7 @@ class ChangelogService {
   /// Sadece daha önce uygulamayı kullanmış ve yeni sürüme geçmiş kullanıcılarda `true` döner.
   static Future<bool> shouldShowWhatsNew() async {
     final prefs = await SharedPreferences.getInstance();
+    final targetCode = effectiveVersionCode;
     if (!prefs.containsKey(_prefKeyLastSeenVersionCode)) {
       // Eğer anahtar hiç yoksa:
       // Kullanıcı eski bir sürümden geliyorsa (örneğin onboarding tamamlanmışsa) yenilikleri göster.
@@ -468,21 +512,134 @@ class ChangelogService {
         return true;
       } else {
         // Yeni kurulum: Mevcut sürümü görüldü işaretle, onboarding sonrası rahatsız etme.
-        await prefs.setInt(_prefKeyLastSeenVersionCode, currentVersionCode);
+        await prefs.setInt(_prefKeyLastSeenVersionCode, targetCode);
         return false;
       }
     }
 
     final lastSeen = prefs.getInt(_prefKeyLastSeenVersionCode) ?? 0;
-    return lastSeen < currentVersionCode;
+    return lastSeen < targetCode;
   }
 
   /// Mevcut sürümü görüldü olarak kaydet
   static Future<void> markCurrentVersionAsSeen() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_prefKeyLastSeenVersionCode, currentVersionCode);
+    await prefs.setInt(_prefKeyLastSeenVersionCode, effectiveVersionCode);
   }
 
   /// En güncel sürüm kaydı
   static ChangelogRelease get latestRelease => releases.first;
+
+  /// Derleme zamanı (--dart-define) veya ChangelogService üzerindeki en güncel sürüm adı
+  static String get effectiveVersionName {
+    const envName = String.fromEnvironment('FLUTTER_BUILD_NAME');
+    if (envName.isNotEmpty) return envName;
+    if (releases.isNotEmpty && releases.first.versionCode >= currentVersionCode) {
+      return releases.first.versionName;
+    }
+    return currentVersionName;
+  }
+
+  /// Derleme zamanı (--dart-define) veya ChangelogService üzerindeki en güncel yapı numarası
+  static int get effectiveVersionCode {
+    const envNumber = String.fromEnvironment('FLUTTER_BUILD_NUMBER');
+    final parsedEnv = int.tryParse(envNumber);
+    if (parsedEnv != null && parsedEnv > 0) return parsedEnv;
+    if (releases.isNotEmpty && releases.first.versionCode > currentVersionCode) {
+      return releases.first.versionCode;
+    }
+    return currentVersionCode;
+  }
+
+  static ({String versionName, int versionCode})? _cachedRuntimeVersion;
+
+  /// Platform (Android PackageInfo / iOS Info.plist / Masaüstü pubspec.yaml) ve
+  /// ChangelogService sürümlerini karşılaştırarak en güncel (versionName, versionCode) çiftini döner.
+  /// Böylece pubspec.yaml veya ChangelogService güncellendiğinde Ayarlar ekranı otomatik güncellenir.
+  static Future<({String versionName, int versionCode})> getRuntimeVersion() async {
+    if (_cachedRuntimeVersion != null) return _cachedRuntimeVersion!;
+
+    String bestName = effectiveVersionName;
+    int bestCode = effectiveVersionCode;
+
+    if (!kIsWeb) {
+      try {
+        if (Platform.isAndroid) {
+          const channel = MethodChannel('com.akarworks.zikirce/battery_optimization');
+          final res = await channel.invokeMapMethod<String, dynamic>('getAppVersion');
+          if (res != null) {
+            final nativeName = (res['versionName'] as String?)?.trim() ?? '';
+            final nativeCode = (res['versionCode'] as num?)?.toInt() ?? 0;
+            if (nativeCode > bestCode ||
+                (nativeCode == bestCode &&
+                    nativeName.isNotEmpty &&
+                    _compareSemVer(nativeName, bestName) > 0)) {
+              bestCode = nativeCode;
+              bestName = nativeName;
+            }
+          }
+        } else if (Platform.isIOS) {
+          const channel = MethodChannel('com.akarworks.zikirce/audio_background');
+          final res = await channel.invokeMapMethod<String, dynamic>('getAppVersion');
+          if (res != null) {
+            final nativeName = (res['versionName'] as String?)?.trim() ?? '';
+            final nativeCode = (res['versionCode'] as num?)?.toInt() ?? 0;
+            if (nativeCode > bestCode ||
+                (nativeCode == bestCode &&
+                    nativeName.isNotEmpty &&
+                    _compareSemVer(nativeName, bestName) > 0)) {
+              bestCode = nativeCode;
+              bestName = nativeName;
+            }
+          }
+        } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+          final pubspecFile = File('pubspec.yaml');
+          if (await pubspecFile.exists()) {
+            final content = await pubspecFile.readAsString();
+            final match = RegExp(r'^version:\s*([0-9]+\.[0-9]+\.[0-9]+)(?:\+([0-9]+))?', multiLine: true)
+                .firstMatch(content);
+            if (match != null) {
+              final pubName = match.group(1) ?? '';
+              final pubCode = int.tryParse(match.group(2) ?? '') ?? bestCode;
+              if (pubCode > bestCode ||
+                  (pubCode == bestCode &&
+                      pubName.isNotEmpty &&
+                      _compareSemVer(pubName, bestName) > 0)) {
+                bestCode = pubCode;
+                bestName = pubName;
+              }
+            }
+          }
+        }
+      } catch (_) {
+        // Fallback to effectiveVersionName / effectiveVersionCode
+      }
+    }
+
+    final resolved = (versionName: bestName, versionCode: bestCode);
+    _cachedRuntimeVersion = resolved;
+    return resolved;
+  }
+
+  /// Dil tercihine göre standart sürüm etiketi üretir: "Versiyon 2.1.8 (Build 63)"
+  static String formatVersionLabel({
+    required bool isTurkish,
+    String? versionName,
+    int? versionCode,
+  }) {
+    final vName = (versionName != null && versionName.isNotEmpty) ? versionName : effectiveVersionName;
+    final vCode = (versionCode != null && versionCode > 0) ? versionCode : effectiveVersionCode;
+    return isTurkish ? 'Versiyon $vName (Build $vCode)' : 'Version $vName (Build $vCode)';
+  }
+
+  static int _compareSemVer(String a, String b) {
+    final aParts = a.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final bParts = b.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    for (int i = 0; i < 3; i++) {
+      final av = i < aParts.length ? aParts[i] : 0;
+      final bv = i < bParts.length ? bParts[i] : 0;
+      if (av != bv) return av.compareTo(bv);
+    }
+    return 0;
+  }
 }

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../dashboard/presentation/widgets/streak_share_preview_modal.dart';
+import '../../providers/settings_provider.dart';
 import '../../../zikir/domain/share_card_data_helper.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
@@ -14,11 +16,21 @@ class ShareCardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final streakAsync = ref.watch(userStreakStreamProvider);
+    final isEzberGoalEnabled = ref.watch(
+      userSettingsProvider.select((s) => s.isHafizlikRepeatGoalEnabled),
+    );
+    final visiblePresets = ShareCardDataHelper.goalPresets
+        .where((p) => p.id != 'ezber' || isEzberGoalEnabled)
+        .take(6)
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.darkBackground,
       appBar: AppBar(
-        title: Text('Manevi Paylaşım Stüdyosu', style: AppTypography.headingSmall(color: Colors.white)),
+        title: Text(
+          'Manevi Paylaşım Stüdyosu',
+          style: AppTypography.headingSmall(color: Colors.white),
+        ),
       ),
       body: streakAsync.when(
         data: (streak) {
@@ -30,88 +42,127 @@ class ShareCardScreen extends ConsumerWidget {
             child: Column(
               children: [
                 const Spacer(),
-                // Luxury Share Card Preview
+                // Tahrir Estetiği Önizleme Kartı
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(28),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 30,
+                  ),
                   decoration: BoxDecoration(
-                    gradient: AppColors.emeraldGradient,
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(color: AppColors.gold500.withValues(alpha: 0.5), width: 2),
+                    color: const Color(0xFFF7EEDB),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: const Color(0xFFDFD1B8),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.gold500.withValues(alpha: 0.2),
-                        blurRadius: 32,
-                        spreadRadius: 4,
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 28,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 54,
-                        height: 54,
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.gold400, width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.gold400.withValues(alpha: 0.3),
-                              blurRadius: 12,
-                            ),
-                          ],
+                      Text(
+                        '“',
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 44,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFA64B2A),
+                          height: 0.75,
                         ),
-                        child: Image.asset('assets/images/zikirce_logo.png', fit: BoxFit.contain),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Kalpler ancak Allah’ı anmakla huzur bulur.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF382A1E),
+                          height: 1.42,
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        '“Kalpler ancak Allah’ı anmakla huzur bulur.”',
-                        textAlign: TextAlign.center,
-                        style: AppTypography.headingSmall(color: Colors.white),
+                      Container(
+                        width: 44,
+                        height: 1.5,
+                        color: const Color(0xFFA64B2A).withValues(alpha: 0.65),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        '(Ra’d Sûresi, 28)',
-                        style: TextStyle(color: AppColors.gold300, fontSize: 13),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Ra’d Sûresi, 28. Âyet',
+                        style: GoogleFonts.outfit(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF382A1E),
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         alignment: WrapAlignment.center,
-                        children: ShareCardDataHelper.goalPresets.take(6).map((preset) {
+                        children: visiblePresets.map((preset) {
                           return ActionChip(
-                            backgroundColor: Colors.black26,
-                            side: BorderSide(color: AppColors.gold500.withValues(alpha: 0.4)),
+                            backgroundColor: const Color(0xFFEFE2C8),
+                            side: const BorderSide(color: Color(0xFFD5C3A3)),
                             label: Text(
                               '${preset.emoji} ${preset.labelTr}',
-                              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                color: Color(0xFF382A1E),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             onPressed: () {
                               ZikirSharePreviewModal.show(
                                 context: context,
                                 zikirName: preset.badgeTitleTr,
                                 category: preset.labelTr,
-                                initialTheme: ZikirShareThemeData.themeForGoalOrTask(goalType: preset.id),
+                                initialTheme:
+                                    ZikirShareThemeData.themeForGoalOrTask(
+                                  goalType: preset.id,
+                                ),
                                 initialShowCounterStats: false,
                               );
                             },
                           );
                         }).toList(),
                       ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Zikirce — İslâmî Yaşam ve Zikir Asistanı',
-                        style: TextStyle(color: Color(0xFFD4EBE4), fontSize: 11),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/zikirce_logo.png',
+                            width: 34,
+                            height: 34,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.medium,
+                            isAntiAlias: true,
+                          ),
+                          const SizedBox(width: 9),
+                          Text(
+                            'Zikirce',
+                            style: GoogleFonts.outfit(
+                              color: const Color(0xFF382A1E),
+                              fontSize: 15.0,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
                 const Spacer(),
-                // Share Studio Button (All Goals)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -119,16 +170,24 @@ class ShareCardScreen extends ConsumerWidget {
                       backgroundColor: AppColors.gold500,
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                     ),
                     icon: const Icon(Icons.auto_awesome_rounded),
-                    label: const Text('Manevi Paylaşım Stüdyosunu Aç', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    label: const Text(
+                      'Manevi Paylaşım Stüdyosunu Aç',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                     onPressed: () {
                       ZikirSharePreviewModal.show(
                         context: context,
                         zikirName: 'Günlük Zikir & Kalbin Huzuru',
                         category: 'Zikir',
-                        initialTheme: ZikirShareCardTheme.emeraldSufi,
+                        initialTheme: ZikirShareCardTheme.fajrDawn,
                         initialShowCounterStats: false,
                       );
                     },
@@ -140,12 +199,22 @@ class ShareCardScreen extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.white,
-                      side: BorderSide(color: AppColors.gold500.withValues(alpha: 0.5)),
+                      side: BorderSide(
+                        color: AppColors.gold500.withValues(alpha: 0.5),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                     ),
                     icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('İstikrar & Seri Kartını Aç', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    label: const Text(
+                      'İstikrar & Seri Kartını Aç',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
                     onPressed: () {
                       StreakSharePreviewModal.show(
                         context,
@@ -153,7 +222,9 @@ class ShareCardScreen extends ConsumerWidget {
                         bestStreak: streak?.bestStreak ?? 0,
                         totalDays: streak?.totalDays ?? 0,
                         rankName: rank,
-                        initialTheme: ZikirShareThemeData.themeForGoalOrTask(goalType: 'streak'),
+                        initialTheme: ZikirShareThemeData.themeForGoalOrTask(
+                          goalType: 'streak',
+                        ),
                       );
                     },
                   ),
@@ -163,7 +234,9 @@ class ShareCardScreen extends ConsumerWidget {
             ),
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.gold500)),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.gold500),
+        ),
         error: (e, _) => Center(child: Text('Hata: $e')),
       ),
     );

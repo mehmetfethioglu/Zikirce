@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import '../services/changelog_service.dart';
 
 /// Configuration and filtering provider for Sentry crash and ANR telemetry monitoring.
 class SentryConfig {
@@ -8,7 +9,8 @@ class SentryConfig {
       'https://3ae37c951dc70b1c39701f8f954e81eb@o4511836028338176.ingest.de.sentry.io/4511836041969744';
 
   /// Release name formatted according to Sentry standards.
-  static const String release = 'com.akarworks.zikirce@2.0.7+50';
+  static const String release =
+      'com.akarworks.zikirce@${ChangelogService.currentVersionName}+${ChangelogService.currentVersionCode}';
 
   /// Telemetry is enabled in Release and Profile modes when DSN is present.
   static bool get isEnabled => !kDebugMode && dsn.isNotEmpty;

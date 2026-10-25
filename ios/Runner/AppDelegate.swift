@@ -118,6 +118,12 @@ import MediaPlayer
         self.startBackgroundTransitionLease()
         result(true)
 
+      case "getAppVersion":
+        let vName = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let vCodeStr = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+        let vCode = Int(vCodeStr) ?? 0
+        result(["versionName": vName, "versionCode": vCode])
+
       default:
         result(FlutterMethodNotImplemented)
       }

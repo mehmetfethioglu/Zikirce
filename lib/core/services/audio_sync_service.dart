@@ -50,6 +50,7 @@ class VerseAudioInfo {
 }
 
 class AudioSyncService {
+  static const int _expectedDbUserVersion = 20261025;
   static sql.Database? _db;
   static final Map<String, List<WordTimestamp>> _ayahCache = {};
 
@@ -69,10 +70,25 @@ class AudioSyncService {
         byteData.lengthInBytes,
       );
 
-      // Copy or update if file doesn't exist or size differs
-      if (!dbFile.existsSync() || dbFile.lengthSync() != assetBytes.length) {
-        debugPrint('[AudioSyncService] Copying ZikirceAudioSync.db (${assetBytes.length} bytes) from assets...');
+      bool needsCopy = !dbFile.existsSync() || dbFile.lengthSync() != assetBytes.length;
+      if (!needsCopy) {
+        try {
+          final probeDb = sql.sqlite3.open(dbPath);
+          final res = probeDb.select('PRAGMA user_version;');
+          final currentVer = res.isNotEmpty ? (res.first['user_version'] as int? ?? 0) : 0;
+          probeDb.dispose();
+          if (currentVer != _expectedDbUserVersion) {
+            needsCopy = true;
+          }
+        } catch (_) {
+          needsCopy = true;
+        }
+      }
+
+      if (needsCopy) {
+        debugPrint('[AudioSyncService] Updating ZikirceAudioSync.db (${assetBytes.length} bytes, v$_expectedDbUserVersion) from assets...');
         await dbFile.writeAsBytes(assetBytes, flush: true);
+        _ayahCache.clear();
       }
 
       _db = sql.sqlite3.open(dbPath);
@@ -201,7 +217,7 @@ class AudioSyncService {
       final rows = stmt.select([surahId, ayahId]);
       stmt.dispose();
 
-      final list = <WordTimestamp>[];
+      final rawList = <WordTimestamp>[];
       for (int i = 0; i < rows.length; i++) {
         final r = rows[i];
         final start = (r['StartTime'] as num?)?.toDouble() ?? 0.0;
@@ -213,7 +229,7 @@ class AudioSyncService {
           end = start + 3000.0;
         }
 
-        list.add(WordTimestamp(
+        rawList.add(WordTimestamp(
           surahId: r['SurahId'] as int? ?? surahId,
           ayahId: r['AyahId'] as int? ?? ayahId,
           pageId: r['PageId'] as int? ?? 1,
@@ -223,12 +239,16 @@ class AudioSyncService {
         ));
       }
 
-      // Smooth interpolation for consecutive words with identical or near-identical start times
-      // (e.g. compound particles like "يَٓا اَيُّهَا", "وَلَا الضَّٓالّٖينَ", "وَإِذْ قَالَ", "لَا تُوَاعِدُوهُنَّ")
+      final list = _normalizeAyahWordOrders(surahId, ayahId, rawList);
+
+      // Safe split for consecutive words with identical start times in Diyanet DB
+      // (e.g. short particle + main word like "وَلَا الضَّٓالّٖينَ", "لَا رَيْبَ")
+      // Never exceeds nextGroupStart and caps short particle slice at 450ms.
       int idx = 0;
       while (idx < list.length) {
         int next = idx;
-        while (next + 1 < list.length && (list[next + 1].startTime - list[idx].startTime).abs() < 40) {
+        while (next + 1 < list.length &&
+            (list[next + 1].startTime - list[idx].startTime).abs() < 15) {
           next++;
         }
         if (next > idx) {
@@ -236,17 +256,22 @@ class AudioSyncService {
           final groupStart = list[idx].startTime;
           final nextGroupStart = (next + 1 < list.length)
               ? list[next + 1].startTime
-              : (groupStart + (count * 800.0));
-          final span = (nextGroupStart - groupStart).clamp(count * 250.0, 30000.0);
-          final slice = span / count;
+              : (groupStart + (count * 450.0));
+          final availableSpan =
+              (nextGroupStart - groupStart).clamp(40.0, 30000.0);
+          final slice = (availableSpan / count).clamp(20.0, 450.0);
           for (int k = 0; k < count; k++) {
+            final computedStart = groupStart + (k * slice);
+            final computedEnd = (k == count - 1)
+                ? nextGroupStart
+                : (groupStart + ((k + 1) * slice));
             list[idx + k] = WordTimestamp(
               surahId: list[idx + k].surahId,
               ayahId: list[idx + k].ayahId,
               pageId: list[idx + k].pageId,
               wordOrder: list[idx + k].wordOrder,
-              startTime: groupStart + (k * slice),
-              endTime: groupStart + ((k + 1) * slice),
+              startTime: computedStart,
+              endTime: computedEnd,
             );
           }
           idx = next + 1;
@@ -265,20 +290,161 @@ class AudioSyncService {
     }
   }
 
+  /// Aligns the 6 known compound-token verses in Diyanet's DB and fills any skipped intermediate WordOrder
+  static List<WordTimestamp> _normalizeAyahWordOrders(
+    int surahId,
+    int ayahId,
+    List<WordTimestamp> raw,
+  ) {
+    if (raw.isEmpty) return raw;
+    final pId = raw.first.pageId;
+
+    // 1. Handle the 6 verses where Diyanet DB merged/split a vocative or waqf token relative to Uthmani text
+    if (surahId == 15 && ayahId == 95 && raw.length == 2) {
+      return [
+        ...raw,
+        WordTimestamp(
+          surahId: 15,
+          ayahId: 95,
+          pageId: pId,
+          wordOrder: 3,
+          startTime: 2450.0,
+          endTime: 4800.0,
+        ),
+      ];
+    }
+    if ((surahId == 27 && ayahId == 9 && raw.length == 6) ||
+        (surahId == 64 && ayahId == 14 && raw.length == 18)) {
+      final firstStart = raw.first.startTime;
+      return [
+        WordTimestamp(
+          surahId: surahId,
+          ayahId: ayahId,
+          pageId: pId,
+          wordOrder: 1,
+          startTime: 0.0,
+          endTime: firstStart > 0 ? firstStart : 600.0,
+        ),
+        for (final item in raw)
+          WordTimestamp(
+            surahId: item.surahId,
+            ayahId: item.ayahId,
+            pageId: item.pageId,
+            wordOrder: item.wordOrder + 1,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          ),
+      ];
+    }
+    if ((surahId == 33 && ayahId == 56 && raw.length == 13) ||
+        (surahId == 37 && ayahId == 102 && raw.length == 27)) {
+      final splitOrder = (surahId == 33) ? 7 : 18;
+      final out = <WordTimestamp>[];
+      for (final item in raw) {
+        if (item.wordOrder < splitOrder) {
+          out.add(item);
+        } else if (item.wordOrder == splitOrder) {
+          out.add(WordTimestamp(
+            surahId: surahId,
+            ayahId: ayahId,
+            pageId: pId,
+            wordOrder: splitOrder,
+            startTime: item.startTime,
+            endTime: item.startTime + 420.0,
+          ));
+          out.add(WordTimestamp(
+            surahId: surahId,
+            ayahId: ayahId,
+            pageId: pId,
+            wordOrder: splitOrder + 1,
+            startTime: item.startTime + 420.0,
+            endTime: item.endTime,
+          ));
+        } else {
+          out.add(WordTimestamp(
+            surahId: surahId,
+            ayahId: ayahId,
+            pageId: pId,
+            wordOrder: item.wordOrder + 1,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          ));
+        }
+      }
+      return out;
+    }
+    if (surahId == 2 && ayahId == 235 && raw.length == 48) {
+      final out = <WordTimestamp>[];
+      for (final item in raw) {
+        if (item.wordOrder < 27) {
+          out.add(item);
+        } else if (item.wordOrder == 27) {
+          continue; // extra pause entry at 31152ms before word 27 (وَلَا تَعْزِمُوا at 34210ms)
+        } else {
+          out.add(WordTimestamp(
+            surahId: surahId,
+            ayahId: ayahId,
+            pageId: pId,
+            wordOrder: item.wordOrder - 1,
+            startTime: item.startTime,
+            endTime: item.endTime,
+          ));
+        }
+      }
+      return out;
+    }
+
+    // 2. Fill any skipped intermediate WordOrder (e.g. 4:78, 7:196, 18:49, 27:36, 75:27, etc.)
+    final filled = <WordTimestamp>[];
+    for (int i = 0; i < raw.length; i++) {
+      final curr = raw[i];
+      if (i > 0) {
+        final prev = raw[i - 1];
+        final gapOrders = curr.wordOrder - prev.wordOrder;
+        if (gapOrders > 1) {
+          final timeSpan = (curr.startTime - prev.startTime).clamp(80.0, 30000.0);
+          for (int m = 1; m < gapOrders; m++) {
+            final ratio = m / gapOrders;
+            final interpStart = prev.startTime + (timeSpan * ratio);
+            filled.add(WordTimestamp(
+              surahId: surahId,
+              ayahId: ayahId,
+              pageId: pId,
+              wordOrder: prev.wordOrder + m,
+              startTime: interpStart,
+              endTime: prev.startTime + (timeSpan * ((m + 1) / gapOrders)),
+            ));
+          }
+        }
+      }
+      filled.add(curr);
+    }
+    return filled;
+  }
+
   /// Gets the currently active word index based on playback milliseconds (High-performance in-memory search)
-  static int getActiveWordOrder(int surahId, int ayahId, double currentMs) {
+  static int getActiveWordOrder(
+    int surahId,
+    int ayahId,
+    double currentMs, {
+    int? renderedWordCount,
+  }) {
     final timestamps = getAyahTimestamps(surahId, ayahId);
     if (timestamps.isEmpty) return 0;
 
-    // 1. Find the latest word whose StartTime <= currentMs
+    int matchedIdx = 0;
     for (int i = timestamps.length - 1; i >= 0; i--) {
       if (currentMs >= timestamps[i].startTime) {
-        return timestamps[i].wordOrder;
+        matchedIdx = i;
+        break;
       }
     }
 
-    // Default to first word if playback just started
-    return timestamps.first.wordOrder;
+    final rawOrder = timestamps[matchedIdx].wordOrder;
+    if (renderedWordCount != null && renderedWordCount > 0) {
+      return rawOrder.clamp(1, renderedWordCount);
+    }
+    return rawOrder;
   }
 
   /// Gets specific word timestamp for an ayah

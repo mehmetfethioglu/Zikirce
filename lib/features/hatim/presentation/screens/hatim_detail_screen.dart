@@ -10,6 +10,7 @@ import '../screens/mukabele_hatim_screen.dart';
 import '../../providers/hatim_providers.dart';
 import 'hatim_qr_screen.dart';
 import '../widgets/hatim_sync_gate.dart';
+import '../widgets/hatim_duasi_modal.dart';
 
 class HatimDetailScreen extends ConsumerWidget {
   final Hatim hatim;
@@ -112,6 +113,16 @@ class HatimDetailScreen extends ConsumerWidget {
         title: Text(hatim.title, style: AppTypography.headingSmall(color: primaryTextColor)),
         actions: [
           IconButton(
+            icon: const Text('🤲', style: TextStyle(fontSize: 20)),
+            tooltip: 'Matbû Hatim Duası',
+            onPressed: () {
+              HatimDuasiModal.show(
+                context,
+                completedHatim: hatim.isCompleted ? hatim : null,
+              );
+            },
+          ),
+          IconButton(
             icon: Icon(Icons.headset_mic_rounded, color: goldAccent),
             tooltip: 'Mukabele ile Dinle',
             onPressed: () {
@@ -201,9 +212,21 @@ class HatimDetailScreen extends ConsumerWidget {
                     final isComp = juz.isCompleted;
 
                     return GestureDetector(
-                      onTap: () {
+                      onTap: () async {
                         HapticService.selectionClick();
-                        hatimNotifier.toggleJuzCompletion(hatim.id, juz.juzNo, !isComp);
+                        final willCompleteAll30 = !isComp && completedJuz == 29;
+                        await hatimNotifier.toggleJuzCompletion(
+                          hatim.id,
+                          juz.juzNo,
+                          !isComp,
+                        );
+                        if (willCompleteAll30 && context.mounted) {
+                          await HatimDuasiModal.show(
+                            context,
+                            completedHatim: hatim,
+                            isCompletionCelebration: true,
+                          );
+                        }
                       },
                       onLongPress: () {
                         HapticService.selectionClick();
@@ -222,7 +245,7 @@ class HatimDetailScreen extends ConsumerWidget {
                               ? null
                               : [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.04),
+                                    color: Colors.black.withValues(alpha: 0.04),
                                     blurRadius: 4,
                                     offset: const Offset(0, 2),
                                   ),

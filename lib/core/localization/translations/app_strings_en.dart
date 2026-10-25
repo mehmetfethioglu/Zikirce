@@ -1,6 +1,8 @@
 // GENERATED FILE FROM .NET MAUI AppResources.en.resx
 // Total keys: 661
 
+import '../../services/changelog_service.dart';
+
 const Map<String, String> appStringsEn = {
   'Onboarding_WelcomeTitle': 'Welcome to Zikirce 🕌',
   'Onboarding_WelcomeDesc': 'Zikirce helps you recite dhikr, track your Holy Quran readings, and build spiritual habits.',
@@ -292,9 +294,9 @@ const Map<String, String> appStringsEn = {
   'Exchange_Success': '🎉 Successfully converted {0} Gold into {1} Diamonds!',
   'Exchange_ConvertToUnlockBadge': '🪙 Convert Gold & Unlock',
   'About_Title': 'About',
-  'About_Version': 'Version 2.0.0',
+  'About_Version': 'Version ${ChangelogService.currentVersionName}',
   'About_Description': 'Developed by Akarworks. It is completely free and ad-free. It targets your prayers :)',
-  'Settings_GuideBtn': 'User Guide & Onboarding',
+  'Settings_GuideBtn': 'User Guide & Feature Showcase',
   'About_PrivacyBtn': 'Privacy Policy',
   'About_FeedbackBtn': 'Feedback',
   'About_CloseBtn': 'OK',
@@ -748,7 +750,8 @@ const Map<String, String> appStringsEn = {
   'Settings_ThemeNight': 'Night',
   'Settings_ThemeSepia': 'Sepia',
   'Settings_AllRightsReserved': '© 2026 Zikirce. All rights reserved.',
-  'Settings_Version': 'Version 2.0.7 (Build 50)',
+  'Settings_Version':
+      'Version ${ChangelogService.currentVersionName} (Build ${ChangelogService.currentVersionCode})',
   'Namaz_TapToChangeCity': '📍 Tap to change city',
   'Namaz_TimeRemainingSuffix': 'Time remaining until {0}',
   'Namaz_NextPrayerPrefix': 'Next Prayer: {0}',

@@ -112,6 +112,12 @@ class ShareReminderNotifier extends StateNotifier<ShareReminderState> {
             ? ZikirShareCardTheme.values[themeIndex]
             : ZikirShareCardTheme.emeraldSufi;
 
+        if (type == ShareReminderType.ezber &&
+            !ref.read(userSettingsProvider).isHafizlikRepeatGoalEnabled) {
+          await clearReminder();
+          return;
+        }
+
         state = ShareReminderState(
           hasPendingReminder: true,
           title: title,
@@ -133,6 +139,7 @@ class ShareReminderNotifier extends StateNotifier<ShareReminderState> {
   }) async {
     final settings = ref.read(userSettingsProvider);
     if (!settings.isShareCardsEnabled) return;
+    if (type == ShareReminderType.ezber && !settings.isHafizlikRepeatGoalEnabled) return;
 
     final resolvedTheme = theme ??
         ZikirShareThemeData.themeForGoalOrTask(
@@ -167,6 +174,12 @@ class ShareReminderNotifier extends StateNotifier<ShareReminderState> {
   Future<void> syncWithDailyGoals(DailyGoalsStatus status) async {
     final settings = ref.read(userSettingsProvider);
     if (!settings.isShareCardsEnabled) return;
+
+    if (!status.isEzberGoalEnabled &&
+        state.hasPendingReminder &&
+        state.type == ShareReminderType.ezber) {
+      await clearReminder();
+    }
 
     try {
       final prefs = await SharedPreferences.getInstance();

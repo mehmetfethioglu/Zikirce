@@ -412,7 +412,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          'Zikirce 2.0',
+                          'Zikirce v${ChangelogService.effectiveVersionName}',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,

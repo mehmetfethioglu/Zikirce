@@ -508,8 +508,29 @@ class ShareCardDataHelper {
     String? zikirName,
     String? category,
     String? rawVirtue,
+    String? customSource,
+    String? customArabic,
     int quoteIndex = 0,
   }) {
+    if (customSource != null && customSource.trim().isNotEmpty && quoteIndex == 0) {
+      final cleanSource = customSource.trim();
+      final lowerSrc = cleanSource.toLowerCase();
+      final isAyet = lowerSrc.contains('sure') ||
+          lowerSrc.contains('sûre') ||
+          lowerSrc.contains('ayet') ||
+          lowerSrc.contains('âyet') ||
+          (category ?? '').toLowerCase().contains('meal') ||
+          (category ?? '').toLowerCase().contains('kuran') ||
+          (category ?? '').toLowerCase().contains('kur’an');
+      return SpiritualQuote(
+        text: (rawVirtue ?? '').trim(),
+        source: cleanSource,
+        arabic: customArabic,
+        type: isAyet ? SpiritualQuoteType.ayet : SpiritualQuoteType.hadis,
+        topic: isAyet ? 'kuran' : resolveTopicKey(zikirName: zikirName, category: category),
+      );
+    }
+
     if (rawVirtue != null && rawVirtue.trim().isNotEmpty && quoteIndex == 0) {
       final parsed = _tryParseVirtue(rawVirtue.trim());
       if (parsed != null) {
@@ -527,7 +548,7 @@ class ShareCardDataHelper {
   }
 
   static SpiritualQuote? _tryParseVirtue(String virtue) {
-    final match = RegExp(r'^(.*?)\s*\(([^()]+)\)\s*$').firstMatch(virtue);
+    final match = RegExp(r'^(.*?)\s*\(([^()]+)\)\s*$', dotAll: true).firstMatch(virtue);
     if (match != null) {
       final quoteText = match.group(1)?.trim() ?? virtue;
       final source = match.group(2)?.trim() ?? '';

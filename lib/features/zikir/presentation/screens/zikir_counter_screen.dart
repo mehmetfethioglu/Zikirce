@@ -11,6 +11,7 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/sound_pool_service.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
@@ -171,13 +172,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     return 68;
   }
 
-  String? _getZikirVirtue(String name) {
-    for (final item in ZikirSeedData.defaultZikirs) {
-      if (item.name.toLowerCase() == name.toLowerCase()) {
-        return item.virtue;
-      }
-    }
-    return null;
+  String? _getZikirVirtue(String name, [String? arabic]) {
+    return ZikirSeedData.getVirtueForZikir(name, arabic: arabic);
   }
 
   void _showZikirDetails(String name, String? arabic, String category) {
@@ -185,17 +181,31 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     final l10n = context.l10n;
     final isFocusMode = ref.read(isZikirFocusModeProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark || isFocusMode;
-    final virtue = _getZikirVirtue(name);
+    final virtue = _getZikirVirtue(name, arabic);
     final arabicFont = ref.read(arabicFontFamilyProvider);
     final isBoldArabic = ref.read(isBoldArabicProvider);
+    final lowerCat = category.toLowerCase();
+    final isDuaCat = lowerCat.contains('dua') || lowerCat.contains('prayer');
+    final isEsmaCat = lowerCat.contains('esma') || lowerCat.contains('asma');
+    final String detailSectionTitle = l10n.isTurkish
+        ? (isDuaCat
+            ? 'Âyet Meâli & Kaynak:'
+            : (isEsmaCat ? 'İsmin Mânâsı & Sahih Hadis-i Şerif:' : 'Sahih Hadis-i Şerif & Fazileti:'))
+        : (isDuaCat
+            ? 'Verse Meaning & Source:'
+            : (isEsmaCat ? 'Meaning & Authentic Hadith:' : 'Authentic Hadith & Virtues:'));
 
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.78,
+          ),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF1F1A17) : colors.bottomSheetBg,
@@ -238,36 +248,61 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                     ),
                   ],
                 ),
-                if (arabic != null && arabic.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: colors.cardBackgroundAlt,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: colors.borderStroke.withValues(alpha: 0.6)),
-                    ),
-                    child: Text(
-                      arabic,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontFamily: arabicFont,
-                        fontSize: 28,
-                        fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                        color: colors.zikirArabicColor,
-                      ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (arabic != null && arabic.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: colors.cardBackgroundAlt,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: colors.borderStroke.withValues(alpha: 0.6)),
+                            ),
+                            child: Text(
+                              QuranWordHighlighter.formatArabicTextForFont(arabic, arabicFont),
+                              textDirection: TextDirection.rtl,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: arabicFont,
+                                fontSize: 28,
+                                fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
+                                color: colors.zikirArabicColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        Text(
+                          '${l10n.isTurkish ? "Kategori" : "Category"}: $category',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.accent),
+                        ),
+                        const SizedBox(height: 8),
+                        if (virtue != null && virtue.isNotEmpty) ...[
+                          Text(
+                            detailSectionTitle,
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.accent),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            virtue,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.5,
+                              color: colors.secondaryTextAlt,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
-                const SizedBox(height: 14),
-                Text('${l10n.isTurkish ? "Kategori" : "Category"}: $category', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.accent)),
-                const SizedBox(height: 8),
-                if (virtue != null && virtue.isNotEmpty) ...[
-                  Text(l10n.isTurkish ? 'Fazileti & Sırrı:' : 'Virtues & Secrets:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.accent)),
-                  const SizedBox(height: 4),
-                  Text(virtue, style: TextStyle(fontSize: 13.5, color: colors.secondaryTextAlt)),
-                ],
+                ),
               ],
             ),
           ),
@@ -382,7 +417,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                             ),
                             subtitle: z.arabic != null && z.arabic!.isNotEmpty
                                 ? Text(
-                                    z.arabic!,
+                                    QuranWordHighlighter.formatArabicTextForFont(z.arabic!, arabicFont),
+                                    textDirection: TextDirection.rtl,
                                     style: TextStyle(
                                       fontFamily: arabicFont,
                                       fontSize: 16,
@@ -613,7 +649,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                             currentZikir.category,
                           ),
                           child: Text(
-                            currentZikir.arabic!,
+                            QuranWordHighlighter.formatArabicTextForFont(currentZikir.arabic!, arabicFont),
+                            textDirection: TextDirection.rtl,
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: arabicFont,
@@ -840,7 +877,7 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                             isActive: false,
                             onTap: () {
                               _resetQuickSettingsTimer();
-                              final virtue = _getZikirVirtue(currentZikir.name);
+                              final virtue = _getZikirVirtue(currentZikir.name, currentZikir.arabic);
                               ZikirSharePreviewModal.show(
                                 context: context,
                                 zikirName: currentZikir.name,

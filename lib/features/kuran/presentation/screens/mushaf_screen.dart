@@ -9,6 +9,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../hatim/providers/hatim_providers.dart';
+import '../../../hatim/presentation/widgets/hatim_duasi_modal.dart';
 import '../../providers/kuran_providers.dart';
 import '../widgets/mushaf_page_widget.dart';
 import '../widgets/audio_sync_player_bar.dart';
@@ -32,6 +33,9 @@ import '../widgets/tilavet_secdesi_exit_dialog.dart';
 import '../widgets/tilavet_secdesi_guide_sheet.dart';
 import '../../../gamification/services/custom_badge_service.dart';
 import '../widgets/add_custom_quran_badge_sheet.dart';
+import '../widgets/tafseer_bottom_sheet.dart';
+import '../../data/islamic_bookshelf_models.dart';
+import '../../../../core/services/meal_service.dart';
 import '../../../dashboard/providers/share_reminder_provider.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
@@ -39,6 +43,8 @@ class MushafScreen extends ConsumerStatefulWidget {
   final Hatim? activeHatim;
   final SureItem? targetSurah;
   final String? streakKey;
+  final bool initialMealOnlyMode;
+  final MushafReadingMode? initialReadingMode;
 
   const MushafScreen({
     super.key,
@@ -46,6 +52,8 @@ class MushafScreen extends ConsumerStatefulWidget {
     this.activeHatim,
     this.targetSurah,
     this.streakKey,
+    this.initialMealOnlyMode = false,
+    this.initialReadingMode,
   });
 
   @override
@@ -57,17 +65,23 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   late final FocusNode _focusNode;
   int _startPage = 1;
   bool _hasMarkedAsRead = false;
+  late MushafReadingMode _readingMode;
   final Set<int> _completedSurahIdsInSession = <int>{};
   final Set<int> _encounteredSecdePages = <int>{};
   bool _dismissedBannerForCurrentPage = false;
   int? _lastBannerPage;
   bool _showDebtReminderBanner = false;
   bool _hideReadBanner = false;
+  bool _hasCompletedActiveHatimInSession = false;
   Timer? _hideReadBannerTimer;
 
   @override
   void initState() {
     super.initState();
+    _readingMode = widget.initialReadingMode ??
+        (widget.initialMealOnlyMode
+            ? MushafReadingMode.mealOnly
+            : MushafReadingMode.mushaf);
     _focusNode = FocusNode();
     final startPage = ref.read(currentMushafPageProvider);
     final targetPage = widget.initialPage > 0 ? widget.initialPage : startPage;
@@ -189,10 +203,50 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     }
   }
 
+  Future<void> _completeActiveHatimAndShowDua() async {
+    final hatim = widget.activeHatim;
+    if (hatim == null) {
+      await HatimDuasiModal.show(context);
+      return;
+    }
+
+    if (!_hasCompletedActiveHatimInSession) {
+      final targetCompletedPages = hatim.totalPages > 0 ? hatim.totalPages : 605;
+      try {
+        await ref.read(hatimNotifierProvider).updateHatimPageProgress(
+              hatimId: hatim.id,
+              targetPage: targetCompletedPages,
+            );
+        if (mounted) {
+          setState(() {
+            _hasCompletedActiveHatimInSession = true;
+          });
+        }
+      } catch (e) {
+        debugPrint('[_MushafScreenState] _completeActiveHatimAndShowDua error: $e');
+      }
+    }
+
+    if (mounted) {
+      await HatimDuasiModal.show(
+        context,
+        completedHatim: hatim,
+        isCompletionCelebration: true,
+      );
+    }
+  }
+
   Future<void> _handleExit() async {
     final currentPage = ref.read(currentMushafPageProvider);
 
     if (widget.activeHatim != null) {
+      if (_hasCompletedActiveHatimInSession) {
+        await _promptSecdeDebtIfNeeded();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
       final totalHatimPages = widget.activeHatim?.totalPages ?? 605;
       final isLastPage = currentPage >= totalHatimPages || currentPage >= 604;
       final shouldSave = await showDialog<bool?>(
@@ -326,19 +380,22 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 targetPage: targetCompletedPages,
               );
           HapticService.targetReached();
-          if (mounted) {
-            final snackBarText = isHatimCompleted
-                ? 'Tebrikler! Hatm-i Şerifiniz başarıyla tamamlandı. 🎉'
-                : 'Hatim ilerlemeniz ($currentPage. Sayfa) kaydedildi.';
+          if (isHatimCompleted && mounted) {
+            _hasCompletedActiveHatimInSession = true;
+            await HatimDuasiModal.show(
+              context,
+              completedHatim: widget.activeHatim,
+              isCompletionCelebration: true,
+            );
+          } else if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Row(
                   children: [
-                    Text(isHatimCompleted ? '🎉 ' : '📖 ',
-                        style: const TextStyle(fontSize: 18)),
+                    const Text('📖 ', style: TextStyle(fontSize: 18)),
                     Expanded(
                       child: Text(
-                        snackBarText,
+                        'Hatim ilerlemeniz ($currentPage. Sayfa) kaydedildi.',
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, color: Colors.white),
                       ),
@@ -863,6 +920,11 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
           ),
           actions: [
             IconButton(
+              icon: Icon(Icons.text_fields_rounded, color: goldColor),
+              tooltip: 'Yazı Boyutu, Meâl & Tefsir Ayarları',
+              onPressed: () => _showReadingSettingsSheet(context, isDark),
+            ),
+            IconButton(
               icon: Icon(Icons.search_rounded, color: iconColor),
               tooltip: 'Âyet Ara',
               onPressed: () {
@@ -894,6 +956,65 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               onPressed: () => _showJumpToPageDialog(context, isDark),
             ),
           ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(44),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Container(
+                height: 36,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF181C22)
+                      : const Color(0xFFF1EAE0),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: goldColor.withValues(alpha: 0.28),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _buildReadingModeChip(
+                      mode: MushafReadingMode.mushaf,
+                      label: 'Mushaf',
+                      icon: Icons.auto_stories_rounded,
+                      isDark: isDark,
+                      goldColor: goldColor,
+                      titleColor: titleColor,
+                      subtitleColor: subtitleColor,
+                    ),
+                    _buildReadingModeChip(
+                      mode: MushafReadingMode.ayatAndMeal,
+                      label: 'Âyet + Meâl',
+                      icon: Icons.view_headline_rounded,
+                      isDark: isDark,
+                      goldColor: goldColor,
+                      titleColor: titleColor,
+                      subtitleColor: subtitleColor,
+                    ),
+                    _buildReadingModeChip(
+                      mode: MushafReadingMode.mealOnly,
+                      label: 'Meâl',
+                      icon: Icons.subject_rounded,
+                      isDark: isDark,
+                      goldColor: goldColor,
+                      titleColor: titleColor,
+                      subtitleColor: subtitleColor,
+                    ),
+                    _buildReadingModeChip(
+                      mode: MushafReadingMode.tafseer,
+                      label: 'Tefsir',
+                      icon: Icons.library_books_rounded,
+                      isDark: isDark,
+                      goldColor: goldColor,
+                      titleColor: titleColor,
+                      subtitleColor: subtitleColor,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
         body: Focus(
           focusNode: _focusNode,
@@ -927,6 +1048,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     _hideReadBanner = false;
                   }
                   ref.read(currentMushafPageProvider.notifier).state = newPage;
+                  unawaited(
+                    ref.read(islamicBookshelfProvider.notifier).syncMushafPage(newPage),
+                  );
                   if (TilavetSecdesiData.isSecdePage(newPage)) {
                     _encounteredSecdePages.add(newPage);
                     if (_lastBannerPage != newPage) {
@@ -944,7 +1068,12 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                       ref.watch(quranPageDataProvider(pageNum));
 
                   return pageDataAsync.when(
-                    data: (data) => MushafPageWidget(pageData: data),
+                    data: (data) => MushafPageWidget(
+                      pageData: data,
+                      isMealOnlyMode:
+                          _readingMode == MushafReadingMode.mealOnly,
+                      readingMode: _readingMode,
+                    ),
                     loading: () => Center(
                       child: CircularProgressIndicator(color: goldColor),
                     ),
@@ -1152,6 +1281,84 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                   ),
                 ),
 
+              // Floating "Hatmi Tamamla ve Hatim Duası Oku" / "Matbû Hatim Duasını Oku" Button at Mushaf End (Page 604/605)
+              if (currentPage >= 604 &&
+                  (widget.activeHatim != null || widget.targetSurah == null))
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: isAudioActive ? 84 : 20,
+                  child: SafeArea(
+                    top: false,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF165241), Color(0xFF0C2E24)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: const Color(0xFFD4AF37),
+                          width: 1.4,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFF165241).withValues(alpha: 0.5),
+                            blurRadius: 16,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _completeActiveHatimAndShowDua,
+                          borderRadius: BorderRadius.circular(24),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 13),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  '🤲',
+                                  style: TextStyle(fontSize: 19),
+                                ),
+                                const SizedBox(width: 10),
+                                Flexible(
+                                  child: Text(
+                                    widget.activeHatim != null
+                                        ? (_hasCompletedActiveHatimInSession
+                                            ? 'Hatim Tamamlandı • Hatim Duasını Oku'
+                                            : 'Hatmi Bitir ve Hatim Duası Oku')
+                                        : 'Matbû Kur’ân Hatim Duasını Oku',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: AppColors.gold300,
+                                  size: 19,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
               // Floating Bottom Audio Player
               const Positioned(
                 left: 0,
@@ -1193,6 +1400,357 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildReadingModeChip({
+    required MushafReadingMode mode,
+    required String label,
+    required IconData icon,
+    required bool isDark,
+    required Color goldColor,
+    required Color titleColor,
+    required Color subtitleColor,
+  }) {
+    final isSelected = _readingMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          HapticService.selectionClick();
+          setState(() => _readingMode = mode);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? (isDark ? const Color(0xFF28303B) : Colors.white)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 13,
+                  color: isSelected ? goldColor : subtitleColor,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    color: isSelected ? titleColor : subtitleColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReadingSettingsSheet(BuildContext context, bool isDark) {
+    final bgColor = isDark ? const Color(0xFF15191F) : const Color(0xFFFDFBF7);
+    final cardBg = isDark ? const Color(0xFF1E242C) : const Color(0xFFF5EFE2);
+    final textColor = isDark ? Colors.white : const Color(0xFF1E2B27);
+    final subColor = isDark ? const Color(0xFF9EA6B2) : const Color(0xFF6B5848);
+    final accentColor = isDark ? AppColors.gold400 : const Color(0xFFA64B2A);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: bgColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (ctx) {
+        return Consumer(
+          builder: (ctx, sheetRef, _) {
+            final arSize = sheetRef.watch(quranFontSizeProvider);
+            final kuranFonts = sheetRef.watch(kuranFontSettingsProvider);
+            final activeMealId = sheetRef.watch(activeMealSourceProvider);
+            final activeMealInfo = MealService.getSourceInfo(activeMealId);
+            final isComparing = sheetRef.watch(isMealComparisonEnabledProvider);
+            final showTranslit = sheetRef.watch(showTransliterationProvider);
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: subColor.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Icon(Icons.tune_rounded, color: accentColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Okuma, Meâl & Tefsir Ayarları',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: textColor,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            TafseerLibraryManagerSheet.show(
+                              context,
+                              onOpenTafseerReader: () {
+                                if (mounted) {
+                                  setState(() => _readingMode = MushafReadingMode.tafseer);
+                                }
+                              },
+                            );
+                          },
+                          icon: Icon(
+                            Icons.cloud_download_outlined,
+                            size: 16,
+                            color: accentColor,
+                          ),
+                          label: Text(
+                            'Tefsir Kütüphanesi',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: accentColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Arapça Hat Boyutu
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Arapça Hat Boyutu',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w700,
+                                  color: textColor,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${arSize.toInt()} pt',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w700,
+                                  color: accentColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: arSize.clamp(20.0, 42.0),
+                            min: 20.0,
+                            max: 42.0,
+                            activeColor: accentColor,
+                            onChanged: (val) {
+                              sheetRef
+                                  .read(quranFontSizeProvider.notifier)
+                                  .setFontSize(val);
+                            },
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                'Türkçe Meâl & Tefsir Yazı Boyutu',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w700,
+                                  color: textColor,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${kuranFonts.mealFontSize.toInt()} pt',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w700,
+                                  color: accentColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: kuranFonts.mealFontSize.clamp(13.0, 26.0),
+                            min: 13.0,
+                            max: 26.0,
+                            activeColor: accentColor,
+                            onChanged: (val) {
+                              sheetRef
+                                  .read(kuranFontSettingsProvider.notifier)
+                                  .setMealFontSize(val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Meâl Karşılaştırma ve Transkripsiyon Anahtarları
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Column(
+                        children: [
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            activeThumbColor: accentColor,
+                            title: Text(
+                              'Meâl Karşılaştırma Modu',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: textColor,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Diyanet, Elmalılı ve Çantay meâllerini alt alta karşılaştır',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 11.5,
+                                color: subColor,
+                              ),
+                            ),
+                            value: isComparing,
+                            onChanged: (val) {
+                              sheetRef
+                                  .read(isMealComparisonEnabledProvider.notifier)
+                                  .state = val;
+                            },
+                          ),
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            activeThumbColor: accentColor,
+                            title: Text(
+                              'Türkçe Okunuş (Transkripsiyon)',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: textColor,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Âyetlerin altında Latin harfli okunuş rehberini göster',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 11.5,
+                                color: subColor,
+                              ),
+                            ),
+                            value: showTranslit,
+                            onChanged: (val) {
+                              sheetRef
+                                  .read(showTransliterationProvider.notifier)
+                                  .toggle(val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Aktif Meâl Seçimi Özeti
+                    ListTile(
+                      tileColor: cardBg,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      leading: Icon(Icons.auto_stories_rounded, color: accentColor),
+                      title: Text(
+                        'Varsayılan Meâl: ${activeMealInfo.title}',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Değiştirmek veya tefsir indirmek için dokunun',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11.5,
+                          color: subColor,
+                        ),
+                      ),
+                      trailing: Icon(
+                        Icons.chevron_right_rounded,
+                        color: subColor,
+                      ),
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        TafseerLibraryManagerSheet.show(
+                          context,
+                          onOpenTafseerReader: () {
+                            if (mounted) {
+                              setState(
+                                  () => _readingMode = MushafReadingMode.tafseer);
+                            }
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

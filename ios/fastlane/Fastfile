@@ -169,6 +169,18 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.1.9 Yenilikleri:
+      • Matbû Kur'ân-ı Kerîm Hatim Duası: Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi'l-Kur'âni'l-Azîm), varsayılan Matbû Arapça sahife görünümü, Diyanet Mushaf hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.
+      • 4 Modlu Kur'ân Okuma, 7 Meâl & 5 Klasik Tefsir: Mushaf, Âyet+Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir modları; 7 Türkçe meâl kıyaslaması ve Kur'ân Yolu, Beyzâvî, Mâtürîdî, Keşşâf ve Râzî tam metin tefsir kütüphanesi sunuldu.
+      • 23 Eserlik İslami Külliyat & Ok ile Kelime Takibi: Kütüb-i Sitte, Riyâzü's-Sâlihîn ve Risale-i Nur Külliyatı eklendi; sesli tilâvette "Ok ile Takip" işaretçisi ve 6.236 âyet akustik senkronizasyonu tamamlandı.
+      • İnteraktif Kullanım Kılavuzu & Sahih Hadis Kaynakları: Ayarlar'a kapsamlı Kullanım Kılavuzu eklendi; 99 Esmâü'l-Hüsnâ ve 146 zikir Kütüb-i Sitte sahih hadis kaynaklarıyla zenginleştirildi.
+
+      What's New in v2.1.9:
+      • Printed Mushaf Khatm Prayer: Complete traditional Khatm al-Quran Prayer with default Printed Mushaf Arabic page layout, authentic Diyanet calligraphy, Divine Name highlighting, and Seljuk rosette stop markers.
+      • 4-Mode Quran Reader, 7 Translations & 5 Classical Tafseers: Mushaf, Verse+Translation, Flowing Book, and In-Page Tafseer modes with 7 Turkish translations and 5 full-text classical Tafseer works.
+      • 23-Volume Islamic Library & Arrow Word Tracking: Added Kutub al-Sittah, Riyad as-Salihin, and Risale-i Nur library, plus the new "Arrow Pointer" word-tracking mode with acoustic sync across all 6,236 verses.
+      • Interactive User Guide & Authentic Hadith Citations: Added a searchable User Guide in Settings and enriched all 146 dhikrs and 99 Names of Allah with authentic Hadith references.
+
       Zikirce v2.1.8 Yenilikleri:
       • Manevi Paylaşım Stüdyosu & Ayet-Hadis Kartları: Zikir, seri ve istatistik kartlarına ayet-hadis entegrasyonu, Cuma ve Kandil özel gün tebrikleri ile Selçuklu hat sanatı detayları eklendi.
       • Hedef Tamamlama & Paylaşım Bildirimi: Namaz, Kur'an, zikir ve ezber hedeflerine ulaşıldığında doğrudan paylaşım kartı oluşturma ve tebrik desteği sunuldu.

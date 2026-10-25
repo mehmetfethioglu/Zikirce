@@ -46,6 +46,7 @@ class SettingsState {
   final bool isMaskingMode;
   final bool isBlurMode;
   final bool isPlayBesmeleOnStartEnabled;
+  final String wordTrackingMode; // 'highlight' | 'arrow'
   final bool isAudioDownloading;
   final bool isAudioDownloadPaused;
   final double audioDownloadProgress;
@@ -99,6 +100,7 @@ class SettingsState {
     this.isMaskingMode = false,
     this.isBlurMode = false,
     this.isPlayBesmeleOnStartEnabled = true,
+    this.wordTrackingMode = 'highlight',
     this.isAudioDownloading = false,
     this.isAudioDownloadPaused = false,
     this.audioDownloadProgress = 0.0,
@@ -146,6 +148,7 @@ class SettingsState {
     bool? isMaskingMode,
     bool? isBlurMode,
     bool? isPlayBesmeleOnStartEnabled,
+    String? wordTrackingMode,
     bool? isAudioDownloading,
     bool? isAudioDownloadPaused,
     double? audioDownloadProgress,
@@ -192,6 +195,7 @@ class SettingsState {
       isMaskingMode: isMaskingMode ?? this.isMaskingMode,
       isBlurMode: isBlurMode ?? this.isBlurMode,
       isPlayBesmeleOnStartEnabled: isPlayBesmeleOnStartEnabled ?? this.isPlayBesmeleOnStartEnabled,
+      wordTrackingMode: wordTrackingMode ?? this.wordTrackingMode,
       isAudioDownloading: isAudioDownloading ?? this.isAudioDownloading,
       isAudioDownloadPaused: isAudioDownloadPaused ?? this.isAudioDownloadPaused,
       audioDownloadProgress: audioDownloadProgress ?? this.audioDownloadProgress,
@@ -307,6 +311,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final isMask = PrefUtils.getBool(prefs, _sKey('IsMaskingMode', sid), false);
     final isBlur = PrefUtils.getBool(prefs, _sKey('IsBlurMode', sid), false);
     final isPlayBesmele = PrefUtils.getBool(prefs, _sKey('IsPlayBesmeleOnStartEnabled', sid), true);
+    final trackingMode = PrefUtils.getString(prefs, _sKey('WordTrackingMode', sid), 'highlight');
 
     if (!mounted) return;
 
@@ -343,6 +348,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       isMaskingMode: isMask,
       isBlurMode: isBlur,
       isPlayBesmeleOnStartEnabled: isPlayBesmele,
+      wordTrackingMode: trackingMode,
       desktopMouseWheelEnabled: prefs.getBool('DesktopMouseWheelEnabled') ?? true,
       desktopFullScreenClickEnabled: prefs.getBool('DesktopFullScreenClickEnabled') ?? true,
       desktopSpaceKeyEnabled: prefs.getBool('DesktopSpaceKeyEnabled') ?? true,
@@ -423,6 +429,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await _setSessionPrefInt(prefs, 'DailyZikirGoal', count);
     await _setSessionPrefInt(prefs, 'ZikirDailyGoal', count);
     await _setSessionPrefInt(prefs, 'zikir_daily_goal', count);
+    ref.invalidate(dailyGoalsStatusProvider);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
@@ -431,6 +438,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsDailyZikirGoalEnabled', enabled);
     await _setSessionPrefBool(prefs, 'IsZikirGoalEnabled', enabled);
+    ref.invalidate(dailyGoalsStatusProvider);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
@@ -440,6 +448,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     await _setSessionPrefInt(prefs, 'DailyQuranGoal', count);
     await _setSessionPrefInt(prefs, 'KuranDailyGoal', count);
     await _setSessionPrefInt(prefs, 'kuran_daily_goal', count);
+    ref.invalidate(dailyGoalsStatusProvider);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
@@ -448,6 +457,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsDailyQuranGoalEnabled', enabled);
     await _setSessionPrefBool(prefs, 'IsKuranGoalEnabled', enabled);
+    ref.invalidate(dailyGoalsStatusProvider);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
@@ -456,6 +466,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsHafizlikRepeatGoalEnabled', enabled);
     await _setSessionPrefBool(prefs, 'IsEzberGoalEnabled', enabled);
+    ref.invalidate(dailyGoalsStatusProvider);
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
@@ -689,6 +700,12 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isPlayBesmeleOnStartEnabled: val);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsPlayBesmeleOnStartEnabled', val);
+  }
+
+  Future<void> setWordTrackingMode(String mode) async {
+    state = state.copyWith(wordTrackingMode: mode);
+    final prefs = await SharedPreferences.getInstance();
+    await _setSessionPrefString(prefs, 'WordTrackingMode', mode);
   }
 
   Future<void> refreshAudioStorageInfo() async {

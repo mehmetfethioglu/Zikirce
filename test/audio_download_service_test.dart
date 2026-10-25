@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zikirce/core/services/audio_download_service.dart';
 import 'package:zikirce/core/services/audio_sync_service.dart';
+import 'package:zikirce/core/utils/quran_word_highlighter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,14 +39,24 @@ void main() {
       expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin/1_1.mp3'));
     });
 
-    test('Page 289 should use ar_mehmetCevik', () {
+    test('Page 289 should use ar_osmanSahin for reciter and word-sync consistency', () {
       final url = AudioDownloadService.getDiyanetAudioUrl(17, 76, pageId: 289);
-      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_mehmetCevik/17_76.mp3'));
+      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin/17_76.mp3'));
     });
 
-    test('Page 292 should use ar_mehmetCevik', () {
+    test('Page 292 should use ar_osmanSahin for reciter and word-sync consistency', () {
       final url = AudioDownloadService.getDiyanetAudioUrl(18, 74, pageId: 292);
-      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_mehmetCevik/18_74.mp3'));
+      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin/18_74.mp3'));
+    });
+
+    test('Page 87 should use ar_osmanSahin', () {
+      final url = AudioDownloadService.getDiyanetAudioUrl(4, 52, pageId: 87);
+      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_osmanSahin/4_52.mp3'));
+    });
+
+    test('Secondary Diyanet URL uses ar_mehmetCevik', () {
+      final url = AudioDownloadService.getDiyanetSecondaryAudioUrl(17, 76);
+      expect(url, equals('https://webdosya.diyanet.gov.tr/kuran/kuranikerim/Sound/ar_mehmetCevik/17_76.mp3'));
     });
 
     test('Page 293 should switch back to ar_osmanSahin', () {
@@ -58,6 +70,41 @@ void main() {
 
       final url2 = AudioDownloadService.getFallbackAudioUrl(114, 6);
       expect(url2, equals('https://everyayah.com/data/Alafasy_128kbps/114006.mp3'));
+    });
+
+    test('isValidDiyanetAudioFile accepts Osman Sahin 64kbps MP3 and rejects Mehmet Cevik ID3v2.3 & Alafasy', () async {
+      final tempDir = await Directory.systemTemp.createTemp('zikirce_audio_test_');
+      try {
+        final osmanFile = File('${tempDir.path}/osman.mp3');
+        await osmanFile.writeAsBytes([
+          0xFF, 0xFB, 0x50, 0xC4,
+          ...List<int>.filled(3000, 0x55),
+        ]);
+        expect(AudioDownloadService.isValidDiyanetAudioFile(osmanFile), isTrue);
+
+        final mehmetFile = File('${tempDir.path}/mehmet.mp3');
+        await mehmetFile.writeAsBytes([
+          0x49, 0x44, 0x33, 0x03,
+          ...List<int>.filled(3000, 0x55),
+        ]);
+        expect(AudioDownloadService.isValidDiyanetAudioFile(mehmetFile), isFalse);
+
+        final alafasyFile = File('${tempDir.path}/alafasy.mp3');
+        await alafasyFile.writeAsBytes([
+          0xFF, 0xFA, 0x90, 0x64,
+          ...List<int>.filled(3000, 0x55),
+        ]);
+        expect(AudioDownloadService.isValidDiyanetAudioFile(alafasyFile), isFalse);
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('QuranWordHighlighter.cleanArabicText separates joined dhu token for 1:1 DB word alignment', () {
+      const sample = 'وَٱللَّهُ ذُوفَضْلٍ عَظِيمٍ';
+      final cleaned = QuranWordHighlighter.cleanArabicText(sample).trim().split(RegExp(r'\s+'));
+      expect(cleaned.length, equals(4));
+      expect(cleaned[1], equals('ذُو'));
     });
   });
 

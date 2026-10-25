@@ -95,7 +95,7 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {

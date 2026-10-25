@@ -128,6 +128,10 @@ class QuranWordHighlighter {
         .replaceAll('\u2007', ' ')
         .replaceAll('\u200B', ' ')
         .replaceAll('ی', 'ي')
+        .replaceAllMapped(
+          RegExp(r'(^|\s)ذُو(?![ق\s])'),
+          (m) => '${m[1]}ذُو ',
+        )
         .replaceAll('D', 'ْد');
   }
 
@@ -340,4 +344,87 @@ class QuranWordHighlighter {
     return spans;
   }
 }
+
+/// Custom-painted rahle/hilal upward tracking arrow pointer for "Ok ile Takip" mode.
+class QuranWordTrackingPointer extends StatelessWidget {
+  final bool isDark;
+  final double height;
+
+  const QuranWordTrackingPointer({
+    super.key,
+    required this.isDark,
+    this.height = 11.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: CustomPaint(
+        painter: QuranTrackingArrowPainter(isDark: isDark),
+      ),
+    );
+  }
+}
+
+class QuranTrackingArrowPainter extends CustomPainter {
+  final bool isDark;
+
+  const QuranTrackingArrowPainter({required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final primaryColor = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+    final accentEmerald = isDark ? const Color(0xFF10B981) : const Color(0xFF059669);
+
+    // 1. Soft glow under the active word baseline
+    final glowPaint = Paint()
+      ..color = primaryColor.withValues(alpha: isDark ? 0.45 : 0.30)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
+
+    final barWidth = (size.width * 0.88).clamp(16.0, 140.0);
+    final barLeft = (size.width - barWidth) / 2.0;
+    final barRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(barLeft, 0.5, barWidth, 2.4),
+      const Radius.circular(2.0),
+    );
+    canvas.drawRRect(barRect, glowPaint);
+
+    // 2. Crisp baseline bar
+    final barPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          accentEmerald.withValues(alpha: 0.85),
+          primaryColor,
+          accentEmerald.withValues(alpha: 0.85),
+        ],
+      ).createShader(Rect.fromLTWH(barLeft, 0, barWidth, 3.0));
+    canvas.drawRRect(barRect, barPaint);
+
+    // 3. Upward pointer arrow (rahle/mushaf indicator) centered under the word
+    final centerX = size.width / 2.0;
+    final arrowPath = Path()
+      ..moveTo(centerX, 2.2) // Sharp tip pointing up at the word
+      ..lineTo(centerX - 5.2, size.height - 0.5)
+      ..quadraticBezierTo(centerX, size.height - 2.2, centerX + 5.2, size.height - 0.5)
+      ..close();
+
+    final arrowGlow = Paint()
+      ..color = primaryColor.withValues(alpha: 0.45)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    canvas.drawPath(arrowPath, arrowGlow);
+
+    final arrowPaint = Paint()
+      ..color = primaryColor
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(arrowPath, arrowPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant QuranTrackingArrowPainter oldDelegate) {
+    return oldDelegate.isDark != isDark;
+  }
+}
+
 

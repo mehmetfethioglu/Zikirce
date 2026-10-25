@@ -1,6 +1,8 @@
 // GENERATED FILE FROM .NET MAUI AppResources.resx
 // Total keys: 661
 
+import '../../services/changelog_service.dart';
+
 const Map<String, String> appStringsTr = {
   'Onboarding_WelcomeTitle': 'Zikirce\'ye Hoş Geldiniz 🕌',
   'Onboarding_WelcomeDesc': 'Zikirce, manevi yolculuğunuzda zikirlerinizi çekmenize, Kur\'an-ı Kerim tilavetlerinizi takip etmenize ve günlük serilerinizi (streak) koruyarak alışkanlık edinmenize yardımcı olur.',
@@ -292,7 +294,7 @@ const Map<String, String> appStringsTr = {
   'Exchange_Success': '🎉 {0} Altın başarıyla {1} Elmas\'a dönüştürüldü!',
   'Exchange_ConvertToUnlockBadge': '🪙 Altın Dönüştür ve Kilidi Aç',
   'About_Title': 'Hakkında',
-  'About_Version': 'Sürüm 2.0.0',
+  'About_Version': 'Sürüm ${ChangelogService.currentVersionName}',
   'About_Description': 'Akarworks tarafından geliştirilmiştir. Tamamen ücretsiz ve reklamsızdır. Sizin Dualarınızı hedefler :)',
   'Settings_GuideBtn': 'Kullanım Kılavuzu & Tanıtım',
   'About_PrivacyBtn': 'Gizlilik Politikası',
@@ -748,7 +750,8 @@ const Map<String, String> appStringsTr = {
   'Settings_ThemeNight': 'Gece',
   'Settings_ThemeSepia': 'Sepya',
   'Settings_AllRightsReserved': '© 2026 Zikirce. Tüm hakları saklıdır.',
-  'Settings_Version': 'Versiyon 2.0.7 (Build 50)',
+  'Settings_Version':
+      'Versiyon ${ChangelogService.currentVersionName} (Build ${ChangelogService.currentVersionCode})',
   'Namaz_TapToChangeCity': '📍 Şehir değiştirmek için dokunun',
   'Namaz_TimeRemainingSuffix': '{0} vaktine kalan süre',
   'Namaz_NextPrayerPrefix': 'Sonraki Vakit: {0}',

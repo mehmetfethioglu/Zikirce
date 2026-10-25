@@ -5,6 +5,7 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/utils/spaced_repetition_sm2.dart';
 import '../../dashboard/providers/share_reminder_provider.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../../settings/providers/settings_provider.dart';
 
 final memorizationPlansStreamProvider = StreamProvider<List<MemorizationPlan>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -65,17 +66,19 @@ class EzberNotifier extends StateNotifier<void> {
     try {
       ref.read(badgeRefreshTriggerProvider.notifier).state++;
       ref.invalidate(dailyGoalsStatusProvider);
-      ref.read(shareReminderProvider.notifier).setReminder(
-        title: 'Ezber & Hafızlık Gayreti',
-        subtitle: 'Sayfa $pageId ezber tekrarı tamamlandı 🧠',
-        type: ShareReminderType.ezber,
-        metadata: {
-          'name': 'Ezber & Hafızlık Gayreti',
-          'category': 'Ezber',
-          'count': result.repetitions,
-          'target': 1,
-        },
-      );
+      if (ref.read(userSettingsProvider).isHafizlikRepeatGoalEnabled) {
+        ref.read(shareReminderProvider.notifier).setReminder(
+          title: 'Ezber & Hafızlık Gayreti',
+          subtitle: 'Sayfa $pageId ezber tekrarı tamamlandı 🧠',
+          type: ShareReminderType.ezber,
+          metadata: {
+            'name': 'Ezber & Hafızlık Gayreti',
+            'category': 'Ezber',
+            'count': result.repetitions,
+            'target': 1,
+          },
+        );
+      }
     } catch (_) {}
   }
 
@@ -125,7 +128,7 @@ class EzberNotifier extends StateNotifier<void> {
     try {
       ref.read(badgeRefreshTriggerProvider.notifier).state++;
       ref.invalidate(dailyGoalsStatusProvider);
-      if (isDone) {
+      if (isDone && ref.read(userSettingsProvider).isHafizlikRepeatGoalEnabled) {
         ref.read(shareReminderProvider.notifier).setReminder(
           title: 'Ezber & Hafızlık Gayreti',
           subtitle: 'Hafızlık virdi tamamlandı 🧠',

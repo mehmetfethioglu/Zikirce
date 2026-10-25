@@ -59,6 +59,7 @@ class QuickAccessManagementSheet extends ConsumerWidget {
     }
 
     // 3. System Cards
+    allCards.add((id: 'card_hatim_duasi', title: 'Matbû Kur’ân Hatim Duası', icon: '🤲', isHatim: false));
     allCards.add((id: 'card_dynamic_surah', title: 'Günün Sûresi (Dinamik)', icon: '📖', isHatim: false));
     allCards.add((id: 'card_shortcut', title: 'Hızlı Kısayol Kartı', icon: '✨', isHatim: false));
     allCards.add((id: 'card_streak_waqiah', title: 'Vâkıa Sûresi (40 Okuma)', icon: '🌿', isHatim: false));

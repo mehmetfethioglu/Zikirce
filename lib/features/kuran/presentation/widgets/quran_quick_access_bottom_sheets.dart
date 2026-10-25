@@ -3,6 +3,7 @@ import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../gamification/models/badge_models.dart';
+import '../../../hatim/presentation/widgets/hatim_duasi_modal.dart';
 import 'add_custom_quran_badge_sheet.dart';
 
 /// Hatim ve Mukabele Detay & İstatistik Bottom Sheet'i
@@ -392,6 +393,39 @@ class HatimDetailBottomSheet extends StatelessWidget {
               ),
               const SizedBox(height: 22),
 
+              // 5.5 Matbû Hatim Duası Butonu
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFB57D15),
+                    side: BorderSide(
+                      color: const Color(0xFFD4AF37).withValues(alpha: 0.6),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    HatimDuasiModal.show(
+                      context,
+                      completedHatim:
+                          (completedPages >= 604 || hatim.isCompleted)
+                              ? hatim
+                              : null,
+                    );
+                  },
+                  icon: const Text('🤲', style: TextStyle(fontSize: 16)),
+                  label: const Text(
+                    'Matbû Kur’ân Hatim Duasını Oku',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+
               // 6. Alt Aksiyon Butonları
               Row(
                 children: [
@@ -650,7 +684,7 @@ class DynamicSurahDetailBottomSheet extends StatelessWidget {
                               Text(
                                 surahItem.nameArabic,
                                 style: const TextStyle(
-                                  fontFamily: 'Amiri',
+                                  fontFamily: 'AmasyaAbay',
                                   fontSize: 17,
                                   color: coralBg,
                                   fontWeight: FontWeight.bold,

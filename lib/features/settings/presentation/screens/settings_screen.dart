@@ -28,6 +28,7 @@ import '../../../../core/session/session_providers.dart';
 import '../../../../core/session/user_session.dart';
 import 'widgets_preview_screen.dart';
 import '../../../../core/services/haptic_service.dart';
+import '../../../../core/services/changelog_service.dart';
 import '../../../dashboard/presentation/widgets/whats_new_bottom_sheet.dart';
 import '../../../namaz_vakitleri/presentation/widgets/prayer_notification_settings_sheet.dart';
 
@@ -53,6 +54,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _isFeedbackExpanded = false;
   String? _selectedFeedbackType;
   bool _isSendingFeedback = false;
+
+  String _runtimeVersionName = ChangelogService.effectiveVersionName;
+  int _runtimeVersionCode = ChangelogService.effectiveVersionCode;
 
   Widget _buildAvatarImage(String imagePath) {
     if (imagePath.startsWith('/') || imagePath.contains(':\\') || (!imagePath.startsWith('assets/') && File(imagePath).existsSync())) {
@@ -116,6 +120,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _feedbackEmailController = TextEditingController();
     _feedbackMessageController = TextEditingController();
     _loadGoogleDriveStatus();
+    _loadRuntimeVersion();
+  }
+
+  Future<void> _loadRuntimeVersion() async {
+    final v = await ChangelogService.getRuntimeVersion();
+    if (mounted) {
+      setState(() {
+        _runtimeVersionName = v.versionName;
+        _runtimeVersionCode = v.versionCode;
+      });
+    }
   }
 
   @override
@@ -2489,6 +2504,208 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ],
                 ),
+                const Divider(height: 20),
+
+                // Kelime Takip Sistemi (Kelime İşaretleme / Ok ile Takip)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.isTurkish
+                          ? 'Kelime Takip Sistemi (Mukabele & Talim)'
+                          : 'Word Tracking System (Mukabele & Talim)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: colors.primaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      l10n.isTurkish
+                          ? 'Sesli tilavet sırasında okunan kelimenin nasıl takip edileceğini seçin'
+                          : 'Choose how the active word is tracked during audio recitation',
+                      style: TextStyle(fontSize: 11, color: colors.secondaryTextAlt),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => settingsNotifier.setWordTrackingMode('highlight'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: settings.wordTrackingMode != 'arrow'
+                                    ? colors.accent.withValues(alpha: 0.14)
+                                    : colors.cardBackgroundAlt,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: settings.wordTrackingMode != 'arrow'
+                                      ? colors.accent
+                                      : colors.borderStroke,
+                                  width: settings.wordTrackingMode != 'arrow' ? 1.6 : 1.0,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.auto_fix_high_rounded,
+                                        size: 16,
+                                        color: settings.wordTrackingMode != 'arrow'
+                                            ? colors.accent
+                                            : colors.secondaryTextAlt,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          l10n.isTurkish ? 'Kelime İşaretleme' : 'Word Highlight',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: settings.wordTrackingMode != 'arrow'
+                                                ? colors.accent
+                                                : colors.primaryText,
+                                          ),
+                                        ),
+                                      ),
+                                      if (settings.wordTrackingMode != 'arrow')
+                                        Icon(Icons.check_circle_rounded, size: 15, color: colors.accent),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Center(
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00965E),
+                                        borderRadius: BorderRadius.circular(7),
+                                      ),
+                                      child: const Text(
+                                        'ٱلرَّحْمَـٰنِ',
+                                        textDirection: TextDirection.rtl,
+                                        style: TextStyle(
+                                          fontFamily: 'SchherazadeNew',
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    l10n.isTurkish
+                                        ? 'Okunan kelimeyi renkli kutu içinde vurgular'
+                                        : 'Highlights the active word inside a colored pill',
+                                    style: TextStyle(fontSize: 10, color: colors.secondaryTextAlt),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => settingsNotifier.setWordTrackingMode('arrow'),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 180),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: settings.wordTrackingMode == 'arrow'
+                                    ? colors.accent.withValues(alpha: 0.14)
+                                    : colors.cardBackgroundAlt,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: settings.wordTrackingMode == 'arrow'
+                                      ? colors.accent
+                                      : colors.borderStroke,
+                                  width: settings.wordTrackingMode == 'arrow' ? 1.6 : 1.0,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.navigation_rounded,
+                                        size: 16,
+                                        color: settings.wordTrackingMode == 'arrow'
+                                            ? colors.accent
+                                            : colors.secondaryTextAlt,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          l10n.isTurkish ? 'Ok ile Takip' : 'Arrow Pointer',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: settings.wordTrackingMode == 'arrow'
+                                                ? colors.accent
+                                                : colors.primaryText,
+                                          ),
+                                        ),
+                                      ),
+                                      if (settings.wordTrackingMode == 'arrow')
+                                        Icon(Icons.check_circle_rounded, size: 15, color: colors.accent),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'ٱلرَّحْمَـٰنِ',
+                                          textDirection: TextDirection.rtl,
+                                          style: TextStyle(
+                                            fontFamily: 'SchherazadeNew',
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.bold,
+                                            color: colors.accent,
+                                          ),
+                                        ),
+                                        Container(
+                                          width: 34,
+                                          height: 2.2,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFD97706),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.change_history_rounded,
+                                          size: 12,
+                                          color: Color(0xFFD97706),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    l10n.isTurkish
+                                        ? 'Okunan kelimenin altında takip oku ile gösterir'
+                                        : 'Points to the active word with a synchronized arrow',
+                                    style: TextStyle(fontSize: 10, color: colors.secondaryTextAlt),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
 
                 // Hafızlık / Ezber ve Kıraat Sesleri İndir
@@ -2919,7 +3136,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 // 3. Kullanım Kılavuzu & Tanıtım
                 InkWell(
                   onTap: () {
-                    context.push('/onboarding?fromSettings=true');
+                    context.push('/guide');
                   },
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
@@ -2934,7 +3151,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             children: [
                               Text(l10n.translate('Settings_GuideBtn'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.primaryText)),
                               Text(
-                                l10n.isTurkish ? 'Zikirce\'nin tüm özelliklerini animasyonlu keşfedin' : 'Explore all Zikirce features interactively',
+                                l10n.isTurkish ? 'Adım adım kullanım rehberi, püf noktaları ve interaktif özellik tanıtımı' : 'Step-by-step user manual, pro tips, and interactive feature showcase',
                                 style: TextStyle(fontSize: 10, color: colors.secondaryTextAlt),
                               ),
                             ],
@@ -3008,9 +3225,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Center(
             child: Column(
               children: [
-                Text(
-                  l10n.translate('Settings_Version'),
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colors.secondaryTextAlt),
+                InkWell(
+                  onTap: () {
+                    HapticService.selectionClick();
+                    WhatsNewBottomSheet.showHistory(context);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: Text(
+                      ChangelogService.formatVersionLabel(
+                        isTurkish: l10n.isTurkish,
+                        versionName: _runtimeVersionName,
+                        versionCode: _runtimeVersionCode,
+                      ),
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colors.secondaryTextAlt),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

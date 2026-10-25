@@ -5,8 +5,10 @@ import 'package:drift/drift.dart' hide Column;
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/zikir_seed_data.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/zikir_providers.dart';
@@ -456,22 +458,58 @@ class _ZikirListScreenState extends ConsumerState<ZikirListScreen> {
                                     ),
                                   ),
                                   alignment: Alignment.centerRight,
-                                  child: Text(
-                                    zikir.arabic!,
+                                  child: Text.rich(
+                                    TextSpan(
+                                      children: QuranWordHighlighter
+                                          .buildHighlightedSpans(
+                                        rawText: zikir.arabic!,
+                                        baseStyle: TextStyle(
+                                          fontFamily: ref
+                                              .watch(arabicFontFamilyProvider),
+                                          fontSize: 18.0,
+                                          fontWeight:
+                                              ref.watch(isBoldArabicProvider)
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                          height: 1.75,
+                                          color: colors.zikirArabicColor,
+                                        ),
+                                        isDark: Theme.of(context).brightness ==
+                                            Brightness.dark,
+                                        enabled: ref.watch(
+                                            highlightDivineWordsProvider),
+                                        fontFamily:
+                                            ref.watch(arabicFontFamilyProvider),
+                                        isBold: ref.watch(isBoldArabicProvider),
+                                      ),
+                                    ),
                                     textDirection: TextDirection.rtl,
                                     textAlign: TextAlign.right,
-                                    style: TextStyle(
-                                      fontFamily: ref.watch(arabicFontFamilyProvider),
-                                      fontSize: 16.5,
-                                      fontWeight: ref.watch(isBoldArabicProvider)
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      height: 1.55,
-                                      color: colors.zikirArabicColor,
-                                    ),
                                   ),
                                 ),
                               ],
+                              Builder(
+                                builder: (context) {
+                                  final virtue = ZikirSeedData.getVirtueForZikir(
+                                    zikir.name,
+                                    arabic: zikir.arabic,
+                                  );
+                                  if (virtue == null || virtue.isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      virtue,
+                                      style: TextStyle(
+                                        fontSize: 12.2,
+                                        height: 1.42,
+                                        color: secondaryTextColor,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                               const SizedBox(height: 10),
                               // Progress Bar
                               ClipRRect(

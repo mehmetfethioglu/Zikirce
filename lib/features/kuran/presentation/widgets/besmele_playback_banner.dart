@@ -1,127 +1,128 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
+import '../../../settings/providers/settings_provider.dart';
 import '../../providers/kuran_providers.dart';
 
-class BesmelePlaybackBanner extends ConsumerStatefulWidget {
-  const BesmelePlaybackBanner({super.key});
+/// Sure başlarında Besmele okunurken ayetlerin üstünü kapatmadan,
+/// üst barda zarifçe beliren ve Besmele biter bitmez (4.9 sn) anında kapanan şerit.
+class BesmelePlaybackBanner extends ConsumerWidget {
+  static const Color _goldColor = Color(0xFFD4AF37);
+  final bool isVisible;
+  final String? surahName;
+
+  const BesmelePlaybackBanner({
+    super.key,
+    this.isVisible = true,
+    this.surahName,
+  });
 
   @override
-  ConsumerState<BesmelePlaybackBanner> createState() => _BesmelePlaybackBannerState();
-}
-
-class _BesmelePlaybackBannerState extends ConsumerState<BesmelePlaybackBanner>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _glowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
-
-    _glowAnimation = Tween<double>(begin: 0.85, end: 1.05).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _animController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final arabicFont = ref.watch(arabicFontFamilyProvider);
+    final isBoldArabic = ref.watch(isBoldArabicProvider);
+    final highlightDivine = ref.watch(highlightDivineWordsProvider);
+    final baseColor =
+        isDark ? const Color(0xFFFDF8EE) : const Color(0xFF1B3B2B);
 
-    return AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: isDark
-                  ? [
-                      AppColors.darkCard.withValues(alpha: 0.95),
-                      const Color(0xFF1E2B25).withValues(alpha: 0.95),
-                    ]
-                  : [
-                      Colors.white.withValues(alpha: 0.96),
-                      AppColors.emerald50.withValues(alpha: 0.96),
-                    ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: (isDark ? AppColors.gold500 : AppColors.gold700)
-                  .withValues(alpha: (0.4 * _glowAnimation.value).clamp(0.0, 1.0)),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (isDark ? AppColors.gold500 : AppColors.gold600)
-                    .withValues(alpha: (0.12 * _glowAnimation.value).clamp(0.0, 1.0)),
-                blurRadius: 16 * _glowAnimation.value,
-                spreadRadius: 1,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.graphic_eq_rounded,
-                    size: 16,
-                    color: isDark ? AppColors.gold400 : AppColors.gold800,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: !isVisible
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark
+                        ? [
+                            const Color(0xFF1A2822),
+                            const Color(0xFF121C18),
+                          ]
+                        : [
+                            const Color(0xFFFDF8EE),
+                            const Color(0xFFF5EBD6),
+                          ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Besmele-i Şerif',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                      color: isDark ? AppColors.gold300 : AppColors.gold800,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: _goldColor.withValues(alpha: 0.55),
+                    width: 1.1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _goldColor.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.graphic_eq_rounded,
+                            color: _goldColor,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            surahName != null && surahName!.isNotEmpty
+                                ? '$surahName • Besmele'
+                                : 'Besmele-i Şerîf',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: _goldColor,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.graphic_eq_rounded,
-                    size: 16,
-                    color: isDark ? AppColors.gold400 : AppColors.gold800,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحٖيمِ',
-                textAlign: TextAlign.center,
-                textDirection: TextDirection.rtl,
-                style: TextStyle(
-                  fontFamily: arabicFont,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? AppColors.gold400 : const Color(0xFF7A510A),
-                  height: 1.6,
-                  letterSpacing: -0.1,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text.rich(
+                        TextSpan(
+                          children: QuranWordHighlighter.buildHighlightedSpans(
+                            rawText: 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّح۪يمِ',
+                            baseStyle: TextStyle(
+                              fontFamily: arabicFont,
+                              fontSize: 20,
+                              height: 1.5,
+                              fontWeight: isBoldArabic
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: baseColor,
+                            ),
+                            isDark: isDark,
+                            enabled: highlightDivine,
+                            fontFamily: arabicFont,
+                            isBold: isBoldArabic,
+                          ),
+                        ),
+                        textAlign: TextAlign.right,
+                        textDirection: TextDirection.rtl,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        );
-      },
+            ),
     );
   }
 }

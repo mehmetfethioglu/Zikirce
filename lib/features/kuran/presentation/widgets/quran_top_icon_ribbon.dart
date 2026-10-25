@@ -5,6 +5,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../hatim/providers/hatim_providers.dart';
+import '../../../hatim/presentation/widgets/hatim_duasi_modal.dart';
 import '../../providers/tilavet_secdesi_provider.dart';
 import 'tilavet_secdesi_guide_sheet.dart';
 
@@ -106,6 +107,24 @@ class QuranTopIconRibbon extends ConsumerWidget {
     );
 
     // ==========================================
+    // 1.5 PINNED #2: MATBÛ KUR'ÂN HATİM DUASI KARTI (Sadece Hatim Duası Okuma)
+    // ==========================================
+    items.add(
+      _buildIconBadgeCard(
+        tooltip: 'Matbû Kur’ân Hatim Duası (Sadece Hatim Duası Oku)',
+        iconWidget: const Text(
+          '🤲',
+          style: TextStyle(fontSize: 22),
+        ),
+        badgeText: 'Dua',
+        badgeColor: const Color(0xFFB57D15),
+        cardBg: isDark ? const Color(0xFF282218) : const Color(0xFFFDF8EB),
+        borderColor: const Color(0xFFD4AF37).withValues(alpha: 0.55),
+        onTap: () => HatimDuasiModal.show(context),
+      ),
+    );
+
+    // ==========================================
     // 2. TAMAMLANAN HATİMLER
     // ==========================================
     for (final h in completedHatims) {
@@ -120,8 +139,8 @@ class QuranTopIconRibbon extends ConsumerWidget {
                 : 'assets/images/ic_hatim_books.svg',
             width: 25,
             height: 25,
-            colorFilter: ColorFilter.mode(
-              const Color(0xFFD97706),
+            colorFilter: const ColorFilter.mode(
+              Color(0xFFD97706),
               BlendMode.srcIn,
             ),
           ),
@@ -173,8 +192,8 @@ class QuranTopIconRibbon extends ConsumerWidget {
             'assets/images/ic_kuran_scroll.svg',
             width: 24,
             height: 24,
-            colorFilter: ColorFilter.mode(
-              const Color(0xFF0284C7),
+            colorFilter: const ColorFilter.mode(
+              Color(0xFF0284C7),
               BlendMode.srcIn,
             ),
           ),
@@ -201,8 +220,8 @@ class QuranTopIconRibbon extends ConsumerWidget {
             'assets/images/ic_kuran_sun.svg',
             width: 24,
             height: 24,
-            colorFilter: ColorFilter.mode(
-              const Color(0xFFEAB308),
+            colorFilter: const ColorFilter.mode(
+              Color(0xFFEAB308),
               BlendMode.srcIn,
             ),
           ),

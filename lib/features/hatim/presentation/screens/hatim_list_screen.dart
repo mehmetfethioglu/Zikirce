@@ -7,6 +7,7 @@ import 'hatim_detail_screen.dart';
 import 'hatim_qr_screen.dart';
 import 'mukabele_hatim_screen.dart';
 import '../widgets/hatim_sync_gate.dart';
+import '../widgets/hatim_duasi_modal.dart';
 
 class HatimListScreen extends ConsumerWidget {
   const HatimListScreen({super.key});
@@ -33,6 +34,11 @@ class HatimListScreen extends ConsumerWidget {
         iconTheme: IconThemeData(color: primaryTextColor),
         title: Text('Hatim Takibi', style: AppTypography.headingSmall(color: primaryTextColor)),
         actions: [
+          IconButton(
+            icon: const Text('🤲', style: TextStyle(fontSize: 20)),
+            tooltip: 'Sadece Hatim Duası Oku',
+            onPressed: () => HatimDuasiModal.show(context),
+          ),
           IconButton(
             icon: Icon(Icons.headset_mic_rounded, color: goldAccent),
             tooltip: 'Mukabele Çalar',
@@ -93,6 +99,20 @@ class HatimListScreen extends ConsumerWidget {
                     label: const Text('Hatim Başlat', style: TextStyle(fontWeight: FontWeight.bold)),
                     onPressed: () => _showCreateHatimDialog(context, hatimNotifier, isDark),
                   ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryTextColor,
+                      side: BorderSide(color: goldAccent.withValues(alpha: 0.65)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+                    ),
+                    icon: const Text('🤲', style: TextStyle(fontSize: 16)),
+                    label: const Text(
+                      'Sadece Hatim Duası Oku (Harici Hatim)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => HatimDuasiModal.show(context),
+                  ),
                 ],
               ),
             );
@@ -115,7 +135,7 @@ class HatimListScreen extends ConsumerWidget {
                       ? null
                       : [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.04),
+                            color: Colors.black.withValues(alpha: 0.04),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -219,7 +239,7 @@ class HatimListScreen extends ConsumerWidget {
                 SwitchListTile(
                   title: Text('Grup Hatmi (QR Paylaşımlı)', style: TextStyle(color: textColor, fontSize: 14)),
                   value: isGroup,
-                  activeColor: isDark ? AppColors.gold500 : AppColors.emerald700,
+                  activeThumbColor: isDark ? AppColors.gold500 : AppColors.emerald700,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (val) => setModalState(() => isGroup = val),
                 ),

@@ -63,6 +63,21 @@ class MainActivity : FlutterFragmentActivity() {
                 "getManufacturer" -> {
                     result.success(Build.MANUFACTURER ?: "")
                 }
+                "getAppVersion" -> {
+                    try {
+                        val pInfo = packageManager.getPackageInfo(packageName, 0)
+                        val vName = pInfo.versionName ?: ""
+                        val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            pInfo.longVersionCode.toInt()
+                        } else {
+                            @Suppress("DEPRECATION")
+                            pInfo.versionCode
+                        }
+                        result.success(mapOf("versionName" to vName, "versionCode" to vCode))
+                    } catch (e: Exception) {
+                        result.success(null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
