@@ -35,3 +35,7 @@
 
 ## [2026-10-25] ADR-007: Hatim Duası Varsayılan Matbû Mushaf Sahife Görünümü & v2.1.9+64 (Build 64) Üretim Sürümü
 - **Karar:** `HatimDuasiModal` varsayılan olarak `HatimDuasiDisplayMode.arabicOnly` (`Matbû Arapça`) modunda açılacak şekilde güncellendi; `HatimDuasiData` içerisindeki Arapça metin Diyanet Matbû Mushaf imlasına (`AmasyaAbay` / `mushaf` çeker `ٖ`, asâr `ٰ`, med `ٓ`, hamzesiz elif tabanı `ا`) dönüştürüldü ve `MushafPageWidget` ile birebir aynı sağlayıcılar (`quranFontFamilyProvider`, `quranFontSizeProvider`, `quranLineHeightProvider`, `highlightDivineWordsProvider`, `isBoldArabicProvider`), `QuranWordHighlighter.buildHighlightedSpans` ve `ZikirceAyahStopMarker` durak gülleriyle render edildi. Sürüm `v2.1.9+64` (Build 64) olarak yükseltilerek Google Play (AAB/APK) ve App Store Connect / TestFlight (GitHub Actions + Fastlane) üretime gönderildi.
+
+## [2026-10-25] ADR-008: Tester Dağıtımı İçin Sürüm Kodu Sabit Tutularak Release APK Derlemesi (`v2.1.9+64`)
+- **Karar:** Kullanıcı talimatı uyarınca sürüm kodu ve numarası yükseltilmeden (`pubspec.yaml` `2.1.9+64`), test kullanıcıları ve harici kurulumlar için `flutter build apk --release` derlemesi tamamlandı.
+- **Teknik Çıktı:** `build/app/outputs/flutter-apk/app-release.apk` (108.5 MB, 113.768.563 bayt) üretildi ve Google Drive dağıtım dizinlerine (`G:\Drive'ım\zikirce_\Releases\zikirce_-v2.1.9+64-release.apk` ve `G:\Drive'ım\zikirce_\zikirce_v2.1.9_b64.apk`) tester erişimi için kopyalandı.
