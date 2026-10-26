@@ -42,4 +42,24 @@ post_install do |installer|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
+
+  # Xcode 26 / iOS 26 UIPopoverPresentationController fix for share_plus 10.x on iPhone & iPad
+  share_plugin_files = Dir.glob(File.join(File.dirname(__FILE__), '.symlinks', 'plugins', 'share_plus', '**', 'FPPSharePlusPlugin.m')) +
+                       Dir.glob(File.join(installer.sandbox.root.to_s, '**', 'FPPSharePlusPlugin.m'))
+  share_plugin_files.uniq.each do |plugin_file|
+    next unless File.exist?(plugin_file)
+    begin
+      content = File.read(plugin_file)
+      if content.include?('sharePositionOrigin: argument must be set')
+        File.chmod(0644, plugin_file) rescue nil
+        patched = content.gsub(
+          /if\s*\(hasPopoverPresentationController\s*&&\s*\(!isCoordinateSpaceOfSourceView\s*\|\|\s*CGRectIsEmpty\(origin\)\)\)\s*\{[^}]*result\(\[FlutterError[^\]]*\]\);\s*return;\s*\}/m,
+          "if (hasPopoverPresentationController && (!isCoordinateSpaceOfSourceView || CGRectIsEmpty(origin))) {\n    CGRect bounds = controller.view.bounds;\n    origin = CGRectMake(CGRectGetMidX(bounds) - 1.0, CGRectGetMidY(bounds) - 1.0, 2.0, 2.0);\n  }"
+        )
+        File.write(plugin_file, patched) if patched != content
+      end
+    rescue => e
+      Pod::UI.puts "share_plus patch note: #{e.message}"
+    end
+  end
 end

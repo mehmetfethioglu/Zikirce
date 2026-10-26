@@ -1,11 +1,11 @@
-name: App Store Connect — Create v2.1.9, Attach Build 64 & Submit for Review
+name: App Store Connect — Create v2.1.10, Attach Build 65 & Submit for Review
 
 on:
   workflow_dispatch:
 
 jobs:
   submit-appstore:
-    name: Submit v2.1.9 (Build 64) to App Store Connect
+    name: Submit v2.1.10 (Build 65) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -17,7 +17,7 @@ jobs:
       - name: Install PyJWT and Cryptography
         run: pip install pyjwt cryptography requests
 
-      - name: Configure v2.1.9 Release Notes, Attach Build 64 & Submit to Review
+      - name: Configure v2.1.10 Release Notes, Attach Build 65 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, jwt, requests
@@ -52,7 +52,7 @@ jobs:
           app_id = apps[0]["id"]
           print(f"✅ Found App ID: {app_id}")
 
-          # 2. Find or create App Store Version 2.1.9
+          # 2. Find or create App Store Version 2.1.10
           r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
           r.raise_for_status()
           versions = r.json().get("data", [])
@@ -63,7 +63,7 @@ jobs:
               v_str = v["attributes"]["versionString"]
               v_state = v["attributes"]["appStoreState"]
               print(f"  Existing version: {v_str} (state: {v_state}, id: {v['id']})")
-              if v_str == "2.1.9":
+              if v_str == "2.1.10":
                   target_version_id = v["id"]
                   break
               if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "INVALID_BINARY"):
@@ -71,7 +71,7 @@ jobs:
 
           if not target_version_id and editable_version:
               target_version_id = editable_version["id"]
-              print(f"🔄 Updating editable version {editable_version['attributes']['versionString']} -> 2.1.9 ({target_version_id})")
+              print(f"🔄 Updating editable version {editable_version['attributes']['versionString']} -> 2.1.10 ({target_version_id})")
               up = requests.patch(
                   f"{BASE}/appStoreVersions/{target_version_id}",
                   headers=make_headers(),
@@ -79,14 +79,14 @@ jobs:
                       "data": {
                           "type": "appStoreVersions",
                           "id": target_version_id,
-                          "attributes": {"versionString": "2.1.9"},
+                          "attributes": {"versionString": "2.1.10"},
                       }
                   },
               )
               print("  Update versionString status:", up.status_code, up.text[:300])
 
           if not target_version_id:
-              print("➕ Creating new App Store Version 2.1.9...")
+              print("➕ Creating new App Store Version 2.1.10...")
               cr = requests.post(
                   f"{BASE}/appStoreVersions",
                   headers=make_headers(),
@@ -95,7 +95,7 @@ jobs:
                           "type": "appStoreVersions",
                           "attributes": {
                               "platform": "IOS",
-                              "versionString": "2.1.9",
+                              "versionString": "2.1.10",
                               "releaseType": "AFTER_APPROVAL",
                           },
                           "relationships": {
@@ -111,25 +111,23 @@ jobs:
                   print("  Create version response:", cr.text)
                   sys.exit(1)
 
-          print(f"✅ Target App Store Version ID for 2.1.9: {target_version_id}")
+          print(f"✅ Target App Store Version ID for 2.1.10: {target_version_id}")
 
           # 3. Set What's New (Release Notes) for TR and EN
           whats_new_tr = (
-              "Zikirce v2.1.9 Yenilikleri:\n"
-              "• Matbû Kur’ân-ı Kerîm Hatim Duası: Mushafların sonunda yer alan 5 bölümlük tam metin Hatim ve Bağışlama Duası (Duâü Hatmi’l-Kur’âni’l-Azîm), varsayılan Matbû Arapça sahife görünümü, Kur’ân okuma sayfasıyla birebir aynı Diyanet Mushaf hattı, Lafzatullah kırmızı vurgusu ve 8 köşeli Selçuklu durak gülleriyle eklendi.\n"
-              "• 4 Modlu Kur’ân Okuma, 7 Meâl Kıyaslama & 5 Klasik Tefsir: Mushaf, Âyet + Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir okuma modları; 7 Türkçe meâl karşılaştırması ve Diyanet Kur’ân Yolu, Beyzâvî, Mâtürîdî, Zemahşerî el-Keşşâf ve Fahreddin er-Râzî tam metin tefsir kütüphanesi sunuldu.\n"
-              "• 23 Eserlik İslami Külliyat Kitaplığı: Kütüb-i Sitte (Buhârî, Müslim, Tirmizî, Ebû Dâvûd, Nesâî, İbn Mâce), Riyâzü’s-Sâlihîn ve DİB Asıl Nüsha Tashihli Risale-i Nur Külliyatı; metin seçme, 4 renk vurgulama, ayraç ve paylaşım kartı özellikleriyle Külliyat rafına eklendi.\n"
-              "• Sesli Tilâvette Ok ile Takip & 6.236 Âyet Akustik Senkronizasyon: Satır yüksekliğini sarsmadan kelimenin altında süzülen Ok ile Takip işaretçisi eklendi; 6.236 âyetin tamamında kelime zaman damgaları akustik olarak kusursuzlaştırıldı.\n"
-              "• İnteraktif Kullanım Kılavuzu & Sahih Hadis Kaynakları: Ayarlar’a anlık aramalı 20 başlıklı Kullanım Kılavuzu eklendi; 99 Esmâü’l-Hüsnâ ve 146 zikir Kütüb-i Sitte sahih hadis kaynaklarıyla zenginleştirildi."
+              "Zikirce v2.1.10 Yenilikleri:\n"
+              "• iOS Paylaşım Kartı & Görsel Paylaşım Düzeltmesi: iPhone ve iPad cihazlarda zikir, seri, namaz ve ibadet karnesi kartlarını paylaşırken oluşan paylaşım penceresi (sharePositionOrigin) hatası kalıcı olarak giderildi.\n"
+              "• Matbû Kur’ân-ı Kerîm Hatim Duası: Mushafların sonunda yer alan 5 bölümlük tam metin Hatim ve Bağışlama Duası, varsayılan Matbû Arapça sahife görünümü ve Selçuklu durak gülleriyle eklendi.\n"
+              "• 4 Modlu Kur’ân Okuma, 7 Meâl & 5 Klasik Tefsir: Mushaf, Âyet + Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir modları; 7 Türkçe meâl kıyaslaması ve 5 tam metin klasik tefsir kütüphanesi sunuldu.\n"
+              "• 23 Eserlik İslami Külliyat & Ok ile Kelime Takibi: Kütüb-i Sitte, Riyâzü’s-Sâlihîn ve Risale-i Nur Külliyatı ile sesli tilâvette Ok ile Takip işaretçisi eklendi."
           )
 
           whats_new_en = (
-              "What's New in Zikirce v2.1.9:\n"
-              "• Printed Mushaf Khatm al-Quran Prayer: Added the complete 5-part traditional Khatm al-Quran and Dedication Prayer opening by default in the Printed Mushaf Arabic layout with authentic Diyanet calligraphy, ruby-red Divine Name highlights, and 8-pointed Seljuk rosette stop markers.\n"
-              "• 4-Mode Quran Reader, 7 Translations & 5 Classical Tafseers: Switch seamlessly between Mushaf, Verse + Translation, Flowing Book, and In-Page Tafseer modes with 7 comparative translations and 5 full-text classical Tafseer works.\n"
-              "• 23-Volume Classical Islamic Library (Külliyat): Full-length editions of Kutub al-Sittah, Riyad as-Salihin, and Risale-i Nur with 4-color highlighting, bookmarks, and quote sharing cards.\n"
-              "• Arrow Pointer Word Tracking & 6,236-Verse Acoustic Sync: Smooth sub-word arrow pointer tracking option and acoustically verified word timestamps across all 6,236 verses.\n"
-              "• Interactive User Guide & Authentic Hadith Citations: Searchable 20-topic User Guide in Settings and authentic Kutub al-Sittah Hadith citations for all 146 dhikrs and 99 Names of Allah."
+              "What's New in Zikirce v2.1.10:\n"
+              "• iOS Share Card & Image Sharing Fix: Resolved the share sheet origin (sharePositionOrigin) error when sharing dhikr, streak, prayer, and worship summary cards on iPhone and iPad.\n"
+              "• Printed Mushaf Khatm al-Quran Prayer: Complete 5-part traditional Khatm al-Quran Prayer opening by default in the Printed Mushaf Arabic layout with Seljuk rosette stop markers.\n"
+              "• 4-Mode Quran Reader, 7 Translations & 5 Classical Tafseers: Mushaf, Verse + Translation, Flowing Book, and In-Page Tafseer modes with 7 comparative translations and 5 full-text classical Tafseer works.\n"
+              "• 23-Volume Classical Islamic Library & Arrow Word Tracking: Full-length editions of Kutub al-Sittah, Riyad as-Salihin, and Risale-i Nur, plus the Arrow Pointer word-tracking mode."
           )
 
           loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
@@ -152,11 +150,11 @@ jobs:
               )
               print(f"📝 Updated whatsNew for locale '{locale}': status {pr.status_code}")
 
-          # 4. Wait for Build 64 to finish Apple processing (if needed) and attach to Version 2.1.9
+          # 4. Wait for Build 65 to finish Apple processing (if needed) and attach to Version 2.1.10
           build_id = None
           for attempt in range(24):
               br = requests.get(
-                  f"{BASE}/builds?filter[app]={app_id}&filter[version]=64&sort=-uploadedDate&limit=5",
+                  f"{BASE}/builds?filter[app]={app_id}&filter[version]=65&sort=-uploadedDate&limit=5",
                   headers=make_headers(),
               )
               br.raise_for_status()
@@ -164,15 +162,15 @@ jobs:
               if b_list:
                   b = b_list[0]
                   state = b["attributes"].get("processingState")
-                  print(f"📦 Build 64 found (id: {b['id']}, state: {state})")
+                  print(f"📦 Build 65 found (id: {b['id']}, state: {state})")
                   if state == "VALID":
                       build_id = b["id"]
                       break
                   elif state in ("FAILED", "INVALID"):
-                      print("❌ Build 64 state is invalid/failed!")
+                      print("❌ Build 65 state is invalid/failed!")
                       break
               else:
-                  print(f"⏳ Attempt {attempt+1}/24: Build 64 still processing on Apple servers, waiting 25s...")
+                  print(f"⏳ Attempt {attempt+1}/24: Build 65 still processing on Apple servers, waiting 25s...")
               time.sleep(25)
 
           if build_id:
@@ -193,7 +191,7 @@ jobs:
                   headers=make_headers(),
                   json={"data": {"type": "builds", "id": build_id}},
               )
-              print(f"🔗 Attached Build 64 ({build_id}) to Version 2.1.9: status {att.status_code}")
+              print(f"🔗 Attached Build 65 ({build_id}) to Version 2.1.10: status {att.status_code}")
 
               # 5. Submit for App Store Review via reviewSubmissions API
               sub_create = requests.post(
@@ -236,9 +234,9 @@ jobs:
                           }
                       },
                   )
-                  print("🚀 Submitted Version 2.1.9 (Build 64) for App Store Review:", confirm.status_code, confirm.text[:300])
+                  print("🚀 Submitted Version 2.1.10 (Build 65) for App Store Review:", confirm.status_code, confirm.text[:300])
               else:
                   print("ℹ️ reviewSubmissions note:", sub_create.status_code, sub_create.text[:400])
           else:
-              print("⚠️ Build 64 is still in Apple TestFlight processing queue; Version 2.1.9 and TR/EN Release Notes are saved and ready in App Store Connect!")
+              print("⚠️ Build 65 is still in Apple TestFlight processing queue; Version 2.1.10 and TR/EN Release Notes are saved and ready in App Store Connect!")
           EOF

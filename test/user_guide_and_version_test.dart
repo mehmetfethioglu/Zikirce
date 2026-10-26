@@ -7,6 +7,7 @@ import 'package:zikirce/core/localization/app_localizations.dart';
 import 'package:zikirce/core/localization/translations/app_strings_en.dart';
 import 'package:zikirce/core/localization/translations/app_strings_tr.dart';
 import 'package:zikirce/core/services/changelog_service.dart';
+import 'package:zikirce/core/utils/share_utils.dart';
 import 'package:zikirce/features/hatim/data/hatim_duasi_data.dart';
 import 'package:zikirce/features/hatim/presentation/widgets/hatim_duasi_modal.dart';
 import 'package:zikirce/features/kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
@@ -37,6 +38,30 @@ void main() {
         SentryConfig.release,
         'com.akarworks.zikirce@${ChangelogService.currentVersionName}+${ChangelogService.currentVersionCode}',
       );
+    });
+
+    testWidgets('ShareUtils.resolveSharePositionOrigin returns non-zero Rect inside iOS source view bounds',
+        (tester) async {
+      Rect? originWithContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              originWithContext = ShareUtils.resolveSharePositionOrigin(context);
+              return const SizedBox(width: 120, height: 48);
+            },
+          ),
+        ),
+      );
+
+      final fallbackOrigin = ShareUtils.resolveSharePositionOrigin();
+      for (final rect in [originWithContext!, fallbackOrigin]) {
+        expect(rect.isEmpty, isFalse);
+        expect(rect.width, greaterThan(0));
+        expect(rect.height, greaterThan(0));
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.top, greaterThanOrEqualTo(0));
+      }
     });
   });
 

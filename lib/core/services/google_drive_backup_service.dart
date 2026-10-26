@@ -17,6 +17,7 @@ import '../providers/database_provider.dart';
 import '../theme/theme_provider.dart';
 import '../utils/pref_utils.dart';
 import '../utils/secure_storage_helper.dart';
+import '../utils/share_utils.dart';
 import 'data_reconciliation_service.dart';
 import 'widget_sync_service.dart';
 
@@ -2070,7 +2071,7 @@ class GoogleDriveBackupService {
     final file = File('${tempDir.path}/$backupFileName');
     await file.writeAsString(jsonContent, encoding: utf8);
 
-    await Share.shareXFiles(
+    await ShareUtils.shareXFiles(
       [XFile(file.path, mimeType: 'application/json')],
       subject: 'Zikirce Yedek Dosyası',
       text: 'Zikirce uygulamanızın tam veri yedeği (.NET MAUI & Flutter tam uyumlu).',

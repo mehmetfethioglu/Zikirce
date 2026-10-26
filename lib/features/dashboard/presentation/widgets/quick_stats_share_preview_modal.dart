@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/islamic_special_days_service.dart';
+import '../../../../core/utils/share_utils.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 import 'quick_stats_share_card_widget.dart';
 
@@ -136,10 +137,11 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
           : '📊 Spiritual Worship & Dhikr Summary • Zikirce Islamic Assistant$greetingPart';
 
       if (mounted) {
-        await Share.shareXFiles(
+        await ShareUtils.shareXFiles(
           [XFile(file.path)],
           text: caption,
           subject: 'Zikirce İbadet Özeti',
+          context: context,
         );
       }
     } catch (e) {
@@ -159,7 +161,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
     }
   }
 
-  void _shareAsText() {
+  Future<void> _shareAsText() async {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
     final greeting = _resolveCurrentGreeting();
@@ -169,10 +171,15 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
         ? '$greetingPart📊 Zikirce İbadet & Maneviyat Özeti\n\n🎯 Bugün: ${widget.todayZikir} Zikir\n📅 Bu Hafta: ${widget.thisWeekZikir} Zikir\n📈 Günlük Ortalama: ${widget.dailyAvgZikir} Zikir\n✨ Toplam Zikir: ${widget.totalZikir}\n📖 Kur\'an Okuma: ${widget.quranPages} Sayfa\n🌱 Manevi Makam: ${widget.rankBadge} ${widget.rankName}\n\n“Beni anın ki, Ben de sizi anayım.” (Bakara, 152)\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
         : '$greetingPart📊 Zikirce Spiritual Summary\n\n🎯 Today: ${widget.todayZikir} Dhikr\n📅 This Week: ${widget.thisWeekZikir} Dhikr\n📈 Daily Avg: ${widget.dailyAvgZikir} Dhikr\n✨ Total: ${widget.totalZikir}\n📖 Quran Reading: ${widget.quranPages} Pages\n🌱 Spiritual Rank: ${widget.rankBadge} ${widget.rankName}\n\n“Remember Me; I will remember you.” (Baqarah, 152)\n— Zikirce Islamic Life & Dhikr Assistant';
 
-    Share.share(
-      shareText,
-      subject: 'Zikirce İbadet Özeti',
-    );
+    try {
+      await ShareUtils.shareText(
+        shareText,
+        subject: 'Zikirce İbadet Özeti',
+        context: context,
+      );
+    } catch (e) {
+      debugPrint('[QuickStatsSharePreviewModal] Metin paylaşım hatası: $e');
+    }
   }
 
   @override

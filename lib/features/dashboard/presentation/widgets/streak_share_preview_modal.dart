@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/utils/share_utils.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 import 'streak_share_card_widget.dart';
 
@@ -113,10 +114,11 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
           : '🔥 ${widget.currentStreak} Days Dhikr Streak • Rank: ${widget.rankName}\n— Zikirce Islamic Life & Dhikr Assistant';
 
       if (mounted) {
-        await Share.shareXFiles(
+        await ShareUtils.shareXFiles(
           [XFile(file.path)],
           text: caption,
           subject: 'Zikirce Gün Serisi',
+          context: context,
         );
       }
     } catch (e) {
@@ -136,17 +138,22 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
     }
   }
 
-  void _shareAsText() {
+  Future<void> _shareAsText() async {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
     final shareText = l10n.isTurkish
         ? '🔥 ${widget.currentStreak} Günlük İbadet Serisi!\n🏆 En İyi Seri: ${widget.bestStreak} Gün\n🗓️ Toplam: ${widget.totalDays} Gün\n🌱 Makam: ${widget.rankName}\n\n“Amellerin Allah’a en sevimli olanı, az da olsa devamlı olanıdır.” (Buhârî)\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
         : '🔥 ${widget.currentStreak} Days Dhikr Streak!\n🏆 Best: ${widget.bestStreak} Days\n🗓️ Total: ${widget.totalDays} Days\n🌱 Rank: ${widget.rankName}\n\n“The most beloved deeds to Allah are those done regularly, even if small.” (Bukhari)\n\n— Zikirce Islamic Life & Dhikr Assistant';
 
-    Share.share(
-      shareText,
-      subject: 'Zikirce İbadet Serisi',
-    );
+    try {
+      await ShareUtils.shareText(
+        shareText,
+        subject: 'Zikirce İbadet Serisi',
+        context: context,
+      );
+    } catch (e) {
+      debugPrint('[StreakSharePreviewModal] Metin paylaşım hatası: $e');
+    }
   }
 
   @override

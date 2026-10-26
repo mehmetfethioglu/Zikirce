@@ -131,6 +131,7 @@ class CloudSyncEngine {
   Timer? _periodicSyncTimer;
   String? _cachedSyncFileId;
   bool _isSyncInProgress = false;
+  bool _useDriveRootFallback = false;
   ProviderContainer? _container;
   Ref? _appRef;
 
@@ -382,18 +383,16 @@ class CloudSyncEngine {
 
       final dio = Dio();
 
-      // A. Drive AppData klasöründeki aktif senkronizasyon dosyasını sorgula
-      final searchRes = await dio.get(
-        GoogleDriveBackupService.driveFilesEndpoint,
-        queryParameters: {
-          'spaces': 'appDataFolder',
-          'q': "name = '$syncFileName' and 'appDataFolder' in parents and trashed = false",
-          'fields': 'files(id, name, modifiedTime, size, md5Checksum)',
-        },
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      // A. Drive AppData (veya 403 durumunda drive root) klasöründeki aktif senkronizasyon dosyasını sorgula
+      final searchRes = await _querySyncFiles(
+        dio,
+        token,
+        appDataQuery: "name = '$syncFileName' and 'appDataFolder' in parents and trashed = false",
+        driveRootQuery: "name = '$syncFileName' and trashed = false",
+        fields: 'files(id, name, modifiedTime, size, md5Checksum)',
       );
 
-      if (searchRes.statusCode != 200 || searchRes.data == null) {
+      if (searchRes == null || searchRes.statusCode != 200 || searchRes.data == null) {
         notifier.setStatus(CloudSyncStatus.idle);
         _isSyncInProgress = false;
         return false;
@@ -544,16 +543,14 @@ class CloudSyncEngine {
       String? targetFileId = _cachedSyncFileId;
 
       if (targetFileId == null || targetFileId.isEmpty) {
-        final searchRes = await dio.get(
-          GoogleDriveBackupService.driveFilesEndpoint,
-          queryParameters: {
-            'spaces': 'appDataFolder',
-            'q': "name = '$syncFileName' and 'appDataFolder' in parents and trashed = false",
-          },
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        final searchRes = await _querySyncFiles(
+          dio,
+          token,
+          appDataQuery: "name = '$syncFileName' and 'appDataFolder' in parents and trashed = false",
+          driveRootQuery: "name = '$syncFileName' and trashed = false",
         );
 
-        if (searchRes.statusCode == 200 && searchRes.data != null) {
+        if (searchRes != null && searchRes.statusCode == 200 && searchRes.data != null) {
           final files = searchRes.data['files'] as List?;
           if (files != null && files.isNotEmpty) {
             targetFileId = files.first['id']?.toString();
@@ -631,20 +628,18 @@ class CloudSyncEngine {
 
     try {
       final dio = Dio();
-      final res = await dio.get(
-        GoogleDriveBackupService.driveFilesEndpoint,
-        queryParameters: {
-          'spaces': 'appDataFolder',
-          'q': "name contains '$snapshotPrefix' and 'appDataFolder' in parents and trashed = false",
-          'fields': 'files(id, name, modifiedTime, size)',
-          'orderBy': 'createdTime desc',
-          'pageSize': 15,
-        },
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      final res = await _querySyncFiles(
+        dio,
+        token,
+        appDataQuery: "name contains '$snapshotPrefix' and 'appDataFolder' in parents and trashed = false",
+        driveRootQuery: "name contains '$snapshotPrefix' and trashed = false",
+        fields: 'files(id, name, modifiedTime, size)',
+        orderBy: 'createdTime desc',
+        pageSize: 15,
       );
 
       final list = <CloudBackupInfo>[];
-      if (res.statusCode == 200 && res.data != null) {
+      if (res != null && res.statusCode == 200 && res.data != null) {
         final files = res.data['files'] as List?;
         if (files != null) {
           for (final f in files) {
@@ -688,47 +683,117 @@ class CloudSyncEngine {
 
   // --- YARDIMCI METOTLAR ---
 
-  Future<void> _uploadMultipart(Dio dio, String token, String filename, String content) async {
-    final boundary = '----WebKitFormBoundary${DateTime.now().millisecondsSinceEpoch}';
-    final metadataJson = jsonEncode({
-      'name': filename,
-      'parents': ['appDataFolder'],
-    });
+  Future<Response<dynamic>?> _querySyncFiles(
+    Dio dio,
+    String token, {
+    required String appDataQuery,
+    required String driveRootQuery,
+    String? fields,
+    String? orderBy,
+    int? pageSize,
+  }) async {
+    if (!_useDriveRootFallback) {
+      try {
+        return await dio.get(
+          GoogleDriveBackupService.driveFilesEndpoint,
+          queryParameters: {
+            'spaces': 'appDataFolder',
+            'q': appDataQuery,
+            if (fields != null) 'fields': fields,
+            if (orderBy != null) 'orderBy': orderBy,
+            if (pageSize != null) 'pageSize': pageSize,
+          },
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 403) {
+          debugPrint('[CloudSyncEngine] appDataFolder 403 döndü; drive.file (spaces=drive) moduna geçiliyor.');
+          _useDriveRootFallback = true;
+        } else {
+          rethrow;
+        }
+      }
+    }
 
-    final body = '--$boundary\r\n'
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n'
-        '$metadataJson\r\n'
-        '--$boundary\r\n'
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n'
-        '$content\r\n'
-        '--$boundary--\r\n';
-
-    await dio.post(
-      '${GoogleDriveBackupService.driveUploadEndpoint}?uploadType=multipart',
-      data: body,
-      options: Options(
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'multipart/related; boundary=$boundary',
+    try {
+      return await dio.get(
+        GoogleDriveBackupService.driveFilesEndpoint,
+        queryParameters: {
+          'spaces': 'drive',
+          'q': driveRootQuery,
+          if (fields != null) 'fields': fields,
+          if (orderBy != null) 'orderBy': orderBy,
+          if (pageSize != null) 'pageSize': pageSize,
         },
-      ),
-    );
+        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        debugPrint('[CloudSyncEngine] Drive sorgu yetkisi yetersiz (${e.response?.statusCode}), sessizce atlanıyor.');
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _uploadMultipart(Dio dio, String token, String filename, String content) async {
+    Future<void> sendPost({required bool useAppData}) async {
+      final boundary = '----WebKitFormBoundary${DateTime.now().millisecondsSinceEpoch}';
+      final metadataMap = <String, dynamic>{
+        'name': filename,
+        if (useAppData) 'parents': ['appDataFolder'],
+      };
+      final metadataJson = jsonEncode(metadataMap);
+
+      final body = '--$boundary\r\n'
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+          '$metadataJson\r\n'
+          '--$boundary\r\n'
+          'Content-Type: application/json; charset=UTF-8\r\n\r\n'
+          '$content\r\n'
+          '--$boundary--\r\n';
+
+      await dio.post(
+        '${GoogleDriveBackupService.driveUploadEndpoint}?uploadType=multipart',
+        data: body,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'multipart/related; boundary=$boundary',
+          },
+        ),
+      );
+    }
+
+    if (!_useDriveRootFallback) {
+      try {
+        await sendPost(useAppData: true);
+        return;
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 403) {
+          debugPrint('[CloudSyncEngine] appDataFolder yükleme 403 döndü; drive.file kök dizinine yükleniyor.');
+          _useDriveRootFallback = true;
+        } else {
+          rethrow;
+        }
+      }
+    }
+
+    await sendPost(useAppData: false);
   }
 
   Future<void> _cleanupOldSnapshots(Dio dio, String token) async {
     try {
-      final res = await dio.get(
-        GoogleDriveBackupService.driveFilesEndpoint,
-        queryParameters: {
-          'spaces': 'appDataFolder',
-          'q': "name contains '$snapshotPrefix' and 'appDataFolder' in parents and trashed = false",
-          'fields': 'files(id, name, createdTime)',
-          'orderBy': 'createdTime desc',
-        },
-        options: Options(headers: {'Authorization': 'Bearer $token'}),
+      final res = await _querySyncFiles(
+        dio,
+        token,
+        appDataQuery: "name contains '$snapshotPrefix' and 'appDataFolder' in parents and trashed = false",
+        driveRootQuery: "name contains '$snapshotPrefix' and trashed = false",
+        fields: 'files(id, name, createdTime)',
+        orderBy: 'createdTime desc',
       );
 
-      if (res.statusCode == 200 && res.data != null) {
+      if (res != null && res.statusCode == 200 && res.data != null) {
         final files = res.data['files'] as List?;
         if (files != null && files.length > maxSnapshots) {
           for (int i = maxSnapshots; i < files.length; i++) {

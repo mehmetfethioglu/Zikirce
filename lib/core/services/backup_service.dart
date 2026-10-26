@@ -17,6 +17,7 @@ import '../services/google_drive_backup_service.dart';
 import '../services/widget_sync_service.dart';
 import '../theme/theme_provider.dart';
 import '../utils/pref_utils.dart';
+import '../utils/share_utils.dart';
 
 /// Sonuç modeli
 class BackupOperationResult {
@@ -417,7 +418,7 @@ class BackupService {
         await file.writeAsString(jsonContent);
       }
 
-      await Share.shareXFiles(
+      await ShareUtils.shareXFiles(
         [XFile(file.path)],
         text: 'Zikirce Yedek Dosyası ($dateStr)',
         subject: 'Zikirce Yedek Dosyası',

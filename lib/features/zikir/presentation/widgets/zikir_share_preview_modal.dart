@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/services/islamic_special_days_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/utils/share_utils.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../domain/share_card_data_helper.dart';
 import 'zikir_share_card_widget.dart';
@@ -194,10 +195,11 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
           : '$greetingPart“${resolvedQuote.text}” (${resolvedQuote.source})\n— Zikirce Islamic Life & Dhikr Assistant';
 
       if (mounted) {
-        await Share.shareXFiles(
+        await ShareUtils.shareXFiles(
           [XFile(file.path)],
           text: caption,
           subject: '$_activeZikirName - Zikirce',
+          context: context,
         );
       }
     } catch (e) {
@@ -217,7 +219,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     }
   }
 
-  void _shareAsText() {
+  Future<void> _shareAsText() async {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
     final resolvedQuote = ShareCardDataHelper.resolveQuote(
@@ -240,10 +242,23 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
         ? '$greetingPart$arabicPart“${resolvedQuote.text}”\n📖 (${resolvedQuote.source})\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
         : '$greetingPart$arabicPart“${resolvedQuote.text}”\n📖 (${resolvedQuote.source})\n\n— Zikirce Islamic Life & Dhikr Assistant';
 
-    Share.share(
-      shareText,
-      subject: '$_activeZikirName - Zikirce',
-    );
+    try {
+      await ShareUtils.shareText(
+        shareText,
+        subject: '$_activeZikirName - Zikirce',
+        context: context,
+      );
+    } catch (e) {
+      debugPrint('[ZikirSharePreviewModal] Metin paylaşım hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Paylaşım başlatılırken bir hata oluştu: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   @override

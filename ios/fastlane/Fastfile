@@ -169,6 +169,14 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.1.10 Yenilikleri:
+      • iOS Paylaşım Kartı & Görsel Paylaşım Düzeltmesi: iPhone ve iPad cihazlarda zikir, seri, namaz ve ibadet karnesi kartlarını paylaşırken oluşan sistem paylaşım penceresi (sharePositionOrigin) hatası kalıcı olarak giderildi.
+      • Bulut Senkronizasyonu & Yedek Paylaşım Kararlılığı: Google Drive senkronizasyon geri dönüşü ve yedek dışa aktarım adımları güçlendirildi.
+
+      What's New in v2.1.10:
+      • iOS Share Card & Image Sharing Fix: Fixed the iOS share sheet origin issue (sharePositionOrigin) when sharing dhikr, streak, prayer, and worship summary cards on iPhone and iPad.
+      • Cloud Sync & Backup Export Reliability: Improved Google Drive sync fallback and local backup sharing stability.
+
       Zikirce v2.1.9 Yenilikleri:
       • Matbû Kur'ân-ı Kerîm Hatim Duası: Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi'l-Kur'âni'l-Azîm), varsayılan Matbû Arapça sahife görünümü, Diyanet Mushaf hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.
       • 4 Modlu Kur'ân Okuma, 7 Meâl & 5 Klasik Tefsir: Mushaf, Âyet+Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir modları; 7 Türkçe meâl kıyaslaması ve Kur'ân Yolu, Beyzâvî, Mâtürîdî, Keşşâf ve Râzî tam metin tefsir kütüphanesi sunuldu.

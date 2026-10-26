@@ -51,11 +51,35 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 64;
-  static const String currentVersionName = '2.1.9';
+  static const int currentVersionCode = 65;
+  static const String currentVersionName = '2.1.10';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 65,
+      versionName: '2.1.10',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'iOS Paylaşım Kartı & Görsel Paylaşım Düzeltmesi',
+          titleEn: 'iOS Share Card & Image Sharing Fix',
+          descTr: 'iOS cihazlarda zikir, seri, namaz ve ibadet karnesi paylaşım kartlarını görsel veya metin olarak paylaşırken oluşan paylaşım penceresi (sharePositionOrigin) hatası kalıcı olarak giderildi.',
+          descEn: 'Resolved an issue on iOS devices where sharing dhikr, streak, prayer, and worship summary cards as images or text could fail to open the system share sheet (sharePositionOrigin).',
+          icon: Icons.ios_share_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Bulut Senkronizasyonu & Yedek Paylaşım Kararlılığı',
+          titleEn: 'Cloud Sync & Backup Export Stability',
+          descTr: 'Google Drive bulut senkronizasyonu izin geri dönüşü ve yerel yedek dosyası dışa aktarım adımları güçlendirildi.',
+          descEn: 'Enhanced Google Drive cloud sync permission fallback and local backup file export reliability.',
+          icon: Icons.cloud_done_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 64,
       versionName: '2.1.9',
