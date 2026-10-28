@@ -1,0 +1,4 @@
+• Uygulama İçi Sürüm Notları: Güncelleme sonrası ilk açılışta neler değiştiğini gösteren bilgi kartı ve Ayarlar içinden tüm geçmiş sürümleri inceleme özelliği eklendi.
+• Resmi Mağaza Ödeme Doğrulaması: Tek Seferlik Ömür Boyu Pro (149,99 ₺) ve 10 günlük %40 Sadakat İndirimi (89,99 ₺) resmi mağaza ödemesine bağlandı.
+• 24s Ödüllü Pro Pass & Alt Bar: Kumanda alt barındaki «🎬 24s Kaldır» kısayolu ile 1 ödüllü videoyla 24 saat reklamsız Pro Pass.
+• Çift Protokol TV Bağlantısı (Port 6466 & 5555).

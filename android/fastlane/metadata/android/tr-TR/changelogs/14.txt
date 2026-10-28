@@ -1,0 +1,4 @@
+• 24s Ödüllü Pro Pass & Alt Bar: Ana kumanda ve Ayarlar altına sabitlenen zarif bar ile 1 ödüllü video izleyerek 24 saat reklamsız Pro Pass («🎬 24s Kaldır») eklendi.
+• Resmi Google Play Ödeme Doğrulaması: Tek Seferlik Ömür Boyu Pro (149,99 ₺) ve 10 günlük %40 Sadakat İndirimi (89,99 ₺) resmi mağaza ödemesine bağlandı.
+• Çift Protokol TV Bağlantısı: Port 6466 (6 Haneli PIN) Sıfır Kurulum + Port 5555 ADB RSA-2048 Turbo modu.
+• Zamanlanmış İzleme Planı & Google Drive Bulut Yedekleme.

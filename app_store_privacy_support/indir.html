@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CueDeck İndir — Akıllı Android/Google TV Kumandası & İzleme Planlayıcı</title>
+    <meta name="description"
+        content="Google TV G10 dokunsal kumanda, zamanlanmış izleme planlayıcı ve tek dokunuşla YouTube Playlist ışınlayıcı. iOS ve Android için hemen indirin!">
+
+    <!-- WhatsApp / Telegram / OpenGraph Rich Preview Card -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="CueDeck — Akıllı TV Kumandası & Zamanlanmış İzleme Planlayıcı">
+    <meta property="og:description"
+        content="Planladığınız saatte bildirim alın, tek dokunuşla televizyonunuzda YouTube Playlist, Netflix veya canlı yayını başlatın! (v1.9.1+13)">
+    <meta property="og:url" content="https://mehmetfethioglu.github.io/cuedeck-indir/indir.html">
+    <meta property="og:image" content="https://mehmetfethioglu.github.io/cuedeck-indir/icon.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#141824">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #141824;
+            --card-bg: #1E2433;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #E6C17A;
+            --accent-mint: #6EE7B7;
+            --text-main: #F1F5F9;
+            --text-muted: #94A3B8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(circle at top, #1E2638 0%, var(--bg) 70%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .portal-card {
+            max-width: 500px;
+            width: 100%;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            padding: 36px 28px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+        }
+
+        .app-icon {
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 18px;
+            background: linear-gradient(135deg, var(--primary), #B88E42);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            font-weight: 800;
+            color: #141824;
+            box-shadow: 0 8px 25px rgba(230, 193, 122, 0.25);
+        }
+
+        .version-pill {
+            display: inline-block;
+            background: rgba(110, 231, 183, 0.12);
+            color: var(--accent-mint);
+            border: 1px solid rgba(110, 231, 183, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 14.5px;
+            line-height: 1.6;
+            margin-bottom: 26px;
+        }
+
+        .btn-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .store-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 15px 20px;
+            border-radius: 14px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 15px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid var(--card-border);
+        }
+
+        .store-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .store-btn.primary-highlight {
+            background: var(--primary);
+            color: #141824;
+            border-color: var(--primary);
+            box-shadow: 0 6px 20px rgba(230, 193, 122, 0.28);
+        }
+
+        .store-btn.secondary {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-main);
+        }
+
+        .device-hint {
+            margin-top: 18px;
+            font-size: 12.5px;
+            color: var(--accent-mint);
+            font-weight: 600;
+        }
+
+        .footer-links {
+            margin-top: 26px;
+            padding-top: 18px;
+            border-top: 1px solid var(--card-border);
+            display: flex;
+            justify-content: center;
+            gap: 18px;
+            font-size: 13px;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="portal-card">
+        <div class="app-icon">CD</div>
+        <span class="version-pill">v1.9.1 (Build 13) &bull; Soft Slate Edition</span>
+        <h1>CueDeck</h1>
+        <p class="subtitle">
+            Google TV G10 referans kumanda, Port 6466 PIN &amp; Port 5555 ADB Turbo köprüsü ve zamanlanmış YouTube
+            Playlist / yayın başlatıcı.
+        </p>
+
+        <div class="btn-stack">
+            <a id="btn-play" href="https://play.google.com/store/apps/details?id=com.akarworks.cuedeck"
+                class="store-btn primary-highlight">
+                🤖 Google Play Store'dan İndir
+            </a>
+            <a id="btn-apk" href="https://github.com/theakar/cuedeck/releases/latest" class="store-btn secondary">
+                📦 Doğrudan Android APK İndir (v1.9.1+13)
+            </a>
+            <a id="btn-ios" href="https://apps.apple.com/app/cuedeck" class="store-btn secondary">
+                🍎 App Store / TestFlight (iOS)
+            </a>
+        </div>
+
+        <div id="device-detected" class="device-hint"></div>
+
+        <div class="footer-links">
+            <a href="index.html">Gizlilik Politikası</a>
+            <a href="support.html">Destek &amp; SSS</a>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const ua = navigator.userAgent || navigator.vendor || window.opera;
+            const btnPlay = document.getElementById('btn-play');
+            const btnIos = document.getElementById('btn-ios');
+            const hint = document.getElementById('device-detected');
+
+            if (/iPad|iPhone|iPod|Macintosh/.test(ua) && !window.MSStream) {
+                btnIos.classList.remove('secondary');
+                btnIos.classList.add('primary-highlight');
+                btnPlay.classList.remove('primary-highlight');
+                btnPlay.classList.add('secondary');
+                hint.textContent = "✓ Apple (iOS / macOS) cihazınız algılandı — App Store / TestFlight öneriliyor.";
+            } else if (/android/i.test(ua)) {
+                hint.textContent = "✓ Android cihazınız algılandı — Google Play veya doğrudan APK ile kurabilirsiniz.";
+            }
+        })();
+    </script>
+</body>
+
+</html>

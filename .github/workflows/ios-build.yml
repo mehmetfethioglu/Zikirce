@@ -1,0 +1,128 @@
+name: iOS Cloud Build & TestFlight Ready
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-ios:
+    name: Build iOS (macOS Apple Silicon)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      - name: 4. Configure Flutter & Xcode environment
+        run: |
+          xcodebuild -version
+          flutter config --no-enable-swift-package-manager
+          flutter doctor -v
+
+      - name: 5. Install dependencies and prepare Flutter iOS
+        run: |
+          flutter pub get
+          flutter build ios --config-only --no-codesign
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      # =========================================================================
+      # 5.5. Ensure Bundle ID 'com.akarworks.cuedeck' via App Store Connect API
+      # =========================================================================
+      - name: 5.5. Register Bundle ID (com.akarworks.cuedeck) on Apple Portal
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        run: |
+          pip3 install --quiet pyjwt cryptography requests
+          python3 - << 'EOF'
+          import os, time, jwt, requests
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+          now = int(time.time())
+          token = jwt.encode(
+              {"iss": issuer_id, "iat": now - 30, "exp": now + 900, "aud": "appstoreconnect-v1"},
+              private_key,
+              algorithm="ES256",
+              headers={"kid": key_id, "typ": "JWT"},
+          )
+          headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          bundle_id = "com.akarworks.cuedeck"
+          r = requests.get(f"{BASE}/bundleIds?filter[identifier]={bundle_id}", headers=headers)
+          print("Bundle ID lookup status:", r.status_code)
+          data = r.json().get("data", []) if r.status_code == 200 else []
+          if not data:
+              print(f"➕ Registering Bundle ID '{bundle_id}' on Apple Developer Portal...")
+              cr = requests.post(
+                  f"{BASE}/bundleIds",
+                  headers=headers,
+                  json={
+                      "data": {
+                          "type": "bundleIds",
+                          "attributes": {
+                              "identifier": bundle_id,
+                              "name": "CueDeck Smart TV Remote",
+                              "platform": "IOS",
+                          },
+                      }
+                  },
+              )
+              print("Register response:", cr.status_code, cr.text[:300])
+          else:
+              print(f"✅ Bundle ID '{bundle_id}' already registered (id={data[0]['id']}).")
+          EOF
+
+      # =========================================================================
+      # 6. Fastlane: Code Signing, Packaging & TestFlight Deployment
+      # =========================================================================
+      - name: 6. Deploy to TestFlight via Fastlane
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        env:
+          APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
+        run: |
+          cd ios
+          bundle install
+          bundle exec fastlane beta
+
+      - name: Print gym build log on failure
+        if: failure()
+        run: |
+          find ~/Library/Logs/gym -name "*.log" -exec cat {} + || true
+
+      # =========================================================================
+      # 7. Upload Signed IPA Artifact (even if TestFlight upload awaits New App)
+      # =========================================================================
+      - name: 7. Upload TestFlight IPA Artifact
+        if: always() && hashFiles('build/ios/ipa/CueDeck.ipa') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuedeck-ios-signed-ipa
+          path: build/ios/ipa/CueDeck.ipa
+          retention-days: 14

@@ -1,0 +1,64 @@
+name: Android Cloud Build & Google Play Console Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Google Play Track (internal, beta, production)"
+        required: false
+        default: "internal"
+
+jobs:
+  build-and-publish-android:
+    name: Build Signed AAB & Upload to Google Play
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+      PLAY_TRACK: ${{ github.event.inputs.track || 'internal' }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 4. Restore Upload Keystore & key.properties
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/cuedeck-upload-keystore.jks
+          printf "%s\n" "$ANDROID_KEY_PROPERTIES" > android/key.properties
+
+      - name: 5. Build Signed Release AAB & APK
+        run: |
+          flutter pub get
+          flutter build appbundle --release
+          flutter build apk --release
+
+      - name: 6. Upload Signed AAB & APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuedeck-android-release-bundles
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
+      - name: 7. Deploy to Google Play Console via Fastlane
+        if: ${{ env.PLAY_STORE_JSON_KEY != '' }}
+        run: |
+          cd android
+          bundle install
+          bundle exec fastlane ${{ env.PLAY_TRACK }}

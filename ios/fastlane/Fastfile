@@ -1,0 +1,183 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload CueDeck to Apple TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_KEY_ID"],
+      issuer_id: ENV["APP_STORE_ISSUER_ID"],
+      key_content: ENV["APP_STORE_PRIVATE_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    keychain_name = "ci_keychain"
+    keychain_password = "temporary_ci_password_123"
+
+    create_keychain(
+      name: keychain_name,
+      password: keychain_password,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600
+    )
+
+    # In macOS Sonoma (14.x+), Apple stores keychains with a -db suffix
+    raw_path = File.expand_path("~/Library/Keychains/#{keychain_name}")
+    keychain_path = File.exist?("#{raw_path}-db") ? "#{raw_path}-db" : raw_path
+
+    # Apple WWDR Intermediate CA G3 yüklemesi (güven zinciri doğrulaması için)
+    wwdr_path = File.expand_path("~/AppleWWDRCAG3.cer")
+    sh("curl -f -s -S -o '#{wwdr_path}' https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer") rescue nil
+    if File.exist?(wwdr_path)
+      import_certificate(
+        certificate_path: wwdr_path,
+        keychain_name: keychain_name,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        log_output: false
+      )
+      File.delete(wwdr_path) rescue nil
+    end
+
+    if ENV["BUILD_CERTIFICATE_BASE64"] && !ENV["BUILD_CERTIFICATE_BASE64"].strip.empty?
+      UI.message("📦 Fiziki Mac'ten aktarılan P12 sertifikası GitHub Secrets üzerinden içe aktarılıyor...")
+      require "base64"
+      p12_path = File.expand_path("~/build_cert.p12")
+      File.binwrite(p12_path, Base64.decode64(ENV["BUILD_CERTIFICATE_BASE64"].strip))
+
+      import_certificate(
+        certificate_path: p12_path,
+        certificate_password: ENV["P12_PASSWORD"] || "",
+        keychain_name: keychain_name,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        log_output: true
+      )
+      File.delete(p12_path) rescue nil
+    else
+      UI.message("⚠️ BUILD_CERTIFICATE_BASE64 bulunamadı; get_certificates ile Apple Portal'dan sorgulanıyor...")
+      get_certificates(
+        api_key: api_key,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password
+      )
+    end
+
+    # Allow codesign and Xcode tools to access private keys in the keychain without GUI prompts
+    [keychain_path, raw_path, "#{raw_path}-db"].uniq.each do |kpath|
+      next unless File.exist?(kpath)
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild:,xcodebuild: -s -k '#{keychain_password}' '#{kpath}'") rescue nil
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k '#{keychain_password}' '#{kpath}'") rescue nil
+    end
+    sh("security list-keychains -d user -s '#{keychain_path}' $(security list-keychains -d user | tr -d '\"')") rescue nil
+    UI.message("=== Anahtarlıkta Yüklü İmzalama Kimlikleri ===")
+    sh("security find-identity -v -p codesigning '#{keychain_path}'") rescue nil
+
+    # 1. Register Bundle ID (com.akarworks.cuedeck) on Apple Developer Portal automatically if not yet created
+    begin
+      produce(
+        api_key: api_key,
+        app_identifier: "com.akarworks.cuedeck",
+        app_name: "CueDeck: Smart TV Remote",
+        skip_itc: true
+      )
+      UI.success("✅ Apple Developer Portal üzerinde 'com.akarworks.cuedeck' Bundle ID hazır.")
+    rescue => ex
+      UI.message("ℹ️ Produce Bundle ID kontrol notu: #{ex.message}")
+    end
+
+    # 2. Fetch or create App Store Provisioning Profile for com.akarworks.cuedeck
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.akarworks.cuedeck",
+      force: true
+    )
+
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    profile_data = sh("security cms -D -i '#{profile_path}'")
+    team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1]
+    UI.message("Extracted Apple Development Team ID: #{team_id}")
+
+    runner_profile_name = lane_context[SharedValues::SIGH_NAME]
+
+    update_project_team(
+      path: "Runner.xcodeproj",
+      teamid: team_id
+    )
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      targets: ["Runner"],
+      team_id: team_id,
+      bundle_identifier: "com.akarworks.cuedeck",
+      profile_name: runner_profile_name,
+      code_sign_identity: "Apple Distribution"
+    )
+
+    prov_profiles = {
+      "com.akarworks.cuedeck" => runner_profile_name
+    }
+
+    ENV["VERBOSE_SCRIPT_LOGGING"] = "1"
+
+    begin
+      build_app(
+        workspace: "Runner.xcworkspace",
+        scheme: "Runner",
+        clean: false,
+        export_method: "app-store",
+        output_directory: "../build/ios/ipa",
+        output_name: "CueDeck.ipa",
+        codesigning_identity: "Apple Distribution",
+        export_options: {
+          signingStyle: "manual",
+          provisioningProfiles: prov_profiles
+        }
+      )
+    rescue => ex
+      log_path = File.expand_path("~/Library/Logs/gym/Runner-Runner.log")
+      if File.exist?(log_path)
+        UI.error("=== DETAILED GYM LOG OUTPUT ===")
+        File.readlines(log_path).last(150).each do |line|
+          UI.error(line.chomp)
+        end
+      end
+      raise ex
+    end
+
+    changelog_text = <<~CHANGELOG
+      CueDeck v1.9.3 (Build 15) Yenilikleri:
+      • Uygulama İçi Sürüm Notları & Yenilikler Ekranı: Güncelleme sonrası ilk açılışta neler değiştiğini gösteren bilgi kartı ve Ayarlar içinden tüm geçmiş sürümleri inceleme özelliği eklendi.
+      • Resmi Mağaza Ödeme Doğrulaması & 24s Pro Pass: Tek Seferlik Ömür Boyu Pro (149,99 ₺) ve 10 günlük %40 Sadakat İndirimi (89,99 ₺) resmi mağaza ödemesine bağlandı; kumanda alt barına «🎬 24s Kaldır» kısayolu eklendi.
+      • Çift Protokol TV Bağlantısı: Standart TV'ler için Port 6466 (6 Haneli PIN) Sıfır Kurulum ve Port 5555 ADB RSA-2048 Turbo modu.
+
+      What's New in CueDeck v1.9.3 (Build 15):
+      • In-App Release Notes & What's New Sheet: Automatically displays what's new on first launch after an update, plus full version history in Settings.
+      • Verified Store Billing & 24h Pro Pass: Official StoreKit 2 / Play Billing verification for Lifetime Pro and 40% Loyalty Discount, plus quick 24h Pro Pass unlock («🎬 Remove 24h»).
+      • Dual-Protocol TV Control: Zero-config Port 6466 (6-Digit PIN) + Port 5555 ADB RSA-2048 Turbo mode.
+    CHANGELOG
+
+    begin
+      upload_to_testflight(
+        api_key: api_key,
+        ipa: "../build/ios/ipa/CueDeck.ipa",
+        skip_waiting_for_build_processing: true,
+        changelog: changelog_text
+      )
+    rescue => ex
+      UI.important("================================================================================")
+      UI.important("⚠️ CueDeck.ipa başarıyla derlendi ve Apple Distribution sertifikasıyla imzalandı!")
+      UI.important("Ancak App Store Connect üzerinde 'com.akarworks.cuedeck' uygulama kaydı henüz açılmamış olabilir.")
+      UI.important("👉 Lütfen https://appstoreconnect.apple.com/apps adresinde (+) New App butonuna tıklayıp 30 saniyede şu 4 alanı doldurun:")
+      UI.important("   • Platform: iOS")
+      UI.important("   • Name: CueDeck")
+      UI.important("   • Primary Language: Turkish (Türkçe)")
+      UI.important("   • Bundle ID: com.akarworks.cuedeck (Otomatik kaydedildi, listeden seçin)")
+      UI.important("   • SKU: cuedeck-001")
+      UI.important("================================================================================")
+      raise ex
+    end
+  end
+end

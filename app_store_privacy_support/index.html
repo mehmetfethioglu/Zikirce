@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CueDeck — Gizlilik Politikası & Destek (Privacy Policy & Support)</title>
+    <meta name="description"
+        content="CueDeck: Akıllı Android/Google TV Kumandası & İzleme Planlayıcı resmi Gizlilik Politikası ve Destek sayfasıdır. Official Privacy Policy and Support portal for CueDeck.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #141824;
+            --card-bg: #1E2433;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #E6C17A;
+            --primary-hover: #F0CFA0;
+            --primary-glow: rgba(230, 193, 122, 0.2);
+            --accent-mint: #6EE7B7;
+            --text-main: #F1F5F9;
+            --text-muted: #94A3B8;
+            --radius-lg: 20px;
+            --radius-md: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.65;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 40px 20px 80px;
+        }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 36px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .brand-badge {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text-main);
+        }
+
+        .app-logo {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary), #C49B50);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 20px;
+            color: #141824;
+            box-shadow: 0 4px 18px var(--primary-glow);
+        }
+
+        .brand-title {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.4px;
+        }
+
+        .brand-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            display: block;
+            font-weight: 500;
+        }
+
+        .lang-switch {
+            display: flex;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 30px;
+            padding: 3px;
+        }
+
+        .lang-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .lang-btn.active {
+            background: var(--primary);
+            color: #141824;
+        }
+
+        .tabs-header {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 32px;
+            background: var(--card-bg);
+            padding: 6px;
+            border-radius: 16px;
+            border: 1px solid var(--card-border);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 14.5px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: rgba(230, 193, 122, 0.14);
+            color: var(--primary);
+            border: 1px solid rgba(230, 193, 122, 0.32);
+        }
+
+        .hero {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+
+        .hero h1 {
+            font-size: 30px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .hero p {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            margin-bottom: 20px;
+            border: 1px solid var(--card-border);
+        }
+
+        .card h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            color: #CBD5E1;
+            font-size: 14.5px;
+            margin-bottom: 12px;
+        }
+
+        .card p:last-child {
+            margin-bottom: 0;
+        }
+
+        ul.check-list {
+            list-style: none;
+            margin: 12px 0;
+        }
+
+        ul.check-list li {
+            position: relative;
+            padding-left: 24px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #CBD5E1;
+        }
+
+        ul.check-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--accent-mint);
+            font-weight: 700;
+        }
+
+        .permission-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 14px;
+            margin-top: 16px;
+        }
+
+        .permission-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-md);
+            padding: 15px;
+        }
+
+        .permission-item-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 6px;
+        }
+
+        .permission-item-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .faq-item {
+            border-bottom: 1px solid var(--card-border);
+            padding: 16px 0;
+        }
+
+        .faq-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .faq-question {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 6px;
+        }
+
+        .faq-answer {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .contact-box {
+            background: linear-gradient(135deg, rgba(230, 193, 122, 0.12), rgba(110, 231, 183, 0.04));
+            border: 1px solid rgba(230, 193, 122, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            text-align: center;
+            margin-top: 24px;
+        }
+
+        .contact-btn {
+            display: inline-block;
+            background: var(--primary);
+            color: #141824;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 14px;
+            margin-top: 14px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 1px solid var(--card-border);
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <nav class="top-nav">
+            <a href="indir.html" class="brand-badge">
+                <div class="app-logo">CD</div>
+                <div>
+                    <span class="brand-title">CueDeck</span>
+                    <span class="brand-sub lang-text" data-tr="Akıllı TV Kumandası & İzleme Planlayıcı"
+                        data-en="Smart TV Remote & Watch Planner">Akıllı TV Kumandası & İzleme Planlayıcı</span>
+                </div>
+            </a>
+            <div class="lang-switch">
+                <button class="lang-btn active" id="btn-tr" onclick="setLanguage('tr')">TR</button>
+                <button class="lang-btn" id="btn-en" onclick="setLanguage('en')">EN</button>
+            </div>
+        </nav>
+
+        <div class="tabs-header">
+            <button class="tab-btn active" id="tab-btn-privacy" onclick="switchTab('privacy')">
+                🛡️ <span class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik
+                    Politikası</span>
+            </button>
+            <button class="tab-btn" id="tab-btn-support" onclick="switchTab('support')">
+                💬 <span class="lang-text" data-tr="Destek & Yardım Merkezi" data-en="Support & Help Center">Destek &
+                    Yardım Merkezi</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: PRIVACY POLICY -->
+        <div id="tab-privacy" class="tab-content active">
+            <div class="hero">
+                <h1 class="lang-text" data-tr="Gizlilik Politikası" data-en="Privacy Policy">Gizlilik Politikası</h1>
+                <p class="lang-text" data-tr="CueDeck iOS & Android Resmi KVKK / GDPR Yasal Bilgilendirmesi"
+                    data-en="Official Privacy & Data Protection Notice for CueDeck iOS & Android">CueDeck iOS & Android
+                    Resmi KVKK / GDPR Yasal Bilgilendirmesi</p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="1. Giriş ve Yerel-Öncelikli (Local-First) Mimari"
+                    data-en="1. Introduction & Local-First Architecture">1. Giriş ve Yerel-Öncelikli (Local-First)
+                    Mimari</h2>
+                <p class="lang-text"
+                    data-tr="Akarworks (Mehmet Akar) tarafından geliştirilen CueDeck (`com.akarworks.cuedeck`), Android TV ve Google TV cihazlarınızı yerel Wi-Fi ağınız üzerinden kontrol etmenizi ve kişisel yayın izleme planlarınızı yönetmenizi sağlayan bir yardımcı uygulamadır. CueDeck kişisel verilerinizi merkezi bir sunucuda toplamaz, satmaz ve üçüncü taraflarla paylaşmaz."
+                    data-en="CueDeck (`com.akarworks.cuedeck`), developed by Akarworks (Mehmet Akar), is a smart remote control and watch scheduler for Android TV and Google TV devices over your local Wi-Fi network. CueDeck does not collect, sell, or share your personal data on external developer servers.">
+                    Akarworks (Mehmet Akar) tarafından geliştirilen CueDeck (`com.akarworks.cuedeck`), Android TV ve
+                    Google TV cihazlarınızı yerel Wi-Fi ağınız üzerinden kontrol etmenizi ve kişisel yayın izleme
+                    planlarınızı yönetmenizi sağlayan bir yardımcı uygulamadır. CueDeck kişisel verilerinizi merkezi bir
+                    sunucuda toplamaz, satmaz ve üçüncü taraflarla paylaşmaz.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="2. Cihaz İçinde Saklanan Veriler ve Donanım Şifrelemesi"
+                    data-en="2. On-Device Data Storage & Hardware Encryption">2. Cihaz İçinde Saklanan Veriler ve
+                    Donanım Şifrelemesi</h2>
+                <p class="lang-text"
+                    data-tr="Aşağıdaki tüm veriler yalnızca cihazınızın yerel depolama alanında ve AndroidKeyStore / iOS Keychain (`AES-256-GCM` + `SHA-256` bütünlük mührü) koruması altında saklanır:"
+                    data-en="All of the following records are stored strictly on your device protected by AndroidKeyStore / iOS Keychain (`AES-256-GCM` + `SHA-256` integrity seals):">
+                    Aşağıdaki tüm veriler yalnızca cihazınızın yerel depolama alanında ve AndroidKeyStore / iOS Keychain
+                    (`AES-256-GCM` + `SHA-256` bütünlük mührü) koruması altında saklanır:
+                </p>
+                <ul class="check-list">
+                    <li class="lang-text"
+                        data-tr="TV yerel IP adresi, Port 6466 PIN eşleştirme bilgisi ve Port 5555 RSA-2048 anahtar çifti."
+                        data-en="TV local IP address, Port 6466 PIN pairing state, and Port 5555 RSA-2048 key pair.">TV
+                        yerel IP adresi, Port 6466 PIN eşleştirme bilgisi ve Port 5555 RSA-2048 anahtar çifti.</li>
+                    <li class="lang-text"
+                        data-tr="Zamanlanmış izleme planları (Watch Cue), YouTube Playlist bağlantıları ve kalınan dakika/bölüm notları."
+                        data-en="Scheduled watch plans (Watch Cues), YouTube Playlist links, and episode/minute checkpoints.">
+                        Zamanlanmış izleme planları (Watch Cue), YouTube Playlist bağlantıları ve kalınan dakika/bölüm
+                        notları.</li>
+                    <li class="lang-text"
+                        data-tr="Tema tercihi (Soft Slate / Warm Alabaster) ve Pro / 24 Saatlik Pro Pass lisans durumu."
+                        data-en="Theme preference (Soft Slate / Warm Alabaster) and Pro / 24-Hour Pro Pass entitlement status.">
+                        Tema tercihi (Soft Slate / Warm Alabaster) ve Pro / 24 Saatlik Pro Pass lisans durumu.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="3. Cihaz İzinleri ve Kullanım Amaçları"
+                    data-en="3. Device Permissions & Purpose">3. Cihaz İzinleri ve Kullanım Amaçları</h2>
+                <div class="permission-grid">
+                    <div class="permission-item">
+                        <div class="permission-item-title">📡 <span class="lang-text"
+                                data-tr="Yerel Ağ (Wi-Fi / mDNS)" data-en="Local Network (Wi-Fi / mDNS)">Yerel Ağ
+                                (Wi-Fi / mDNS)</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Aynı Wi-Fi ağındaki Android TV ve Google TV cihazlarını (`_androidtvremote2._tcp`, Port 6466/5555) otomatik keşfetmek ve kumanda komutlarını iletmek için kullanılır."
+                            data-en="Used exclusively to discover Android TV / Google TV devices on the same Wi-Fi network and transmit remote key commands.">
+                            Aynı Wi-Fi ağındaki Android TV ve Google TV cihazlarını otomatik keşfetmek ve kumanda
+                            komutlarını iletmek için kullanılır.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">🎙️ <span class="lang-text"
+                                data-tr="Mikrofon (Sesli Komut)" data-en="Microphone (Voice Command)">Mikrofon (Sesli
+                                Komut)</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Yalnızca kumanda üzerindeki mikrofon tuşuna bastığınızda TV'ye sesli komut veya YouTube araması göndermek için kullanılır; ses kaydı saklanmaz."
+                            data-en="Used only when you tap the voice remote button to send voice search or TV commands; audio is never stored.">
+                            Yalnızca kumanda üzerindeki mikrofon tuşuna bastığınızda TV'ye sesli komut veya YouTube
+                            araması göndermek için kullanılır; ses kaydı saklanmaz.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">⏰ <span class="lang-text"
+                                data-tr="Bildirimler & Tam Zamanlı Alarm"
+                                data-en="Notifications & Exact Alarms">Bildirimler & Tam Zamanlı Alarm</span></div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="Planladığınız yayın saatinde (`SCHEDULE_EXACT_ALARM`) zamanında hatırlatma bildirimi göndermek için kullanılır."
+                            data-en="Used to trigger timely reminders for your scheduled watch sessions (`SCHEDULE_EXACT_ALARM`).">
+                            Planladığınız yayın saatinde zamanında hatırlatma bildirimi göndermek için kullanılır.
+                        </div>
+                    </div>
+                    <div class="permission-item">
+                        <div class="permission-item-title">☁️ <span class="lang-text"
+                                data-tr="Google Drive Yedekleme (İsteğe Bağlı)"
+                                data-en="Google Drive Backup (Optional)">Google Drive Yedekleme (İsteğe Bağlı)</span>
+                        </div>
+                        <div class="permission-item-desc lang-text"
+                            data-tr="İzleme planlarınızı kendi Google Drive hesabınızdaki izole uygulama klasörüne (`AES-256-GCM` şifreli) yedeklemek için kullanılır."
+                            data-en="Used optionally to back up your watch plans into your personal Google Drive app folder with `AES-256-GCM` encryption.">
+                            İzleme planlarınızı kendi Google Drive hesabınızdaki izole uygulama klasörüne yedeklemek
+                            için kullanılır.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: SUPPORT & HELP -->
+        <div id="tab-support" class="tab-content">
+            <div class="hero">
+                <h1 class="lang-text" data-tr="Destek & Yardım Merkezi" data-en="Support & Help Center">Destek & Yardım
+                    Merkezi</h1>
+                <p class="lang-text" data-tr="CueDeck TV eşleştirme rehberi, SSS ve doğrudan geliştirici iletişimi"
+                    data-en="CueDeck TV pairing guide, FAQ, and direct developer contact">CueDeck TV eşleştirme rehberi,
+                    SSS ve doğrudan geliştirici iletişimi</p>
+            </div>
+
+            <div class="card">
+                <h2 class="lang-text" data-tr="Sıkça Sorulan Sorular (SSS)" data-en="Frequently Asked Questions (FAQ)">
+                    Sıkça Sorulan Sorular (SSS)</h2>
+
+                <div class="faq-item">
+                    <div class="faq-question">📺 <span class="lang-text"
+                            data-tr="Televizyonumla nasıl eşleşebilirim (Port 6466 PIN vs Port 5555 ADB)?"
+                            data-en="How do I pair with my TV (Port 6466 PIN vs Port 5555 ADB)?">Televizyonumla nasıl
+                            eşleşebilirim (Port 6466 PIN vs Port 5555 ADB)?</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="Standart televizyonlar için Ayarlar ekranından 'Port 6466 (6 Haneli PIN)' modunu seçip TV ekranında beliren 6 haneli kodu girmeniz yeterlidir. Doğrudan YouTube Playlist ışınlama ve <120ms Turbo hız için TV'nizde Geliştirici Seçenekleri > Ağ üzerinden ADB Hata Ayıklama'yı açıp 'Port 5555 (ADB Turbo)' modunu kullanabilirsiniz."
+                        data-en="For standard retail TVs, select 'Port 6466 (6-Digit PIN)' in Settings and enter the 6-digit code shown on your TV. For instant YouTube Playlist beaming and <120ms Turbo response, enable Network ADB Debugging on your TV and use 'Port 5555 (ADB Turbo)'.">
+                        Standart televizyonlar için Ayarlar ekranından 'Port 6466 (6 Haneli PIN)' modunu seçip TV
+                        ekranında beliren 6 haneli kodu girmeniz yeterlidir.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">💎 <span class="lang-text"
+                            data-tr="CueDeck Pro ve 24 Saatlik Pro Pass nasıl çalışır?"
+                            data-en="How do CueDeck Pro and the 24-Hour Pro Pass work?">CueDeck Pro ve 24 Saatlik Pro
+                            Pass nasıl çalışır?</span></div>
+                    <div class="faq-answer lang-text"
+                        data-tr="CueDeck'te zorunlu abonelik yoktur. Ayarlar ekranından 1 kısa ödüllü video izleyerek 24 saat boyunca tüm Pro özelliklerini ücretsiz açabilir, 10 farklı günde %40 Sadakat İndirimi kazanabilir veya tek seferlik ödemeyle ömür boyu CueDeck Pro sahibi olabilirsiniz."
+                        data-en="CueDeck has no subscriptions. Watch 1 short rewarded video in Settings to unlock all Pro features for 24 hours, earn a 40% Loyalty Discount over 10 days, or upgrade once to CueDeck Pro Lifetime.">
+                        CueDeck'te zorunlu abonelik yoktur. 1 kısa ödüllü video izleyerek 24 saat boyunca Pro Pass
+                        açabilir veya tek seferlik ödemeyle ömür boyu Pro sahibi olabilirsiniz.
+                    </div>
+                </div>
+            </div>
+
+            <div class="contact-box">
+                <h3 class="lang-text" data-tr="Doğrudan Geliştirici Desteği" data-en="Direct Developer Support">Doğrudan
+                    Geliştirici Desteği</h3>
+                <p class="lang-text"
+                    data-tr="Sorularınız ve teknik destek talepleriniz için 24 saat içinde yanıt veriyoruz."
+                    data-en="We respond to all technical inquiries and support requests within 24 hours.">Sorularınız ve
+                    teknik destek talepleriniz için 24 saat içinde yanıt veriyoruz.</p>
+                <a href="mailto:akarbilisimteknolojileri@gmail.com?subject=CueDeck%20Destek%20Talebi"
+                    class="contact-btn">✉️ akarbilisimteknolojileri@gmail.com</a>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2026 Akarworks (Mehmet Akar) &bull; CueDeck v1.9.1 (Build 13)</p>
+        </footer>
+    </div>
+
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById('tab-btn-' + tabName).classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+            window.location.hash = tabName;
+        }
+
+        function setLanguage(lang) {
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('btn-' + lang).classList.add('active');
+            document.querySelectorAll('.lang-text').forEach(el => {
+                const t = el.getAttribute('data-' + lang);
+                if (t) el.textContent = t;
+            });
+            document.documentElement.lang = lang;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.location.hash.replace('#', '') === 'support') {
+                switchTab('support');
+            }
+        });
+    </script>
+</body>
+
+</html>

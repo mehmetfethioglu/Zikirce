@@ -1,0 +1,4 @@
+• 24h Rewarded Pro Pass & Bottom Bar: Watch 1 optional rewarded video («🎬 Remove 24h») to unlock a 24-hour ad-free Pro Pass across the remote and Watch Planner.
+• Verified Google Play Billing: One-time Lifetime Pro (149.99 TRY / $5.99) and 10-day 40% Loyalty Discount (89.99 TRY / $3.49) verified via official store billing.
+• Dual-Protocol TV Control: Zero-config Port 6466 (6-Digit PIN) + Port 5555 ADB RSA-2048 Turbo mode.
+• Scheduled Watch Planner & AES-256-GCM Google Drive Backup.

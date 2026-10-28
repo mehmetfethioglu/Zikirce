@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Deep Obsidian-Midnight Background Gradient (Tahrir & CueDeck DNA) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#181A22"/>
+      <stop offset="55%" stop-color="#0C0D12"/>
+      <stop offset="100%" stop-color="#050507"/>
+    </linearGradient>
+
+    <!-- Warm Champagne-Gold to Amber-Bronze Gradient (Tahrir & Zikirce DNA) -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F7EEDB"/>
+      <stop offset="45%" stop-color="#E2A84B"/>
+      <stop offset="100%" stop-color="#B86B22"/>
+    </linearGradient>
+
+    <!-- Luminous Ivory-Parchment Highlight Gradient -->
+    <linearGradient id="ivoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#E5D6BD"/>
+    </linearGradient>
+
+    <!-- Subtle Inner Ring Metallic Gradient -->
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#262A36"/>
+      <stop offset="100%" stop-color="#11131A"/>
+    </linearGradient>
+
+    <filter id="shadow" x="-12%" y="-12%" width="124%" height="124%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle App Icon Container -->
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bgGrad)" stroke="#2A2D38" stroke-width="3" filter="url(#shadow)"/>
+
+  <!-- Concentric Geometric Halo Frame (Zikirce & Tahrir Concentric Medallion Homage) -->
+  <circle cx="256" cy="276" r="148" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" opacity="0.28"/>
+
+  <!-- Broadcast / Cast Signal Arcs (Top Wireless Wave Triad) -->
+  <path d="M 196 112 A 96 96 0 0 1 316 112" fill="none" stroke="url(#goldGrad)" stroke-width="11" stroke-linecap="round" opacity="0.95"/>
+  <path d="M 166 84 A 136 136 0 0 1 346 84" fill="none" stroke="url(#goldGrad)" stroke-width="8" stroke-linecap="round" opacity="0.58"/>
+
+  <!-- Tactile D-Pad & Watch-Planner Dial Outer Ring -->
+  <circle cx="256" cy="276" r="126" fill="url(#ringGrad)" stroke="url(#goldGrad)" stroke-width="9" filter="url(#shadow)"/>
+
+  <!-- 4 Cardinal D-Pad & Clock Notches (12h, 3h, 6h, 9h) -->
+  <line x1="256" y1="166" x2="256" y2="184" stroke="url(#ivoryGrad)" stroke-width="7" stroke-linecap="round"/>
+  <line x1="256" y1="368" x2="256" y2="386" stroke="url(#goldGrad)" stroke-width="7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="146" y1="276" x2="164" y2="276" stroke="url(#goldGrad)" stroke-width="7" stroke-linecap="round" opacity="0.8"/>
+  <line x1="348" y1="276" x2="366" y2="276" stroke="url(#goldGrad)" stroke-width="7" stroke-linecap="round" opacity="0.8"/>
+
+  <!-- Scheduled Progress Arc on Inner Track -->
+  <path d="M 256 202 A 74 74 0 1 1 188 306" fill="none" stroke="url(#goldGrad)" stroke-width="5" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Inner Obsidian Well -->
+  <circle cx="256" cy="276" r="64" fill="#0B0C10" stroke="#2F3444" stroke-width="2.5"/>
+
+  <!-- Central Sculptural Golden Cue / Play Prism -->
+  <path d="M 238 242 C 238 235, 245 231, 251 235 L 295 266 C 301 270, 301 282, 295 286 L 251 317 C 245 321, 238 317, 238 310 Z"
+        fill="url(#goldGrad)"/>
+  <path d="M 241 244 L 289 276 L 241 276 Z"
+        fill="url(#ivoryGrad)" opacity="0.38"/>
+</svg>
