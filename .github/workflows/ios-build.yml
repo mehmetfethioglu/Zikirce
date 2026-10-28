@@ -54,7 +54,7 @@ jobs:
       - name: 5.5. Register Bundle ID (com.akarworks.cuedeck) on Apple Portal
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: |
-          pip3 install --quiet pyjwt cryptography requests
+          pip3 install --break-system-packages --quiet pyjwt cryptography requests
           python3 - << 'EOF'
           import os, time, jwt, requests
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
