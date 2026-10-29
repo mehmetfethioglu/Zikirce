@@ -1206,6 +1206,18 @@ class _CueDeckSettingsScreenState
     final activePlayingId = ref.watch(
       cueDeckProvider.select((s) => s.activePlayingCueId),
     );
+    final localWifiIp = ref.watch(
+      cueDeckProvider.select((s) => s.localWifiIp),
+    );
+    final localNetworkPermissionDenied = ref.watch(
+      cueDeckProvider.select((s) => s.localNetworkPermissionDenied),
+    );
+
+    if (!_ipFocusNode.hasFocus &&
+        _ipController.text.trim() != device.ip &&
+        device.ip.isNotEmpty) {
+      _ipController.text = device.ip;
+    }
 
     // True Black (#000000) in Dark Mode, Warm Alabaster in Light Mode
     final pageBg = isDarkMode ? Colors.black : const Color(0xFFF3F6FA);
@@ -1562,6 +1574,92 @@ class _CueDeckSettingsScreenState
                                     : FontWeight.w400,
                               ),
                             ),
+                            if (localWifiIp.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 3),
+                              Text(
+                                '📱 Telefon Wi-Fi IP: $localWifiIp',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: goldText,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                            if (localNetworkPermissionDenied) ...<Widget>[
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3F1518),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: const Color(0xFFF87171),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    const Text(
+                                      '⚠️ iPhone "Yerel Ağ" İzni Kapalı!',
+                                      style: TextStyle(
+                                        color: Color(0xFFFCA5A5),
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'iOS güvenlik ayarı nedeniyle CueDeck\'in Wi-Fi ağındaki TV\'ye erişimi engelleniyor. Lütfen iPhone Ayarlar > Uygulamalar > CueDeck > Yerel Ağ anahtarını açın.',
+                                      style: TextStyle(
+                                        color: Color(0xFFFECACA),
+                                        fontSize: 10.5,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: FilledButton.icon(
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor:
+                                              const Color(0xFFF87171),
+                                          foregroundColor: Colors.black,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(10),
+                                          ),
+                                        ),
+                                        onPressed: () {
+                                          ref
+                                              .read(cueDeckProvider.notifier)
+                                              .openIosLocalNetworkSettings();
+                                        },
+                                        icon: const Icon(
+                                          Icons.settings_suggest_rounded,
+                                          size: 16,
+                                        ),
+                                        label: const Text(
+                                          '📲 iPhone Ayarlarında "Yerel Ağ" İznini Aç',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 10),
 
                             // PROMINENT "AĞDAKİ CİHAZLARI ARA" BUTTON
@@ -1706,9 +1804,9 @@ class _CueDeckSettingsScreenState
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '1️⃣ Yukarıdan "🔍 Ağdaki Cihazları Ara"ya basın veya TV IP adresini girin (başka bir telefonda CueDeck açıksa önce kapatın).\n'
+                                    '1️⃣ Yukarıdan "🔍 Ağdaki Cihazları Ara"ya basın. (iPhone kullanıyorsanız: iPhone Ayarlar > Uygulamalar > CueDeck > Yerel Ağ izninin açık olduğundan emin olun).\n'
                                     '2️⃣ TV\'de Ayarlar > Cihaz Tercihleri > Hakkında > Yapı Numarası (7 kez basın) > Geliştirici Seçenekleri > USB/Ağ Hata Ayıklama (ADB) açın.\n'
-                                    '3️⃣ Aşağıdaki "🔐 TV Eşleştir ve Bağlan" butonuna basıp TV ekranında çıkan "Her zaman izin ver -> Tamam" onayını kabul edin.',
+                                    '3️⃣ Aşağıdaki "🔐 TV Eşleştir (RSA Onayı)" butonuna basıp TV ekranında çıkan "Her zaman izin ver -> Tamam" onayını kabul edin.',
                                     style: TextStyle(
                                       color: secondaryText,
                                       fontSize: 11,

@@ -41,6 +41,8 @@ class CueDeckState {
     this.activePlayingCueId,
     this.activeReminderItem,
     this.entitlement = const CueEntitlementState(),
+    this.localWifiIp = '',
+    this.localNetworkPermissionDenied = false,
   });
 
   final int activeTab;
@@ -64,6 +66,8 @@ class CueDeckState {
   final String? activePlayingCueId;
   final WatchCueItem? activeReminderItem;
   final CueEntitlementState entitlement;
+  final String localWifiIp;
+  final bool localNetworkPermissionDenied;
 
   /// True when the user owns the one-time Lifetime Pro upgrade.
   bool get isProLifetime => entitlement.isProLifetime;
@@ -153,6 +157,8 @@ class CueDeckState {
     WatchCueItem? activeReminderItem,
     bool clearReminder = false,
     CueEntitlementState? entitlement,
+    String? localWifiIp,
+    bool? localNetworkPermissionDenied,
   }) {
     return CueDeckState(
       activeTab: activeTab ?? this.activeTab,
@@ -184,6 +190,9 @@ class CueDeckState {
           ? null
           : (activeReminderItem ?? this.activeReminderItem),
       entitlement: entitlement ?? this.entitlement,
+      localWifiIp: localWifiIp ?? this.localWifiIp,
+      localNetworkPermissionDenied:
+          localNetworkPermissionDenied ?? this.localNetworkPermissionDenied,
     );
   }
 }
@@ -777,7 +786,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     state = state.copyWith(
       isScanning: true,
-      lastCommandStatus: '$targetIp:5555 taranıyor...',
+      lastCommandStatus: '$targetIp:5555 ve yerel Wi-Fi ağı taranıyor...',
     );
 
     final service = ref.read(adbTvServiceProvider);
@@ -794,13 +803,23 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       isScanning: false,
       discoveredDevices: devices,
       selectedDevice: selected,
+      localWifiIp: service.detectedWifiIp,
+      localNetworkPermissionDenied: service.localNetworkPermissionDenied,
       lastCommandStatus: selected.isOnline
           ? 'Bağlandı: ${selected.name} (${selected.ip})'
-          : (service.lastConnectRequiredPairingPrompt
-                ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
-                : 'Çevrimdışı / ADB Bekleniyor (${selected.ip})'),
+          : (service.localNetworkPermissionDenied
+                ? '⚠️ iPhone "Yerel Ağ" izni kapalı! Ayarlar > CueDeck > Yerel Ağ iznini açın.'
+                : (service.lastConnectRequiredPairingPrompt
+                      ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
+                      : 'Çevrimdışı / ADB Bekleniyor (${selected.ip})')),
     );
     await _persistState(triggerAutoBackup: false);
+  }
+
+  /// Opens the iOS system Settings page for CueDeck so the user can enable "Yerel Ağ" (Local Network).
+  Future<void> openIosLocalNetworkSettings() async {
+    final service = ref.read(adbTvServiceProvider);
+    await service.openIosLocalNetworkSettings();
   }
 
   /// Initiates an interactive 18-second ADB RSA-2048 pairing handshake with the
@@ -963,6 +982,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       lastCommandStatus: 'Aktif TV: ${device.name} (${device.ip})',
     );
     _persistState();
+    if (!device.isOnline && !state.isScanning) {
+      unawaited(scanNetworkForTvs(customIp: device.ip));
+    }
   }
 
   Future<void> sendRemoteKey(TvKeyCommand command) async {

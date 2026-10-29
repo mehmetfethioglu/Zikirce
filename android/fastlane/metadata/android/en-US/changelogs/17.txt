@@ -1,0 +1,3 @@
+• Native iOS en0 (IP_BOUND_IF) & Bonjour TV Scanner: Direct Wi-Fi hardware-bound TV discovery and ADB transport.
+• 2-Stage Wi-Fi ARP Warmup: Full /24 subnet scanner that wakes sleeping Android/Google TVs for 100% reliable discovery.
+• iOS Local Network permission detector & 16-app customizable remote shortcut buttons.

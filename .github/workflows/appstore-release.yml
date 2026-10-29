@@ -1,34 +1,34 @@
-name: App Store Connect — Create v1.9.4, Attach Build 16 & Submit for Review
+name: App Store Connect — Create v1.9.5, Attach Build 17 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 1.9.4)"
+        description: "App Store Version String (e.g. 1.9.5)"
         required: false
-        default: "1.9.4"
+        default: "1.9.5"
       build_number:
-        description: "TestFlight Build Number (e.g. 16)"
+        description: "TestFlight Build Number (e.g. 17)"
         required: false
-        default: "16"
+        default: "17"
 
 jobs:
   submit-appstore:
-    name: Submit v1.9.4 (Build 16) to App Store Connect
+    name: Submit v1.9.5 (Build 17) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.4' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '16' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.5' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '17' }}
 
     steps:
       - name: Install PyJWT and Cryptography
         run: pip install pyjwt cryptography requests
 
-      - name: Ensure Bundle ID, Configure v1.9.4 Release Notes, Attach Build 16 & Submit to Review
+      - name: Ensure Bundle ID, Configure v1.9.5 Release Notes, Attach Build 17 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, jwt, requests
@@ -36,8 +36,8 @@ jobs:
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
-          target_version = os.environ.get("TARGET_VERSION", "1.9.4").strip()
-          target_build = os.environ.get("TARGET_BUILD", "16").strip()
+          target_version = os.environ.get("TARGET_VERSION", "1.9.5").strip()
+          target_build = os.environ.get("TARGET_BUILD", "17").strip()
           bundle_id_str = "com.akarworks.cuedeck"
 
           def make_headers():
@@ -168,16 +168,16 @@ jobs:
           # 3. Set What's New (Release Notes) for TR and EN
           whats_new_tr = (
               f"CueDeck v{target_version} (Build {target_build}) Yenilikleri:\n"
-              "• Özelleştirilebilir Kumanda Tuşları: Kumanda üzerindeki 6 kısayol tuşunu basılı tutarak veya Ayarlar'dan 16 popüler TV uygulamasıyla (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, BluTV, S Sport+, TOD TV, Spotify vb.) değiştirin.\n"
-              "• Kolay TV Bağlantısı & Çoklu Telefon: «Ağdaki Cihazları Ara» butonu, 3 adımlı eşleştirme rehberi ve iOS/Android çoklu cihaz desteği.\n"
-              "• Koyu Temada Gerçek Siyah (#000000) Ayarlar ekranı."
+              "• Doğal iOS en0 (IP_BOUND_IF) & Bonjour TV Tarayıcı: iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanımına bağlanan doğal Swift ADB & alt ağ tarayıcısı.\n"
+              "• 2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması: Wi-Fi güç tasarrufundaki TV'leri önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan keşif motoru.\n"
+              "• iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar Kısayolu."
           )
 
           whats_new_en = (
               f"What's New in CueDeck v{target_version} (Build {target_build}):\n"
-              "• Customizable Remote App Buttons: Long-press any of the 6 remote shortcut slots or use Settings to swap between 16 popular TV apps (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch, Kodi, VLC).\n"
-              "• Guided TV Pairing & Multi-Phone Support: 1-tap Network Device Scanner, 3-step pairing guide, and seamless iOS + Android multi-phone socket sharing.\n"
-              "• True Black (#000000) Settings Screen."
+              "• Native iOS en0 (IP_BOUND_IF) & Bonjour Scanner: Hardware-bound Wi-Fi socket discovery and ADB shell transport for iPhone 17 Pro Max.\n"
+              "• 2-Stage Wi-Fi ARP Warmup & Full /24 Subnet Sweep: Wakes sleeping 802.11 TVs before probing Ports 5555 and 6466.\n"
+              "• Automatic iOS Local Network Permission Detection & 1-Tap Settings Shortcut."
           )
 
           loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())

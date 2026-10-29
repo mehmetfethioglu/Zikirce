@@ -1,5 +1,17 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-018] 2026-10-29: Doğal iOS `en0` (`IP_BOUND_IF`) & Bonjour Ağ Köprüsü, 2-Aşamalı Wi-Fi ARP Uyandırma (`/24` Tam Tarama) ve iOS Yerel Ağ İzin Kalkanı (`v1.9.5+17`)
+- **Tarih & Ajanlar:** `2026-10-29` — Kanuni, El-Cezeri & Piri Reis, Mimar Sinan, Kâtip Çelebi, Barbaros (Denetçiler: Ebussuud — `KARAR: GEÇTİ`)
+- **Bağlam & Canlı Ağ Teşhisi (`192.168.1.125`):**
+  1. Kullanıcının `192.168.1.125:5555` (`SMART_TV`, `rtd285o`, Android 9, `ro.adb.secure=0`) televizyonu üzerinde yapılan canlı ağ ve `ip neigh` analizinde, iPhone 17 Pro Max'ten gönderilen paketlerin TV'ye hiç ulaşmadığı (`errno 65 EHOSTUNREACH` — iOS Yerel Ağ izni veya hücresel/tünel arayüz yönlendirmesi) ve Wi-Fi güç tasarrufunda (`DTIM`) ilk ARP yanıtının **694 ms** sürdüğü tespit edildi.
+  2. Tek aşamalı `<1000ms` TCP zaman aşımı (iOS çekirdeğinin 1000ms `TCP SYN` yeniden gönderim süresinden kısa olduğu için) uykudaki Wi-Fi TV'leri kaçırıyordu; ayrıca `NetworkInterface.list` iPhone'da `pdp_ip0` (5G) ve `utun` (Private Relay) arayüzlerini de taramaya dahil ediyordu.
+- **Karar & Çözüm:**
+  1. **Doğal iOS `en0` (`IP_BOUND_IF`) & `NetServiceBrowser` Köprüsü ([`ios/Runner/AppDelegate.swift`](file:///c:/Users/theak/source/repos/cuedeck/ios/Runner/AppDelegate.swift#L1-L392)):** `setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &en0Index, ...)` ile TCP soketlerini doğrudan fiziksel `en0` Wi-Fi donanımına bağlayan `scanSubnetForTvs` ve `nativeAdbShell` metodları + `_androidtvremote2._tcp.`, `_adb._tcp.`, `_googlecast._tcp.` için `NetServiceBrowser` izin tetikleyicisi eklendi.
+  2. **2-Aşamalı Wi-Fi ARP Uyandırma & Tam `/24` Alt Ağ Taraması ([`AdbTvService.discoverDevices`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L973-L1360), [`pingTv`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L604-L645)):** Önce `240ms` ARP uyandırma dalgası gönderilip `140ms` beklenerek TV'nin MAC adresi (`00:cb:b4:30:11:64`) telefonun ARP tablosuna alınır; ardından ikinci geçişte Port `5555` ve `6466` paralel taranır (canlı ağ testinde `192.168.1.100`'den başlayarak `192.168.1.125` `SMART_TV` cihazını otomatik bulduğu doğrulandı).
+  3. **iPhone Yerel Ağ İzin Kalkanı & `📱 Telefon Wi-Fi IP` Göstergesi ([`CueDeckSettingsScreen`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L1562-L1662)):** `errno == 65 (EHOSTUNREACH)` algılandığında kullanıcıya doğrudan `UIApplication.openSettingsURLString` ile `iPhone Ayarlar > CueDeck > Yerel Ağ` ekranını açan buton gösterilir.
+
+---
+
 ## [ADR-017] 2026-10-29: Gerçek Siyah (`#000000`) Ayarlar Sayfası, `🔍 Ağdaki Cihazları Ara` Butonu, 3 Adımda Kolay Eşleştirme Yönlendirmesi ve Özelleştirilebilir 6'lı Kumanda Uygulama Tuşları
 - **Tarih & Ajanlar:** `2026-10-29` — Kanuni, Mimar Sinan, Kâtip Çelebi (Denetçiler: Matrakçı & Ebussuud — `KARAR: GEÇTİ`)
 - **Karar & Uygulanan Değişiklikler:**

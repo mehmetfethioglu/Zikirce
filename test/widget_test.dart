@@ -51,12 +51,14 @@ class _FakeAdbTvService extends AdbTvService {
     String ip, {
     int port = 5555,
     Duration timeout = const Duration(milliseconds: 220),
+    bool warmupRetry = false,
   }) async =>
       true;
 
   @override
   Future<List<TvDevice>> discoverDevices({
     String preferredIp = '192.168.1.123',
+    bool forceFullSubnetScan = false,
   }) async {
     return <TvDevice>[
       TvDevice(
@@ -378,14 +380,14 @@ void main() {
       expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
       expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
       expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(find.text('📋 Sürüm Notları (v1.9.4)'), findsOneWidget);
+      expect(find.text('📋 Sürüm Notları (v1.9.5)'), findsOneWidget);
 
       // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(find.text('📋 Sürüm Notları (v1.9.4)'));
+      await tester.tap(find.text('📋 Sürüm Notları (v1.9.5)'));
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Kumanda Uygulama Tuşlarını Değiştirme (16 Uygulama)'),
+        find.text('Doğal iOS en0 (IP_BOUND_IF) & Bonjour Ağ Motoru'),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));

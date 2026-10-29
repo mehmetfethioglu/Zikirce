@@ -148,15 +148,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.4 (Build 16) Yenilikleri:
-      • Özelleştirilebilir Kumanda Tuşları: Kumanda üzerindeki 6 kısayol tuşunu basılı tutarak veya Ayarlar'dan 16 popüler TV uygulamasıyla (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, BluTV, S Sport+, TOD TV, Spotify vb.) değiştirin.
-      • Kolay TV Bağlantısı & Çoklu Telefon: «Ağdaki Cihazları Ara» butonu, 3 adımlı eşleştirme rehberi ve iOS/Android çoklu cihaz desteği.
-      • Koyu Temada Gerçek Siyah (#000000) Ayarlar ekranı.
+      CueDeck v1.9.5 (Build 17) Yenilikleri:
+      • Doğal iOS en0 (IP_BOUND_IF) & Bonjour TV Tarayıcı: iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanımına bağlanan doğal Swift ADB & alt ağ tarayıcısı.
+      • 2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması: Wi-Fi güç tasarrufundaki TV'leri önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan keşif motoru.
+      • iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar Kısayolu.
 
-      What's New in CueDeck v1.9.4 (Build 16):
-      • Customizable Remote App Buttons: Long-press any of the 6 remote shortcut slots or use Settings to swap between 16 popular TV apps (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch, Kodi, VLC).
-      • Guided TV Pairing & Multi-Phone Support: 1-tap Network Device Scanner, 3-step pairing guide, and seamless iOS + Android multi-phone socket sharing.
-      • True Black (#000000) Settings Screen.
+      What's New in CueDeck v1.9.5 (Build 17):
+      • Native iOS en0 (IP_BOUND_IF) & Bonjour Scanner: Hardware-bound Wi-Fi socket discovery and ADB shell transport for iPhone 17 Pro Max.
+      • 2-Stage Wi-Fi ARP Warmup & Full /24 Subnet Sweep: Wakes sleeping 802.11 TVs before probing Ports 5555 and 6466.
+      • Automatic iOS Local Network Permission Detection & 1-Tap Settings Shortcut.
     CHANGELOG
 
     begin

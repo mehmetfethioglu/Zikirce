@@ -40,11 +40,38 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.4+16';
-  static const String currentShortVersion = 'v1.9.4';
+  static const String currentVersion = '1.9.5+17';
+  static const String currentShortVersion = 'v1.9.5';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.5+17',
+      versionLabel: 'v1.9.5 (Build 17)',
+      releaseDate: '29 Ekim 2026',
+      headline:
+          'iOS Doğal en0 (IP_BOUND_IF) TV Tarayıcı, 2-Aşamalı ARP Uyandırma & Yerel Ağ İzin Kalkanı',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'iOS AĞ',
+          title: 'Doğal iOS en0 (IP_BOUND_IF) & Bonjour Ağ Motoru',
+          description:
+              'iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanım arayüzüne bağlanan doğal Swift ADB & alt ağ tarayıcısı eklendi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'KEŞİF',
+          title: '2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması',
+          description:
+              'Wi-Fi güç tasarrufundaki TV\'leri (192.168.1.x) önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan 2 aşamalı keşif motoru devreye alındı.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'İZİN',
+          title: 'iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar',
+          description:
+              'iOS Yerel Ağ izni kapalıysa (errno 65) otomatik algılayıp doğrudan iPhone Ayarlar > CueDeck > Yerel Ağ sayfasını açan kısayol butonu eklendi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.4+16',
       versionLabel: 'v1.9.4 (Build 16)',
