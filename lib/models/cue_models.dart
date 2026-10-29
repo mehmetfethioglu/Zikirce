@@ -45,6 +45,76 @@ enum StreamingPlatform {
     leanbackActivity: 'com.akarworks.zikirce.MainActivity',
     brandColor: Color(0xFFE2A84B),
     icon: Icons.auto_awesome_rounded,
+  ),
+  primeVideo(
+    label: 'Prime Video',
+    packageName: 'com.amazon.amazonvideo.livingroom',
+    leanbackActivity: '',
+    brandColor: Color(0xFF00A8E1),
+    icon: Icons.ondemand_video_rounded,
+  ),
+  disneyPlus(
+    label: 'Disney+',
+    packageName: 'com.disney.disneyplus',
+    leanbackActivity: '',
+    brandColor: Color(0xFF113CCF),
+    icon: Icons.stars_rounded,
+  ),
+  exxen(
+    label: 'Exxen',
+    packageName: 'com.exxen.android',
+    leanbackActivity: '',
+    brandColor: Color(0xFFFFD600),
+    icon: Icons.bolt_rounded,
+  ),
+  blutv(
+    label: 'Max / BluTV',
+    packageName: 'com.blutv.androidtv',
+    leanbackActivity: '',
+    brandColor: Color(0xFF2979FF),
+    icon: Icons.theaters_rounded,
+  ),
+  ssportPlus(
+    label: 'S Sport+',
+    packageName: 'com.ssportplus.android',
+    leanbackActivity: '',
+    brandColor: Color(0xFF00C853),
+    icon: Icons.sports_basketball_rounded,
+  ),
+  todTv(
+    label: 'TOD TV',
+    packageName: 'com.todtv.turkiye',
+    leanbackActivity: '',
+    brandColor: Color(0xFFFF6D00),
+    icon: Icons.sports_soccer_rounded,
+  ),
+  spotify(
+    label: 'Spotify',
+    packageName: 'com.spotify.tv.android',
+    leanbackActivity: '',
+    brandColor: Color(0xFF1DB954),
+    icon: Icons.music_note_rounded,
+  ),
+  twitch(
+    label: 'Twitch',
+    packageName: 'tv.twitch.android.app',
+    leanbackActivity: '',
+    brandColor: Color(0xFF9146FF),
+    icon: Icons.videogame_asset_rounded,
+  ),
+  kodi(
+    label: 'Kodi / IPTV',
+    packageName: 'org.xbmc.kodi',
+    leanbackActivity: '',
+    brandColor: Color(0xFF17B2E7),
+    icon: Icons.settings_input_antenna_rounded,
+  ),
+  vlc(
+    label: 'VLC Player',
+    packageName: 'org.videolan.vlc',
+    leanbackActivity: '',
+    brandColor: Color(0xFFFF8800),
+    icon: Icons.video_library_rounded,
   );
 
   const StreamingPlatform({
@@ -54,6 +124,17 @@ enum StreamingPlatform {
     required this.brandColor,
     required this.icon,
   });
+
+  /// Default 6 shortcut buttons displayed on the G10 remote chassis (3x2 grid).
+  static const List<StreamingPlatform> defaultRemoteShortcuts =
+      <StreamingPlatform>[
+    StreamingPlatform.youtube,
+    StreamingPlatform.netflix,
+    StreamingPlatform.beinConnect,
+    StreamingPlatform.tabii,
+    StreamingPlatform.tivibu,
+    StreamingPlatform.zikirce,
+  ];
 
   final String label;
   final String packageName;
@@ -75,7 +156,17 @@ enum StreamingPlatform {
       case StreamingPlatform.tivibu:
         return 'https://www.tivibu.com.tr/... (veya boş bırakın)';
       case StreamingPlatform.zikirce:
-        return 'https://... (opsiyonel derin bağlantı)';
+      case StreamingPlatform.primeVideo:
+      case StreamingPlatform.disneyPlus:
+      case StreamingPlatform.exxen:
+      case StreamingPlatform.blutv:
+      case StreamingPlatform.ssportPlus:
+      case StreamingPlatform.todTv:
+      case StreamingPlatform.spotify:
+      case StreamingPlatform.twitch:
+      case StreamingPlatform.kodi:
+      case StreamingPlatform.vlc:
+        return 'https://... (opsiyonel derin bağlantı veya boş bırakın)';
     }
   }
 
@@ -85,15 +176,26 @@ enum StreamingPlatform {
       case StreamingPlatform.youtube:
         return 'Örn: Flutter Mimari Playlist veya Tarih Belgeseli Serisi';
       case StreamingPlatform.beinConnect:
-        return 'Örn: Süper Lig Derbi Özel • Kanal 77';
+      case StreamingPlatform.todTv:
+      case StreamingPlatform.ssportPlus:
+        return 'Örn: Süper Lig / Premier Lig Maç Yayını';
       case StreamingPlatform.tabii:
         return 'Örn: Gassal veya Kübra • Yeni Sezon';
       case StreamingPlatform.netflix:
-        return 'Örn: 3 Cisim Problemi • 1. Sezon';
+      case StreamingPlatform.primeVideo:
+      case StreamingPlatform.disneyPlus:
+      case StreamingPlatform.exxen:
+      case StreamingPlatform.blutv:
+        return 'Örn: Favori Dizi veya Film • 1. Sezon';
       case StreamingPlatform.tivibu:
         return 'Örn: Avrupa Ligi Maç Gecesi • Tivibu Spor';
       case StreamingPlatform.zikirce:
         return 'Örn: Akşam Tesbihatı & Günlük Vird';
+      case StreamingPlatform.spotify:
+      case StreamingPlatform.twitch:
+      case StreamingPlatform.kodi:
+      case StreamingPlatform.vlc:
+        return 'Örn: Canlı Yayın / Çalma Listesi';
     }
   }
 
@@ -101,14 +203,24 @@ enum StreamingPlatform {
   String get unitLabel {
     switch (this) {
       case StreamingPlatform.youtube:
+      case StreamingPlatform.vlc:
         return 'Video';
       case StreamingPlatform.beinConnect:
       case StreamingPlatform.tivibu:
+      case StreamingPlatform.ssportPlus:
+      case StreamingPlatform.todTv:
+      case StreamingPlatform.twitch:
+      case StreamingPlatform.kodi:
         return 'Yayın';
+      case StreamingPlatform.spotify:
+        return 'Parça';
       case StreamingPlatform.zikirce:
-        return 'Bölüm';
       case StreamingPlatform.tabii:
       case StreamingPlatform.netflix:
+      case StreamingPlatform.primeVideo:
+      case StreamingPlatform.disneyPlus:
+      case StreamingPlatform.exxen:
+      case StreamingPlatform.blutv:
         return 'Bölüm';
     }
   }

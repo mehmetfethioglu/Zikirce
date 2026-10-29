@@ -1,0 +1,4 @@
+CueDeck v1.9.4 (Build 16) Yenilikleri:
+• Özelleştirilebilir Kumanda Tuşları: Kumanda üzerindeki 6 kısayol tuşunu basılı tutarak veya Ayarlar'dan 16 popüler TV uygulamasıyla (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, BluTV, S Sport+, TOD TV, Spotify vb.) değiştirin.
+• Kolay TV Bağlantısı & Çoklu Telefon: «Ağdaki Cihazları Ara» butonu, 3 adımlı eşleştirme rehberi ve iOS/Android çoklu cihaz desteği.
+• Koyu Temada Gerçek Siyah (#000000) Ayarlar ekranı.

@@ -807,6 +807,7 @@ class TactileDpadDialWidget extends ConsumerWidget {
 }
 
 /// 2-Column Pill App Launch Buttons at the bottom of the G10 remote chassis.
+/// Supports 1-tap TV app launch and long-press (or Settings) slot customization.
 class QuickLaunchAppDock extends ConsumerWidget {
   const QuickLaunchAppDock({super.key, this.isDarkMode = true});
 
@@ -814,78 +815,63 @@ class QuickLaunchAppDock extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final shortcuts = ref.watch(
+      cueDeckProvider.select((s) => s.remoteShortcuts),
+    );
+    final slots = shortcuts.length == 6
+        ? shortcuts
+        : StreamingPlatform.defaultRemoteShortcuts;
+
     void launch(StreamingPlatform p) {
       HapticFeedback.mediumImpact();
       ref.read(cueDeckProvider.notifier).launchPlatformApp(p);
+    }
+
+    void customizeSlot(int index) {
+      HapticFeedback.heavyImpact();
+      showRemoteShortcutPickerSheet(context, slotIndex: index);
+    }
+
+    Widget buildSlot(int index) {
+      final platform = slots[index];
+      final isNetflix = platform == StreamingPlatform.netflix;
+      return Expanded(
+        child: _AppCapsuleButton(
+          key: Key('remote_shortcut_slot_$index'),
+          platform: platform,
+          displayLabel: isNetflix ? 'NETFLIX' : null,
+          isDarkMode: isDarkMode,
+          showIcon: !isNetflix,
+          useBrandTextColor: isNetflix,
+          onTap: () => launch(platform),
+          onLongPress: () => customizeSlot(index),
+        ),
+      );
     }
 
     return Column(
       children: <Widget>[
         Row(
           children: <Widget>[
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.youtube,
-                isDarkMode: isDarkMode,
-                showIcon: true,
-                onTap: () => launch(StreamingPlatform.youtube),
-              ),
-            ),
+            buildSlot(0),
             const SizedBox(width: 10),
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.netflix,
-                displayLabel: 'NETFLIX',
-                isDarkMode: isDarkMode,
-                showIcon: false,
-                useBrandTextColor: true,
-                onTap: () => launch(StreamingPlatform.netflix),
-              ),
-            ),
+            buildSlot(1),
           ],
         ),
         const SizedBox(height: 8),
         Row(
           children: <Widget>[
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.beinConnect,
-                isDarkMode: isDarkMode,
-                showIcon: true,
-                onTap: () => launch(StreamingPlatform.beinConnect),
-              ),
-            ),
+            buildSlot(2),
             const SizedBox(width: 10),
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.tabii,
-                isDarkMode: isDarkMode,
-                showIcon: true,
-                onTap: () => launch(StreamingPlatform.tabii),
-              ),
-            ),
+            buildSlot(3),
           ],
         ),
         const SizedBox(height: 8),
         Row(
           children: <Widget>[
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.tivibu,
-                isDarkMode: isDarkMode,
-                showIcon: true,
-                onTap: () => launch(StreamingPlatform.tivibu),
-              ),
-            ),
+            buildSlot(4),
             const SizedBox(width: 10),
-            Expanded(
-              child: _AppCapsuleButton(
-                platform: StreamingPlatform.zikirce,
-                isDarkMode: isDarkMode,
-                showIcon: true,
-                onTap: () => launch(StreamingPlatform.zikirce),
-              ),
-            ),
+            buildSlot(5),
           ],
         ),
       ],
@@ -895,10 +881,12 @@ class QuickLaunchAppDock extends ConsumerWidget {
 
 class _AppCapsuleButton extends StatelessWidget {
   const _AppCapsuleButton({
+    super.key,
     required this.platform,
     required this.isDarkMode,
     required this.showIcon,
     required this.onTap,
+    this.onLongPress,
     this.displayLabel,
     this.useBrandTextColor = false,
   });
@@ -907,6 +895,7 @@ class _AppCapsuleButton extends StatelessWidget {
   final bool isDarkMode;
   final bool showIcon;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final String? displayLabel;
   final bool useBrandTextColor;
 
@@ -920,40 +909,44 @@ class _AppCapsuleButton extends StatelessWidget {
         ? platform.brandColor
         : (isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF1F232B));
 
-    return Material(
-      color: fillColor,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
+    return Tooltip(
+      message: '${platform.label} (Değiştirmek için basılı tutun)',
+      child: Material(
+        color: fillColor,
         borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor, width: 1.1),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              if (showIcon) ...<Widget>[
-                Icon(platform.icon, color: platform.brandColor, size: 15),
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  displayLabel ?? platform.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11.5,
-                    letterSpacing: useBrandTextColor ? 0.6 : 0.1,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          onLongPress: onLongPress,
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor, width: 1.1),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                if (showIcon) ...<Widget>[
+                  Icon(platform.icon, color: platform.brandColor, size: 15),
+                  const SizedBox(width: 5),
+                ],
+                Flexible(
+                  child: Text(
+                    displayLabel ?? platform.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                      letterSpacing: useBrandTextColor ? 0.6 : 0.1,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1214,12 +1207,11 @@ class _CueDeckSettingsScreenState
       cueDeckProvider.select((s) => s.activePlayingCueId),
     );
 
-    // Soft, breathable modern palette (Soft Slate in Dark Mode, Warm Alabaster in Light Mode)
-    final pageBg =
-        isDarkMode ? const Color(0xFF141824) : const Color(0xFFF3F6FA);
-    final cardBg = isDarkMode ? const Color(0xFF1E2433) : Colors.white;
+    // True Black (#000000) in Dark Mode, Warm Alabaster in Light Mode
+    final pageBg = isDarkMode ? Colors.black : const Color(0xFFF3F6FA);
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final cardBorder = isDarkMode
-        ? Colors.white.withValues(alpha: 0.06)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
@@ -1230,7 +1222,7 @@ class _CueDeckSettingsScreenState
     final softAccentFill =
         isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFD99B38);
     final inputFill =
-        isDarkMode ? const Color(0xFF151A26) : const Color(0xFFF1F5F9);
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF1F5F9);
     final softMint =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
     final softAmber =
@@ -1424,7 +1416,7 @@ class _CueDeckSettingsScreenState
                                     ),
                                     selected: isDarkMode,
                                     backgroundColor: isDarkMode
-                                        ? const Color(0xFF151A26)
+                                        ? const Color(0xFF11141E)
                                         : const Color(0xFFF1F5F9),
                                     selectedColor: isDarkMode
                                         ? const Color(0xFF2D2920)
@@ -1464,7 +1456,7 @@ class _CueDeckSettingsScreenState
                                     ),
                                     selected: !isDarkMode,
                                     backgroundColor: isDarkMode
-                                        ? const Color(0xFF151A26)
+                                        ? const Color(0xFF11141E)
                                         : const Color(0xFFF1F5F9),
                                     selectedColor: isDarkMode
                                         ? const Color(0xFF2D2920)
@@ -1496,7 +1488,7 @@ class _CueDeckSettingsScreenState
                       ),
                       const SizedBox(height: 12),
 
-                      // 2. SOFT & CLEAN TV CONNECTION CARD
+                      // 2. SIMPLIFIED & GUIDED TV CONNECTION CARD
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
@@ -1527,12 +1519,30 @@ class _CueDeckSettingsScreenState
                                     ),
                                   ),
                                 ),
-                                Text(
-                                  '${device.ip}:${device.port}',
-                                  style: TextStyle(
-                                    color: secondaryText,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w500,
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    '${device.ip}:${device.port}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () => _openTvSetupGuideSheet(context),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Icon(
+                                      Icons.help_outline_rounded,
+                                      size: 17,
+                                      color: goldText,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -1540,17 +1550,80 @@ class _CueDeckSettingsScreenState
                             const SizedBox(height: 4),
                             Text(
                               isScanning
-                                  ? 'Ağdaki televizyonlar taranıyor...'
+                                  ? '📡 Ağdaki Android TV ve Google TV cihazları aranıyor...'
                                   : status,
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: secondaryText,
+                                color: device.isOnline ? softMint : secondaryText,
                                 fontSize: 11.5,
+                                fontWeight: device.isOnline
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
                               ),
                             ),
+                            const SizedBox(height: 10),
+
+                            // PROMINENT "AĞDAKİ CİHAZLARI ARA" BUTTON
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                key: const Key('scan_network_devices_button'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: softAccentFill,
+                                  foregroundColor: const Color(0xFF0A0C12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 11,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                onPressed: isScanning
+                                    ? null
+                                    : () {
+                                        HapticFeedback.mediumImpact();
+                                        final ip = _ipController.text.trim();
+                                        ref
+                                            .read(cueDeckProvider.notifier)
+                                            .scanNetworkForTvs(
+                                              customIp:
+                                                  ip.isNotEmpty ? ip : null,
+                                            );
+                                      },
+                                icon: Icon(
+                                  isScanning
+                                      ? Icons.radar_rounded
+                                      : Icons.wifi_find_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  isScanning
+                                      ? 'Ağdaki Cihazlar Aranıyor...'
+                                      : '🔍 Ağdaki Cihazları Ara',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // DISCOVERED DEVICES CHIPS
                             if (discoveredDevices.isNotEmpty) ...<Widget>[
                               const SizedBox(height: 10),
+                              Text(
+                                'Ağda Bulunan Cihazlar (Seçmek için dokunun):',
+                                style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
@@ -1559,7 +1632,7 @@ class _CueDeckSettingsScreenState
                                   return ChoiceChip(
                                     visualDensity: VisualDensity.compact,
                                     label: Text(
-                                      '${d.name} (${d.ip})',
+                                      '${d.isOnline ? "🟢" : "⚪"} ${d.name} (${d.ip})',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -1571,7 +1644,7 @@ class _CueDeckSettingsScreenState
                                     checkmarkColor: goldText,
                                     side: BorderSide(
                                       color: isSelected
-                                          ? goldText.withValues(alpha: 0.55)
+                                          ? goldText.withValues(alpha: 0.65)
                                           : cardBorder,
                                     ),
                                     labelStyle: TextStyle(
@@ -1592,7 +1665,63 @@ class _CueDeckSettingsScreenState
                                 }).toList(),
                               ),
                             ],
+
                             const SizedBox(height: 10),
+
+                            // STEP-BY-STEP PAIRING & CONNECTION INSTRUCTIONS BOX
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(11),
+                              decoration: BoxDecoration(
+                                color: inputFill,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: goldText.withValues(alpha: 0.25),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.tips_and_updates_outlined,
+                                        color: goldText,
+                                        size: 15,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          '3 Adımda Kolay Eşleştirme & Bağlantı',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: goldText,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '1️⃣ Yukarıdan "🔍 Ağdaki Cihazları Ara"ya basın veya TV IP adresini girin (başka bir telefonda CueDeck açıksa önce kapatın).\n'
+                                    '2️⃣ TV\'de Ayarlar > Cihaz Tercihleri > Hakkında > Yapı Numarası (7 kez basın) > Geliştirici Seçenekleri > USB/Ağ Hata Ayıklama (ADB) açın.\n'
+                                    '3️⃣ Aşağıdaki "🔐 TV Eşleştir ve Bağlan" butonuna basıp TV ekranında çıkan "Her zaman izin ver -> Tamam" onayını kabul edin.',
+                                    style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 11,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            // MANUAL IP INPUT + DIRECT CONNECT
                             Row(
                               children: <Widget>[
                                 Expanded(
@@ -1629,12 +1758,14 @@ class _CueDeckSettingsScreenState
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: softAccentFill,
-                                    foregroundColor: const Color(0xFF141824),
+                                OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: goldText,
+                                    side: BorderSide(
+                                      color: goldText.withValues(alpha: 0.45),
+                                    ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
+                                      horizontal: 12,
                                       vertical: 10,
                                     ),
                                     shape: RoundedRectangleBorder(
@@ -1651,7 +1782,7 @@ class _CueDeckSettingsScreenState
                                     'Tara ve Bağlan',
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 12,
+                                      fontSize: 11.5,
                                     ),
                                   ),
                                 ),
@@ -1664,12 +1795,14 @@ class _CueDeckSettingsScreenState
                                   child: OutlinedButton(
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: goldText,
+                                      backgroundColor:
+                                          goldText.withValues(alpha: 0.10),
                                       side: BorderSide(
-                                        color: goldText.withValues(alpha: 0.35),
+                                        color: goldText.withValues(alpha: 0.45),
                                       ),
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
-                                        vertical: 8,
+                                        vertical: 9,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -1706,7 +1839,7 @@ class _CueDeckSettingsScreenState
                                       side: BorderSide(color: cardBorder),
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
-                                        vertical: 8,
+                                        vertical: 9,
                                       ),
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
@@ -1730,28 +1863,15 @@ class _CueDeckSettingsScreenState
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  tooltip: 'Kurulum Rehberi',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 32,
-                                    minHeight: 32,
-                                  ),
-                                  onPressed: () =>
-                                      _openTvSetupGuideSheet(context),
-                                  icon: Icon(
-                                    Icons.help_outline_rounded,
-                                    size: 18,
-                                    color: secondaryText,
-                                  ),
-                                ),
                               ],
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 12),
+
+                      // 2.15. CUSTOMIZABLE REMOTE APP BUTTONS CARD (6 SLOTS)
+                      const _RemoteShortcutCustomizationCard(),
                       const SizedBox(height: 12),
 
                       // 2.25. CUEDECK PRO & 24H PASS (COMPACT & SOFT)
@@ -1858,6 +1978,317 @@ class _CueDeckSettingsScreenState
   }
 }
 
+/// Opens the bottom sheet to change which streaming app is assigned to [slotIndex] (0..5)
+/// on the G10 physical remote chassis.
+void showRemoteShortcutPickerSheet(
+  BuildContext context, {
+  required int slotIndex,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _RemoteShortcutPickerSheet(slotIndex: slotIndex),
+  );
+}
+
+/// Settings card allowing users to customize all 6 app shortcut buttons on the G10 remote.
+class _RemoteShortcutCustomizationCard extends ConsumerWidget {
+  const _RemoteShortcutCustomizationCard();
+
+  static const List<String> _slotPositionLabels = <String>[
+    '1. Sol Üst',
+    '2. Sağ Üst',
+    '3. Sol Orta',
+    '4. Sağ Orta',
+    '5. Sol Alt',
+    '6. Sağ Alt',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final shortcuts = ref.watch(
+      cueDeckProvider.select((s) => s.remoteShortcuts),
+    );
+    final slots = shortcuts.length == 6
+        ? shortcuts
+        : StreamingPlatform.defaultRemoteShortcuts;
+
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
+    final subSurfaceBg =
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
+    final borderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.09)
+        : const Color(0xFFE2E8F0);
+    final primaryText =
+        isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
+    final secondaryText =
+        isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final goldText =
+        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
+
+    Widget buildEditableSlot(int index) {
+      final platform = slots[index];
+      return Expanded(
+        child: InkWell(
+          key: Key('settings_shortcut_slot_$index'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            showRemoteShortcutPickerSheet(context, slotIndex: index);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: subSurfaceBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(platform.icon, color: platform.brandColor, size: 16),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        _slotPositionLabels[index],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: secondaryText,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        platform.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: primaryText,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.swap_horiz_rounded,
+                  color: goldText,
+                  size: 15,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.apps_rounded, color: goldText, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Kumanda Uygulama Tuşları (6 Yuva)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: goldText,
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  ref
+                      .read(cueDeckProvider.notifier)
+                      .resetRemoteShortcutsToDefault();
+                },
+                child: const Text(
+                  'Sıfırla',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Değiştirmek istediğiniz tuşa dokunun (veya kumandada tuşa basılı tutun).',
+            style: TextStyle(color: secondaryText, fontSize: 11.5),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: <Widget>[
+              buildEditableSlot(0),
+              const SizedBox(width: 8),
+              buildEditableSlot(1),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: <Widget>[
+              buildEditableSlot(2),
+              const SizedBox(width: 8),
+              buildEditableSlot(3),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: <Widget>[
+              buildEditableSlot(4),
+              const SizedBox(width: 8),
+              buildEditableSlot(5),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RemoteShortcutPickerSheet extends ConsumerWidget {
+  const _RemoteShortcutPickerSheet({required this.slotIndex});
+
+  final int slotIndex;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final shortcuts = ref.watch(
+      cueDeckProvider.select((s) => s.remoteShortcuts),
+    );
+    final currentPlatform = (slotIndex >= 0 && slotIndex < shortcuts.length)
+        ? shortcuts[slotIndex]
+        : StreamingPlatform.youtube;
+
+    final sheetBg =
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F6FA);
+    final itemBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
+    final borderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.09)
+        : const Color(0xFFE2E8F0);
+    final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
+    final secondaryText =
+        isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final goldText =
+        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(Icons.tune_rounded, color: goldText, size: 19),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${slotIndex + 1}. Kumanda Tuşunu Değiştir',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: secondaryText),
+                  ),
+                ],
+              ),
+              Text(
+                'Bu tuşa bastığınızda TV\'de açılacak uygulamayı seçin:',
+                style: TextStyle(color: secondaryText, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: StreamingPlatform.values.map((platform) {
+                      final isSelected = platform == currentPlatform;
+                      return ChoiceChip(
+                        avatar: Icon(
+                          platform.icon,
+                          color: platform.brandColor,
+                          size: 16,
+                        ),
+                        label: Text(platform.label),
+                        selected: isSelected,
+                        backgroundColor: itemBg,
+                        selectedColor: isDarkMode
+                            ? const Color(0xFF2D2920)
+                            : const Color(0xFFFEF3C7),
+                        checkmarkColor: goldText,
+                        side: BorderSide(
+                          color: isSelected
+                              ? goldText.withValues(alpha: 0.75)
+                              : borderColor,
+                        ),
+                        labelStyle: TextStyle(
+                          color: primaryText,
+                          fontWeight:
+                              isSelected ? FontWeight.w800 : FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                        onSelected: (_) {
+                          HapticFeedback.mediumImpact();
+                          ref
+                              .read(cueDeckProvider.notifier)
+                              .updateRemoteShortcutSlot(slotIndex, platform);
+                          Navigator.of(context).pop();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Phase 1: CueDeck Pro (One-Time Lifetime Purchase) + 24-Hour Rewarded Pro Pass
 /// + 10-Day 40% Loyalty Discount Card inside `CueDeckSettingsScreen`.
 class _CueDeckProPassAndUpgradeSection extends ConsumerWidget {
@@ -1873,7 +2304,7 @@ class _CueDeckProPassAndUpgradeSection extends ConsumerWidget {
     final rewardedDays = entitlement.rewardedDaysCount;
     final isLoyaltyUnlocked = entitlement.isLoyaltyDiscountUnlocked;
 
-    final cardBg = isDarkMode ? const Color(0xFF1E2433) : Colors.white;
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
     final secondaryText =
@@ -1883,9 +2314,9 @@ class _CueDeckProPassAndUpgradeSection extends ConsumerWidget {
     final mintText =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
     final subSurfaceBg =
-        isDarkMode ? const Color(0xFF171C28) : const Color(0xFFF8FAFC);
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
     final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.06)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
 
     void showToast(String message) {
@@ -1895,7 +2326,7 @@ class _CueDeckProPassAndUpgradeSection extends ConsumerWidget {
         ..showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF1E2433),
+            backgroundColor: const Color(0xFF0A0C12),
             content: Text(
               message,
               style: const TextStyle(color: Colors.white, fontSize: 12.5),
@@ -2020,7 +2451,7 @@ class _CueDeckProPassAndUpgradeSection extends ConsumerWidget {
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: goldText,
-                      foregroundColor: const Color(0xFF141824),
+                      foregroundColor: const Color(0xFF0A0C12),
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -2194,9 +2625,9 @@ class _CueNonIntrusiveAdBannerState
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
     if (hasPro) return const SizedBox.shrink();
 
-    final cardBg = isDarkMode ? const Color(0xFF1A202E) : Colors.white;
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.06)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
     final secondaryText =
         isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
@@ -2261,7 +2692,7 @@ class _CueNonIntrusiveAdBannerState
                         ..showSnackBar(
                           SnackBar(
                             behavior: SnackBarBehavior.floating,
-                            backgroundColor: const Color(0xFF1E2433),
+                            backgroundColor: const Color(0xFF0A0C12),
                             content: Text(
                               res.message,
                               style: const TextStyle(
@@ -2340,7 +2771,7 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final sheetBg =
-        isDarkMode ? const Color(0xFF141722) : const Color(0xFFF3F5F9);
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
     final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
     final secondaryText =
         isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
@@ -2432,7 +2863,7 @@ class _TvSetupGuideSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
     final sheetBg =
-        isDarkMode ? const Color(0xFF141722) : const Color(0xFFF3F5F9);
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
     final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
     final secondaryText =
         isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
@@ -2450,7 +2881,7 @@ class _TvSetupGuideSheet extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            '📖 TV Bağlantı Modları & Kurulum Rehberi',
+            '📖 Adım Adım TV Eşleştirme & Bağlantı Rehberi',
             style: TextStyle(
               color: primaryText,
               fontWeight: FontWeight.w800,
@@ -2459,7 +2890,7 @@ class _TvSetupGuideSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            '1️⃣ Standart Kumanda Modu (Port 6466 • Sıfır Kurulum):',
+            '1️⃣ ADB Turbo & Tek Dokunuşla Uygulama Açma Modu (Önerilen):',
             style: TextStyle(
               color: goldText,
               fontWeight: FontWeight.w800,
@@ -2468,12 +2899,15 @@ class _TvSetupGuideSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '• Kutudan çıkan tüm Sony, TCL, Philips, Xiaomi ve Google TV cihazlarında açıktır.\n• \'🔢 PIN Eşleştir (6466)\' butonuna basıp TV ekranındaki 6 haneli kodu girmeniz yeterlidir.',
-            style: TextStyle(color: secondaryText, fontSize: 12, height: 1.35),
+            '• Adım 1: Telefon ve TV aynı Wi-Fi ağında olsun. iPhone kullanıyorsanız Ayarlar > Uygulamalar > CueDeck > Yerel Ağ izninin açık olduğundan emin olun.\n'
+            '• Adım 2: TV\'de Ayarlar > Cihaz Tercihleri > Hakkında > Yapı Numarası üzerine 7 kez basın.\n'
+            '• Adım 3: TV\'de Geliştirici Seçenekleri > USB / Kablosuz Ağ Hata Ayıklama (ADB) seçeneğini açın.\n'
+            '• Adım 4: CueDeck\'te "🔍 Ağdaki Cihazları Ara"ya basıp TV\'nizi seçin, ardından "🔐 TV Eşleştir" butonuna basıp TV ekranında çıkan "Her zaman izin ver -> Tamam" onayını kabul edin.',
+            style: TextStyle(color: secondaryText, fontSize: 12, height: 1.4),
           ),
           const SizedBox(height: 10),
           Text(
-            '2️⃣ ADB Turbo & YouTube Playlist Işınlama Modu (Port 5555):',
+            '2️⃣ Standart Kumanda Modu (Port 6466 • 6 Haneli PIN):',
             style: TextStyle(
               color: goldText,
               fontWeight: FontWeight.w800,
@@ -2482,10 +2916,7 @@ class _TvSetupGuideSheet extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '• Tek dokunuşla YouTube Playlist/Deep-Link açmak ve <120ms hız için:\n'
-            '  1. TV Ayarları > Sistem > Hakkında > Derleme Numarası\'na 7 kez basın.\n'
-            '  2. Geliştirici Seçenekleri > USB / Ağ Hata Ayıklamayı açın.\n'
-            '  3. CueDeck\'te \'🔐 TV Eşleştir (RSA Onayı)\'na basıp TV ekranında \'İzin Ver\'i seçin.',
+            '• Geliştirici Seçenekleri olmayan standart Google TV cihazlarında "🔢 PIN Eşleştir (6466)" butonuna basıp TV ekranında beliren 6 haneli kodu girmeniz yeterlidir.',
             style: TextStyle(color: secondaryText, fontSize: 12, height: 1.35),
           ),
         ],
@@ -2521,7 +2952,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
       cueDeckProvider.select((s) => s.isProcessingBackup),
     );
 
-    final cardBg = isDarkMode ? const Color(0xFF1E2433) : Colors.white;
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
     final secondaryText =
@@ -2531,12 +2962,12 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
     final mintText =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
     final subSurfaceBg =
-        isDarkMode ? const Color(0xFF171C28) : const Color(0xFFF8FAFC);
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
     final buttonBorder = isDarkMode
-        ? Colors.white.withValues(alpha: 0.08)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
     final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.06)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
 
     void showMessage(String msg) {
@@ -2546,7 +2977,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
         ..showSnackBar(
           SnackBar(
             behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF1E2433),
+            backgroundColor: const Color(0xFF0A0C12),
             content: Text(
               msg,
               style: const TextStyle(color: Colors.white, fontSize: 12.5),
@@ -3552,14 +3983,14 @@ class WatchPlanMasteryHeader extends ConsumerWidget {
     final goldText =
         isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
     final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.06)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: isDarkMode ? const Color(0xFF1E2433) : Colors.white,
+        color: isDarkMode ? const Color(0xFF0A0C12) : Colors.white,
         border: Border.all(color: borderColor),
       ),
       child: Row(
@@ -3648,7 +4079,7 @@ class WatchCueCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
     final brandColor = item.platform.brandColor;
-    final cardBg = isDarkMode ? const Color(0xFF1E2433) : Colors.white;
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
     final secondaryText =
@@ -3658,14 +4089,14 @@ class WatchCueCard extends ConsumerWidget {
     final mintText =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
     final subSurfaceBg =
-        isDarkMode ? const Color(0xFF171C28) : const Color(0xFFF8FAFC);
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
     final buttonBorder = isDarkMode
-        ? Colors.white.withValues(alpha: 0.08)
+        ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
     final borderColor = isPlayingOnTv
         ? goldText.withValues(alpha: 0.50)
         : (isDarkMode
-            ? Colors.white.withValues(alpha: 0.06)
+            ? Colors.white.withValues(alpha: 0.09)
             : const Color(0xFFE2E8F0));
 
     return Container(

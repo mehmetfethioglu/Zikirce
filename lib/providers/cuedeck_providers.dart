@@ -14,6 +14,7 @@ import '../services/google_drive_backup_service.dart';
 const String _kPrefsCueItemsKey = 'cuedeck_watch_items_v1';
 const String _kPrefsTvIpKey = 'cuedeck_tv_ip_v1';
 const String _kPrefsDarkModeKey = 'cuedeck_dark_mode_v1';
+const String _kPrefsRemoteShortcutsKey = 'cuedeck_remote_shortcuts_v1';
 
 /// Immutable state for the CueDeck Remote & Watch Planner application.
 @immutable
@@ -27,6 +28,7 @@ class CueDeckState {
     required this.lastPressedDirection,
     required this.lastCommandStatus,
     required this.cueItems,
+    this.remoteShortcuts = StreamingPlatform.defaultRemoteShortcuts,
     this.isDarkMode = true,
     this.isListeningVoice = false,
     this.lastVoiceTranscript = '',
@@ -49,6 +51,7 @@ class CueDeckState {
   final TvKeyCommand? lastPressedDirection;
   final String lastCommandStatus;
   final List<WatchCueItem> cueItems;
+  final List<StreamingPlatform> remoteShortcuts;
   final bool isDarkMode;
   final bool isListeningVoice;
   final String lastVoiceTranscript;
@@ -135,6 +138,7 @@ class CueDeckState {
     bool clearPressedDirection = false,
     String? lastCommandStatus,
     List<WatchCueItem>? cueItems,
+    List<StreamingPlatform>? remoteShortcuts,
     bool? isDarkMode,
     bool? isListeningVoice,
     String? lastVoiceTranscript,
@@ -161,6 +165,7 @@ class CueDeckState {
           : (lastPressedDirection ?? this.lastPressedDirection),
       lastCommandStatus: lastCommandStatus ?? this.lastCommandStatus,
       cueItems: cueItems ?? this.cueItems,
+      remoteShortcuts: remoteShortcuts ?? this.remoteShortcuts,
       isDarkMode: isDarkMode ?? this.isDarkMode,
       isListeningVoice: isListeningVoice ?? this.isListeningVoice,
       lastVoiceTranscript: lastVoiceTranscript ?? this.lastVoiceTranscript,
@@ -211,6 +216,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Timer? _schedulerTimer;
   Timer? _highlightResetTimer;
   Timer? _autoBackupDebounceTimer;
+  Timer? _initialRetryTimer;
 
   @override
   CueDeckState build() {
@@ -218,13 +224,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       _schedulerTimer?.cancel();
       _highlightResetTimer?.cancel();
       _autoBackupDebounceTimer?.cancel();
+      _initialRetryTimer?.cancel();
     });
 
     final now = DateTime.now();
     final initialDevices = <TvDevice>[
       const TvDevice(
         name: 'Redline Android TV (Salon)',
-        ip: '192.168.1.123',
+        ip: '192.168.1.125',
         port: 5555,
         boardInfo: 'Realtek RTD2851P • CleanYourTV OS',
         isOnline: true,
@@ -321,6 +328,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     await refreshGoogleDriveStatus();
     _startScheduleMonitor();
     await scanNetworkForTvs();
+    if (!state.selectedDevice.isOnline) {
+      _initialRetryTimer?.cancel();
+      _initialRetryTimer = Timer(const Duration(seconds: 4), () {
+        if (!state.selectedDevice.isOnline && !state.isScanning) {
+          scanNetworkForTvs();
+        }
+      });
+    }
   }
 
   Future<void> _syncNativeNotifications() async {
@@ -377,6 +392,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       final savedIp = prefs.getString(_kPrefsTvIpKey);
       final savedDark = prefs.getBool(_kPrefsDarkModeKey);
       final rawJson = prefs.getString(_kPrefsCueItemsKey);
+      final savedShortcuts = prefs.getStringList(_kPrefsRemoteShortcutsKey);
 
       List<WatchCueItem>? loadedItems;
       if (rawJson != null && rawJson.isNotEmpty) {
@@ -387,6 +403,13 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             .toList();
       }
 
+      List<StreamingPlatform>? loadedShortcuts;
+      if (savedShortcuts != null && savedShortcuts.length == 6) {
+        loadedShortcuts = savedShortcuts
+            .map((name) => StreamingPlatform.fromName(name))
+            .toList(growable: false);
+      }
+
       state = state.copyWith(
         isDarkMode: savedDark ?? state.isDarkMode,
         selectedDevice: savedIp != null && AdbTvService.isValidIp(savedIp)
@@ -395,6 +418,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         cueItems: (loadedItems != null && loadedItems.isNotEmpty)
             ? loadedItems
             : state.cueItems,
+        remoteShortcuts: loadedShortcuts ?? state.remoteShortcuts,
       );
     } catch (_) {
       // Ignore storage read issues in headless test environments
@@ -406,6 +430,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kPrefsTvIpKey, state.selectedDevice.ip);
       await prefs.setBool(_kPrefsDarkModeKey, state.isDarkMode);
+      await prefs.setStringList(
+        _kPrefsRemoteShortcutsKey,
+        state.remoteShortcuts.map((e) => e.name).toList(growable: false),
+      );
       final encoded = jsonEncode(
         state.cueItems.map((e) => e.toJson()).toList(),
       );
@@ -700,6 +728,32 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           : 'Açık Tema (G10 Beyaz Kumanda) aktif',
     );
     _persistState();
+  }
+
+  /// Replaces the streaming app assigned to slot [slotIndex] (0..5) on the G10 remote.
+  void updateRemoteShortcutSlot(int slotIndex, StreamingPlatform platform) {
+    if (slotIndex < 0 || slotIndex >= 6) return;
+    final current = List<StreamingPlatform>.from(
+      state.remoteShortcuts.length == 6
+          ? state.remoteShortcuts
+          : StreamingPlatform.defaultRemoteShortcuts,
+    );
+    current[slotIndex] = platform;
+    state = state.copyWith(
+      remoteShortcuts: List<StreamingPlatform>.unmodifiable(current),
+      lastCommandStatus:
+          '🎮 ${slotIndex + 1}. kısayol tuşu "${platform.label}" olarak güncellendi',
+    );
+    _persistState(triggerAutoBackup: false);
+  }
+
+  /// Restores the G10 remote's 6 app shortcut slots to the default lineup.
+  void resetRemoteShortcutsToDefault() {
+    state = state.copyWith(
+      remoteShortcuts: StreamingPlatform.defaultRemoteShortcuts,
+      lastCommandStatus: '🎮 Kumanda kısayol tuşları varsayılana sıfırlandı',
+    );
+    _persistState(triggerAutoBackup: false);
   }
 
   void setActiveTab(int index) {

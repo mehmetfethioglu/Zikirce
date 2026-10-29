@@ -1,34 +1,34 @@
-name: App Store Connect — Create v1.9.3, Attach Build 15 & Submit for Review
+name: App Store Connect — Create v1.9.4, Attach Build 16 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 1.9.3)"
+        description: "App Store Version String (e.g. 1.9.4)"
         required: false
-        default: "1.9.3"
+        default: "1.9.4"
       build_number:
-        description: "TestFlight Build Number (e.g. 15)"
+        description: "TestFlight Build Number (e.g. 16)"
         required: false
-        default: "15"
+        default: "16"
 
 jobs:
   submit-appstore:
-    name: Submit v1.9.3 (Build 15) to App Store Connect
+    name: Submit v1.9.4 (Build 16) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.3' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '15' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.4' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '16' }}
 
     steps:
       - name: Install PyJWT and Cryptography
         run: pip install pyjwt cryptography requests
 
-      - name: Ensure Bundle ID, Configure v1.9.3 Release Notes, Attach Build 15 & Submit to Review
+      - name: Ensure Bundle ID, Configure v1.9.4 Release Notes, Attach Build 16 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, jwt, requests
@@ -36,8 +36,8 @@ jobs:
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
-          target_version = os.environ.get("TARGET_VERSION", "1.9.3").strip()
-          target_build = os.environ.get("TARGET_BUILD", "15").strip()
+          target_version = os.environ.get("TARGET_VERSION", "1.9.4").strip()
+          target_build = os.environ.get("TARGET_BUILD", "16").strip()
           bundle_id_str = "com.akarworks.cuedeck"
 
           def make_headers():
@@ -168,18 +168,16 @@ jobs:
           # 3. Set What's New (Release Notes) for TR and EN
           whats_new_tr = (
               f"CueDeck v{target_version} (Build {target_build}) Yenilikleri:\n"
-              "• Soft Slate & Warm Alabaster Arayüzü: Tam sayfa Ayarlar ve İzleme Planı ekranı gözü dinlendiren yumuşak renk paleti (#141824 / #E6C17A) ve sade kart düzeniyle yenilendi.\n"
-              "• Çift Protokol Evrensel TV Bağlantısı: Standart perakende Android TV ve Google TV cihazları için Port 6466 (6 Haneli PIN) Sıfır Kurulum modu ve gelişmiş kullanıcılar için Port 5555 (RSA-2048 ADB Turbo) <120ms tuş ve YouTube Playlist ışınlama modu eklendi.\n"
-              "• CueDeck Pro & 24 Saatlik Ödüllü Pro Pass: Tek bir kısa ödüllü video ile 24 saat boyunca reklamsız Pro Pass açın, 10 farklı günde %40 Sadakat İndirimi kazanın veya tek seferlik Ömür Boyu Pro sahibi olun.\n"
-              "• Zamanlanmış İzleme Planlayıcı & AES-256-GCM Bulut Yedekleme: Gerçek işletim sistemi alarmları ve donanım şifreli Google Drive senkronizasyonu güçlendirildi."
+              "• Özelleştirilebilir Kumanda Tuşları: Kumanda üzerindeki 6 kısayol tuşunu basılı tutarak veya Ayarlar'dan 16 popüler TV uygulamasıyla (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, BluTV, S Sport+, TOD TV, Spotify vb.) değiştirin.\n"
+              "• Kolay TV Bağlantısı & Çoklu Telefon: «Ağdaki Cihazları Ara» butonu, 3 adımlı eşleştirme rehberi ve iOS/Android çoklu cihaz desteği.\n"
+              "• Koyu Temada Gerçek Siyah (#000000) Ayarlar ekranı."
           )
 
           whats_new_en = (
               f"What's New in CueDeck v{target_version} (Build {target_build}):\n"
-              "• Soft Slate & Warm Alabaster UI: Redesigned the full-page Settings & Watch Planner screen with a soothing color palette (#141824 / #E6C17A) and streamlined cards.\n"
-              "• Dual-Protocol Universal TV Connectivity: Added Zero-Config Port 6466 (6-Digit PIN) pairing for retail Android TV & Google TV devices alongside Port 5555 (RSA-2048 ADB Turbo) for <120ms key injection and direct YouTube Playlist beaming.\n"
-              "• CueDeck Pro & 24-Hour Rewarded Pro Pass: Unlock 24 hours of ad-free Pro access with a single rewarded video ad, earn a 40% Loyalty Discount in 10 days, or upgrade once to Lifetime Pro.\n"
-              "• Scheduled Watch Planner & AES-256-GCM Cloud Backup: Enhanced native OS reminders and hardware-encrypted Google Drive synchronization."
+              "• Customizable Remote App Buttons: Long-press any of the 6 remote shortcut slots or use Settings to swap between 16 popular TV apps (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch, Kodi, VLC).\n"
+              "• Guided TV Pairing & Multi-Phone Support: 1-tap Network Device Scanner, 3-step pairing guide, and seamless iOS + Android multi-phone socket sharing.\n"
+              "• True Black (#000000) Settings Screen."
           )
 
           loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())

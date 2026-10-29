@@ -218,6 +218,12 @@ class AdbTvService {
   final Map<int, Completer<bool>> _streamCompleters = <int, Completer<bool>>{};
   final Map<int, List<int>> _streamOutputBuffers = <int, List<int>>{};
   Future<bool>? _connectingFuture;
+  Timer? _idleDisconnectTimer;
+
+  /// Idle duration after which the TCP 5555 socket is automatically released
+  /// so multiple phones (e.g., Xiaomi 14 + iPhone 17 Pro Max) on the same LAN
+  /// can share the TV's single-client `adbd` TCP transport without locking each other out.
+  static const Duration _idleSocketTimeout = Duration(seconds: 6);
 
   /// True when the last connection attempt sent an RSA public key and is waiting
   /// for the user to accept the "Allow USB/Network debugging?" prompt on the TV.
@@ -229,10 +235,23 @@ class AdbTvService {
 
   /// Releases active ADB TCP socket and pending stream completers.
   void dispose() {
+    _idleDisconnectTimer?.cancel();
+    _idleDisconnectTimer = null;
     _closeConnection();
   }
 
+  void _scheduleIdleDisconnect() {
+    _idleDisconnectTimer?.cancel();
+    _idleDisconnectTimer = Timer(_idleSocketTimeout, () {
+      if (_streamCompleters.isEmpty && _connectingFuture == null) {
+        _closeConnection();
+      }
+    });
+  }
+
   void _closeConnection() {
+    _idleDisconnectTimer?.cancel();
+    _idleDisconnectTimer = null;
     _socketSub?.cancel();
     _socketSub = null;
     try {
@@ -271,6 +290,7 @@ class AdbTvService {
         _handshakeDone &&
         _connectedIp == targetIp &&
         _connectedPort == device.port) {
+      _scheduleIdleDisconnect();
       return true;
     }
 
@@ -337,16 +357,32 @@ class AdbTvService {
 
       final handshakeTimeout = allowInteractivePairing
           ? const Duration(seconds: 18)
-          : const Duration(milliseconds: 2500);
+          : const Duration(milliseconds: 2800);
 
-      final ok = await _cnxnCompleter!.future.timeout(
+      var ok = await _cnxnCompleter!.future.timeout(
         handshakeTimeout,
         onTimeout: () => false,
       );
+
+      // If this phone (e.g., iPhone 17 Pro Max on first connect) just sent its
+      // RSA-2048 public key and triggered the on-screen TV authorization dialog,
+      // automatically wait up to 14 additional seconds for the user to tap "Allow".
+      if (!ok &&
+          !allowInteractivePairing &&
+          _sentAuthPublicKey &&
+          _cnxnCompleter != null &&
+          !_cnxnCompleter!.isCompleted) {
+        ok = await _cnxnCompleter!.future.timeout(
+          const Duration(seconds: 14),
+          onTimeout: () => false,
+        );
+      }
+
       if (!ok) {
         _closeConnection();
         return false;
       }
+      _scheduleIdleDisconnect();
       return true;
     } catch (_) {
       _closeConnection();
@@ -840,16 +876,20 @@ class AdbTvService {
     final cleanPreferred = preferredIp.trim();
     final discoveredMap = <String, TvDevice>{};
 
+    final isIos = Platform.isIOS;
+    final prefAdbTimeout = Duration(milliseconds: isIos ? 950 : 650);
+    final prefRemoteTimeout = Duration(milliseconds: isIos ? 800 : 550);
+
     // 1. Probe preferred IP and run mDNS multicast discovery in parallel
     final preferredPort5555Future = pingTv(
       cleanPreferred,
       port: 5555,
-      timeout: const Duration(milliseconds: 650),
+      timeout: prefAdbTimeout,
     );
     final preferredPort6466Future = pingTv(
       cleanPreferred,
       port: 6466,
-      timeout: const Duration(milliseconds: 550),
+      timeout: prefRemoteTimeout,
     );
     final mdnsFuture = _discoverViaMdns();
 
@@ -880,21 +920,23 @@ class AdbTvService {
     }
     discoveredMap[cleanPreferred] = preferredDevice;
 
-    // 2. Collect active Wi-Fi IPv4 subnet prefixes
+    // 2. Collect active Wi-Fi IPv4 subnet prefixes (prioritizing iOS en0 / Android wlan0)
     final prefixes = <String>{};
     final selfIps = <String>{};
-
-    final prefParts = cleanPreferred.split('.');
-    if (prefParts.length == 4) {
-      prefixes.add('${prefParts[0]}.${prefParts[1]}.${prefParts[2]}');
-    }
 
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
         includeLoopback: false,
       );
-      for (final iface in interfaces) {
+      final sortedInterfaces = [...interfaces]..sort((a, b) {
+        final aWifi =
+            a.name.startsWith('en') || a.name.startsWith('wlan') ? 0 : 1;
+        final bWifi =
+            b.name.startsWith('en') || b.name.startsWith('wlan') ? 0 : 1;
+        return aWifi.compareTo(bWifi);
+      });
+      for (final iface in sortedInterfaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address.trim();
           selfIps.add(ip);
@@ -906,6 +948,11 @@ class AdbTvService {
         }
       }
     } catch (_) {}
+
+    final prefParts = cleanPreferred.split('.');
+    if (prefParts.length == 4) {
+      prefixes.add('${prefParts[0]}.${prefParts[1]}.${prefParts[2]}');
+    }
 
     // 3. Build candidate IP list: mDNS responders + comprehensive common DHCP octets
     const candidateOctets = <int>[
@@ -924,14 +971,23 @@ class AdbTvService {
     candidateIps.remove(cleanPreferred);
     candidateIps.removeAll(selfIps);
 
-    final futures = <Future<TvDevice?>>[];
-    for (final candidateIp in candidateIps) {
-      if (!isValidIp(candidateIp)) continue;
-      futures.add(() async {
+    final validCandidates =
+        candidateIps.where((ip) => isValidIp(ip)).toList();
+    final batchSize = isIos ? 10 : 26;
+    final candidateAdbTimeout = Duration(milliseconds: isIos ? 620 : 480);
+    final candidateRemoteTimeout = Duration(milliseconds: isIos ? 500 : 420);
+
+    for (var i = 0; i < validCandidates.length; i += batchSize) {
+      final end = (i + batchSize < validCandidates.length)
+          ? i + batchSize
+          : validCandidates.length;
+      final batch = validCandidates.sublist(i, end);
+
+      final batchFutures = batch.map((candidateIp) async {
         final adbOk = await pingTv(
           candidateIp,
           port: 5555,
-          timeout: const Duration(milliseconds: 480),
+          timeout: candidateAdbTimeout,
         );
         final mdnsLabel = mdnsHits[candidateIp];
         if (adbOk) {
@@ -948,7 +1004,7 @@ class AdbTvService {
         final remotePortOk = await pingTv(
           candidateIp,
           port: 6466,
-          timeout: const Duration(milliseconds: 420),
+          timeout: candidateRemoteTimeout,
         );
         if (remotePortOk || mdnsLabel != null) {
           return TvDevice(
@@ -966,13 +1022,13 @@ class AdbTvService {
           );
         }
         return null;
-      }());
-    }
+      });
 
-    final results = await Future.wait(futures);
-    for (final item in results) {
-      if (item != null) {
-        discoveredMap[item.ip] = item;
+      final results = await Future.wait(batchFutures);
+      for (final item in results) {
+        if (item != null) {
+          discoveredMap[item.ip] = item;
+        }
       }
     }
 
@@ -1389,6 +1445,7 @@ class AdbTvService {
         );
         _streamCompleters.remove(localId);
         final collected = _streamOutputBuffers.remove(localId) ?? const <int>[];
+        _scheduleIdleDisconnect();
         if (completed) {
           return utf8.decode(collected, allowMalformed: true);
         }

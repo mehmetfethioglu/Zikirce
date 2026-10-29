@@ -180,11 +180,24 @@ void main() {
       expect(find.text('CueDeck'), findsOneWidget);
       expect(find.text('Redline Android TV (Salon)'), findsOneWidget);
       expect(
-        find.text('Sony BRAVIA 4K TV (192.168.1.145)'),
+        find.byKey(const Key('scan_network_devices_button')),
+        findsOneWidget,
+      );
+      expect(find.text('🔍 Ağdaki Cihazları Ara'), findsOneWidget);
+      expect(
+        find.text('3 Adımda Kolay Eşleştirme & Bağlantı'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Sony BRAVIA 4K TV (192.168.1.145)'),
         findsOneWidget,
       );
       expect(find.text('🔐 TV Eşleştir (RSA Onayı)'), findsOneWidget);
       expect(find.text('🔢 PIN Eşleştir (6466)'), findsOneWidget);
+      expect(
+        find.text('Kumanda Uygulama Tuşları (6 Yuva)'),
+        findsOneWidget,
+      );
       expect(
         find.text('CueDeck Pro & 24s Pass'),
         findsOneWidget,
@@ -200,17 +213,44 @@ void main() {
       );
 
       // Select discovered Sony BRAVIA TV chip and trigger RSA pairing
-      await tester.tap(find.text('Sony BRAVIA 4K TV (192.168.1.145)'));
+      final sonyChip = find.textContaining('Sony BRAVIA 4K TV (192.168.1.145)');
+      await tester.ensureVisible(sonyChip);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('🔐 TV Eşleştir (RSA Onayı)'));
+      await tester.tap(sonyChip);
+      await tester.pumpAndSettle();
+      final pairBtn = find.text('🔐 TV Eşleştir (RSA Onayı)');
+      await tester.ensureVisible(pairBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(pairBtn);
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Eşleşti ve Bağlandı: Sony BRAVIA 4K TV'),
         findsOneWidget,
       );
 
-      // 5. Switch to Classic White Light Theme and verify soft Light Mode full-screen & chip styling
-      await tester.tap(find.text('Klasik Beyaz Kumanda'));
+      // Test customizing Remote Shortcut Slot 0 ("1. Sol Üst") to Prime Video
+      final slot0 = find.byKey(const Key('settings_shortcut_slot_0'));
+      await tester.ensureVisible(slot0);
+      await tester.pumpAndSettle();
+      await tester.tap(slot0);
+      await tester.pumpAndSettle();
+      expect(find.text('1. Kumanda Tuşunu Değiştir'), findsOneWidget);
+      await tester.tap(find.text('Prime Video'));
+      await tester.pumpAndSettle();
+      expect(find.text('Prime Video'), findsWidgets);
+
+      // Reset remote shortcuts back to defaults
+      final resetBtn = find.text('Sıfırla');
+      await tester.ensureVisible(resetBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(resetBtn);
+      await tester.pumpAndSettle();
+
+      // 5. Switch to Classic White Light Theme and verify Light Mode & True Black (#000000) Dark Mode
+      final whiteThemeChip = find.text('Klasik Beyaz Kumanda');
+      await tester.ensureVisible(whiteThemeChip);
+      await tester.pumpAndSettle();
+      await tester.tap(whiteThemeChip);
       await tester.pumpAndSettle();
       final lightScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
       expect(lightScaffold.backgroundColor, const Color(0xFFF3F6FA));
@@ -226,7 +266,7 @@ void main() {
       await tester.tap(find.text('Gerçek Siyah (#000000)'));
       await tester.pumpAndSettle();
       final darkScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
-      expect(darkScaffold.backgroundColor, const Color(0xFF141824));
+      expect(darkScaffold.backgroundColor, Colors.black);
 
       // 6. Open AddWatchCueSheet ("Plan Ekle") and add a YouTube Playlist with Recurrence & Clock
       final addPlanBtn = find.text('Plan Ekle');
@@ -338,14 +378,14 @@ void main() {
       expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
       expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
       expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(find.text('📋 Sürüm Notları (v1.9.3)'), findsOneWidget);
+      expect(find.text('📋 Sürüm Notları (v1.9.4)'), findsOneWidget);
 
       // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(find.text('📋 Sürüm Notları (v1.9.3)'));
+      await tester.tap(find.text('📋 Sürüm Notları (v1.9.4)'));
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Uygulama İçi Sürüm Notları & Yenilikler Kartı'),
+        find.text('Kumanda Uygulama Tuşlarını Değiştirme (16 Uygulama)'),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));

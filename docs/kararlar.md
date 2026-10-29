@@ -1,5 +1,29 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-017] 2026-10-29: Gerçek Siyah (`#000000`) Ayarlar Sayfası, `🔍 Ağdaki Cihazları Ara` Butonu, 3 Adımda Kolay Eşleştirme Yönlendirmesi ve Özelleştirilebilir 6'lı Kumanda Uygulama Tuşları
+- **Tarih & Ajanlar:** `2026-10-29` — Kanuni, Mimar Sinan, Kâtip Çelebi (Denetçiler: Matrakçı & Ebussuud — `KARAR: GEÇTİ`)
+- **Karar & Uygulanan Değişiklikler:**
+  1. **Koyu Temada Gerçek Siyah (`#000000`) Ayarlar Sayfası ([`CueDeckSettingsScreen`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L1210-L1240)):** Ayarlar sayfası koyu temada `Colors.black` (`#000000`) zemin ve `#0A0C12` derin obsidiyen kart yüzeylerine geçirilerek G10 kumanda gövdesiyle tam görsel bütünlük sağlandı.
+  2. **`🔍 Ağdaki Cihazları Ara` Butonu & 3 Adımda Kolay Eşleştirme Yönlendirmesi ([`CueDeckSettingsScreen`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L1562-L1705), [`_TvSetupGuideSheet`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L2668-L2735)):** TV Bağlantı kartının en üstüne tam genişlikli **`🔍 Ağdaki Cihazları Ara`** butonu, bulunan TV'leri canlı durum ikonuyla (`🟢`/`⚪`) seçme çipleri ve kart içinde **"3 Adımda Kolay Eşleştirme & Bağlantı"** yönlendirme kutusu eklendi.
+  3. **Kumanda Üzerindeki 6 Uygulama Tuşunu Değiştirme Özelliği ([`StreamingPlatform`](file:///c:/Users/theak/source/repos/cuedeck/lib/models/cue_models.dart#L5-L125), [`CueDeckNotifier.updateRemoteShortcutSlot`](file:///c:/Users/theak/source/repos/cuedeck/lib/providers/cuedeck_providers.dart#L734-L756), [`QuickLaunchAppDock`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L809-L879), [`_RemoteShortcutCustomizationCard`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L2013-L2189), [`_RemoteShortcutPickerSheet`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L2191-L2306)):**
+     - `StreamingPlatform` kataloğu 16 popüler TV uygulamasına (`YouTube`, `Netflix`, `beIN`, `tabii`, `Tivibu`, `Zikirce`, `Prime Video`, `Disney+`, `Exxen`, `Max / BluTV`, `S Sport+`, `TOD TV`, `Spotify`, `Twitch`, `Kodi / IPTV`, `VLC Player`) çıkarıldı.
+     - Kullanıcılar hem doğrudan kumanda üzerindeki 6 uygulama tuşundan herhangi birine **basılı tutarak (`onLongPress`)** hem de Ayarlar ekranındaki **"Kumanda Uygulama Tuşları (6 Yuva)"** kartından diledikleri tuşu değiştirebilir veya varsayılana sıfırlayabilir (`SharedPreferences` `cuedeck_remote_shortcuts_v1`).
+
+---
+
+## [ADR-016] 2026-10-29: iPhone 17 Pro Max & Xiaomi 14 Çoklu Cihaz Eşzamanlı TV Kontrolü (`_scheduleIdleDisconnect`), iOS `en0` Gruplu Ağ Taraması ve Yerel Ağ İzni Sonrası Otomatik Yeniden Tarama
+- **Tarih & Ajanlar:** `2026-10-29` — Kanuni, El-Cezeri & Piri Reis, Ali Kuşçu, Kâtip Çelebi (Denetçiler: Ebussuud — `KARAR: GEÇTİ`)
+- **Bağlam:**
+  1. Kullanıcı **Xiaomi 14** (Android) ve **iPhone 17 Pro Max** (iOS TestFlight `v1.9.3+15`) cihazlarını aynı Wi-Fi ağında test ederken Xiaomi 14'ün TV'ye bağlandığını ancak iPhone 17 Pro Max'in bağlanamadığını bildirdi.
+  2. **Kök Neden 1 (`adbd` Tek İstemci Kilidi):** Android TV üzerindeki `adbd` (TCP Port `5555`) aynı anda yalnızca **1 aktif TCP transport bağlantısını** kabul eder. Xiaomi 14 üzerinde CueDeck açıkken kalıcı `_socket` hiç kapatılmadığı için TV, iPhone 17 Pro Max'ten gelen `CNXN` el sıkışmasını bekletiyordu.
+  3. **Kök Neden 2 (iOS `NSLocalNetworkUsageDescription` İlk Açılış Yarışı & 52 Soket ARP Taşması):** iOS'ta uygulama ilk açıldığında *"CueDeck yerel ağınızdaki cihazları bulmak ve bunlara bağlanmak istiyor"* sistem penceresi ekrandayken ilk `scanNetworkForTvs()` çağrısı `EHOSTDOWN`/`ENOBUFS` ile reddediliyor; ayrıca 52 IP'ye aynı anda paralel `Socket.connect` açılması iOS XNU `en0` ARP kuyruğunu dolduruyordu.
+- **Karar & Çözüm:**
+  1. **6 Saniye Hareketsizlikte Otomatik Soket Serbest Bırakma ([`AdbTvService._scheduleIdleDisconnect`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L243-L250)):** Tuş basımı bittikten 6 saniye sonra `_socket` otomatik kapatılır; sonraki tuş basımında ~35ms içinde yeniden bağlanır. Böylece Xiaomi 14 ve iPhone 17 Pro Max aynı anda açık olsa bile TV'yi sırayla kesintisiz kontrol edebilir.
+  2. **iOS `en0` Öncelikli 10'arlı Gruplu (`batchSize = 10`) Alt Ağ Keşfi & Otomatik RSA Onay Süresi Uzatma ([`AdbTvService.discoverDevices`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L873-L1045), [`AdbTvService._connectInternal`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L358-L382)):** iOS'ta zaman aşımı `950ms`/`620ms` olarak optimize edildi, paralel soket sayısı 10'arlı gruplara bölündü ve ilk bağlantıda RSA onayı gerekiyorsa bekleme süresi otomatik +14 saniye uzatıldı.
+  3. **iOS Yerel Ağ İzni Sonrası 4. Saniyede Otomatik Yeniden Tarama ([`CueDeckNotifier._initializeAsync`](file:///c:/Users/theak/source/repos/cuedeck/lib/providers/cuedeck_providers.dart#L314-L334)):** İlk açılış taramasında TV çevrimdışı dönerse (kullanıcı iOS "İzin Ver" butonuna basarken), 4 saniye sonra otomatik ikinci tarama (`_initialRetryTimer`) tetiklenir.
+
+---
+
 ## [ADR-015] 2026-10-28: Uygulama İçi Sürüm Notları (`CueReleaseNotesService` & `showCueWhatsNewModal`), İlk Açılış Yenilikler Kartı ve GitHub Actions iOS TestFlight Dağıtımı (`v1.9.3+15`)
 - **Tarih & Ajanlar:** `2026-10-28` — Kanuni, Mimar Sinan, Barbaros Hayreddin Paşa, Kâtip Çelebi (Denetçiler: Matrakçı & Ebussuud — `KARAR: GEÇTİ`, `8/8` test başarılı)
 - **Karar & Uygulanan Değişiklikler:**

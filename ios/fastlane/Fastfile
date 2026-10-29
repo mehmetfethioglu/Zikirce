@@ -148,15 +148,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.3 (Build 15) Yenilikleri:
-      • Uygulama İçi Sürüm Notları & Yenilikler Ekranı: Güncelleme sonrası ilk açılışta neler değiştiğini gösteren bilgi kartı ve Ayarlar içinden tüm geçmiş sürümleri inceleme özelliği eklendi.
-      • Resmi Mağaza Ödeme Doğrulaması & 24s Pro Pass: Tek Seferlik Ömür Boyu Pro (149,99 ₺) ve 10 günlük %40 Sadakat İndirimi (89,99 ₺) resmi mağaza ödemesine bağlandı; kumanda alt barına «🎬 24s Kaldır» kısayolu eklendi.
-      • Çift Protokol TV Bağlantısı: Standart TV'ler için Port 6466 (6 Haneli PIN) Sıfır Kurulum ve Port 5555 ADB RSA-2048 Turbo modu.
+      CueDeck v1.9.4 (Build 16) Yenilikleri:
+      • Özelleştirilebilir Kumanda Tuşları: Kumanda üzerindeki 6 kısayol tuşunu basılı tutarak veya Ayarlar'dan 16 popüler TV uygulamasıyla (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, BluTV, S Sport+, TOD TV, Spotify vb.) değiştirin.
+      • Kolay TV Bağlantısı & Çoklu Telefon: «Ağdaki Cihazları Ara» butonu, 3 adımlı eşleştirme rehberi ve iOS/Android çoklu cihaz desteği.
+      • Koyu Temada Gerçek Siyah (#000000) Ayarlar ekranı.
 
-      What's New in CueDeck v1.9.3 (Build 15):
-      • In-App Release Notes & What's New Sheet: Automatically displays what's new on first launch after an update, plus full version history in Settings.
-      • Verified Store Billing & 24h Pro Pass: Official StoreKit 2 / Play Billing verification for Lifetime Pro and 40% Loyalty Discount, plus quick 24h Pro Pass unlock («🎬 Remove 24h»).
-      • Dual-Protocol TV Control: Zero-config Port 6466 (6-Digit PIN) + Port 5555 ADB RSA-2048 Turbo mode.
+      What's New in CueDeck v1.9.4 (Build 16):
+      • Customizable Remote App Buttons: Long-press any of the 6 remote shortcut slots or use Settings to swap between 16 popular TV apps (YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch, Kodi, VLC).
+      • Guided TV Pairing & Multi-Phone Support: 1-tap Network Device Scanner, 3-step pairing guide, and seamless iOS + Android multi-phone socket sharing.
+      • True Black (#000000) Settings Screen.
     CHANGELOG
 
     begin

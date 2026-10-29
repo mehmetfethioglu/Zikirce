@@ -40,11 +40,38 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.3+15';
-  static const String currentShortVersion = 'v1.9.3';
+  static const String currentVersion = '1.9.4+16';
+  static const String currentShortVersion = 'v1.9.4';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.4+16',
+      versionLabel: 'v1.9.4 (Build 16)',
+      releaseDate: '29 Ekim 2026',
+      headline:
+          'Gerçek Siyah (#000000) Ayarlar, Ağ Cihaz Arama, Özelleştirilebilir Kumanda Tuşları & Çoklu Telefon Desteği',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'TUŞLAR',
+          title: 'Kumanda Uygulama Tuşlarını Değiştirme (16 Uygulama)',
+          description:
+              'Kumanda üzerindeki 6 kısayol tuşuna basılı tutarak veya Ayarlar içinden YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch ve daha fazlasıyla değiştirebilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'AĞ & iOS',
+          title: '«🔍 Ağdaki Cihazları Ara» & Çoklu Telefon Desteği',
+          description:
+              'Tek dokunuşla ağdaki TV cihazlarını arama, 3 adımda kolay eşleştirme rehberi ve birden fazla telefonun (iPhone + Android) aynı TV\'yi birbirini kilitlemeden yönetmesi sağlandı.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TASARIM',
+          title: 'Koyu Temada Gerçek Siyah (#000000) Ayarlar Ekranı',
+          description:
+              'Ayarlar ve İzleme Planı ekranı koyu temada tam Gerçek Siyah (#000000) zemin ve derin obsidiyen kartlarla G10 kumanda gövdesiyle bütünleştirildi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.3+15',
       versionLabel: 'v1.9.3 (Build 15)',
