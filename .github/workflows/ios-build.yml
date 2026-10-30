@@ -3,7 +3,7 @@ name: iOS Cloud Build & TestFlight Ready
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ cuedeck-ios ]
 
 jobs:
   build-ios:
