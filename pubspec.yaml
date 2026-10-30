@@ -2,7 +2,7 @@ name: cuedeck
 description: "CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı."
 publish_to: 'none'
 
-version: 1.9.6+18
+version: 1.9.7+19
 
 environment:
   sdk: ^3.12.2

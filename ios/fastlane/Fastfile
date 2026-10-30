@@ -148,15 +148,17 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.6 (Build 18) Yenilikleri:
-      • Kumandadan Tek Dokunuşla Sesli Komut & Doğal iOS Speech (tr-TR): Sesli Asistan tuşuna dokunduğunuz anda mikrofon otomatik dinlemeye başlar; iPhone 17 Pro Max için doğal Apple SFSpeechRecognizer + AVAudioEngine ses tanıma motoru eklendi.
-      • Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton: Kumanda üzerindeki minimal fare butonuyla D-Pad alanı 120 FPS dokunmatik Touchpad/Mouse yüzeyine dönüşür.
-      • Tam Vaktinde Arka Plan Bildirimleri: Uygulama kapalıyken bildirimleri tam dakikasında ileten iOS UNUserNotificationCenter ve Android AlarmClock mimarisi devreye alındı.
+      CueDeck v1.9.7 (Build 19) Yenilikleri:
+      • Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips Smart TV Desteği: Artık sadece Android TV'leri değil, evinizdeki diğer popüler Smart TV modellerini de doğrudan telefonunuzdan kontrol edebilirsiniz.
+      • Ağdaki TV'leri Listeden Seçerek Kolay Bağlanma: «Ağdaki Cihazları Ara» butonuna bastığınızda açık televizyonlar sade bir pencerede listelenir; istediğiniz TV'ye dokunarak hemen bağlanabilirsiniz.
+      • Dokunmatik Fare (Touchpad) Modu: Kumandadaki fare butonuna dokunarak yön tuşları alanını dokunmatik yüzeye dönüştürebilir, parmağınızı kaydırarak gezinebilirsiniz.
+      • Tek Dokunuşla Sesli Komut ve Tam Vaktinde Bildirimler: Mikrofon tuşuna basar basmaz konuşabilirsiniz; izleme hatırlatıcıları uygulama kapalıyken bile tam saatinde gelir.
 
-      What's New in CueDeck v1.9.6 (Build 18):
-      • 1-Tap Instant Voice Command & Native iOS Speech (tr-TR): Tapping the Voice Assistant button starts listening immediately with native Apple SFSpeechRecognizer + AVAudioEngine on iPhone 17 Pro Max.
-      • Minimal D-Pad to 120 FPS Mouse / Touchpad Toggle Button on the G10 remote chassis.
-      • Exact On-Time Background Notifications via UNCalendarNotificationTrigger and Android AlarmClock.
+      What's New in CueDeck v1.9.7 (Build 19):
+      • Non-Android Smart TV Support: Control Arçelik, Beko, Grundig, Vestel, Samsung, LG, and Philips Smart TVs directly from your phone alongside Android TV & Google TV.
+      • Easy TV Picker Popup: Tap "Search Network Devices" to view all nearby TVs in a clean popup list and connect with a single tap.
+      • Touchpad / Mouse Mode: Convert the D-Pad into a smooth touchpad surface for effortless navigation.
+      • 1-Tap Voice Command & On-Time Watch Reminders: Speak immediately after tapping the microphone button, and receive watch plan notifications right on time.
     CHANGELOG
 
     begin

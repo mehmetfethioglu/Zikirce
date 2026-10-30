@@ -40,35 +40,69 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.6+18';
-  static const String currentShortVersion = 'v1.9.6';
+  static const String currentVersion = '1.9.7+19';
+  static const String currentShortVersion = 'v1.9.7';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.7+19',
+      versionLabel: 'v1.9.7 (Build 19)',
+      releaseDate: '30 Ekim 2026',
+      headline:
+          'Arçelik, Vestel, Samsung ve LG Smart TV Desteği, Kolay TV Seçimi, Dokunmatik Fare & Tek Dokunuşla Sesli Komut',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'SMART TV',
+          title:
+              'Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips Smart TV Desteği',
+          description:
+              'Sadece Android TV\'leri değil; Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips marka akıllı televizyonları da artık doğrudan telefonunuzdan kontrol edebilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TV SEÇİMİ',
+          title: 'Ağdaki TV\'leri Listeden Seçerek Kolay Bağlanma',
+          description:
+              '«Ağdaki Cihazları Ara» butonuna bastığınızda aynı Wi-Fi ağındaki televizyonlar sade bir pencerede listelenir; istediğiniz TV\'ye dokunarak hemen bağlanabilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TOUCHPAD',
+          title: 'Yön Tuşlarını Dokunmatik Mouse (Touchpad) Gibi Kullanma',
+          description:
+              'Kumanda üzerindeki küçük fare butonuna dokunarak yön tuşları alanını dokunmatik yüzeye dönüştürebilir, TV uygulamalarında parmağınızı kaydırarak rahatça gezinebilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'SES & ALARM',
+          title: 'Tek Dokunuşla Sesli Komut ve Tam Zamanında Hatırlatıcılar',
+          description:
+              'Kumandadaki sesli komut tuşuna bastığınız anda ikinci bir dokunuşa gerek kalmadan konuşabilirsiniz. İzleme planı bildirimleri uygulama kapalıyken bile tam saatinde gelir.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.6+18',
       versionLabel: 'v1.9.6 (Build 18)',
       releaseDate: '30 Ekim 2026',
       headline:
-          'Tam Vaktinde Arka Plan Bildirimleri (AlarmClock), Kumanda Mouse/Touchpad Dönüştürücü & Tek Dokunuşla Sesli Komut',
+          'Tam Vaktinde İzleme Bildirimleri, Dokunmatik Fare Modu ve Tek Dokunuşla Sesli Komut',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
           badge: 'BİLDİRİM',
-          title: 'Tam Vaktinde Arka Plan Bildirimleri (Android AlarmClock & iOS UNUserNotification)',
+          title: 'Uygulama Kapalıyken Bile Tam Vaktinde Gelen Bildirimler',
           description:
-              'Uygulama kapalıyken bildirimlerin gecikmesini önleyen Android AlarmManager.setAlarmClock (USE_EXACT_ALARM + FOREGROUND_RECEIVER) ve iOS UNCalendarNotificationTrigger köprüsü devreye alındı.',
+              'Kaydettiğiniz dizi, film ve video planlarının hatırlatma bildirimleri artık uygulamayı açmanıza gerek kalmadan tam belirlediğiniz dakikada telefonunuza ulaşır.',
         ),
         CueReleaseNoteItem(
           badge: 'TOUCHPAD',
-          title: 'Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton',
+          title: 'Kumanda Üzerinde Dokunmatik Fare (Touchpad) Özelliği',
           description:
-              'Kumanda üzerindeki yön tuşlarının sağ üst köşesine eklenen minimal fare butonu ile D-Pad alanı 120 FPS dokunmatik Touchpad/Mouse yüzeyine dönüşür; parmağınızı kaldırmadan kaydırıp dokunarak tıklayabilirsiniz.',
+              'Yön tuşlarının sağ üst köşesindeki fare düğmesiyle orta alanı dokunmatik fare gibi kullanabilir, parmağınızı kaydırıp dokunarak seçim yapabilirsiniz.',
         ),
         CueReleaseNoteItem(
-          badge: 'TEK DOKUNUŞ',
-          title: 'Kumandadan Tek Dokunuşla Anında Mikrofon & iOS Speech (tr-TR)',
+          badge: 'SESLİ KOMUT',
+          title: 'Tek Dokunuşla Hemen Konuşma ve iPhone Ses Desteği',
           description:
-              'Kumanda üzerindeki Sesli Asistan tuşuna dokunduğunuz anda mikrofon otomatik dinlemeye başlar; iPhone 17 Pro Max için doğal Apple SFSpeechRecognizer + AVAudioEngine ses tanıma motoru eklendi.',
+              'Kumandadaki mikrofon tuşuna dokunduğunuz anda dinleme otomatik başlar; iPhone ve Android telefonlarda sesli komutlar anında televizyona iletilir.',
         ),
       ],
     ),
@@ -77,25 +111,25 @@ class CueReleaseNotesCatalog {
       versionLabel: 'v1.9.5 (Build 17)',
       releaseDate: '29 Ekim 2026',
       headline:
-          'iOS Doğal en0 (IP_BOUND_IF) TV Tarayıcı, 2-Aşamalı ARP Uyandırma & Yerel Ağ İzin Kalkanı',
+          'Daha Hızlı TV Bulma ve iPhone Wi-Fi Bağlantı İyileştirmeleri',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
-          badge: 'iOS AĞ',
-          title: 'Doğal iOS en0 (IP_BOUND_IF) & Bonjour Ağ Motoru',
+          badge: 'BAĞLANTI',
+          title: 'iPhone ve Android İçin Güçlendirilmiş TV Bulucu',
           description:
-              'iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanım arayüzüne bağlanan doğal Swift ADB & alt ağ tarayıcısı eklendi.',
+              'Telefonunuzda mobil veri açık olsa bile evinizdeki Wi-Fi ağına bağlı televizyonları çok daha hızlı ve kesintisiz şekilde bulur.',
         ),
         CueReleaseNoteItem(
-          badge: 'KEŞİF',
-          title: '2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması',
+          badge: 'UYANDIRMA',
+          title: 'Bekleme Modundaki Televizyonları Algılama',
           description:
-              'Wi-Fi güç tasarrufundaki TV\'leri (192.168.1.x) önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan 2 aşamalı keşif motoru devreye alındı.',
+              'Wi-Fi uyku modunda bekleyen televizyonları arama sırasında otomatik uyandırarak listede görünmesini sağlar.',
         ),
         CueReleaseNoteItem(
-          badge: 'İZİN',
-          title: 'iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar',
+          badge: 'KOLAY İZİN',
+          title: 'iPhone Ağ İzni Kısayolu',
           description:
-              'iOS Yerel Ağ izni kapalıysa (errno 65) otomatik algılayıp doğrudan iPhone Ayarlar > CueDeck > Yerel Ağ sayfasını açan kısayol butonu eklendi.',
+              'iPhone\'da yerel ağ izni kapalıysa sizi tek dokunuşla ilgili ayar sayfasına yönlendiren yardımcı buton eklendi.',
         ),
       ],
     ),
@@ -104,25 +138,25 @@ class CueReleaseNotesCatalog {
       versionLabel: 'v1.9.4 (Build 16)',
       releaseDate: '29 Ekim 2026',
       headline:
-          'Gerçek Siyah (#000000) Ayarlar, Ağ Cihaz Arama, Özelleştirilebilir Kumanda Tuşları & Çoklu Telefon Desteği',
+          'Özelleştirilebilir Kumanda Uygulama Tuşları, Aynı Anda Birden Fazla Telefon Desteği & Siyah Tema',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
           badge: 'TUŞLAR',
-          title: 'Kumanda Uygulama Tuşlarını Değiştirme (16 Uygulama)',
+          title: 'Kumandadaki 6 Uygulama Tuşunu İstediğiniz Gibi Değiştirme',
           description:
-              'Kumanda üzerindeki 6 kısayol tuşuna basılı tutarak veya Ayarlar içinden YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify, Twitch ve daha fazlasıyla değiştirebilirsiniz.',
+              'Kumanda üzerindeki 6 uygulama tuşuna basılı tutarak veya Ayarlar\'dan YouTube, Netflix, beIN, tabii, Prime Video, Disney+, Exxen, Max/BluTV, S Sport+, TOD TV, Spotify gibi 16 popüler uygulamadan istediğinizi atayabilirsiniz.',
         ),
         CueReleaseNoteItem(
-          badge: 'AĞ & iOS',
-          title: '«🔍 Ağdaki Cihazları Ara» & Çoklu Telefon Desteği',
+          badge: 'ÇOKLU TELEFON',
+          title: 'Evdeki Birden Fazla Telefonla Aynı TV\'yi Yönetme',
           description:
-              'Tek dokunuşla ağdaki TV cihazlarını arama, 3 adımda kolay eşleştirme rehberi ve birden fazla telefonun (iPhone + Android) aynı TV\'yi birbirini kilitlemeden yönetmesi sağlandı.',
+              'Evde hem iPhone hem Android telefonlar aynı anda uygulamayı açsa bile birbirinin bağlantısını kesmeden televizyonu rahatça kontrol edebilir.',
         ),
         CueReleaseNoteItem(
           badge: 'TASARIM',
-          title: 'Koyu Temada Gerçek Siyah (#000000) Ayarlar Ekranı',
+          title: 'Göz Yormayan Tam Siyah Gece Teması',
           description:
-              'Ayarlar ve İzleme Planı ekranı koyu temada tam Gerçek Siyah (#000000) zemin ve derin obsidiyen kartlarla G10 kumanda gövdesiyle bütünleştirildi.',
+              'Karanlık ortamda televizyon izlerken gözünüzü almaması için Ayarlar ve İzleme Planı ekranı tam siyah gece temasıyla uyumlu hale getirildi.',
         ),
       ],
     ),
@@ -131,31 +165,19 @@ class CueReleaseNotesCatalog {
       versionLabel: 'v1.9.3 (Build 15)',
       releaseDate: '28 Ekim 2026',
       headline:
-          'Uygulama İçi Sürüm Notları, Gerçek AdMob & Resmi Mağaza Ödeme Doğrulaması',
+          'Yenilikler Ekranı, 24 Saat Ücretsiz Reklamsız Kullanım & Ömür Boyu Pro',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
           badge: 'YENİ',
-          title: 'Uygulama İçi Sürüm Notları & Yenilikler Kartı',
+          title: 'Uygulama İçi Sürüm Notları ve Yenilikler Penceresi',
           description:
-              'Güncelleme sonrasında ilk açılışta bu sürümde neler değiştiğini gösteren yenilikler penceresi ve Ayarlar içinden tüm geçmiş sürümleri inceleme özelliği eklendi.',
+              'Her güncellemede yeni eklenen özellikleri sade bir pencerede görebilir ve Ayarlar\'dan geçmiş yenilikleri inceleyebilirsiniz.',
         ),
         CueReleaseNoteItem(
-          badge: 'PRO',
-          title: 'Resmi Mağaza Ödeme Doğrulaması (149,99 ₺) & Pro Sıfırlama',
+          badge: '24s PASS',
+          title: 'Tek Kısa Reklamla 24 Saat Boyunca Reklamsız Kullanım',
           description:
-              'Tek Seferlik Ömür Boyu Pro (149,99 ₺) ve 10 günlük %40 Sadakat İndirimi (89,99 ₺) doğrudan Google Play Billing ve Apple StoreKit 2 ödeme onayına bağlandı.',
-        ),
-        CueReleaseNoteItem(
-          badge: 'PASS',
-          title: 'Kumanda Alt Bar & «🎬 24s Kaldır» Kısayolu',
-          description:
-              'Fiziksel G10 kumanda gövdesinin dışında, tuşlara müdahale etmeyen alt bar ve 1 ödüllü video izleyerek 24 saat reklamsız Pro Pass açma kısayolu eklendi.',
-        ),
-        CueReleaseNoteItem(
-          badge: 'iOS',
-          title: 'iOS TestFlight & Üretim AdMob Entegrasyonu',
-          description:
-              'Apple App Store Connect TestFlight dağıtımı, iOS üretim AdMob birimleri ve SKAdNetwork gizlilik yapılandırması tamamlandı.',
+              'İstediğiniz zaman tek bir kısa ödüllü video izleyerek uygulamayı 24 saat boyunca tamamen reklamsız kullanabilirsiniz.',
         ),
       ],
     ),
@@ -164,19 +186,19 @@ class CueReleaseNotesCatalog {
       versionLabel: 'v1.9.1 (Build 13)',
       releaseDate: '28 Ekim 2026',
       headline:
-          'Soft Slate & Warm Alabaster Arayüzü ve Port 6466 PIN Eşleştirme',
+          'Yenilenen Sade Tasarım ve Ekrandaki PIN Koduyla Kolay Eşleştirme',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
           badge: 'TASARIM',
-          title: 'Yumuşak Renk Paleti (Soft Slate & Warm Alabaster)',
+          title: 'Daha Sade ve Okunaklı Ayarlar Ekranı',
           description:
-              'Ayarlar ve İzleme Planı ekranı gözü dinlendiren #141824 Soft Slate (Koyu Mod) ve #F3F6FA Warm Alabaster (Açık Mod) renk paletiyle yenilendi.',
+              'Ayarlar ve İzleme Planı ekranı daha ferah, anlaşılır ve gözü dinlendiren renklerle yenilendi.',
         ),
         CueReleaseNoteItem(
-          badge: 'TV',
-          title: 'Port 6466 (6 Haneli PIN) Sıfır Kurulum Modu',
+          badge: 'EŞLEŞTİRME',
+          title: 'TV Ekranında Çıkan 6 Haneli Kod ile Kolay Bağlantı',
           description:
-              'Geliştirici Seçenekleri kapalı olan standart televizyonlar için 6 haneli PIN ile eşleştirme ve adım adım görsel TV kurulum rehberi eklendi.',
+              'Televizyon ekranında beliren 6 haneli kodu telefonunuza girerek hiçbir teknik ayarla uğraşmadan kolayca eşleştirebilirsiniz.',
         ),
       ],
     ),
@@ -184,45 +206,25 @@ class CueReleaseNotesCatalog {
       version: '1.8.0+11',
       versionLabel: 'v1.8.0 (Build 11)',
       releaseDate: '28 Ekim 2026',
-      headline: 'Tam Ekran Ayarlar & Gerçek İşletim Sistemi Alarmları',
+      headline: 'Tam Ekran İzleme Planlayıcı ve Hatırlatma Bildirimleri',
       highlights: <CueReleaseNoteItem>[
         CueReleaseNoteItem(
-          badge: 'ALARM',
-          title: 'Gerçek OS Bildirimleri & Arka Plan Zamanlayıcısı',
+          badge: 'PLANLAYICI',
+          title: 'Kişisel Dizi, Film ve YouTube Listesi Planlayıcı',
           description:
-              'Uygulama kapalıyken dahi izleme planı saatinde ve ön hatırlatma dakikasında yüksek öncelikli durum çubuğu bildirimi gönderimi devreye alındı.',
-        ),
-        CueReleaseNoteItem(
-          badge: 'AYARLAR',
-          title: 'Tam Sayfa Ayarlar & İzleme Planı Ekranı',
-          description:
-              'Ayarlar ve İzleme Planı görünümü yarım ekran çekmece yerine tam sayfa (Scaffold) mimarisine taşındı.',
-        ),
-      ],
-    ),
-    CueReleaseVersionEntry(
-      version: '1.7.0+10',
-      versionLabel: 'v1.7.0 (Build 10)',
-      releaseDate: '28 Ekim 2026',
-      headline: 'Evrensel Android TV & Google TV RSA-2048 Eşleştirme',
-      highlights: <CueReleaseNoteItem>[
-        CueReleaseNoteItem(
-          badge: 'TV',
-          title: 'ADB RSA-2048 Donanım İmzalı Eşleştirme & mDNS Keşfi',
-          description:
-              'Sony Bravia, TCL, Philips, Xiaomi Mi Box/Stick, Chromecast ve Redline TV cihazlarını yerel ağda otomatik bulma ve RSA onayıyla eşleştirme eklendi.',
+              'İzlemek istediğiniz içerikleri gün ve saat seçerek planlayabilir, vakti geldiğinde bildirim alıp tek dokunuşla televizyonunuzda açabilirsiniz.',
         ),
         CueReleaseNoteItem(
           badge: 'BULUT',
-          title: 'AES-256-GCM Şifreli Google Drive & Yerel JSON Yedekleme',
+          title: 'Google Hesabı ve Dosya İle Yedekleme',
           description:
-              'İzleme planlarını ve TV profillerini donanım şifreli olarak Google Drive üzerinden tüm cihazlarda eşitleme desteği sağlandı.',
+              'İzleme listenizi ve kumanda ayarlarınızı Google hesabınıza veya telefonunuza yedekleyip istediğiniz zaman geri yükleyebilirsiniz.',
         ),
       ],
     ),
   ];
 
-  /// Latest version entry (`1.9.3+15`).
+  /// Latest version entry (`1.9.7+19`).
   static CueReleaseVersionEntry get latest => versions.first;
 }
 

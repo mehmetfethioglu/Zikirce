@@ -401,7 +401,7 @@ import UserNotifications
     case "scanSubnetForTvs":
       triggerBonjourLocalNetworkPrompt()
       let args = call.arguments as? [String: Any]
-      let preferredIp = (args?["preferredIp"] as? String) ?? "192.168.1.125"
+      let preferredIp = (args?["preferredIp"] as? String) ?? ""
       DispatchQueue.global(qos: .userInitiated).async {
         let scanResult = Self.performNativeSubnetScan(preferredIp: preferredIp)
         DispatchQueue.main.async {
@@ -610,10 +610,13 @@ import UserNotifications
     let lock = NSLock()
     var open5555 = Set<String>()
     var open6466 = Set<String>()
+    var open8008 = Set<String>()
+    var openSmartTv = Set<String>()
+    let smartTvPorts: [UInt16] = [8085, 56789, 8001, 3000, 1925, 8060]
     var permissionDeniedCount = 0
     var lastPermissionErrno: Int32 = 0
 
-    // 1. Two-stage warmup + probe on preferredIp first
+    // 1. Two-stage warmup + probe on preferredIp first (if valid)
     if !preferredIp.isEmpty {
       let warm = probePortWithFallback(ip: preferredIp, port: 5555, en0Index: en0Index, timeoutMs: 420)
       if warm.open {
@@ -633,23 +636,34 @@ import UserNotifications
       if p6466.open {
         open6466.insert(preferredIp)
       }
+      for sPort in smartTvPorts {
+        let pSmart = probePortWithFallback(ip: preferredIp, port: sPort, en0Index: en0Index, timeoutMs: 380)
+        if pSmart.open {
+          openSmartTv.insert("\(preferredIp):\(sPort)")
+          break
+        }
+      }
+      let p8008 = probePortWithFallback(ip: preferredIp, port: 8008, en0Index: en0Index, timeoutMs: 450)
+      if p8008.open {
+        open8008.insert(preferredIp)
+      }
     }
 
-    // 2. Build ordered octet list: priority DHCP range (95..160) first, then remaining (2..94, 161..254)
-    var orderedOctets: [Int] = Array(95...160)
-    orderedOctets.append(contentsOf: Array(2...94))
+    // 2. Build ordered octet list: priority DHCP ranges (2..60, 95..160) first, then remaining (61..94, 161..254)
+    var orderedOctets: [Int] = Array(2...60)
+    orderedOctets.append(contentsOf: Array(95...160))
+    orderedOctets.append(contentsOf: Array(61...94))
     orderedOctets.append(contentsOf: Array(161...254))
 
-    let priorityOctets = Array(95...160)
-    // Fast ARP warmup on priority range (95..160) in chunks of 22
-    let chunkSize = 22
-    for start in stride(from: 0, to: priorityOctets.count, by: chunkSize) {
-      let end = min(start + chunkSize, priorityOctets.count)
-      let slice = Array(priorityOctets[start..<end])
+    let warmupOctets = Array(2...60) + Array(95...160)
+    let chunkSize = 28
+    for start in stride(from: 0, to: warmupOctets.count, by: chunkSize) {
+      let end = min(start + chunkSize, warmupOctets.count)
+      let slice = Array(warmupOctets[start..<end])
       DispatchQueue.concurrentPerform(iterations: slice.count) { idx in
         let ip = "\(prefix).\(slice[idx])"
         if ip == wifiIp { return }
-        let res = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: 260)
+        let res = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: 220)
         if res.open {
           lock.lock()
           open5555.insert(ip)
@@ -663,25 +677,26 @@ import UserNotifications
       }
     }
 
-    usleep(140_000) // Allow Wi-Fi ARP replies from sleeping TVs to settle
+    usleep(120_000) // Allow Wi-Fi ARP replies from sleeping TVs to settle
 
-    // Full scan across all 253 octets in chunks of 24
-    let fullChunkSize = 24
+    // Full scan across all 253 octets for ports 5555, 6466, and 8008 in chunks of 28
+    let fullChunkSize = 28
     for start in stride(from: 0, to: orderedOctets.count, by: fullChunkSize) {
       let end = min(start + fullChunkSize, orderedOctets.count)
       let slice = Array(orderedOctets[start..<end])
-      let isPrioritySlice = start < 66
-      let timeout: Int32 = isPrioritySlice ? 780 : 420
+      let isPrioritySlice = start < 125
+      let timeout5555: Int32 = isPrioritySlice ? 650 : 380
+      let timeoutOther: Int32 = isPrioritySlice ? 340 : 240
 
       DispatchQueue.concurrentPerform(iterations: slice.count) { idx in
         let ip = "\(prefix).\(slice[idx])"
         if ip == wifiIp { return }
 
         lock.lock()
-        let alreadyFound = open5555.contains(ip)
+        let already5555 = open5555.contains(ip)
         lock.unlock()
-        if !alreadyFound {
-          let r5555 = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: timeout)
+        if !already5555 {
+          let r5555 = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: timeout5555)
           if r5555.open {
             lock.lock()
             open5555.insert(ip)
@@ -689,21 +704,41 @@ import UserNotifications
           }
         }
 
-        if isPrioritySlice {
-          let r6466 = probePortWithFallback(ip: ip, port: 6466, en0Index: en0Index, timeoutMs: 360)
-          if r6466.open {
-            lock.lock()
-            open6466.insert(ip)
-            lock.unlock()
+        let r6466 = probePortWithFallback(ip: ip, port: 6466, en0Index: en0Index, timeoutMs: timeoutOther)
+        if r6466.open {
+          lock.lock()
+          open6466.insert(ip)
+          lock.unlock()
+        } else {
+          var matchedSmart = false
+          for sPort: UInt16 in [8085, 56789, 8001, 3000] {
+            let rSmart = probePortWithFallback(ip: ip, port: sPort, en0Index: en0Index, timeoutMs: 220)
+            if rSmart.open {
+              lock.lock()
+              openSmartTv.insert("\(ip):\(sPort)")
+              lock.unlock()
+              matchedSmart = true
+              break
+            }
+          }
+          if !matchedSmart {
+            let r8008 = probePortWithFallback(ip: ip, port: 8008, en0Index: en0Index, timeoutMs: timeoutOther)
+            if r8008.open {
+              lock.lock()
+              open8008.insert(ip)
+              lock.unlock()
+            }
           }
         }
       }
     }
 
-    let isPermissionDenied = open5555.isEmpty && open6466.isEmpty && permissionDeniedCount >= 3
+    let isPermissionDenied = open5555.isEmpty && open6466.isEmpty && openSmartTv.isEmpty && open8008.isEmpty && permissionDeniedCount >= 3
     return [
       "open5555": Array(open5555),
       "open6466": Array(open6466),
+      "open8008": Array(open8008),
+      "openSmartTv": Array(openSmartTv),
       "wifiIp": wifiIp,
       "subnetPrefix": prefix,
       "permissionDenied": isPermissionDenied,

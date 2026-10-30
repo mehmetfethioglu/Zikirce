@@ -1,28 +1,28 @@
-name: App Store Connect — Create v1.9.5, Attach Build 17 & Submit for Review
+name: App Store Connect — Create v1.9.7, Attach Build 19 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 1.9.5)"
+        description: "App Store Version String (e.g. 1.9.7)"
         required: false
-        default: "1.9.5"
+        default: "1.9.7"
       build_number:
-        description: "TestFlight Build Number (e.g. 17)"
+        description: "TestFlight Build Number (e.g. 19)"
         required: false
-        default: "17"
+        default: "19"
 
 jobs:
   submit-appstore:
-    name: Submit v1.9.5 (Build 17) to App Store Connect
+    name: Submit v1.9.7 (Build 19) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.5' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '17' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.7' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '19' }}
 
     steps:
       - name: Install PyJWT and Cryptography
@@ -168,16 +168,18 @@ jobs:
           # 3. Set What's New (Release Notes) for TR and EN
           whats_new_tr = (
               f"CueDeck v{target_version} (Build {target_build}) Yenilikleri:\n"
-              "• Doğal iOS en0 (IP_BOUND_IF) & Bonjour TV Tarayıcı: iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanımına bağlanan doğal Swift ADB & alt ağ tarayıcısı.\n"
-              "• 2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması: Wi-Fi güç tasarrufundaki TV'leri önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan keşif motoru.\n"
-              "• iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar Kısayolu."
+              "• Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips Smart TV Desteği: Artık sadece Android TV'leri değil, evinizdeki diğer popüler Smart TV modellerini de doğrudan kontrol edebilirsiniz.\n"
+              "• Ağdaki TV'leri Listeden Seçerek Kolay Bağlanma: «Ağdaki Cihazları Ara» butonuna bastığınızda açık televizyonlar sade bir pencerede listelenir; istediğiniz TV'ye dokunarak hemen bağlanabilirsiniz.\n"
+              "• Dokunmatik Fare (Touchpad) Modu ve Tek Dokunuşla Sesli Komut: Yön tuşları alanını dokunmatik fare gibi kullanabilir, mikrofon tuşuna basar basmaz konuşabilirsiniz.\n"
+              "• Tam Vaktinde İzleme Hatırlatıcıları: İzleme planı bildirimleri uygulama kapalıyken bile tam saatinde telefonunuza ulaşır."
           )
 
           whats_new_en = (
               f"What's New in CueDeck v{target_version} (Build {target_build}):\n"
-              "• Native iOS en0 (IP_BOUND_IF) & Bonjour Scanner: Hardware-bound Wi-Fi socket discovery and ADB shell transport for iPhone 17 Pro Max.\n"
-              "• 2-Stage Wi-Fi ARP Warmup & Full /24 Subnet Sweep: Wakes sleeping 802.11 TVs before probing Ports 5555 and 6466.\n"
-              "• Automatic iOS Local Network Permission Detection & 1-Tap Settings Shortcut."
+              "• Smart TV Support: Control Arçelik, Beko, Grundig, Vestel, Samsung, LG, and Philips Smart TVs alongside Android TV & Google TV.\n"
+              "• Easy TV Picker Popup: Tap 'Search Network Devices' to view nearby TVs in a clean list and connect with one tap.\n"
+              "• Touchpad Mode & 1-Tap Voice Command: Use the D-Pad area as a smooth touchpad and speak immediately with a single tap on the microphone key.\n"
+              "• On-Time Watch Reminders: Receive your scheduled watch plan notifications right on time even when the app is closed."
           )
 
           loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())

@@ -12,7 +12,7 @@ import '../services/cue_notification_service.dart';
 import '../services/google_drive_backup_service.dart';
 
 const String _kPrefsCueItemsKey = 'cuedeck_watch_items_v1';
-const String _kPrefsTvIpKey = 'cuedeck_tv_ip_v1';
+const String _kPrefsTvDeviceV2Key = 'cuedeck_tv_device_v2';
 const String _kPrefsDarkModeKey = 'cuedeck_dark_mode_v1';
 const String _kPrefsRemoteShortcutsKey = 'cuedeck_remote_shortcuts_v1';
 
@@ -242,15 +242,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     });
 
     final now = DateTime.now();
-    final initialDevices = <TvDevice>[
-      const TvDevice(
-        name: 'Redline Android TV (Salon)',
-        ip: '192.168.1.125',
-        port: 5555,
-        boardInfo: 'Realtek RTD2851P • CleanYourTV OS',
-        isOnline: true,
-      ),
-    ];
 
     final defaultCues = <WatchCueItem>[
       WatchCueItem(
@@ -321,12 +312,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     return CueDeckState(
       activeTab: 0,
-      selectedDevice: initialDevices.first,
-      discoveredDevices: initialDevices,
+      selectedDevice: TvDevice.unconfigured,
+      discoveredDevices: const <TvDevice>[],
       isScanning: false,
       isTouchpadMode: false,
       lastPressedDirection: null,
-      lastCommandStatus: 'Redline Android TV (192.168.1.123:5555) hazır',
+      lastCommandStatus: 'Ağdaki TV cihazları aranıyor...',
       cueItems: defaultCues,
       activePlayingCueId: 'cue_yt_playlist_1',
     );
@@ -396,10 +387,23 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Future<void> _loadPersistedState() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedIp = prefs.getString(_kPrefsTvIpKey);
+      final savedDeviceRaw = prefs.getString(_kPrefsTvDeviceV2Key);
       final savedDark = prefs.getBool(_kPrefsDarkModeKey);
       final rawJson = prefs.getString(_kPrefsCueItemsKey);
       final savedShortcuts = prefs.getStringList(_kPrefsRemoteShortcutsKey);
+
+      TvDevice? loadedDevice;
+      if (savedDeviceRaw != null && savedDeviceRaw.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(savedDeviceRaw);
+          if (decoded is Map<String, dynamic>) {
+            final parsed = TvDevice.fromJson(decoded);
+            if (parsed.hasValidIp) {
+              loadedDevice = parsed.copyWith(isOnline: false);
+            }
+          }
+        } catch (_) {}
+      }
 
       List<WatchCueItem>? loadedItems;
       if (rawJson != null && rawJson.isNotEmpty) {
@@ -419,9 +423,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
       state = state.copyWith(
         isDarkMode: savedDark ?? state.isDarkMode,
-        selectedDevice: savedIp != null && AdbTvService.isValidIp(savedIp)
-            ? state.selectedDevice.copyWith(ip: savedIp)
-            : state.selectedDevice,
+        selectedDevice: loadedDevice ?? state.selectedDevice,
         cueItems: (loadedItems != null && loadedItems.isNotEmpty)
             ? loadedItems
             : state.cueItems,
@@ -435,7 +437,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Future<void> _persistState({bool triggerAutoBackup = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kPrefsTvIpKey, state.selectedDevice.ip);
+      if (state.selectedDevice.hasValidIp) {
+        await prefs.setString(
+          _kPrefsTvDeviceV2Key,
+          jsonEncode(state.selectedDevice.toJson()),
+        );
+      } else {
+        await prefs.remove(_kPrefsTvDeviceV2Key);
+      }
       await prefs.setBool(_kPrefsDarkModeKey, state.isDarkMode);
       await prefs.setStringList(
         _kPrefsRemoteShortcutsKey,
@@ -778,24 +787,57 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   Future<void> scanNetworkForTvs({String? customIp}) async {
-    final targetIp = (customIp != null && AdbTvService.isValidIp(customIp))
-        ? customIp.trim()
-        : state.selectedDevice.ip;
+    final cleanCustom = customIp?.trim() ?? '';
+    final hasCustomIp = AdbTvService.isValidIp(cleanCustom);
+    final targetIp = hasCustomIp
+        ? cleanCustom
+        : (state.selectedDevice.hasValidIp ? state.selectedDevice.ip : '');
 
     state = state.copyWith(
       isScanning: true,
-      lastCommandStatus: '$targetIp:5555 ve yerel Wi-Fi ağı taranıyor...',
+      lastCommandStatus: targetIp.isNotEmpty
+          ? '$targetIp ve yerel Wi-Fi ağı taranıyor...'
+          : 'Yerel Wi-Fi ağındaki akıllı TV\'ler taranıyor...',
     );
 
     final service = ref.read(adbTvServiceProvider);
     final devices = await service.discoverDevices(preferredIp: targetIp);
-    final selected = devices.firstWhere(
-      (d) => d.ip == targetIp && d.isOnline,
-      orElse: () => devices.firstWhere(
-        (d) => d.isOnline,
-        orElse: () => devices.first,
-      ),
-    );
+
+    TvDevice selected;
+    if (devices.isNotEmpty) {
+      selected = devices.firstWhere(
+        (d) => targetIp.isNotEmpty && d.ip == targetIp && d.isOnline,
+        orElse: () => devices.firstWhere(
+          (d) => d.isOnline,
+          orElse: () => devices.firstWhere(
+            (d) => targetIp.isNotEmpty && d.ip == targetIp,
+            orElse: () => devices.first,
+          ),
+        ),
+      );
+    } else if (hasCustomIp) {
+      selected = TvDevice(
+        name: 'Akıllı TV ($cleanCustom)',
+        ip: cleanCustom,
+        port: 5555,
+        boardInfo: 'Ağda yanıt alınamadı • TV\'nin açık olduğundan emin olun',
+        isOnline: false,
+      );
+    } else if (state.selectedDevice.hasValidIp) {
+      selected = state.selectedDevice.copyWith(isOnline: false);
+    } else {
+      selected = TvDevice.unconfigured;
+    }
+
+    final statusMessage = selected.isOnline
+        ? 'Bağlandı: ${selected.name} (${selected.ip}:${selected.port})'
+        : (service.localNetworkPermissionDenied
+              ? '⚠️ iPhone "Yerel Ağ" izni kapalı! Ayarlar > CueDeck > Yerel Ağ iznini açın.'
+              : (service.lastConnectRequiredPairingPrompt && selected.hasValidIp
+                    ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
+                    : (devices.isEmpty
+                          ? 'Ağda açık TV bulunamadı — TV\'nin aynı Wi-Fi ağında olduğundan emin olun'
+                          : '${devices.length} TV bulundu — bağlanmak için listeden seçin')));
 
     state = state.copyWith(
       isScanning: false,
@@ -803,15 +845,119 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       selectedDevice: selected,
       localWifiIp: service.detectedWifiIp,
       localNetworkPermissionDenied: service.localNetworkPermissionDenied,
-      lastCommandStatus: selected.isOnline
-          ? 'Bağlandı: ${selected.name} (${selected.ip})'
-          : (service.localNetworkPermissionDenied
-                ? '⚠️ iPhone "Yerel Ağ" izni kapalı! Ayarlar > CueDeck > Yerel Ağ iznini açın.'
-                : (service.lastConnectRequiredPairingPrompt
-                      ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
-                      : 'Çevrimdışı / ADB Bekleniyor (${selected.ip})')),
+      lastCommandStatus: statusMessage,
     );
     await _persistState(triggerAutoBackup: false);
+  }
+
+  /// Resets the currently selected TV so the user can switch to a different TV cleanly.
+  void disconnectCurrentTv() {
+    state = state.copyWith(
+      selectedDevice: TvDevice.unconfigured,
+      lastCommandStatus:
+          'TV bağlantısı sıfırlandı — ağdaki cihazları arayın veya listeden TV seçin',
+    );
+    unawaited(_persistState(triggerAutoBackup: false));
+  }
+
+  /// Selects a discovered [device] and connects/pairs with it.
+  Future<bool> connectAndPairDevice(TvDevice device) async {
+    if (!device.hasValidIp) return false;
+    state = state.copyWith(
+      isScanning: true,
+      selectedDevice: device,
+      lastCommandStatus:
+          '🔌 Bağlanılıyor: ${device.name} (${device.ip}:${device.port})...',
+    );
+
+    if (device.protocol.isNonAndroidSmartTv) {
+      final smartConnected = device.copyWith(
+        isOnline: true,
+        isPaired: true,
+      );
+      final updatedList = <TvDevice>[
+        smartConnected,
+        ...state.discoveredDevices.where((d) => d.ip != smartConnected.ip),
+      ];
+      state = state.copyWith(
+        isScanning: false,
+        selectedDevice: smartConnected,
+        discoveredDevices: updatedList,
+        lastCommandStatus:
+            '✓ Bağlandı: ${smartConnected.name} (${smartConnected.ip}:${smartConnected.port})',
+      );
+      await _persistState(triggerAutoBackup: false);
+      return true;
+    }
+
+    final service = ref.read(adbTvServiceProvider);
+    if (device.protocol == TvConnectionProtocol.remotePort6466 &&
+        device.port == 6466) {
+      // Check if ADB 5555 is also open on this TV for direct zero-PIN control,
+      // otherwise select it ready for Port 6466/6467 PIN pairing.
+      final session = await service.startPin6467PairingSession(device);
+      final adbOpen = session['adb5555Open'] == true;
+      if (adbOpen) {
+        final paired = await service.pairWithTv(
+          device.copyWith(
+            port: 5555,
+            protocol: TvConnectionProtocol.adbPort5555,
+          ),
+        );
+        final updatedList = <TvDevice>[
+          paired,
+          ...state.discoveredDevices.where((d) => d.ip != paired.ip),
+        ];
+        state = state.copyWith(
+          isScanning: false,
+          selectedDevice: paired,
+          discoveredDevices: updatedList,
+          lastCommandStatus: paired.isOnline
+              ? '✓ Bağlandı: ${paired.name} (${paired.ip})'
+              : '🔐 TV ekranındaki onayı kabul edin veya PIN ile eşleştirin',
+        );
+        await _persistState(triggerAutoBackup: false);
+        return paired.isOnline;
+      }
+
+      final updatedDevice = device.copyWith(
+        isOnline: true,
+        boardInfo: session['pinDisplayed'] == true
+            ? 'TV ekranında 6 haneli PIN gösteriliyor • PIN girin'
+            : device.boardInfo,
+      );
+      final updatedList = <TvDevice>[
+        updatedDevice,
+        ...state.discoveredDevices.where((d) => d.ip != updatedDevice.ip),
+      ];
+      state = state.copyWith(
+        isScanning: false,
+        selectedDevice: updatedDevice,
+        discoveredDevices: updatedList,
+        lastCommandStatus: session['pinDisplayed'] == true
+            ? '🔢 TV ekranındaki 6 haneli PIN kodunu girerek eşleştirmeyi tamamlayın'
+            : 'Aktif TV: ${updatedDevice.name} (${updatedDevice.ip}:6466)',
+      );
+      await _persistState(triggerAutoBackup: false);
+      return updatedDevice.isOnline;
+    }
+
+    final pairedDevice = await service.pairWithTv(device);
+    final updatedList = <TvDevice>[
+      pairedDevice,
+      ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
+    ];
+
+    state = state.copyWith(
+      isScanning: false,
+      selectedDevice: pairedDevice,
+      discoveredDevices: updatedList,
+      lastCommandStatus: pairedDevice.isOnline
+          ? '✓ Bağlandı: ${pairedDevice.name} (${pairedDevice.ip})'
+          : '⚠️ Bağlantı bekleniyor: ${pairedDevice.boardInfo}',
+    );
+    await _persistState(triggerAutoBackup: false);
+    return pairedDevice.isOnline;
   }
 
   /// Opens the iOS system Settings page for CueDeck so the user can enable "Yerel Ağ" (Local Network).
@@ -820,18 +966,33 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     await service.openIosLocalNetworkSettings();
   }
 
+  String _resolveTargetTvIp(String? customIp) {
+    final cleanCustom = customIp?.trim() ?? '';
+    if (AdbTvService.isValidIp(cleanCustom)) return cleanCustom;
+    if (state.selectedDevice.hasValidIp) return state.selectedDevice.ip;
+    for (final d in state.discoveredDevices) {
+      if (d.hasValidIp) return d.ip;
+    }
+    return '';
+  }
+
   /// Initiates an interactive 18-second ADB RSA-2048 pairing handshake with the
   /// selected (or [customIp]) Android TV so the user can accept the on-screen
-  /// debugging prompt on Sony, TCL, Xiaomi, Philips, Google TV, or Redline sets.
+  /// debugging prompt on Sony, TCL, Xiaomi, Philips, Samsung, LG, or Google TV sets.
   Future<bool> pairWithSelectedTv({String? customIp}) async {
-    final targetIp = (customIp != null && AdbTvService.isValidIp(customIp))
-        ? customIp.trim()
-        : state.selectedDevice.ip;
+    final targetIp = _resolveTargetTvIp(customIp);
+    if (targetIp.isEmpty) {
+      state = state.copyWith(
+        lastCommandStatus:
+            '⚠️ Önce "Ağdaki Cihazları Ara" ile TV seçin veya TV IP adresini girin',
+      );
+      return false;
+    }
 
     final candidate = state.selectedDevice.ip == targetIp
         ? state.selectedDevice
         : TvDevice(
-            name: 'Android TV ($targetIp)',
+            name: 'Akıllı TV ($targetIp)',
             ip: targetIp,
             port: 5555,
             boardInfo: 'Android TV • Eşleştiriliyor...',
@@ -842,7 +1003,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       isScanning: true,
       selectedDevice: candidate,
       lastCommandStatus:
-          '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin...',
+          '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin ($targetIp)...',
     );
 
     final service = ref.read(adbTvServiceProvider);
@@ -865,15 +1026,53 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return pairedDevice.isOnline;
   }
 
+  /// Starts a TLS Port 6467 PIN pairing session so the TV displays a 6-character
+  /// PIN code on screen immediately when the user opens the PIN Pairing sheet.
+  Future<Map<String, dynamic>> startPin6467Pairing({String? customIp}) async {
+    final targetIp = _resolveTargetTvIp(customIp);
+    if (targetIp.isEmpty) {
+      return const <String, dynamic>{
+        'pinDisplayed': false,
+        'adb5555Open': false,
+        'message':
+            'Önce "Ağdaki Cihazları Ara" ile TV seçin veya TV IP adresini girin.',
+      };
+    }
+
+    final candidate = state.selectedDevice.ip == targetIp
+        ? state.selectedDevice
+        : TvDevice(
+            name: 'Google TV ($targetIp)',
+            ip: targetIp,
+            port: 6466,
+            protocol: TvConnectionProtocol.remotePort6466,
+            boardInfo: 'Google TV • PIN İsteniyor...',
+            isOnline: false,
+          );
+
+    final service = ref.read(adbTvServiceProvider);
+    final res = await service.startPin6467PairingSession(candidate);
+    final msg = (res['message'] as String?) ?? '';
+    if (msg.isNotEmpty) {
+      state = state.copyWith(lastCommandStatus: msg);
+    }
+    return res;
+  }
+
   /// Pairs with a standard retail Android TV / Google TV over Port 6466/6467
-  /// using the 6-digit PIN displayed on the TV screen (Zero-Config mode).
+  /// using the 6-character PIN displayed on the TV screen (Zero-Config mode).
   Future<bool> pairWithSelectedTvPin6466(
     String sixDigitPin, {
     String? customIp,
   }) async {
-    final targetIp = (customIp != null && AdbTvService.isValidIp(customIp))
-        ? customIp.trim()
-        : state.selectedDevice.ip;
+    final targetIp = _resolveTargetTvIp(customIp);
+    if (targetIp.isEmpty) {
+      state = state.copyWith(
+        lastCommandStatus:
+            '⚠️ Önce "Ağdaki Cihazları Ara" ile TV seçin veya TV IP adresini girin',
+      );
+      return false;
+    }
 
     final candidate = state.selectedDevice.ip == targetIp
         ? state.selectedDevice
@@ -890,7 +1089,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       isScanning: true,
       selectedDevice: candidate,
       lastCommandStatus:
-          '🔢 Port 6466 üzerinden 6 haneli PIN doğrulanıyor ($targetIp)...',
+          '🔢 TV PIN kodu doğrulanıyor ($targetIp)...',
     );
 
     final service = ref.read(adbTvServiceProvider);
@@ -901,16 +1100,17 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
     ];
 
+    final ok = pairedDevice.isPaired || pairedDevice.isOnline;
     state = state.copyWith(
       isScanning: false,
       selectedDevice: pairedDevice,
       discoveredDevices: updatedList,
-      lastCommandStatus: pairedDevice.isPaired
-          ? '✓ PIN Eşleşti (Port 6466): ${pairedDevice.name} (${pairedDevice.ip})'
+      lastCommandStatus: ok
+          ? '✓ Eşleşti ve Bağlandı: ${pairedDevice.name} (${pairedDevice.ip})'
           : '⚠️ PIN Eşleştirme hatası: ${pairedDevice.boardInfo}',
     );
     await _persistState(triggerAutoBackup: false);
-    return pairedDevice.isPaired;
+    return ok;
   }
 
   // ===========================================================================

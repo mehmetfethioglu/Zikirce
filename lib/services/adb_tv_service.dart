@@ -209,6 +209,8 @@ class AdbTvService {
 
   Socket? _socket;
   StreamSubscription<Uint8List>? _socketSub;
+  SecureSocket? _activePairingTlsSocket;
+  String? _activePairingIp;
   String? _connectedIp;
   int _connectedPort = 5555;
   bool _handshakeDone = false;
@@ -219,6 +221,7 @@ class AdbTvService {
   bool _voicePermissionDenied = false;
   String _detectedWifiIp = '';
   int _nextLocalId = 1;
+  final Set<String> _ipsRequiringRsaAuth = <String>{};
   final List<int> _rxBuffer = <int>[];
   Completer<bool>? _cnxnCompleter;
   final Map<int, Completer<bool>> _streamCompleters = <int, Completer<bool>>{};
@@ -265,7 +268,16 @@ class AdbTvService {
   void dispose() {
     _idleDisconnectTimer?.cancel();
     _idleDisconnectTimer = null;
+    _closePairingSocket();
     _closeConnection();
+  }
+
+  void _closePairingSocket() {
+    try {
+      _activePairingTlsSocket?.destroy();
+    } catch (_) {}
+    _activePairingTlsSocket = null;
+    _activePairingIp = null;
   }
 
   void _scheduleIdleDisconnect() {
@@ -346,6 +358,19 @@ class AdbTvService {
     int port, {
     required Duration timeout,
   }) async {
+    if (Platform.isIOS &&
+        _detectedWifiIp.trim().isEmpty &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      try {
+        final wifiInfo = await _networkChannel
+            .invokeMethod<Map<Object?, Object?>>('getWifiInfo');
+        final nativeWifiIp = wifiInfo?['wifiIp']?.toString().trim() ?? '';
+        if (isValidIp(nativeWifiIp)) {
+          _detectedWifiIp = nativeWifiIp;
+        }
+      } catch (_) {}
+    }
+
     final wifiIp = _detectedWifiIp.trim();
     if (wifiIp.isNotEmpty && isValidIp(wifiIp)) {
       final wParts = wifiIp.split('.');
@@ -651,11 +676,185 @@ class AdbTvService {
   }
 
   static final RegExp _safePinRegex = RegExp(r'^\d{6}$');
+  static final RegExp _safeHexPinRegex = RegExp(r'^[0-9a-fA-F]{4,8}$');
   final Set<String> _pinPairedIps = <String>{};
 
-  /// Validates a 6-digit numeric PIN for Port 6466/6467 Android TV Remote v2 pairing.
+  /// Validates a strict 6-digit numeric PIN.
   static bool isValidSixDigitPin(String pin) =>
       _safePinRegex.hasMatch(pin.trim());
+
+  /// Validates either a 6-digit numeric PIN or a 6-character hexadecimal PIN (`0-9`, `A-F`)
+  /// displayed by Android TV Remote Service v2 on Port 6467.
+  static bool isValidPairingPinCode(String pin) =>
+      _safeHexPinRegex.hasMatch(pin.trim());
+
+  /// Builds the 3 protobuf handshake frames (`PairingRequest`, `PairingOption`,
+  /// `PairingConfiguration`) for `Android TV Remote Protocol v2` (`pairingmessage.proto`)
+  /// over TLS Port 6467 that cause the TV screen to display the 6-character pairing PIN.
+  static List<Uint8List> buildPin6467InitiationFrames({
+    String serviceName = 'androidtvremote2',
+    String clientName = 'CueDeck',
+  }) {
+    Uint8List frameWithLength(List<int> body) =>
+        Uint8List.fromList(<int>[body.length, ...body]);
+
+    final svcBytes = utf8.encode(serviceName);
+    final cliBytes = utf8.encode(clientName);
+
+    // 1. PairingRequest (field 10 -> tag 0x52)
+    final reqInner = <int>[
+      0x0A,
+      svcBytes.length,
+      ...svcBytes,
+      0x12,
+      cliBytes.length,
+      ...cliBytes,
+    ];
+    final reqMsg = <int>[
+      0x08, 0x02, // protocol_version = 2
+      0x10, 0xC8, 0x01, // status = 200 (STATUS_OK)
+      0x52, reqInner.length, ...reqInner,
+    ];
+
+    // 2. PairingOption (field 20 -> tag 0xA2, 0x01)
+    // input_encodings (field 1 -> 0x0A): type = HEXADECIMAL (3), symbol_length = 6
+    // preferred_role (field 3 -> 0x18): ROLE_TYPE_INPUT (1)
+    const optInner = <int>[
+      0x0A, 0x04, 0x08, 0x03, 0x10, 0x06,
+      0x18, 0x01,
+    ];
+    final optMsg = <int>[
+      0x08, 0x02,
+      0x10, 0xC8, 0x01,
+      0xA2, 0x01, optInner.length, ...optInner,
+    ];
+
+    // 3. PairingConfiguration (field 30 -> tag 0xF2, 0x01)
+    // encoding (field 1 -> 0x0A): type = HEXADECIMAL (3), symbol_length = 6
+    // client_role (field 2 -> 0x10): ROLE_TYPE_INPUT (1)
+    const cfgInner = <int>[
+      0x0A, 0x04, 0x08, 0x03, 0x10, 0x06,
+      0x10, 0x01,
+    ];
+    final cfgMsg = <int>[
+      0x08, 0x02,
+      0x10, 0xC8, 0x01,
+      0xF2, 0x01, cfgInner.length, ...cfgInner,
+    ];
+
+    return <Uint8List>[
+      frameWithLength(reqMsg),
+      frameWithLength(optMsg),
+      frameWithLength(cfgMsg),
+    ];
+  }
+
+  /// Builds the `PairingSecret` (`field 40`, tag `0x82, 0x02`) protobuf frame
+  /// containing the 32-byte SHA-256 secret payload for TLS Port 6467 PIN completion.
+  static Uint8List buildPin6467SecretFrame(String pinCode) {
+    final cleanPin = pinCode.trim().toUpperCase();
+    final secretBytes = sha256.convert(utf8.encode(cleanPin)).bytes;
+    final secretInner = <int>[
+      0x0A,
+      secretBytes.length,
+      ...secretBytes,
+    ];
+    final msg = <int>[
+      0x08, 0x02, // protocol_version = 2
+      0x10, 0xC8, 0x01, // status = 200
+      0x82, 0x02, secretInner.length, ...secretInner,
+    ];
+    return Uint8List.fromList(<int>[msg.length, ...msg]);
+  }
+
+  /// Connects to the TV's TLS Port [pairingPort] (default 6467) and transmits the
+  /// `PairingRequest` -> `PairingOption` -> `PairingConfiguration` sequence so the
+  /// TV immediately pops up the 6-character PIN code on screen.
+  Future<Map<String, dynamic>> startPin6467PairingSession(
+    TvDevice device, {
+    int pairingPort = 6467,
+  }) async {
+    final cleanIp = device.ip.trim();
+    if (!isValidIp(cleanIp)) {
+      return <String, dynamic>{
+        'pinTriggered': false,
+        'adbOpen': false,
+        'message': 'Lütfen önce listeden bir TV seçin veya geçerli bir IP girin.',
+      };
+    }
+
+    _closePairingSocket();
+    String certModelHint = '';
+    var pinTriggered = false;
+
+    try {
+      final tlsSocket = await SecureSocket.connect(
+        cleanIp,
+        pairingPort,
+        onBadCertificate: (X509Certificate cert) {
+          final subj = cert.subject;
+          final cnMatch = RegExp(r'CN=([^/,]+)').firstMatch(subj);
+          if (cnMatch != null) {
+            final cn = cnMatch.group(1)?.trim() ?? '';
+            if (cn.isNotEmpty && !cn.toLowerCase().contains('atvremote')) {
+              certModelHint = cn;
+            }
+          }
+          return true;
+        },
+        timeout: const Duration(milliseconds: 1600),
+      );
+      _activePairingTlsSocket = tlsSocket;
+      _activePairingIp = cleanIp;
+
+      final frames = buildPin6467InitiationFrames();
+      tlsSocket.add(frames[0]); // PairingRequest
+      await tlsSocket.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      tlsSocket.add(frames[1]); // PairingOption
+      await tlsSocket.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      tlsSocket.add(frames[2]); // PairingConfiguration -> triggers PIN on TV!
+      await tlsSocket.flush();
+      pinTriggered = true;
+    } catch (_) {
+      _closePairingSocket();
+    }
+
+    final adbOpen = await pingTv(
+      cleanIp,
+      port: 5555,
+      timeout: const Duration(milliseconds: 550),
+    );
+
+    if (pinTriggered) {
+      return <String, dynamic>{
+        'pinTriggered': true,
+        'adbOpen': adbOpen,
+        'certModelHint': certModelHint,
+        'message':
+            '📺 TV ekranında ($cleanIp) 6 haneli PIN kodu açıldı! Lütfen ekrandaki kodu aşağıya girin.',
+      };
+    }
+
+    if (adbOpen) {
+      return <String, dynamic>{
+        'pinTriggered': false,
+        'adbOpen': true,
+        'certModelHint': certModelHint,
+        'message':
+            '💡 Bu TV\'de ($cleanIp) Port 5555 (ADB) açık! PIN koduna gerek olmadan "PIN Olmadan Doğrudan Bağlan" butonuna basabilirsiniz.',
+      };
+    }
+
+    return <String, dynamic>{
+      'pinTriggered': false,
+      'adbOpen': false,
+      'certModelHint': certModelHint,
+      'message':
+          '⚠️ TV ($cleanIp:$pairingPort) PIN servisine yanıt vermedi. TV\'nin açık olduğundan emin olun veya "Ağdaki Cihazları Ara" ile TV\'yi seçin.',
+    };
+  }
 
   /// Encodes an Android TV Remote v2 (`remotemessage.proto`) `RemoteKeyInject`
   /// protobuf frame prefixed with its varint frame length for Port 6466 transport.
@@ -689,11 +888,15 @@ class AdbTvService {
   }
 
   /// Pairs with a standard retail Android TV / Google TV over Port 6467/6466
-  /// using a 6-digit on-screen PIN (Zero-Config mode without Developer Options).
-  Future<TvDevice> pairWithPin6466(TvDevice device, String sixDigitPin) async {
+  /// using a 6-character on-screen PIN (Zero-Config mode without Developer Options).
+  Future<TvDevice> pairWithPin6466(
+    TvDevice device,
+    String sixDigitPin, {
+    int pairingPort = 6467,
+  }) async {
     final cleanIp = device.ip.trim();
     final cleanPin = sixDigitPin.trim();
-    if (!isValidIp(cleanIp) || !isValidSixDigitPin(cleanPin)) {
+    if (!isValidIp(cleanIp) || !isValidPairingPinCode(cleanPin)) {
       return device.copyWith(
         isOnline: false,
         boardInfo: 'Geçersiz IP veya 6 haneli PIN kodu',
@@ -701,31 +904,76 @@ class AdbTvService {
     }
 
     var tlsConnected = false;
-    SecureSocket? tlsSocket;
-    try {
-      tlsSocket = await SecureSocket.connect(
+    final secretFrame = buildPin6467SecretFrame(cleanPin);
+
+    if (_activePairingTlsSocket != null && _activePairingIp == cleanIp) {
+      try {
+        _activePairingTlsSocket!.add(secretFrame);
+        await _activePairingTlsSocket!.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 180));
+        tlsConnected = true;
+      } catch (_) {}
+      _closePairingSocket();
+    }
+
+    if (!tlsConnected) {
+      SecureSocket? tlsSocket;
+      try {
+        tlsSocket = await SecureSocket.connect(
+          cleanIp,
+          pairingPort,
+          onBadCertificate: (_) => true,
+          timeout: const Duration(milliseconds: 1200),
+        );
+        final initFrames = buildPin6467InitiationFrames();
+        for (final f in initFrames) {
+          tlsSocket.add(f);
+          await tlsSocket.flush();
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+        }
+        tlsSocket.add(secretFrame);
+        await tlsSocket.flush();
+        tlsConnected = true;
+      } catch (_) {
+        tlsConnected = await pingTv(
+          cleanIp,
+          port: 6466,
+          timeout: const Duration(milliseconds: 600),
+        );
+      } finally {
+        tlsSocket?.destroy();
+      }
+    }
+
+    if (!tlsConnected) {
+      final adbOk = await pingTv(
         cleanIp,
-        6467,
-        onBadCertificate: (_) => true,
-        timeout: const Duration(milliseconds: 900),
-      );
-      final pinDigest = sha256.convert(utf8.encode('cuedeck:$cleanPin')).bytes;
-      // Send pairing secret frame over TLS 6467
-      tlsSocket.add(<int>[pinDigest.length, ...pinDigest]);
-      await tlsSocket.flush();
-      tlsConnected = true;
-    } catch (_) {
-      tlsConnected = await pingTv(
-        cleanIp,
-        port: 6466,
+        port: 5555,
         timeout: const Duration(milliseconds: 550),
       );
-    } finally {
-      tlsSocket?.destroy();
+      if (adbOk) {
+        final pairedAdb = await pairWithTv(
+          device.copyWith(
+            port: 5555,
+            protocol: TvConnectionProtocol.adbPort5555,
+          ),
+        );
+        if (pairedAdb.isOnline) {
+          return pairedAdb.copyWith(isPaired: true);
+        }
+      }
     }
 
     _pinPairedIps.add(cleanIp);
+    final httpMeta = await _fetchTvHttpMetadata(cleanIp);
+    final resolvedName = (httpMeta['name']?.isNotEmpty ?? false)
+        ? httpMeta['name']!
+        : (device.name.isNotEmpty && device.name != 'TV Seçilmedi'
+              ? device.name
+              : 'Google TV ($cleanIp)');
+
     return device.copyWith(
+      name: resolvedName,
       port: 6466,
       protocol: TvConnectionProtocol.remotePort6466,
       isPaired: true,
@@ -769,7 +1017,39 @@ class AdbTvService {
   Future<TvDevice> pairWithTv(TvDevice device) async {
     final cleanIp = device.ip.trim();
     if (!isValidIp(cleanIp)) {
-      return device.copyWith(isOnline: false);
+      return device.copyWith(
+        isOnline: false,
+        boardInfo: 'Geçersiz IP adresi • Lütfen listeden bir TV seçin',
+      );
+    }
+
+    if (device.protocol.isNonAndroidSmartTv) {
+      final httpMeta = await _fetchTvHttpMetadata(cleanIp);
+      final reachable = await pingTv(
+        cleanIp,
+        port: device.port,
+        timeout: const Duration(milliseconds: 500),
+      );
+      final openSmartPort = reachable
+          ? device.port
+          : await _probeOpenSmartTvPort(cleanIp);
+      final resolvedPort = openSmartPort > 0 ? openSmartPort : device.port;
+      final resolvedProto = TvConnectionProtocol.fromNameOrPort(
+        '',
+        resolvedPort,
+      );
+      return device.copyWith(
+        name: (httpMeta['name']?.isNotEmpty ?? false)
+            ? httpMeta['name']!
+            : device.name,
+        port: resolvedPort,
+        protocol: resolvedProto,
+        isPaired: true,
+        isOnline: reachable || openSmartPort > 0,
+        boardInfo: (httpMeta['model']?.isNotEmpty ?? false)
+            ? '${httpMeta['model']} • Smart TV Aktif (Port $resolvedPort)'
+            : '${resolvedProto.label} • Doğrudan Kontrol Hazır',
+      );
     }
 
     if (_connectedIp != cleanIp || !_handshakeDone) {
@@ -777,20 +1057,62 @@ class AdbTvService {
     }
 
     final connected = await _ensureConnected(
-      device,
+      device.copyWith(port: 5555, protocol: TvConnectionProtocol.adbPort5555),
       allowInteractivePairing: true,
     );
     if (!connected) {
-      final portOpen = await pingTv(cleanIp, port: device.port);
+      final port5555Open = await pingTv(cleanIp, port: 5555);
+      final port6466Open = await pingTv(
+        cleanIp,
+        port: 6466,
+        timeout: const Duration(milliseconds: 500),
+      );
+      if (!port5555Open && port6466Open) {
+        final httpMeta = await _fetchTvHttpMetadata(cleanIp);
+        return device.copyWith(
+          name: (httpMeta['name']?.isNotEmpty ?? false)
+              ? httpMeta['name']!
+              : device.name,
+          port: 6466,
+          protocol: TvConnectionProtocol.remotePort6466,
+          isOnline: true,
+          boardInfo:
+              'Standart Kumanda Modu (Port 6466) Aktif • PIN ile Eşleştirebilirsiniz',
+        );
+      }
+      final smartPort = await _probeOpenSmartTvPort(cleanIp);
+      if (smartPort > 0) {
+        final httpMeta = await _fetchTvHttpMetadata(cleanIp);
+        final smartProto = TvConnectionProtocol.fromNameOrPort(
+          '',
+          smartPort,
+        );
+        return device.copyWith(
+          name: (httpMeta['name']?.isNotEmpty ?? false)
+              ? httpMeta['name']!
+              : '${smartProto.label.split('(').first.trim()} ($cleanIp)',
+          port: smartPort,
+          protocol: smartProto,
+          isPaired: true,
+          isOnline: true,
+          boardInfo: (httpMeta['model']?.isNotEmpty ?? false)
+              ? '${httpMeta['model']} • Smart TV Aktif (Port $smartPort)'
+              : '${smartProto.label} • Doğrudan Kontrol Hazır',
+        );
+      }
       return device.copyWith(
         isOnline: false,
-        boardInfo: portOpen
-            ? 'TV Ekranındaki ADB Yetkilendirme Onayını Kabul Edin'
-            : 'Port 5555 Kapalı • TV Geliştirici Ayarlarından ADB Açın',
+        boardInfo: port5555Open
+            ? 'TV Ekranındaki "Hata Ayıklamaya İzin Ver" Onayını Kabul Edin'
+            : 'Port 5555 Kapalı • TV Ayarlarından ADB Açın veya PIN Eşleştir Kullanın',
       );
     }
 
-    return probeTvDeviceProfile(device, allowInteractivePairing: true);
+    final probed = await probeTvDeviceProfile(
+      device.copyWith(port: 5555, protocol: TvConnectionProtocol.adbPort5555),
+      allowInteractivePairing: true,
+    );
+    return probed.copyWith(isPaired: true, isOnline: true);
   }
 
   /// Queries `getprop` on the connected Android TV to detect its real brand,
@@ -844,10 +1166,6 @@ class AdbTvService {
       } else {
         resolvedName = rawModel;
       }
-      if (rawPlatform.toLowerCase().contains('rtd2851') &&
-          !resolvedName.toLowerCase().contains('redline')) {
-        resolvedName = 'Redline / $resolvedName';
-      }
     }
 
     final platformPart =
@@ -860,6 +1178,272 @@ class AdbTvService {
       boardInfo: '$platformPart • $releasePart',
       isOnline: true,
     );
+  }
+
+  /// Queries Google Cast / DIAL / UPnP HTTP endpoints on Port 8008 (`/setup/eureka_info`
+  /// and `/ssdp/device-desc.xml`) to obtain the TV's real user-assigned room name
+  /// and model without requiring ADB authorization.
+  Future<Map<String, String>> _fetchTvHttpMetadata(String ip) async {
+    final cleanIp = ip.trim();
+    if (!isValidIp(cleanIp) ||
+        Platform.environment.containsKey('FLUTTER_TEST')) {
+      return const <String, String>{};
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 420);
+    try {
+      // 1. Try Google Cast / Android TV /setup/eureka_info JSON on port 8008
+      try {
+        final req = await client
+            .getUrl(Uri.parse('http://$cleanIp:8008/setup/eureka_info'))
+            .timeout(const Duration(milliseconds: 450));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 450),
+        );
+        if (resp.statusCode == 200) {
+          final body = await resp
+              .transform(utf8.decoder)
+              .join()
+              .timeout(const Duration(milliseconds: 450));
+          final decoded = jsonDecode(body);
+          if (decoded is Map) {
+            final name = decoded['name']?.toString().trim() ?? '';
+            final model =
+                decoded['model_name']?.toString().trim() ??
+                decoded['ssdp_udn']?.toString().trim() ??
+                '';
+            if (name.isNotEmpty) {
+              return <String, String>{
+                'name': name,
+                'model': model,
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 2. Try UPnP / DIAL device description XML on port 8008
+      try {
+        final req = await client
+            .getUrl(Uri.parse('http://$cleanIp:8008/ssdp/device-desc.xml'))
+            .timeout(const Duration(milliseconds: 450));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 450),
+        );
+        if (resp.statusCode == 200) {
+          final xml = await resp
+              .transform(utf8.decoder)
+              .join()
+              .timeout(const Duration(milliseconds: 450));
+          final friendly = RegExp(
+            r'<friendlyName>([^<]+)</friendlyName>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          final model = RegExp(
+            r'<modelName>([^<]+)</modelName>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          final manufacturer = RegExp(
+            r'<manufacturer>([^<]+)</manufacturer>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          if (friendly.isNotEmpty) {
+            return <String, String>{
+              'name': friendly,
+              'model': [manufacturer, model]
+                  .where((s) => s.isNotEmpty)
+                  .join(' '),
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 3. Try Samsung Tizen REST metadata on port 8001 (/api/v2/)
+      try {
+        final req = await client
+            .getUrl(Uri.parse('http://$cleanIp:8001/api/v2/'))
+            .timeout(const Duration(milliseconds: 420));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 420),
+        );
+        if (resp.statusCode == 200) {
+          final body = await resp
+              .transform(utf8.decoder)
+              .join()
+              .timeout(const Duration(milliseconds: 420));
+          final decoded = jsonDecode(body);
+          if (decoded is Map) {
+            final dev = decoded['device'];
+            final name = (dev is Map ? dev['name'] : decoded['name'])
+                    ?.toString()
+                    .trim() ??
+                '';
+            final model = (dev is Map ? dev['modelName'] : '')
+                    ?.toString()
+                    .trim() ??
+                'Samsung Smart TV';
+            if (name.isNotEmpty) {
+              return <String, String>{
+                'name': name,
+                'model': model,
+                'smartPort': '8001',
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 4. Try Vestel / Arçelik / Toshiba UPnP description on port 56789 (/dd.xml)
+      try {
+        final req = await client
+            .getUrl(Uri.parse('http://$cleanIp:56789/dd.xml'))
+            .timeout(const Duration(milliseconds: 420));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 420),
+        );
+        if (resp.statusCode == 200) {
+          final xml = await resp
+              .transform(utf8.decoder)
+              .join()
+              .timeout(const Duration(milliseconds: 420));
+          final friendly = RegExp(
+            r'<friendlyName>([^<]+)</friendlyName>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          final manufacturer = RegExp(
+            r'<manufacturer>([^<]+)</manufacturer>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          if (friendly.isNotEmpty) {
+            return <String, String>{
+              'name': friendly,
+              'model': manufacturer.isNotEmpty
+                  ? '$manufacturer Smart TV'
+                  : 'Arçelik / Vestel Smart TV',
+              'smartPort': '56789',
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 5. Try Roku / ECP device-info on port 8060 (/query/device-info)
+      try {
+        final req = await client
+            .getUrl(Uri.parse('http://$cleanIp:8060/query/device-info'))
+            .timeout(const Duration(milliseconds: 420));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 420),
+        );
+        if (resp.statusCode == 200) {
+          final xml = await resp
+              .transform(utf8.decoder)
+              .join()
+              .timeout(const Duration(milliseconds: 420));
+          final friendly = RegExp(
+            r'<friendly-device-name>([^<]+)</friendly-device-name>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          final model = RegExp(
+            r'<model-name>([^<]+)</model-name>',
+            caseSensitive: false,
+          ).firstMatch(xml)?.group(1)?.trim() ?? '';
+          if (friendly.isNotEmpty) {
+            return <String, String>{
+              'name': friendly,
+              'model': model.isNotEmpty ? model : 'Smart TV',
+              'smartPort': '8060',
+            };
+          }
+        }
+      } catch (_) {}
+    } finally {
+      client.close(force: true);
+    }
+    return const <String, String>{};
+  }
+
+  /// Sends SSDP multicast `M-SEARCH` (`239.255.255.250:1900`) to discover
+  /// Smart TVs, Google Cast, and DIAL/UPnP rendering devices on the LAN.
+  Future<Map<String, String>> _discoverViaSsdp() async {
+    final discoveredBySsdp = <String, String>{};
+    RawDatagramSocket? ssdpSocket;
+    StreamSubscription<RawSocketEvent>? sub;
+
+    try {
+      ssdpSocket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        0,
+        reuseAddress: true,
+      );
+      final targetAddr = InternetAddress('239.255.255.250');
+
+      sub = ssdpSocket.listen((event) {
+        if (event != RawSocketEvent.read) return;
+        final dg = ssdpSocket?.receive();
+        if (dg == null) return;
+        final senderIp = dg.address.address.trim();
+        if (!isValidIp(senderIp)) return;
+        final text = utf8.decode(dg.data, allowMalformed: true);
+        final lower = text.toLowerCase();
+        if (lower.contains('tv') ||
+            lower.contains('cast') ||
+            lower.contains('dial') ||
+            lower.contains('mediarenderer') ||
+            lower.contains('android') ||
+            lower.contains('arcelik') ||
+            lower.contains('grundig') ||
+            lower.contains('beko') ||
+            lower.contains('vestel') ||
+            lower.contains('samsung') ||
+            lower.contains('webos') ||
+            lower.contains('philips') ||
+            lower.contains('roku')) {
+          var brandLabel = 'Smart TV ($senderIp)';
+          if (lower.contains('arcelik') ||
+              lower.contains('grundig') ||
+              lower.contains('beko')) {
+            brandLabel = 'Arçelik / Grundig Smart TV ($senderIp)';
+          } else if (lower.contains('vestel') ||
+              lower.contains('toshiba') ||
+              lower.contains('regal')) {
+            brandLabel = 'Vestel Smart TV ($senderIp)';
+          } else if (lower.contains('samsung') || lower.contains('tizen')) {
+            brandLabel = 'Samsung Smart TV ($senderIp)';
+          } else if (lower.contains('webos') || lower.contains('lg')) {
+            brandLabel = 'LG webOS Smart TV ($senderIp)';
+          } else if (lower.contains('philips')) {
+            brandLabel = 'Philips Smart TV ($senderIp)';
+          }
+          discoveredBySsdp[senderIp] = brandLabel;
+        }
+      });
+
+      const searchTargets = <String>[
+        'urn:dial-multiscreen-org:service:dial:1',
+        'urn:schemas-upnp-org:device:MediaRenderer:1',
+        'urn:samsung.com:device:RemoteControlReceiver:1',
+        'ssdp:all',
+      ];
+      for (final st in searchTargets) {
+        final req =
+            'M-SEARCH * HTTP/1.1\r\n'
+            'HOST: 239.255.255.250:1900\r\n'
+            'MAN: "ssdp:discover"\r\n'
+            'MX: 1\r\n'
+            'ST: $st\r\n\r\n';
+        ssdpSocket.send(ascii.encode(req), targetAddr, 1900);
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 420));
+    } catch (_) {
+      // Ignore UDP multicast errors in restricted environments
+    } finally {
+      await sub?.cancel();
+      ssdpSocket?.close();
+    }
+
+    return discoveredBySsdp;
   }
 
   /// Sends mDNS multicast PTR queries (`224.0.0.251:5353`) for
@@ -970,15 +1554,17 @@ class AdbTvService {
     return '';
   }
 
-  /// Discovers all Android TV / Google TV devices on the local network using
+  /// Discovers all Android TV / Google TV / Smart TV devices on the local network using
   /// native iOS `en0` (`IP_BOUND_IF`) + Bonjour scanning, mDNS (`224.0.0.251:5353`),
-  /// 2-stage ARP-warmup `/24` subnet sweeping (`2..254`), Port 5555 (ADB) +
-  /// Port 6466 (Android TV Remote v2) probing, and `getprop` model detection.
+  /// SSDP UPnP (`239.255.255.250:1900`), 2-stage ARP-warmup `/24` subnet sweeping (`2..254`),
+  /// Port 5555 (ADB) + Port 6466 (Android TV Remote v2) + Port 8008 (Cast/DIAL) probing,
+  /// and `getprop` / HTTP metadata model detection.
   Future<List<TvDevice>> discoverDevices({
-    String preferredIp = '192.168.1.125',
+    String preferredIp = '',
     bool forceFullSubnetScan = false,
   }) async {
     final cleanPreferred = preferredIp.trim();
+    final hasValidPreferred = isValidIp(cleanPreferred);
     final discoveredMap = <String, TvDevice>{};
     final isIos = Platform.isIOS;
     final isTestEnv =
@@ -1070,12 +1656,14 @@ class AdbTvService {
       }
     } catch (_) {}
 
-    final prefParts = cleanPreferred.split('.');
-    if (prefParts.length == 4 &&
-        (prefParts[0] == '192' ||
-            prefParts[0] == '10' ||
-            prefParts[0] == '172')) {
-      prefixes.add('${prefParts[0]}.${prefParts[1]}.${prefParts[2]}');
+    if (hasValidPreferred) {
+      final prefParts = cleanPreferred.split('.');
+      if (prefParts.length == 4 &&
+          (prefParts[0] == '192' ||
+              prefParts[0] == '10' ||
+              prefParts[0] == '172')) {
+        prefixes.add('${prefParts[0]}.${prefParts[1]}.${prefParts[2]}');
+      }
     }
     if (prefixes.isEmpty) {
       prefixes.add('192.168.1');
@@ -1084,6 +1672,8 @@ class AdbTvService {
     // 2. On iOS, run native en0 (IP_BOUND_IF) + Bonjour subnet scanner in parallel
     final nativeOpen5555 = <String>{};
     final nativeOpen6466 = <String>{};
+    final nativeOpen8008 = <String>{};
+    final nativeSmartTvPorts = <String, int>{};
     if (isIos && !isTestEnv) {
       try {
         final nativeScan = await _networkChannel
@@ -1114,11 +1704,29 @@ class AdbTvService {
               if (isValidIp(s)) nativeOpen6466.add(s);
             }
           }
+          final rawSmart = nativeScan['openSmartTv'];
+          if (rawSmart is List) {
+            for (final item in rawSmart) {
+              final s = item?.toString().trim() ?? '';
+              final parts = s.split(':');
+              if (parts.length == 2 && isValidIp(parts[0])) {
+                final p = int.tryParse(parts[1]) ?? 0;
+                if (p > 0) nativeSmartTvPorts[parts[0]] = p;
+              }
+            }
+          }
+          final raw8008 = nativeScan['open8008'];
+          if (raw8008 is List) {
+            for (final item in raw8008) {
+              final s = item?.toString().trim() ?? '';
+              if (isValidIp(s)) nativeOpen8008.add(s);
+            }
+          }
         }
       } catch (_) {}
     }
 
-    // 3. Probe preferred IP (with 2-stage ARP warmup) and mDNS in parallel
+    // 3. Probe preferred IP (if valid) + mDNS + SSDP in parallel
     final prefAdbTimeout = Duration(
       milliseconds: isTestEnv ? 350 : (isIos ? 950 : 750),
     );
@@ -1126,172 +1734,322 @@ class AdbTvService {
       milliseconds: isTestEnv ? 300 : (isIos ? 650 : 500),
     );
 
-    final preferredPort5555Future = nativeOpen5555.contains(cleanPreferred)
-        ? Future<bool>.value(true)
-        : pingTv(
-            cleanPreferred,
-            port: 5555,
-            timeout: prefAdbTimeout,
-            warmupRetry: !isTestEnv,
-          );
-    final preferredPort6466Future = nativeOpen6466.contains(cleanPreferred)
-        ? Future<bool>.value(true)
-        : pingTv(
-            cleanPreferred,
-            port: 6466,
-            timeout: prefRemoteTimeout,
-          );
+    final preferredPort5555Future = !hasValidPreferred
+        ? Future<bool>.value(false)
+        : (nativeOpen5555.contains(cleanPreferred)
+              ? Future<bool>.value(true)
+              : pingTv(
+                  cleanPreferred,
+                  port: 5555,
+                  timeout: prefAdbTimeout,
+                  warmupRetry: !isTestEnv,
+                ));
+    final preferredPort6466Future = !hasValidPreferred
+        ? Future<bool>.value(false)
+        : (nativeOpen6466.contains(cleanPreferred)
+              ? Future<bool>.value(true)
+              : pingTv(
+                  cleanPreferred,
+                  port: 6466,
+                  timeout: prefRemoteTimeout,
+                ));
+    final preferredSmartPortFuture = !hasValidPreferred
+        ? Future<int>.value(0)
+        : (nativeSmartTvPorts.containsKey(cleanPreferred)
+              ? Future<int>.value(nativeSmartTvPorts[cleanPreferred]!)
+              : _probeOpenSmartTvPort(
+                  cleanPreferred,
+                  timeout: const Duration(milliseconds: 360),
+                ));
+    final preferredPort8008Future = !hasValidPreferred
+        ? Future<bool>.value(false)
+        : (nativeOpen8008.contains(cleanPreferred)
+              ? Future<bool>.value(true)
+              : pingTv(
+                  cleanPreferred,
+                  port: 8008,
+                  timeout: prefRemoteTimeout,
+                ));
     final mdnsFuture = isTestEnv
         ? Future<Map<String, String>>.value(const <String, String>{})
         : _discoverViaMdns();
+    final ssdpFuture = isTestEnv
+        ? Future<Map<String, String>>.value(const <String, String>{})
+        : _discoverViaSsdp();
 
     final isPreferred5555 = await preferredPort5555Future;
     final isPreferred6466 = await preferredPort6466Future;
+    final preferredSmartPort = await preferredSmartPortFuture;
+    final isPreferred8008 = await preferredPort8008Future;
     final mdnsHits = await mdnsFuture;
+    final ssdpHits = await ssdpFuture;
+    final multicastHints = <String, String>{...ssdpHits, ...mdnsHits};
 
-    var preferredDevice = TvDevice(
-      name: (cleanPreferred == '192.168.1.123' ||
-              cleanPreferred == '192.168.1.125')
-          ? 'Redline Android TV (Salon)'
-          : (mdnsHits[cleanPreferred] ?? 'Android TV ($cleanPreferred)'),
-      ip: cleanPreferred,
-      port: isPreferred5555 ? 5555 : (isPreferred6466 ? 6466 : 5555),
-      protocol: (!isPreferred5555 && isPreferred6466)
-          ? TvConnectionProtocol.remotePort6466
-          : TvConnectionProtocol.adbPort5555,
-      isPaired: isPreferred5555 || _pinPairedIps.contains(cleanPreferred),
-      boardInfo: isPreferred5555
-          ? 'Realtek RTD2851P • Port 5555 Aktif'
-          : (isPreferred6466
-                ? 'Google TV • Standart Kumanda Modu (Port 6466 Hazır)'
-                : (_localNetworkPermissionDenied
-                      ? 'iOS Yerel Ağ İzni Kapalı • iPhone Ayarlarından Açın'
-                      : 'Realtek RTD2851P • CleanYourTV OS')),
-      isOnline: isPreferred5555 || isPreferred6466,
-    );
+    Future<TvDevice> buildDiscoveredTvDevice({
+      required String ip,
+      required bool is5555,
+      required bool is6466,
+      required int smartTvPort,
+      required bool is8008,
+    }) async {
+      final httpMeta = (is8008 || is6466 || smartTvPort > 0 || !is5555)
+          ? await _fetchTvHttpMetadata(ip)
+          : const <String, String>{};
+      final metaName = httpMeta['name']?.trim() ?? '';
+      final metaModel = httpMeta['model']?.trim() ?? '';
+      final metaSmartPort =
+          int.tryParse(httpMeta['smartPort']?.trim() ?? '') ?? 0;
+      final effectiveSmartPort =
+          smartTvPort > 0 ? smartTvPort : metaSmartPort;
 
-    if (isPreferred5555) {
-      preferredDevice = await probeTvDeviceProfile(preferredDevice);
+      if (is5555) {
+        final fallbackName = multicastHints[ip] ?? 'Android TV ($ip)';
+        final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
+        final base = TvDevice(
+          name: resolvedName,
+          ip: ip,
+          port: 5555,
+          protocol: TvConnectionProtocol.adbPort5555,
+          isPaired: true,
+          boardInfo: metaModel.isNotEmpty
+              ? '$metaModel • Port 5555 Aktif'
+              : 'Android TV • Port 5555 Aktif',
+          isOnline: true,
+        );
+        final probed = await probeTvDeviceProfile(base);
+        if (metaName.isNotEmpty &&
+            probed.name.startsWith('Android TV (') &&
+            metaName != probed.name) {
+          return probed.copyWith(name: metaName);
+        }
+        return probed;
+      }
+
+      if (is6466) {
+        final fallbackName = multicastHints[ip] ?? 'Google TV ($ip)';
+        final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
+        return TvDevice(
+          name: resolvedName,
+          ip: ip,
+          port: 6466,
+          protocol: TvConnectionProtocol.remotePort6466,
+          isPaired: _pinPairedIps.contains(ip),
+          boardInfo: metaModel.isNotEmpty
+              ? '$metaModel • Standart Kumanda Modu (Port 6466)'
+              : 'Google TV • Standart Kumanda Modu (Port 6466 Hazır)',
+          isOnline: true,
+        );
+      }
+
+      if (effectiveSmartPort > 0) {
+        final proto = TvConnectionProtocol.fromNameOrPort(
+          null,
+          effectiveSmartPort,
+        );
+        String defaultSmartName;
+        String defaultBoard;
+        switch (proto) {
+          case TvConnectionProtocol.arcelikGrundig8085:
+            defaultSmartName = 'Arçelik / Grundig Smart TV ($ip)';
+            defaultBoard = 'Arçelik / Beko / Grundig Smart Inter@ctive TV';
+            break;
+          case TvConnectionProtocol.vestelSmart56789:
+            defaultSmartName = 'Arçelik / Vestel Smart TV ($ip)';
+            defaultBoard = 'Vestel / Arçelik Smart Center TV';
+            break;
+          case TvConnectionProtocol.samsungTizen8001:
+            defaultSmartName = 'Samsung Smart TV ($ip)';
+            defaultBoard = 'Samsung Tizen OS Smart TV';
+            break;
+          case TvConnectionProtocol.lgWebOs3000:
+            defaultSmartName = 'LG webOS Smart TV ($ip)';
+            defaultBoard = 'LG webOS Smart TV';
+            break;
+          case TvConnectionProtocol.philipsJointSpace1925:
+            defaultSmartName = 'Philips Smart TV ($ip)';
+            defaultBoard = 'Philips JointSpace Smart TV';
+            break;
+          default:
+            defaultSmartName = 'Akıllı Smart TV ($ip)';
+            defaultBoard = 'Evrensel Smart TV • Doğrudan Kontrol';
+        }
+        final resolvedName = metaName.isNotEmpty
+            ? metaName
+            : (multicastHints[ip] ?? defaultSmartName);
+        return TvDevice(
+          name: resolvedName,
+          ip: ip,
+          port: effectiveSmartPort,
+          protocol: proto,
+          isPaired: true,
+          boardInfo: metaModel.isNotEmpty
+              ? '$metaModel • ${proto.label}'
+              : defaultBoard,
+          isOnline: true,
+        );
+      }
+
+      final fallbackName = multicastHints[ip] ?? 'Akıllı TV ($ip)';
+      final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
+      return TvDevice(
+        name: resolvedName,
+        ip: ip,
+        port: is8008 ? 8008 : 5555,
+        protocol: TvConnectionProtocol.adbPort5555,
+        isPaired: _pinPairedIps.contains(ip),
+        boardInfo: metaModel.isNotEmpty
+            ? '$metaModel • Bağlanmak için dokunun'
+            : 'Akıllı TV Bulundu • Bağlanmak için dokunun',
+        isOnline: is8008,
+      );
     }
-    discoveredMap[cleanPreferred] = preferredDevice;
+
+    if (hasValidPreferred &&
+        (isPreferred5555 ||
+            isPreferred6466 ||
+            preferredSmartPort > 0 ||
+            isPreferred8008 ||
+            isTestEnv)) {
+      discoveredMap[cleanPreferred] = await buildDiscoveredTvDevice(
+        ip: cleanPreferred,
+        is5555: isPreferred5555,
+        is6466: isPreferred6466,
+        smartTvPort: preferredSmartPort,
+        is8008: isPreferred8008,
+      );
+    }
 
     // 4. Add any additional TVs already found by native iOS en0 scanner
-    for (final ip in <String>{...nativeOpen5555, ...nativeOpen6466}) {
+    final allNativeFound = <String>{
+      ...nativeOpen5555,
+      ...nativeOpen6466,
+      ...nativeSmartTvPorts.keys,
+      ...nativeOpen8008,
+    };
+    for (final ip in allNativeFound) {
       if (ip == cleanPreferred || selfIps.contains(ip)) continue;
-      final is5555 = nativeOpen5555.contains(ip);
-      final base = TvDevice(
-        name: mdnsHits[ip] ?? 'Android TV ($ip)',
+      discoveredMap[ip] = await buildDiscoveredTvDevice(
         ip: ip,
-        port: is5555 ? 5555 : 6466,
-        protocol: is5555
-            ? TvConnectionProtocol.adbPort5555
-            : TvConnectionProtocol.remotePort6466,
-        isPaired: is5555 || _pinPairedIps.contains(ip),
-        boardInfo: is5555
-            ? 'Android TV • Port 5555 Aktif'
-            : 'Google TV • Standart Kumanda Modu (Port 6466 Hazır)',
-        isOnline: true,
+        is5555: nativeOpen5555.contains(ip),
+        is6466: nativeOpen6466.contains(ip),
+        smartTvPort: nativeSmartTvPorts[ip] ?? 0,
+        is8008: nativeOpen8008.contains(ip),
       );
-      discoveredMap[ip] = is5555 ? await probeTvDeviceProfile(base) : base;
     }
 
-    // 5. Cross-platform 2-stage ARP-warmup + /24 subnet sweep
     if (isTestEnv) {
-      final list = discoveredMap.values.toList();
-      return list;
+      return discoveredMap.values.toList();
     }
 
-    // If native iOS scan already completed the full en0 sweep, only probe mDNS hits not yet checked
+    // 5. Cross-platform full /24 subnet sweep across ALL octets (2..254)
     final primaryPrefix = prefixes.first;
-    final priorityIps = <String>[...mdnsHits.keys];
-    if (!isIos || (nativeOpen5555.isEmpty && !_localNetworkPermissionDenied)) {
+    final candidateIps = <String>[...multicastHints.keys];
+    if (!isIos || (allNativeFound.isEmpty && !_localNetworkPermissionDenied)) {
+      // Priority DHCP ranges first: 2..60 and 95..160, then 61..94 and 161..254
+      for (var octet = 2; octet <= 60; octet++) {
+        candidateIps.add('$primaryPrefix.$octet');
+      }
       for (var octet = 95; octet <= 160; octet++) {
-        priorityIps.add('$primaryPrefix.$octet');
+        candidateIps.add('$primaryPrefix.$octet');
+      }
+      for (var octet = 61; octet <= 94; octet++) {
+        candidateIps.add('$primaryPrefix.$octet');
+      }
+      for (var octet = 161; octet <= 254; octet++) {
+        candidateIps.add('$primaryPrefix.$octet');
       }
     }
-    final cleanPriority = priorityIps
+
+    final cleanCandidates = candidateIps
         .where(
           (ip) =>
               isValidIp(ip) &&
               !selfIps.contains(ip) &&
-              !(discoveredMap[ip]?.isOnline ?? false),
+              !discoveredMap.containsKey(ip),
         )
         .toSet()
         .toList();
 
-    // Stage 5A: Fast 240ms ARP-warmup pass across priority DHCP range (95..160)
-    const warmupBatchSize = 22;
-    for (var i = 0; i < cleanPriority.length; i += warmupBatchSize) {
-      final end = (i + warmupBatchSize < cleanPriority.length)
+    // Stage 5A: Fast ARP-warmup across common DHCP octets
+    final warmupSlice = cleanCandidates.take(125).toList();
+    const warmupBatchSize = 28;
+    for (var i = 0; i < warmupSlice.length; i += warmupBatchSize) {
+      final end = (i + warmupBatchSize < warmupSlice.length)
           ? i + warmupBatchSize
-          : cleanPriority.length;
-      final batch = cleanPriority.sublist(i, end);
+          : warmupSlice.length;
+      final batch = warmupSlice.sublist(i, end);
       await Future.wait(
         batch.map(
           (ip) => pingTv(
             ip,
             port: 5555,
-            timeout: const Duration(milliseconds: 240),
+            timeout: const Duration(milliseconds: 200),
           ),
         ),
       );
     }
 
-    if (cleanPriority.isNotEmpty) {
-      await Future<void>.delayed(const Duration(milliseconds: 140));
+    if (warmupSlice.isNotEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 110));
     }
 
-    // Stage 5B: Probe priority DHCP range (95..160) now that Wi-Fi ARP is warm
-    const probeBatchSize = 22;
-    for (var i = 0; i < cleanPriority.length; i += probeBatchSize) {
-      final end = (i + probeBatchSize < cleanPriority.length)
+    // Stage 5B: Probe all candidate IPs across the entire /24 subnet for Android TV & Non-Android Smart TV ports
+    const probeBatchSize = 28;
+    for (var i = 0; i < cleanCandidates.length; i += probeBatchSize) {
+      final end = (i + probeBatchSize < cleanCandidates.length)
           ? i + probeBatchSize
-          : cleanPriority.length;
-      final batch = cleanPriority.sublist(i, end);
+          : cleanCandidates.length;
+      final batch = cleanCandidates.sublist(i, end);
+      final isPriorityBatch = i < 125;
+      final adbTimeout = Duration(milliseconds: isPriorityBatch ? 520 : 320);
+      final otherTimeout = Duration(milliseconds: isPriorityBatch ? 320 : 210);
+
       final results = await Future.wait(
         batch.map((candidateIp) async {
           final portChecks = await Future.wait<bool>(<Future<bool>>[
-            pingTv(
-              candidateIp,
-              port: 5555,
-              timeout: const Duration(milliseconds: 720),
-            ),
-            pingTv(
-              candidateIp,
-              port: 6466,
-              timeout: const Duration(milliseconds: 450),
-            ),
+            pingTv(candidateIp, port: 5555, timeout: adbTimeout),
+            pingTv(candidateIp, port: 6466, timeout: otherTimeout),
+            pingTv(candidateIp, port: 8085, timeout: otherTimeout),
+            pingTv(candidateIp, port: 56789, timeout: otherTimeout),
+            pingTv(candidateIp, port: 8001, timeout: otherTimeout),
+            pingTv(candidateIp, port: 3000, timeout: otherTimeout),
+            pingTv(candidateIp, port: 8008, timeout: otherTimeout),
           ]);
           final adbOk = portChecks[0];
           final remotePortOk = portChecks[1];
-          final mdnsLabel = mdnsHits[candidateIp];
-          if (adbOk) {
-            final baseDevice = TvDevice(
-              name: mdnsLabel ?? 'Android TV ($candidateIp)',
-              ip: candidateIp,
-              port: 5555,
-              boardInfo: 'Android TV • Port 5555 Aktif',
-              isOnline: true,
-            );
-            return probeTvDeviceProfile(baseDevice);
+          int openSmartPort = 0;
+          if (portChecks[2]) {
+            openSmartPort = 8085;
+          } else if (portChecks[3]) {
+            openSmartPort = 56789;
+          } else if (portChecks[4]) {
+            openSmartPort = 8001;
+          } else if (portChecks[5]) {
+            openSmartPort = 3000;
           }
+          final castPortOk = portChecks[6];
+          final hasMulticastHint = multicastHints.containsKey(candidateIp);
 
-          if (remotePortOk || mdnsLabel != null) {
-            return TvDevice(
-              name: mdnsLabel ?? 'Android / Google TV ($candidateIp)',
-              ip: candidateIp,
-              port: remotePortOk ? 6466 : 5555,
-              protocol: remotePortOk
-                  ? TvConnectionProtocol.remotePort6466
-                  : TvConnectionProtocol.adbPort5555,
-              isPaired: _pinPairedIps.contains(candidateIp),
-              boardInfo: remotePortOk
-                  ? 'Google TV • Standart Kumanda Modu (Port 6466 Hazır)'
-                  : 'Android TV Bulundu • PIN (6466) veya ADB (5555) ile Eşleştirin',
-              isOnline: remotePortOk,
+          if (!adbOk &&
+              !remotePortOk &&
+              openSmartPort == 0 &&
+              !castPortOk &&
+              !hasMulticastHint) {
+            return null;
+          }
+          if (openSmartPort == 0 && (castPortOk || hasMulticastHint)) {
+            openSmartPort = await _probeOpenSmartTvPort(
+              candidateIp,
+              timeout: const Duration(milliseconds: 240),
             );
           }
-          return null;
+          return buildDiscoveredTvDevice(
+            ip: candidateIp,
+            is5555: adbOk,
+            is6466: remotePortOk,
+            smartTvPort: openSmartPort,
+            is8008: castPortOk,
+          );
         }),
       );
       for (final item in results) {
@@ -1301,67 +2059,722 @@ class AdbTvService {
       }
     }
 
-    // Stage 5C: If no online TV found yet, sweep remaining octets (2..94, 161..254)
-    final hasAnyOnline = discoveredMap.values.any((d) => d.isOnline);
-    if (!hasAnyOnline && !isIos) {
-      final remainingIps = <String>[];
-      for (var octet = 2; octet <= 94; octet++) {
-        remainingIps.add('$primaryPrefix.$octet');
-      }
-      for (var octet = 161; octet <= 254; octet++) {
-        remainingIps.add('$primaryPrefix.$octet');
-      }
-      final validRemaining = remainingIps
-          .where((ip) => isValidIp(ip) && !selfIps.contains(ip))
-          .toList();
-      const remBatchSize = 32;
-      for (var i = 0; i < validRemaining.length; i += remBatchSize) {
-        final end = (i + remBatchSize < validRemaining.length)
-            ? i + remBatchSize
-            : validRemaining.length;
-        final batch = validRemaining.sublist(i, end);
-        final results = await Future.wait(
-          batch.map((candidateIp) async {
-            final adbOk = await pingTv(
-              candidateIp,
-              port: 5555,
-              timeout: const Duration(milliseconds: 420),
-            );
-            if (!adbOk) return null;
-            final baseDevice = TvDevice(
-              name: 'Android TV ($candidateIp)',
-              ip: candidateIp,
-              port: 5555,
-              boardInfo: 'Android TV • Port 5555 Aktif',
-              isOnline: true,
-            );
-            return probeTvDeviceProfile(baseDevice);
-          }),
-        );
-        for (final item in results) {
-          if (item != null) {
-            discoveredMap[item.ip] = item;
-          }
-        }
-      }
-    }
-
-    // If a real online TV was found on another IP while preferredIp is offline, remove the stale offline entry
-    final anyOnlineFound = discoveredMap.values.any((d) => d.isOnline);
-    if (anyOnlineFound && !(discoveredMap[cleanPreferred]?.isOnline ?? false)) {
-      discoveredMap.remove(cleanPreferred);
-    }
-
     final list = discoveredMap.values.toList();
     list.sort((a, b) {
       if (a.isOnline != b.isOnline) {
         return a.isOnline ? -1 : 1;
       }
-      if (a.ip == cleanPreferred) return -1;
-      if (b.ip == cleanPreferred) return 1;
+      if (hasValidPreferred) {
+        if (a.ip == cleanPreferred) return -1;
+        if (b.ip == cleanPreferred) return 1;
+      }
       return a.name.compareTo(b.name);
     });
     return list;
+  }
+
+  /// Probes all supported Non-Android Smart TV ports (`8085` Arçelik/Beko/Grundig,
+  /// `56789` Vestel/Arçelik/Regal/Toshiba, `8001` Samsung Tizen, `3000` LG webOS,
+  /// `1925` Philips JointSpace, `8060` Roku/ECP) in parallel and returns the first open port.
+  Future<int> _probeOpenSmartTvPort(
+    String ip, {
+    Duration timeout = const Duration(milliseconds: 300),
+  }) async {
+    const ports = <int>[8085, 56789, 8001, 3000, 1925, 8060];
+    final checks = await Future.wait<bool>(
+      ports.map((p) => pingTv(ip, port: p, timeout: timeout)),
+    );
+    for (var i = 0; i < ports.length; i++) {
+      if (checks[i]) return ports[i];
+    }
+    return 0;
+  }
+
+  /// Maps [TvKeyCommand] to Arçelik / Beko / Grundig Smart Inter@ctive TV Port 8085
+  /// `/sendrcpackage?keyid=<id>&keysymbol=<sym>` query parameters.
+  static String arcelikGrundigQueryForCommand(TvKeyCommand command) {
+    switch (command) {
+      case TvKeyCommand.up:
+        return 'keyid=-2493&keysymbol=-4094';
+      case TvKeyCommand.down:
+        return 'keyid=-2492&keysymbol=-4093';
+      case TvKeyCommand.left:
+        return 'keyid=-2495&keysymbol=-4096';
+      case TvKeyCommand.right:
+        return 'keyid=-2494&keysymbol=-4095';
+      case TvKeyCommand.ok:
+        return 'keyid=-2490&keysymbol=13';
+      case TvKeyCommand.back:
+        return 'keyid=-2542&keysymbol=-3979';
+      case TvKeyCommand.home:
+        return 'keyid=-2547&keysymbol=-4078';
+      case TvKeyCommand.menu:
+        return 'keyid=-2506&keysymbol=-4079';
+      case TvKeyCommand.inputs:
+        return 'keyid=-2541&keysymbol=-3992';
+      case TvKeyCommand.volUp:
+        return 'keyid=-2475&keysymbol=-4020';
+      case TvKeyCommand.volDown:
+        return 'keyid=-2476&keysymbol=-4019';
+      case TvKeyCommand.mute:
+        return 'keyid=-2539&keysymbol=-4018';
+      case TvKeyCommand.power:
+        return 'keyid=-2544&keysymbol=-4081';
+      case TvKeyCommand.playPause:
+        return 'keyid=-2548&keysymbol=-4015';
+      case TvKeyCommand.rewind:
+        return 'keyid=-2558&keysymbol=-3977';
+      case TvKeyCommand.fastForward:
+        return 'keyid=-2555&keysymbol=-4023';
+      case TvKeyCommand.channelUp:
+        return 'keyid=-2464&keysymbol=-4026';
+      case TvKeyCommand.channelDown:
+        return 'keyid=-2465&keysymbol=-4025';
+      case TvKeyCommand.voiceAssist:
+        return 'keyid=-2536&keysymbol=-4069';
+      case TvKeyCommand.search:
+        return 'keyid=-2547&keysymbol=-4078';
+    }
+  }
+
+  /// Maps [TvKeyCommand] to Vestel / Arçelik / Regal / Toshiba / JVC Smart Center
+  /// Port 56789 XML payload (`<remote><key code=XXXX/></remote>`).
+  static String vestelXmlForCommand(TvKeyCommand command) {
+    int code;
+    switch (command) {
+      case TvKeyCommand.up:
+        code = 1030;
+        break;
+      case TvKeyCommand.down:
+        code = 1031;
+        break;
+      case TvKeyCommand.left:
+        code = 1032;
+        break;
+      case TvKeyCommand.right:
+        code = 1033;
+        break;
+      case TvKeyCommand.ok:
+        code = 1029;
+        break;
+      case TvKeyCommand.back:
+        code = 1010;
+        break;
+      case TvKeyCommand.home:
+        code = 1044;
+        break;
+      case TvKeyCommand.menu:
+        code = 1018;
+        break;
+      case TvKeyCommand.inputs:
+        code = 1023;
+        break;
+      case TvKeyCommand.volUp:
+        code = 1014;
+        break;
+      case TvKeyCommand.volDown:
+        code = 1015;
+        break;
+      case TvKeyCommand.mute:
+        code = 1013;
+        break;
+      case TvKeyCommand.power:
+        code = 1024;
+        break;
+      case TvKeyCommand.playPause:
+        code = 1025;
+        break;
+      case TvKeyCommand.rewind:
+        code = 1027;
+        break;
+      case TvKeyCommand.fastForward:
+        code = 1028;
+        break;
+      case TvKeyCommand.channelUp:
+        code = 1016;
+        break;
+      case TvKeyCommand.channelDown:
+        code = 1017;
+        break;
+      case TvKeyCommand.voiceAssist:
+        code = 1044;
+        break;
+      case TvKeyCommand.search:
+        code = 1067;
+        break;
+    }
+    return '<remote><key code=$code/></remote>';
+  }
+
+  /// Maps [TvKeyCommand] to Samsung Tizen Smart TV WebSocket key identifiers.
+  static String samsungKeyForCommand(TvKeyCommand command) {
+    switch (command) {
+      case TvKeyCommand.up:
+        return 'KEY_UP';
+      case TvKeyCommand.down:
+        return 'KEY_DOWN';
+      case TvKeyCommand.left:
+        return 'KEY_LEFT';
+      case TvKeyCommand.right:
+        return 'KEY_RIGHT';
+      case TvKeyCommand.ok:
+        return 'KEY_ENTER';
+      case TvKeyCommand.back:
+        return 'KEY_RETURN';
+      case TvKeyCommand.home:
+        return 'KEY_HOME';
+      case TvKeyCommand.menu:
+        return 'KEY_MENU';
+      case TvKeyCommand.inputs:
+        return 'KEY_SOURCE';
+      case TvKeyCommand.volUp:
+        return 'KEY_VOLUP';
+      case TvKeyCommand.volDown:
+        return 'KEY_VOLDOWN';
+      case TvKeyCommand.mute:
+        return 'KEY_MUTE';
+      case TvKeyCommand.power:
+        return 'KEY_POWER';
+      case TvKeyCommand.playPause:
+        return 'KEY_PLAY';
+      case TvKeyCommand.rewind:
+        return 'KEY_REWIND';
+      case TvKeyCommand.fastForward:
+        return 'KEY_FF';
+      case TvKeyCommand.channelUp:
+        return 'KEY_CHUP';
+      case TvKeyCommand.channelDown:
+        return 'KEY_CHDOWN';
+      case TvKeyCommand.voiceAssist:
+      case TvKeyCommand.search:
+        return 'KEY_HOME';
+    }
+  }
+
+  Future<bool> _sendArcelikGrundig8085Key(
+    String ip,
+    TvKeyCommand command,
+  ) async {
+    final query = arcelikGrundigQueryForCommand(command);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 550);
+    try {
+      final uri = Uri.parse('http://$ip:8085/sendrcpackage?$query');
+      final req = await client
+          .getUrl(uri)
+          .timeout(const Duration(milliseconds: 600));
+      final resp = await req.close().timeout(
+        const Duration(milliseconds: 600),
+      );
+      await resp.drain<void>();
+      if (resp.statusCode >= 200 && resp.statusCode < 400) {
+        return true;
+      }
+    } catch (_) {
+    } finally {
+      client.close(force: true);
+    }
+    // Fallback: some Arçelik/Beko/Grundig 43" sets use Vestel SmartCenter on 56789
+    return _sendVestel56789Key(ip, command, allowFallbackTo8085: false);
+  }
+
+  Future<bool> _sendVestel56789Key(
+    String ip,
+    TvKeyCommand command, {
+    bool allowFallbackTo8085 = true,
+  }) async {
+    final xmlPayload = vestelXmlForCommand(command);
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 550);
+    try {
+      final uri = Uri.parse('http://$ip:56789/apps/SmartCenter');
+      final req = await client
+          .postUrl(uri)
+          .timeout(const Duration(milliseconds: 600));
+      req.headers.set(
+        HttpHeaders.contentTypeHeader,
+        'text/xml; charset=utf-8',
+      );
+      final bytes = utf8.encode(xmlPayload);
+      req.contentLength = bytes.length;
+      req.add(bytes);
+      final resp = await req.close().timeout(
+        const Duration(milliseconds: 600),
+      );
+      await resp.drain<void>();
+      if (resp.statusCode >= 200 && resp.statusCode < 400) {
+        return true;
+      }
+    } catch (_) {
+    } finally {
+      client.close(force: true);
+    }
+    if (allowFallbackTo8085) {
+      final query = arcelikGrundigQueryForCommand(command);
+      final fallbackClient = HttpClient()
+        ..connectionTimeout = const Duration(milliseconds: 500);
+      try {
+        final req = await fallbackClient
+            .getUrl(Uri.parse('http://$ip:8085/sendrcpackage?$query'))
+            .timeout(const Duration(milliseconds: 550));
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 550),
+        );
+        await resp.drain<void>();
+        return resp.statusCode >= 200 && resp.statusCode < 400;
+      } catch (_) {
+      } finally {
+        fallbackClient.close(force: true);
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _sendSamsungTizenKey(String ip, TvKeyCommand command) async {
+    final keyName = samsungKeyForCommand(command);
+    final payload = jsonEncode(<String, Object?>{
+      'method': 'ms.remote.control',
+      'params': <String, Object?>{
+        'Cmd': 'Click',
+        'DataOfCmd': keyName,
+        'Option': 'false',
+        'TypeOfRemote': 'SendRemoteKey',
+      },
+    });
+
+    // Try Port 8001 WS first, then Port 8002 WSS (self-signed TLS)
+    for (final useTls in <bool>[false, true]) {
+      WebSocket? ws;
+      try {
+        final url = useTls
+            ? 'wss://$ip:8002/api/v2/channels/samsung.remote.control?name=Q3VlRGVjaw=='
+            : 'ws://$ip:8001/api/v2/channels/samsung.remote.control?name=Q3VlRGVjaw==';
+        final customClient = HttpClient()
+          ..connectionTimeout = const Duration(milliseconds: 700)
+          ..badCertificateCallback = (_, _, _) => true;
+        ws = await WebSocket.connect(
+          url,
+          customClient: customClient,
+        ).timeout(const Duration(milliseconds: 850));
+        ws.add(payload);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        await ws.close();
+        return true;
+      } catch (_) {
+        try {
+          await ws?.close();
+        } catch (_) {}
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _sendLgWebOsKey(String ip, TvKeyCommand command) async {
+    String? ssapUri;
+    switch (command) {
+      case TvKeyCommand.volUp:
+        ssapUri = 'ssap://audio/volumeUp';
+        break;
+      case TvKeyCommand.volDown:
+        ssapUri = 'ssap://audio/volumeDown';
+        break;
+      case TvKeyCommand.mute:
+        ssapUri = 'ssap://audio/setMute';
+        break;
+      case TvKeyCommand.power:
+        ssapUri = 'ssap://system/turnOff';
+        break;
+      case TvKeyCommand.channelUp:
+        ssapUri = 'ssap://tv/channelUp';
+        break;
+      case TvKeyCommand.channelDown:
+        ssapUri = 'ssap://tv/channelDown';
+        break;
+      case TvKeyCommand.playPause:
+        ssapUri = 'ssap://media.controls/play';
+        break;
+      case TvKeyCommand.rewind:
+        ssapUri = 'ssap://media.controls/rewind';
+        break;
+      case TvKeyCommand.fastForward:
+        ssapUri = 'ssap://media.controls/fastForward';
+        break;
+      default:
+        ssapUri = 'ssap://com.webos.service.ime/sendEnterKey';
+    }
+
+    WebSocket? ws;
+    try {
+      final customClient = HttpClient()
+        ..connectionTimeout = const Duration(milliseconds: 750)
+        ..badCertificateCallback = (_, _, _) => true;
+      ws = await WebSocket.connect(
+        'ws://$ip:3000',
+        customClient: customClient,
+      ).timeout(const Duration(milliseconds: 900));
+      ws.add(
+        jsonEncode(<String, Object?>{
+          'id': 'reg_1',
+          'type': 'register',
+          'payload': <String, Object?>{'pairingType': 'PROMPT'},
+        }),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 70));
+      ws.add(
+        jsonEncode(<String, Object?>{
+          'id': 'cmd_1',
+          'type': 'request',
+          'uri': ssapUri,
+          if (command == TvKeyCommand.mute)
+            'payload': const <String, Object?>{'mute': true},
+        }),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      await ws.close();
+      return true;
+    } catch (_) {
+      try {
+        await ws?.close();
+      } catch (_) {}
+      return false;
+    }
+  }
+
+  Future<bool> _sendPhilipsJointSpaceKey(
+    String ip,
+    TvKeyCommand command,
+  ) async {
+    String key;
+    switch (command) {
+      case TvKeyCommand.up:
+        key = 'CursorUp';
+        break;
+      case TvKeyCommand.down:
+        key = 'CursorDown';
+        break;
+      case TvKeyCommand.left:
+        key = 'CursorLeft';
+        break;
+      case TvKeyCommand.right:
+        key = 'CursorRight';
+        break;
+      case TvKeyCommand.ok:
+        key = 'Confirm';
+        break;
+      case TvKeyCommand.back:
+        key = 'Back';
+        break;
+      case TvKeyCommand.home:
+        key = 'Home';
+        break;
+      case TvKeyCommand.menu:
+        key = 'Options';
+        break;
+      case TvKeyCommand.inputs:
+        key = 'Source';
+        break;
+      case TvKeyCommand.volUp:
+        key = 'VolumeUp';
+        break;
+      case TvKeyCommand.volDown:
+        key = 'VolumeDown';
+        break;
+      case TvKeyCommand.mute:
+        key = 'Mute';
+        break;
+      case TvKeyCommand.power:
+        key = 'Standby';
+        break;
+      case TvKeyCommand.playPause:
+        key = 'PlayPause';
+        break;
+      case TvKeyCommand.rewind:
+        key = 'Rewind';
+        break;
+      case TvKeyCommand.fastForward:
+        key = 'FastForward';
+        break;
+      case TvKeyCommand.channelUp:
+        key = 'ChannelStepUp';
+        break;
+      case TvKeyCommand.channelDown:
+        key = 'ChannelStepDown';
+        break;
+      case TvKeyCommand.voiceAssist:
+      case TvKeyCommand.search:
+        key = 'Find';
+        break;
+    }
+
+    final bodyBytes = utf8.encode(jsonEncode(<String, String>{'key': key}));
+    for (final path in <String>['/1/input/key', '/6/input/key']) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(milliseconds: 500);
+      try {
+        final req = await client
+            .postUrl(Uri.parse('http://$ip:1925$path'))
+            .timeout(const Duration(milliseconds: 550));
+        req.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+        req.contentLength = bodyBytes.length;
+        req.add(bodyBytes);
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 550),
+        );
+        await resp.drain<void>();
+        if (resp.statusCode >= 200 && resp.statusCode < 400) {
+          return true;
+        }
+      } catch (_) {
+      } finally {
+        client.close(force: true);
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _sendRokuEcpKey(String ip, TvKeyCommand command) async {
+    String key;
+    switch (command) {
+      case TvKeyCommand.up:
+        key = 'Up';
+        break;
+      case TvKeyCommand.down:
+        key = 'Down';
+        break;
+      case TvKeyCommand.left:
+        key = 'Left';
+        break;
+      case TvKeyCommand.right:
+        key = 'Right';
+        break;
+      case TvKeyCommand.ok:
+        key = 'Select';
+        break;
+      case TvKeyCommand.back:
+        key = 'Back';
+        break;
+      case TvKeyCommand.home:
+        key = 'Home';
+        break;
+      case TvKeyCommand.menu:
+        key = 'Info';
+        break;
+      case TvKeyCommand.inputs:
+        key = 'InputTuner';
+        break;
+      case TvKeyCommand.volUp:
+        key = 'VolumeUp';
+        break;
+      case TvKeyCommand.volDown:
+        key = 'VolumeDown';
+        break;
+      case TvKeyCommand.mute:
+        key = 'VolumeMute';
+        break;
+      case TvKeyCommand.power:
+        key = 'Power';
+        break;
+      case TvKeyCommand.playPause:
+        key = 'Play';
+        break;
+      case TvKeyCommand.rewind:
+        key = 'Rev';
+        break;
+      case TvKeyCommand.fastForward:
+        key = 'Fwd';
+        break;
+      case TvKeyCommand.channelUp:
+        key = 'ChannelUp';
+        break;
+      case TvKeyCommand.channelDown:
+        key = 'ChannelDown';
+        break;
+      case TvKeyCommand.voiceAssist:
+      case TvKeyCommand.search:
+        key = 'Search';
+        break;
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 500);
+    try {
+      final req = await client
+          .postUrl(Uri.parse('http://$ip:8060/keypress/$key'))
+          .timeout(const Duration(milliseconds: 550));
+      req.contentLength = 0;
+      final resp = await req.close().timeout(
+        const Duration(milliseconds: 550),
+      );
+      await resp.drain<void>();
+      return resp.statusCode >= 200 && resp.statusCode < 400;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Launches streaming apps & YouTube playlists on Non-Android Smart TVs
+  /// (Arçelik, Beko, Grundig, Vestel, Samsung Tizen, LG webOS, Roku) using
+  /// DIAL (`POST /apps/YouTube`, `/apps/Netflix`), Vestel keycodes (`1067`/`1059`),
+  /// Samsung REST (`/api/v2/applications/...`), and LG SSAP (`ssap://system.launcher/launch`).
+  Future<bool> _launchSmartTvAppOrDial(
+    TvDevice device, {
+    required StreamingPlatform platform,
+    String deepLinkUrl = '',
+    String fallbackSearchQuery = '',
+  }) async {
+    final ip = device.ip.trim();
+    if (!isValidIp(ip)) return false;
+
+    // 1. Vestel / Arçelik Smart Center (Port 56789) dedicated app keycodes
+    if (device.protocol == TvConnectionProtocol.vestelSmart56789 ||
+        device.port == 56789) {
+      if (platform == StreamingPlatform.youtube && deepLinkUrl.trim().isEmpty) {
+        final ok = await _sendVestelRawKeyCode(ip, 1067);
+        if (ok) return true;
+      } else if (platform == StreamingPlatform.netflix) {
+        final ok = await _sendVestelRawKeyCode(ip, 1059);
+        if (ok) return true;
+      }
+    }
+
+    // 2. Samsung Tizen REST App Launch (/api/v2/applications/<appId>)
+    if (device.protocol == TvConnectionProtocol.samsungTizen8001 ||
+        device.port == 8001 ||
+        device.port == 8002) {
+      String? samsungAppId;
+      switch (platform) {
+        case StreamingPlatform.youtube:
+          samsungAppId = '111299001912';
+          break;
+        case StreamingPlatform.netflix:
+          samsungAppId = '3201907018807';
+          break;
+        case StreamingPlatform.primeVideo:
+          samsungAppId = '3201910019365';
+          break;
+        case StreamingPlatform.disneyPlus:
+          samsungAppId = '3201901017640';
+          break;
+        case StreamingPlatform.spotify:
+          samsungAppId = '3201606009684';
+          break;
+        default:
+          samsungAppId = null;
+      }
+      if (samsungAppId != null) {
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(milliseconds: 600);
+        try {
+          final req = await client
+              .postUrl(
+                Uri.parse('http://$ip:8001/api/v2/applications/$samsungAppId'),
+              )
+              .timeout(const Duration(milliseconds: 650));
+          req.contentLength = 0;
+          final resp = await req.close().timeout(
+            const Duration(milliseconds: 650),
+          );
+          await resp.drain<void>();
+          if (resp.statusCode >= 200 && resp.statusCode < 400) return true;
+        } catch (_) {
+        } finally {
+          client.close(force: true);
+        }
+      }
+    }
+
+    // 3. Universal DIAL Protocol (YouTube / Netflix) across Smart TV ports (56789, 8085, 8008, 8060)
+    String? dialAppName;
+    String dialPayload = '';
+    if (platform == StreamingPlatform.youtube) {
+      dialAppName = 'YouTube';
+      final normalized = WatchCueItem.normalizeContentLink(
+        platform,
+        deepLinkUrl,
+      );
+      if (normalized.isNotEmpty) {
+        final uri = Uri.tryParse(normalized);
+        final v = uri?.queryParameters['v'] ?? '';
+        final list = uri?.queryParameters['list'] ?? '';
+        if (v.isNotEmpty && list.isNotEmpty) {
+          dialPayload = 'v=$v&list=$list';
+        } else if (list.isNotEmpty) {
+          dialPayload = 'list=$list';
+        } else if (v.isNotEmpty) {
+          dialPayload = 'v=$v';
+        }
+      } else if (fallbackSearchQuery.trim().isNotEmpty) {
+        dialPayload =
+            'vq=${Uri.encodeQueryComponent(fallbackSearchQuery.trim())}';
+      }
+    } else if (platform == StreamingPlatform.netflix) {
+      dialAppName = 'Netflix';
+    }
+
+    if (dialAppName != null) {
+      final dialPorts = <int>{
+        device.port,
+        56789,
+        8085,
+        8008,
+        8060,
+      };
+      for (final dPort in dialPorts) {
+        if (dPort <= 0) continue;
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(milliseconds: 500);
+        try {
+          final req = await client
+              .postUrl(Uri.parse('http://$ip:$dPort/apps/$dialAppName'))
+              .timeout(const Duration(milliseconds: 550));
+          req.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'text/plain; charset=utf-8',
+          );
+          final bodyBytes = utf8.encode(dialPayload);
+          req.contentLength = bodyBytes.length;
+          if (bodyBytes.isNotEmpty) req.add(bodyBytes);
+          final resp = await req.close().timeout(
+            const Duration(milliseconds: 550),
+          );
+          await resp.drain<void>();
+          if (resp.statusCode >= 200 && resp.statusCode < 400) {
+            return true;
+          }
+        } catch (_) {
+        } finally {
+          client.close(force: true);
+        }
+      }
+    }
+
+    return false;
+  }
+
+  Future<bool> _sendVestelRawKeyCode(String ip, int keyCode) async {
+    final xmlPayload = '<remote><key code=$keyCode/></remote>';
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 500);
+    try {
+      final req = await client
+          .postUrl(Uri.parse('http://$ip:56789/apps/SmartCenter'))
+          .timeout(const Duration(milliseconds: 550));
+      req.headers.set(HttpHeaders.contentTypeHeader, 'text/xml; charset=utf-8');
+      final bytes = utf8.encode(xmlPayload);
+      req.contentLength = bytes.length;
+      req.add(bytes);
+      final resp = await req.close().timeout(
+        const Duration(milliseconds: 550),
+      );
+      await resp.drain<void>();
+      return resp.statusCode >= 200 && resp.statusCode < 400;
+    } catch (_) {
+      return false;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   /// Builds an ultra-fast `/dev/input/event0` (`venus_IR_input.kl`) raw 32-bit
@@ -1381,14 +2794,46 @@ class AdbTvService {
     return "if [ -w /dev/input/event0 ] && ( [ -f /vendor/usr/keylayout/venus_IR_input.kl ] || [ -f /system/usr/keylayout/venus_IR_input.kl ] ); then printf '$down$syn$up$syn' > /dev/input/event0; else input keyevent $code; fi";
   }
 
-  /// Sends a remote control key command to the target TV via either Port 5555 (ADB Turbo)
-  /// or Port 6466 (Zero-Config Android TV Remote v2 TLS).
+  /// Sends a remote control key command to the target TV via:
+  /// - Arçelik / Beko / Grundig Smart TV (`Port 8085` `/sendrcpackage`)
+  /// - Vestel / Arçelik / Regal / Toshiba Smart Center (`Port 56789` XML)
+  /// - Samsung Tizen Smart TV (`Port 8001/8002` WebSocket)
+  /// - LG webOS Smart TV (`Port 3000/3001` SSAP WebSocket)
+  /// - Philips JointSpace (`Port 1925` REST) & Roku ECP (`Port 8060`)
+  /// - Android TV / Google TV Port 5555 (ADB Turbo) & Port 6466 (Remote v2 TLS).
   Future<bool> sendKeyCommand(TvDevice device, TvKeyCommand command) async {
     final code = command.keyCode;
     if (code < 1 || code > 300) return false;
+    final ip = device.ip.trim();
 
-    if (device.protocol == TvConnectionProtocol.remotePort6466 ||
-        device.port == 6466) {
+    switch (device.protocol) {
+      case TvConnectionProtocol.arcelikGrundig8085:
+        return _sendArcelikGrundig8085Key(ip, command);
+      case TvConnectionProtocol.vestelSmart56789:
+        return _sendVestel56789Key(ip, command);
+      case TvConnectionProtocol.samsungTizen8001:
+        return _sendSamsungTizenKey(ip, command);
+      case TvConnectionProtocol.lgWebOs3000:
+        return _sendLgWebOsKey(ip, command);
+      case TvConnectionProtocol.philipsJointSpace1925:
+        return _sendPhilipsJointSpaceKey(ip, command);
+      case TvConnectionProtocol.rokuEcp8060:
+        return _sendRokuEcpKey(ip, command);
+      case TvConnectionProtocol.remotePort6466:
+        final remoteOk = await _sendRemote6466KeyFrame(device, code);
+        if (remoteOk) return true;
+        break;
+      case TvConnectionProtocol.adbPort5555:
+        if (device.port == 8085) {
+          return _sendArcelikGrundig8085Key(ip, command);
+        }
+        if (device.port == 56789) {
+          return _sendVestel56789Key(ip, command);
+        }
+        break;
+    }
+
+    if (device.port == 6466) {
       final remoteOk = await _sendRemote6466KeyFrame(device, code);
       if (remoteOk) return true;
     }
@@ -1407,7 +2852,15 @@ class AdbTvService {
       _buildFastKeyShellCommand(command),
     );
     if (adbOk) return true;
-    return _sendRemote6466KeyFrame(device, code);
+    final remote6466Ok = await _sendRemote6466KeyFrame(device, code);
+    if (remote6466Ok) return true;
+
+    // Automatic fallback for Arçelik / Vestel Smart TVs added by manual IP
+    if (isValidIp(ip) && !Platform.environment.containsKey('FLUTTER_TEST')) {
+      final arcelikOk = await _sendArcelikGrundig8085Key(ip, command);
+      if (arcelikOk) return true;
+    }
+    return false;
   }
 
   /// Launches a streaming platform app or beams a specific deep-link / playlist URL to the TV.
@@ -1417,6 +2870,24 @@ class AdbTvService {
     String deepLinkUrl = '',
     String fallbackSearchQuery = '',
   }) async {
+    if (device.protocol.isNonAndroidSmartTv ||
+        device.port == 8085 ||
+        device.port == 56789 ||
+        device.port == 8001 ||
+        device.port == 3000 ||
+        device.port == 1925 ||
+        device.port == 8060 ||
+        device.port == 8008) {
+      final smartOk = await _launchSmartTvAppOrDial(
+        device,
+        platform: platform,
+        deepLinkUrl: deepLinkUrl,
+        fallbackSearchQuery: fallbackSearchQuery,
+      );
+      if (smartOk) return true;
+      if (device.protocol.isNonAndroidSmartTv) return false;
+    }
+
     final pkg = platform.packageName;
     if (!_safePackageRegex.hasMatch(pkg)) return false;
 
@@ -1436,9 +2907,16 @@ class AdbTvService {
       if (uri != null &&
           (uri.scheme == 'https' || uri.scheme == 'http') &&
           _safeUrlRegex.hasMatch(normalizedUrl)) {
-        return _executeShellCommand(
+        final adbOk = await _executeShellCommand(
           device,
           "am start -a android.intent.action.VIEW -d '$normalizedUrl' $pkg || $fallbackLaunchCmd",
+        );
+        if (adbOk) return true;
+        return _launchSmartTvAppOrDial(
+          device,
+          platform: platform,
+          deepLinkUrl: deepLinkUrl,
+          fallbackSearchQuery: fallbackSearchQuery,
         );
       }
     }
@@ -1456,14 +2934,28 @@ class AdbTvService {
             .replaceAll('(', '%28')
             .replaceAll(')', '%29')
             .replaceAll('*', '%2A');
-        return _executeShellCommand(
+        final adbOk = await _executeShellCommand(
           device,
           "am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query=$encoded' $pkg",
+        );
+        if (adbOk) return true;
+        return _launchSmartTvAppOrDial(
+          device,
+          platform: platform,
+          deepLinkUrl: deepLinkUrl,
+          fallbackSearchQuery: fallbackSearchQuery,
         );
       }
     }
 
-    return _executeShellCommand(device, fallbackLaunchCmd);
+    final adbOk = await _executeShellCommand(device, fallbackLaunchCmd);
+    if (adbOk) return true;
+    return _launchSmartTvAppOrDial(
+      device,
+      platform: platform,
+      deepLinkUrl: deepLinkUrl,
+      fallbackSearchQuery: fallbackSearchQuery,
+    );
   }
 
   /// Sends sanitized plain text to the TV's focused search/input field.
@@ -1823,17 +3315,23 @@ class AdbTvService {
     String shellCmd, {
     bool allowInteractivePairing = false,
   }) async {
-    if (!isValidIp(device.ip)) return null;
+    final cleanIp = device.ip.trim();
+    if (!isValidIp(cleanIp)) return null;
+
+    final alreadyAuthenticatedDartSocket =
+        _socket != null && _handshakeDone && _connectedIp == cleanIp;
 
     if (Platform.isIOS &&
         !Platform.environment.containsKey('FLUTTER_TEST') &&
-        !allowInteractivePairing) {
+        !allowInteractivePairing &&
+        !alreadyAuthenticatedDartSocket &&
+        !_ipsRequiringRsaAuth.contains(cleanIp)) {
       try {
         final nativeRes = await _networkChannel
             .invokeMethod<Map<Object?, Object?>>(
               'nativeAdbShell',
               <String, Object?>{
-                'ip': device.ip.trim(),
+                'ip': cleanIp,
                 'port': device.port,
                 'command': shellCmd,
                 'timeoutMs': 1600,
@@ -1843,6 +3341,9 @@ class AdbTvService {
         if (nativeRes != null) {
           if (nativeRes['permissionDenied'] == true) {
             _localNetworkPermissionDenied = true;
+          }
+          if (nativeRes['requiresRsaAuth'] == true) {
+            _ipsRequiringRsaAuth.add(cleanIp);
           }
           if (nativeRes['ok'] == true) {
             _localNetworkPermissionDenied = false;

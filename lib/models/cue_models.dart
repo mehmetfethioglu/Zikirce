@@ -287,7 +287,8 @@ enum TvKeyCommand {
   final String label;
 }
 
-/// Connection protocol mode for communicating with Android TV / Google TV devices.
+/// Connection protocol mode for communicating with Android TV, Google TV, and
+/// Non-Android Smart TVs (Arçelik, Beko, Grundig, Vestel, Samsung Tizen, LG webOS, Philips, Roku).
 enum TvConnectionProtocol {
   /// Port 5555: ADB TCP/IP with RSA-2048 `CMD_AUTH`, `/dev/input/event0` hardware scan-code
   /// injection (<120ms), and direct YouTube Playlist / deep-link URL launching (`am start`).
@@ -295,20 +296,68 @@ enum TvConnectionProtocol {
 
   /// Port 6466/6467: Standard Android TV Remote Protocol v2 (Zero-Config TLS + 6-Digit PIN)
   /// enabled out-of-the-box on retail Google TV & Android TV sets without Developer Options.
-  remotePort6466('Standart Kumanda Modu (Port 6466 PIN)', 6466);
+  remotePort6466('Standart Kumanda Modu (Port 6466 PIN)', 6466),
+
+  /// Port 8085: Arçelik / Beko / Grundig Smart Inter@ctive TV HTTP RC Package protocol
+  /// (`/sendrcpackage?keyid=<id>&keysymbol=<sym>`) + DIAL app launcher.
+  arcelikGrundig8085('Arçelik / Beko / Grundig Smart TV (Port 8085)', 8085),
+
+  /// Port 56789: Vestel / Arçelik / Regal / Toshiba / JVC Smart Center XML protocol
+  /// (`POST /apps/SmartCenter` `<remote><key code=XXXX/></remote>`) + DIAL app launcher.
+  vestelSmart56789('Vestel / Arçelik Smart Center (Port 56789)', 56789),
+
+  /// Port 8001/8002: Samsung Tizen Smart TV WebSocket Remote Control API
+  /// (`/api/v2/channels/samsung.remote.control`).
+  samsungTizen8001('Samsung Smart TV • Tizen (Port 8001)', 8001),
+
+  /// Port 3000/3001: LG webOS Smart TV SSAP WebSocket protocol (`ws://<ip>:3000`).
+  lgWebOs3000('LG Smart TV • webOS (Port 3000)', 3000),
+
+  /// Port 1925: Philips Smart TV JointSpace REST JSON API (`POST /1/input/key`).
+  philipsJointSpace1925('Philips Smart TV • JointSpace (Port 1925)', 1925),
+
+  /// Port 8060: Roku ECP (`POST /keypress/<key>`) & Universal DIAL Smart TV protocol.
+  rokuEcp8060('Evrensel Smart TV • ECP/DIAL (Port 8060)', 8060);
 
   const TvConnectionProtocol(this.label, this.defaultPort);
 
   final String label;
   final int defaultPort;
 
+  bool get isNonAndroidSmartTv =>
+      this == TvConnectionProtocol.arcelikGrundig8085 ||
+      this == TvConnectionProtocol.vestelSmart56789 ||
+      this == TvConnectionProtocol.samsungTizen8001 ||
+      this == TvConnectionProtocol.lgWebOs3000 ||
+      this == TvConnectionProtocol.philipsJointSpace1925 ||
+      this == TvConnectionProtocol.rokuEcp8060;
+
   static TvConnectionProtocol fromNameOrPort(String? name, int port) {
     for (final p in TvConnectionProtocol.values) {
       if (p.name == name) return p;
     }
-    return port == 6466
-        ? TvConnectionProtocol.remotePort6466
-        : TvConnectionProtocol.adbPort5555;
+    switch (port) {
+      case 6466:
+      case 6467:
+        return TvConnectionProtocol.remotePort6466;
+      case 8085:
+        return TvConnectionProtocol.arcelikGrundig8085;
+      case 56789:
+        return TvConnectionProtocol.vestelSmart56789;
+      case 8001:
+      case 8002:
+        return TvConnectionProtocol.samsungTizen8001;
+      case 3000:
+      case 3001:
+        return TvConnectionProtocol.lgWebOs3000;
+      case 1925:
+      case 1926:
+        return TvConnectionProtocol.philipsJointSpace1925;
+      case 8060:
+        return TvConnectionProtocol.rokuEcp8060;
+      default:
+        return TvConnectionProtocol.adbPort5555;
+    }
   }
 }
 
@@ -319,11 +368,21 @@ class TvDevice {
     required this.name,
     required this.ip,
     this.port = 5555,
-    this.boardInfo = 'Realtek RTD2851P • Android TV',
+    this.boardInfo = 'Android TV / Google TV',
     this.isOnline = true,
     this.protocol = TvConnectionProtocol.adbPort5555,
     this.isPaired = false,
   });
+
+  static const TvDevice unconfigured = TvDevice(
+    name: 'TV Seçilmedi',
+    ip: '',
+    port: 5555,
+    boardInfo: 'Ağdaki cihazları arayın veya listeden TV seçin',
+    isOnline: false,
+    protocol: TvConnectionProtocol.adbPort5555,
+    isPaired: false,
+  );
 
   final String name;
   final String ip;
@@ -332,6 +391,36 @@ class TvDevice {
   final bool isOnline;
   final TvConnectionProtocol protocol;
   final bool isPaired;
+
+  bool get hasValidIp => ip.trim().isNotEmpty;
+
+  String get displayEndpoint =>
+      hasValidIp ? '${ip.trim()}:$port' : 'Henüz TV bağlanmadı';
+
+  String get protocolBadgeLabel {
+    if (!hasValidIp) return 'Bağlı Değil';
+    switch (protocol) {
+      case TvConnectionProtocol.arcelikGrundig8085:
+        return 'Port 8085 • Arçelik/Grundig Smart TV';
+      case TvConnectionProtocol.vestelSmart56789:
+        return 'Port 56789 • Vestel/Arçelik Smart TV';
+      case TvConnectionProtocol.samsungTizen8001:
+        return 'Port $port • Samsung Tizen Smart TV';
+      case TvConnectionProtocol.lgWebOs3000:
+        return 'Port $port • LG webOS Smart TV';
+      case TvConnectionProtocol.philipsJointSpace1925:
+        return 'Port $port • Philips Smart TV';
+      case TvConnectionProtocol.rokuEcp8060:
+        return 'Port $port • Evrensel Smart TV';
+      case TvConnectionProtocol.remotePort6466:
+        return 'Port 6466 • Standart Kumanda';
+      case TvConnectionProtocol.adbPort5555:
+        if (port == 8008 || port == 8009) {
+          return 'Port $port • Smart TV / Cast';
+        }
+        return 'Port 5555 • ADB Turbo';
+    }
+  }
 
   TvDevice copyWith({
     String? name,
@@ -365,13 +454,15 @@ class TvDevice {
 
   factory TvDevice.fromJson(Map<String, dynamic> json) {
     final parsedPort = (json['port'] as int?) ?? 5555;
+    final parsedIp = ((json['ip'] as String?) ?? '').trim();
     return TvDevice(
-      name: (json['name'] as String?) ?? 'Redline Android TV',
-      ip: (json['ip'] as String?) ?? '192.168.1.123',
+      name: (json['name'] as String?) ??
+          (parsedIp.isNotEmpty ? 'Akıllı TV ($parsedIp)' : 'TV Seçilmedi'),
+      ip: parsedIp,
       port: parsedPort,
       boardInfo:
-          (json['boardInfo'] as String?) ?? 'Realtek RTD2851P • Android TV',
-      isOnline: (json['isOnline'] as bool?) ?? true,
+          (json['boardInfo'] as String?) ?? 'Android TV / Google TV',
+      isOnline: (json['isOnline'] as bool?) ?? false,
       protocol: TvConnectionProtocol.fromNameOrPort(
         json['protocol'] as String?,
         parsedPort,

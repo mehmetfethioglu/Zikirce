@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../models/cue_models.dart';
 import '../providers/cuedeck_providers.dart';
+import '../services/adb_tv_service.dart';
 import '../services/cue_monetization_service.dart';
 import '../services/cue_release_notes_service.dart';
 import '../services/google_drive_backup_service.dart';
@@ -1370,8 +1372,10 @@ class _CueDeckSettingsScreenState
   @override
   void initState() {
     super.initState();
-    final currentIp = ref.read(cueDeckProvider).selectedDevice.ip;
-    _ipController = TextEditingController(text: currentIp);
+    final currentDevice = ref.read(cueDeckProvider).selectedDevice;
+    _ipController = TextEditingController(
+      text: currentDevice.hasValidIp ? currentDevice.ip : '',
+    );
     _ipFocusNode = FocusNode();
   }
 
@@ -1403,12 +1407,6 @@ class _CueDeckSettingsScreenState
     final localNetworkPermissionDenied = ref.watch(
       cueDeckProvider.select((s) => s.localNetworkPermissionDenied),
     );
-
-    if (!_ipFocusNode.hasFocus &&
-        _ipController.text.trim() != device.ip &&
-        device.ip.isNotEmpty) {
-      _ipController.text = device.ip;
-    }
 
     // True Black (#000000) in Dark Mode, Warm Alabaster in Light Mode
     final pageBg = isDarkMode ? Colors.black : const Color(0xFFF3F6FA);
@@ -1725,7 +1723,7 @@ class _CueDeckSettingsScreenState
                                 const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
-                                    '${device.ip}:${device.port}',
+                                    device.displayEndpoint,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -1735,6 +1733,28 @@ class _CueDeckSettingsScreenState
                                     ),
                                   ),
                                 ),
+                                if (device.hasValidIp) ...<Widget>[
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    key: const Key('disconnect_tv_button'),
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: () {
+                                      HapticFeedback.selectionClick();
+                                      _ipController.clear();
+                                      ref
+                                          .read(cueDeckProvider.notifier)
+                                          .disconnectCurrentTv();
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(2),
+                                      child: Icon(
+                                        Icons.link_off_rounded,
+                                        size: 17,
+                                        color: secondaryText,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const SizedBox(width: 6),
                                 InkWell(
                                   borderRadius: BorderRadius.circular(14),
@@ -1853,7 +1873,7 @@ class _CueDeckSettingsScreenState
                             ],
                             const SizedBox(height: 10),
 
-                            // PROMINENT "AĞDAKİ CİHAZLARI ARA" BUTTON
+                            // PROMINENT "AĞDAKİ CİHAZLARI ARA" BUTTON (Opens Modern Device Discovery Popup)
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton.icon(
@@ -1869,18 +1889,15 @@ class _CueDeckSettingsScreenState
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
-                                onPressed: isScanning
-                                    ? null
-                                    : () {
-                                        HapticFeedback.mediumImpact();
-                                        final ip = _ipController.text.trim();
-                                        ref
-                                            .read(cueDeckProvider.notifier)
-                                            .scanNetworkForTvs(
-                                              customIp:
-                                                  ip.isNotEmpty ? ip : null,
-                                            );
-                                      },
+                                onPressed: () {
+                                  HapticFeedback.mediumImpact();
+                                  unawaited(
+                                    ref
+                                        .read(cueDeckProvider.notifier)
+                                        .scanNetworkForTvs(),
+                                  );
+                                  showTvDiscoveryModal(context);
+                                },
                                 icon: Icon(
                                   isScanning
                                       ? Icons.radar_rounded
@@ -1889,7 +1906,7 @@ class _CueDeckSettingsScreenState
                                 ),
                                 label: Text(
                                   isScanning
-                                      ? 'Ağdaki Cihazlar Aranıyor...'
+                                      ? 'Ağdaki Cihazlar Aranıyor... (Listeyi Aç)'
                                       : '🔍 Ağdaki Cihazları Ara',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -1904,13 +1921,39 @@ class _CueDeckSettingsScreenState
                             // DISCOVERED DEVICES CHIPS
                             if (discoveredDevices.isNotEmpty) ...<Widget>[
                               const SizedBox(height: 10),
-                              Text(
-                                'Ağda Bulunan Cihazlar (Seçmek için dokunun):',
-                                style: TextStyle(
-                                  color: secondaryText,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              Row(
+                                children: <Widget>[
+                                  Expanded(
+                                    child: Text(
+                                      'Ağda Bulunan TV\'ler (${discoveredDevices.length}) — Bağlanmak için seçin:',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: secondaryText,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () => showTvDiscoveryModal(context),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      child: Text(
+                                        'Tümünü Gör',
+                                        style: TextStyle(
+                                          color: goldText,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 6),
                               Wrap(
@@ -1943,12 +1986,25 @@ class _CueDeckSettingsScreenState
                                       fontWeight: FontWeight.w600,
                                       fontSize: 11,
                                     ),
-                                    onSelected: (_) {
+                                    onSelected: (_) async {
                                       HapticFeedback.selectionClick();
                                       _ipController.text = d.ip;
-                                      ref
+                                      final ok = await ref
                                           .read(cueDeckProvider.notifier)
-                                          .selectDevice(d);
+                                          .connectAndPairDevice(d);
+                                      if (!context.mounted) return;
+                                      if (d.protocol ==
+                                              TvConnectionProtocol
+                                                  .remotePort6466 &&
+                                          d.port == 6466 &&
+                                          !d.isPaired) {
+                                        _openPin6466Dialog(context, d.ip);
+                                      } else if (!ok) {
+                                        _openInteractiveRsaPairingSheet(
+                                          context,
+                                          d.ip,
+                                        );
+                                      }
                                     },
                                   );
                                 }).toList(),
@@ -2062,10 +2118,16 @@ class _CueDeckSettingsScreenState
                                     ),
                                   ),
                                   onPressed: () {
+                                    HapticFeedback.mediumImpact();
                                     final ip = _ipController.text.trim();
-                                    ref
-                                        .read(cueDeckProvider.notifier)
-                                        .scanNetworkForTvs(customIp: ip);
+                                    unawaited(
+                                      ref
+                                          .read(cueDeckProvider.notifier)
+                                          .scanNetworkForTvs(customIp: ip),
+                                    );
+                                    if (ip.isEmpty) {
+                                      showTvDiscoveryModal(context);
+                                    }
                                   },
                                   child: const Text(
                                     'Tara ve Bağlan',
@@ -2082,6 +2144,7 @@ class _CueDeckSettingsScreenState
                               children: <Widget>[
                                 Expanded(
                                   child: OutlinedButton(
+                                    key: const Key('pair_tv_rsa_button'),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: goldText,
                                       backgroundColor:
@@ -2097,18 +2160,14 @@ class _CueDeckSettingsScreenState
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
-                                    onPressed: isScanning
-                                        ? null
-                                        : () {
-                                            HapticFeedback.mediumImpact();
-                                            final ip =
-                                                _ipController.text.trim();
-                                            ref
-                                                .read(cueDeckProvider.notifier)
-                                                .pairWithSelectedTv(
-                                                  customIp: ip,
-                                                );
-                                          },
+                                    onPressed: () {
+                                      HapticFeedback.mediumImpact();
+                                      final ip = _ipController.text.trim();
+                                      _openInteractiveRsaPairingSheet(
+                                        context,
+                                        ip,
+                                      );
+                                    },
                                     child: const Text(
                                       '🔐 TV Eşleştir (RSA Onayı)',
                                       maxLines: 1,
@@ -2123,6 +2182,7 @@ class _CueDeckSettingsScreenState
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: OutlinedButton(
+                                    key: const Key('pair_tv_pin_button'),
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: primaryText,
                                       side: BorderSide(color: cardBorder),
@@ -2134,13 +2194,11 @@ class _CueDeckSettingsScreenState
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
-                                    onPressed: isScanning
-                                        ? null
-                                        : () {
-                                            final ip =
-                                                _ipController.text.trim();
-                                            _openPin6466Dialog(context, ip);
-                                          },
+                                    onPressed: () {
+                                      HapticFeedback.mediumImpact();
+                                      final ip = _ipController.text.trim();
+                                      _openPin6466Dialog(context, ip);
+                                    },
                                     child: const Text(
                                       '🔢 PIN Eşleştir (6466)',
                                       maxLines: 1,
@@ -2248,6 +2306,15 @@ class _CueDeckSettingsScreenState
     );
   }
 
+  void _openInteractiveRsaPairingSheet(BuildContext context, String targetIp) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _InteractiveTvPairingSheet(customIp: targetIp),
+    );
+  }
+
   void _openPin6466Dialog(BuildContext context, String targetIp) {
     showModalBottomSheet<void>(
       context: context,
@@ -2265,6 +2332,18 @@ class _CueDeckSettingsScreenState
       builder: (_) => const _TvSetupGuideSheet(),
     );
   }
+}
+
+/// Opens the modern network device discovery modal popup so the user can view
+/// all discovered TVs on the Wi-Fi network, see their live status/protocol,
+/// and tap any TV to connect and pair.
+void showTvDiscoveryModal(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => const _TvDiscoveryModalSheet(),
+  );
 }
 
 /// Opens the bottom sheet to change which streaming app is assigned to [slotIndex] (0..5)
@@ -3029,7 +3108,746 @@ class _CueNonIntrusiveAdBannerState
   }
 }
 
-/// Phase 2: 6-Digit PIN Pairing Sheet for Port 6466/6467 (`Android TV Remote Protocol v2`).
+/// Modern Network TV Discovery Popup (`showTvDiscoveryModal`) that scans the
+/// Wi-Fi subnet, displays discovered TVs with their model/room name and protocol
+/// badge, and lets the user tap any TV card to connect & pair.
+class _TvDiscoveryModalSheet extends ConsumerStatefulWidget {
+  const _TvDiscoveryModalSheet();
+
+  @override
+  ConsumerState<_TvDiscoveryModalSheet> createState() =>
+      _TvDiscoveryModalSheetState();
+}
+
+class _TvDiscoveryModalSheetState
+    extends ConsumerState<_TvDiscoveryModalSheet> {
+  late final TextEditingController _manualIpController;
+  String? _connectingIp;
+
+  @override
+  void initState() {
+    super.initState();
+    _manualIpController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _manualIpController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connectToDevice(TvDevice device) async {
+    if (_connectingIp != null) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _connectingIp = device.ip;
+    });
+    final notifier = ref.read(cueDeckProvider.notifier);
+    final ok = await notifier.connectAndPairDevice(device);
+    if (!mounted) return;
+    setState(() {
+      _connectingIp = null;
+    });
+
+    final updated = ref.read(cueDeckProvider).selectedDevice;
+    if (device.protocol == TvConnectionProtocol.remotePort6466 &&
+        updated.port == 6466 &&
+        !updated.isPaired) {
+      Navigator.of(context).pop();
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _Pin6466PairingSheet(targetIp: device.ip),
+      );
+      return;
+    }
+
+    if (ok || updated.isOnline) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: const Color(0xFF0A0C12),
+            content: Text(
+              '✓ Bağlandı: ${updated.name} (${updated.ip})',
+              style: const TextStyle(color: Colors.white, fontSize: 12.5),
+            ),
+          ),
+        );
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pop();
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _InteractiveTvPairingSheet(customIp: device.ip),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final isScanning = ref.watch(cueDeckProvider.select((s) => s.isScanning));
+    final discoveredDevices = ref.watch(
+      cueDeckProvider.select((s) => s.discoveredDevices),
+    );
+    final selectedDevice = ref.watch(
+      cueDeckProvider.select((s) => s.selectedDevice),
+    );
+    final localWifiIp = ref.watch(
+      cueDeckProvider.select((s) => s.localWifiIp),
+    );
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    final sheetBg =
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F6FA);
+    final cardBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
+    final cardBorder = isDarkMode
+        ? Colors.white.withValues(alpha: 0.09)
+        : const Color(0xFFE2E8F0);
+    final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
+    final secondaryText =
+        isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final goldText =
+        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
+    final mintText =
+        isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
+
+    return Container(
+      key: const Key('tv_discovery_modal_sheet'),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(color: cardBorder),
+      ),
+      padding: EdgeInsets.fromLTRB(18, 14, 18, bottomInset + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: secondaryText.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: goldText.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  isScanning ? Icons.radar_rounded : Icons.tv_rounded,
+                  color: goldText,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      '📡 Ağdaki Akıllı TV Cihazları',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      localWifiIp.isNotEmpty
+                          ? 'Telefon Wi-Fi IP: $localWifiIp • Seçerek bağlanın'
+                          : 'Wi-Fi ağındaki Android TV & Google TV cihazları',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: secondaryText,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                key: const Key('rescan_network_modal_button'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: goldText,
+                  side: BorderSide(color: goldText.withValues(alpha: 0.45)),
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: isScanning
+                    ? null
+                    : () {
+                        HapticFeedback.selectionClick();
+                        ref.read(cueDeckProvider.notifier).scanNetworkForTvs();
+                      },
+                icon: const Icon(Icons.refresh_rounded, size: 15),
+                label: Text(
+                  isScanning ? 'Taranıyor' : 'Yenile',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Icon(Icons.close_rounded, color: secondaryText, size: 20),
+              ),
+            ],
+          ),
+          if (isScanning) ...<Widget>[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                minHeight: 3.5,
+                backgroundColor: cardBorder,
+                valueColor: AlwaysStoppedAnimation<Color>(goldText),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '🔍 Yerel Wi-Fi ağı taranıyor (Port 5555 • Port 6466 • Google Cast • mDNS)...',
+              style: TextStyle(
+                color: goldText,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Flexible(
+            child: discoveredDevices.isEmpty
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: cardBorder),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          children: <Widget>[
+                            Icon(
+                              isScanning
+                                  ? Icons.wifi_tethering_rounded
+                                  : Icons.info_outline_rounded,
+                              color: goldText,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isScanning
+                                    ? 'Ağdaki TV\'ler aranıyor, lütfen bekleyin...'
+                                    : 'Henüz açık bir TV bulunamadı',
+                                style: TextStyle(
+                                  color: primaryText,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '• TV\'nizin açık ve telefonunuzla aynı Wi-Fi ağında olduğundan emin olun.\n'
+                          '• Standart Google TV / Android TV cihazları otomatik bulunur.\n'
+                          '• TV IP adresini biliyorsanız aşağıdan doğrudan bağlanabilirsiniz.',
+                          style: TextStyle(
+                            color: secondaryText,
+                            fontSize: 11.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: discoveredDevices.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final d = discoveredDevices[index];
+                      final isSelected =
+                          d.ip == selectedDevice.ip && selectedDevice.isOnline;
+                      final isConnectingThis = _connectingIp == d.ip;
+
+                      return InkWell(
+                        key: Key('discovered_tv_card_${d.ip}'),
+                        borderRadius: BorderRadius.circular(15),
+                        onTap: () => _connectToDevice(d),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 11,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(
+                              color: isSelected
+                                  ? mintText.withValues(alpha: 0.7)
+                                  : goldText.withValues(alpha: 0.32),
+                              width: isSelected ? 1.4 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            children: <Widget>[
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: (isSelected ? mintText : goldText)
+                                      .withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(11),
+                                ),
+                                child: Icon(
+                                  Icons.tv_rounded,
+                                  color: isSelected ? mintText : goldText,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    Text(
+                                      d.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: primaryText,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${d.ip}:${d.port} • ${d.protocolBadgeLabel}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: goldText,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      d.boardInfo,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: secondaryText,
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (isConnectingThis)
+                                SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: goldText,
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? mintText.withValues(alpha: 0.16)
+                                        : goldText,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    isSelected ? '✓ Bağlı' : 'Bağlan',
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? mintText
+                                          : const Color(0xFF0A0C12),
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11.5,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _manualIpController,
+                  style: TextStyle(color: primaryText, fontSize: 12.5),
+                  decoration: InputDecoration(
+                    hintText: 'Manuel TV IP ile ekle (Örn: 192.168.1.50)',
+                    hintStyle: TextStyle(color: secondaryText, fontSize: 11.5),
+                    isDense: true,
+                    filled: true,
+                    fillColor: cardBg,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(11),
+                      borderSide: BorderSide(color: cardBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(11),
+                      borderSide: BorderSide(color: cardBorder),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: goldText,
+                  foregroundColor: const Color(0xFF0A0C12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                ),
+                onPressed: () async {
+                  final rawIp = _manualIpController.text.trim();
+                  if (!AdbTvService.isValidIp(rawIp)) return;
+                  await ref
+                      .read(cueDeckProvider.notifier)
+                      .scanNetworkForTvs(customIp: rawIp);
+                },
+                child: const Text(
+                  'Ekle & Ara',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Interactive RSA-2048 ADB Pairing Modal Sheet (`🔐 TV Eşleştir`) with live
+/// step-by-step progress, retry, and 1-tap fallback to Port 6466 PIN pairing.
+class _InteractiveTvPairingSheet extends ConsumerStatefulWidget {
+  const _InteractiveTvPairingSheet({required this.customIp});
+
+  final String customIp;
+
+  @override
+  ConsumerState<_InteractiveTvPairingSheet> createState() =>
+      _InteractiveTvPairingSheetState();
+}
+
+class _InteractiveTvPairingSheetState
+    extends ConsumerState<_InteractiveTvPairingSheet> {
+  late final TextEditingController _ipController;
+  bool _isPairing = false;
+  bool? _pairSuccess;
+  String _statusMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final state = ref.read(cueDeckProvider);
+    final initialIp = AdbTvService.isValidIp(widget.customIp)
+        ? widget.customIp.trim()
+        : (state.selectedDevice.hasValidIp
+              ? state.selectedDevice.ip
+              : (state.discoveredDevices.isNotEmpty
+                    ? state.discoveredDevices.first.ip
+                    : ''));
+    _ipController = TextEditingController(text: initialIp);
+    if (AdbTvService.isValidIp(initialIp)) {
+      Future<void>.microtask(_startRsaPairing);
+    } else {
+      _statusMessage =
+          'Eşleştirilecek TV IP adresini girin veya "Ağdaki Cihazları Ara" ile TV seçin.';
+    }
+  }
+
+  @override
+  void dispose() {
+    _ipController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRsaPairing() async {
+    final targetIp = _ipController.text.trim();
+    if (!AdbTvService.isValidIp(targetIp)) {
+      setState(() {
+        _pairSuccess = false;
+        _statusMessage =
+            'Lütfen geçerli bir TV IP adresi girin (Örn: 192.168.1.50) veya ağdan TV seçin.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isPairing = true;
+      _pairSuccess = null;
+      _statusMessage =
+          '🔐 $targetIp:5555 adresine RSA-2048 anahtarı gönderildi. Lütfen TV ekranında çıkan "Hata ayıklamaya izin ver -> Her zaman izin ver -> Tamam" onayını kumandayla kabul edin...';
+    });
+
+    final ok = await ref
+        .read(cueDeckProvider.notifier)
+        .pairWithSelectedTv(customIp: targetIp);
+    if (!mounted) return;
+    final currentDevice = ref.read(cueDeckProvider).selectedDevice;
+    setState(() {
+      _isPairing = false;
+      _pairSuccess = ok;
+      _statusMessage = ok
+          ? '✓ Eşleşti ve Bağlandı: ${currentDevice.name} (${currentDevice.ip})'
+          : '⚠️ ${currentDevice.boardInfo}';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final sheetBg =
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
+    final cardBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
+    final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
+    final secondaryText =
+        isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
+    final goldText =
+        isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
+    final mintText =
+        isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
+
+    return Container(
+      key: const Key('interactive_tv_pairing_sheet'),
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      padding: EdgeInsets.fromLTRB(18, 16, 18, bottomInset + 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.security_rounded, color: goldText, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '🔐 TV Eşleştirme (ADB RSA-2048 Onayı)',
+                  style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Icon(Icons.close_rounded, color: secondaryText, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'TV\'de Geliştirici Seçenekleri > USB / Ağ Hata Ayıklama açıkken TV ekranında beliren onay penceresini kabul ederek tam kontrol sağlayın.',
+            style: TextStyle(
+              color: secondaryText,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ipController,
+            style: TextStyle(
+              color: primaryText,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+            decoration: InputDecoration(
+              labelText: 'Hedef TV IP Adresi',
+              hintText: 'Örn: 192.168.1.50',
+              labelStyle: TextStyle(color: goldText, fontSize: 12),
+              filled: true,
+              fillColor: cardBg,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          if (_isPairing) ...<Widget>[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                minHeight: 4,
+                valueColor: AlwaysStoppedAnimation<Color>(goldText),
+              ),
+            ),
+          ],
+          if (_statusMessage.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _pairSuccess == true
+                      ? mintText.withValues(alpha: 0.6)
+                      : goldText.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                _statusMessage,
+                style: TextStyle(
+                  color: _pairSuccess == true ? mintText : primaryText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFE2A84B),
+                    foregroundColor: const Color(0xFF090A0F),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _isPairing ? null : _startRsaPairing,
+                  icon: Icon(
+                    _isPairing ? Icons.hourglass_top_rounded : Icons.vpn_key_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    _isPairing
+                        ? 'TV Onayı Bekleniyor...'
+                        : '🔐 RSA Onayı Gönder ve Eşleştir',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final ip = _ipController.text.trim();
+                    Navigator.of(context).pop();
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => _Pin6466PairingSheet(targetIp: ip),
+                    );
+                  },
+                  icon: const Icon(Icons.pin_rounded, size: 15),
+                  label: const Text(
+                    '🔢 PIN ile Eşleştir (6466)',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    unawaited(
+                      ref.read(cueDeckProvider.notifier).scanNetworkForTvs(),
+                    );
+                    showTvDiscoveryModal(context);
+                  },
+                  icon: const Icon(Icons.wifi_find_rounded, size: 15),
+                  label: const Text(
+                    '🔍 Ağdan TV Seç',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phase 2: 6-Character PIN Pairing Sheet for Port 6466/6467 (`Android TV Remote Protocol v2`).
+/// Automatically initiates the TLS Port 6467 pairing handshake on open so the TV screen
+/// immediately displays the 6-character PIN code.
 class _Pin6466PairingSheet extends ConsumerStatefulWidget {
   const _Pin6466PairingSheet({required this.targetIp});
 
@@ -3042,17 +3860,100 @@ class _Pin6466PairingSheet extends ConsumerStatefulWidget {
 
 class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
   late final TextEditingController _pinController;
+  late final TextEditingController _ipController;
+  bool _isRequestingPin = false;
+  bool _isVerifyingPin = false;
+  bool _pinDisplayedOnTv = false;
+  bool _adb5555OpenOnTv = false;
+  String _sessionMessage = '';
 
   @override
   void initState() {
     super.initState();
     _pinController = TextEditingController();
+    final state = ref.read(cueDeckProvider);
+    final initialIp = AdbTvService.isValidIp(widget.targetIp)
+        ? widget.targetIp.trim()
+        : (state.selectedDevice.hasValidIp
+              ? state.selectedDevice.ip
+              : (state.discoveredDevices.isNotEmpty
+                    ? state.discoveredDevices.first.ip
+                    : ''));
+    _ipController = TextEditingController(text: initialIp);
+    if (AdbTvService.isValidIp(initialIp)) {
+      Future<void>.microtask(_triggerTvPinDisplay);
+    } else {
+      _sessionMessage =
+          'Önce TV IP adresini girin veya "Ağdaki Cihazları Ara" ile TV\'nizi seçin.';
+    }
   }
 
   @override
   void dispose() {
     _pinController.dispose();
+    _ipController.dispose();
     super.dispose();
+  }
+
+  Future<void> _triggerTvPinDisplay() async {
+    final ip = _ipController.text.trim();
+    if (!AdbTvService.isValidIp(ip)) {
+      setState(() {
+        _sessionMessage = 'Lütfen geçerli bir TV IP adresi girin.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isRequestingPin = true;
+      _sessionMessage =
+          '📡 $ip adresindeki TV ekranında 6 haneli PIN kodu oluşturuluyor...';
+    });
+
+    final res = await ref
+        .read(cueDeckProvider.notifier)
+        .startPin6467Pairing(customIp: ip);
+    if (!mounted) return;
+    setState(() {
+      _isRequestingPin = false;
+      _pinDisplayedOnTv = res['pinDisplayed'] == true;
+      _adb5555OpenOnTv = res['adb5555Open'] == true;
+      _sessionMessage = (res['message'] as String?) ?? '';
+    });
+  }
+
+  Future<void> _submitPinAndPair() async {
+    final pin = _pinController.text.trim();
+    final ip = _ipController.text.trim();
+    if (!AdbTvService.isValidPairingPinCode(pin)) {
+      setState(() {
+        _sessionMessage =
+            '⚠️ Lütfen TV ekranında görünen 6 karakterli PIN kodunu eksiksiz girin (0-9 / A-F).';
+      });
+      return;
+    }
+
+    setState(() {
+      _isVerifyingPin = true;
+      _sessionMessage = '🔢 PIN kodu ($pin) TV ile doğrulanıyor...';
+    });
+
+    final nav = Navigator.of(context);
+    final ok = await ref
+        .read(cueDeckProvider.notifier)
+        .pairWithSelectedTvPin6466(pin, customIp: ip);
+    if (!mounted) return;
+    setState(() {
+      _isVerifyingPin = false;
+    });
+    if (ok) {
+      nav.pop();
+    } else {
+      final board = ref.read(cueDeckProvider).selectedDevice.boardInfo;
+      setState(() {
+        _sessionMessage = '⚠️ $board';
+      });
+    }
   }
 
   @override
@@ -3061,11 +3962,14 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final sheetBg =
         isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
+    final cardBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
     final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
     final secondaryText =
         isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
     final goldText =
         isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
+    final mintText =
+        isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
 
     return Container(
       decoration: BoxDecoration(
@@ -3077,27 +3981,116 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
-            '🔢 Standart TV PIN Eşleştirme (Port 6466)',
-            style: TextStyle(
-              color: primaryText,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-            ),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  '🔢 Standart TV PIN Eşleştirme (Port 6466)',
+                  style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: goldText,
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: _isRequestingPin ? null : _triggerTvPinDisplay,
+                icon: const Icon(Icons.refresh_rounded, size: 15),
+                label: const Text(
+                  'PIN İste',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            'Geliştirici Seçenekleri kapalı olan standart Google TV / Android TV cihazlarında ekranda beliren 6 haneli PIN kodunu girin.',
+            'Standart Google TV / Android TV cihazlarında TV ekranında beliren 6 karakterli PIN kodunu (rakam veya A-F harf) girin.',
             style: TextStyle(
               color: secondaryText,
               fontSize: 12,
               height: 1.35,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _ipController,
+            style: TextStyle(
+              color: primaryText,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+            decoration: InputDecoration(
+              labelText: 'TV IP Adresi',
+              hintText: 'Örn: 192.168.1.50',
+              labelStyle: TextStyle(color: goldText, fontSize: 11.5),
+              filled: true,
+              fillColor: cardBg,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          if (_sessionMessage.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                  color: _pinDisplayedOnTv
+                      ? mintText.withValues(alpha: 0.6)
+                      : goldText.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                _sessionMessage,
+                style: TextStyle(
+                  color: _pinDisplayedOnTv ? mintText : primaryText,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+          if (_adb5555OpenOnTv) ...<Widget>[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: mintText,
+                  side: BorderSide(color: mintText.withValues(alpha: 0.65)),
+                ),
+                onPressed: () async {
+                  final ip = _ipController.text.trim();
+                  final nav = Navigator.of(context);
+                  final ok = await ref
+                      .read(cueDeckProvider.notifier)
+                      .pairWithSelectedTv(customIp: ip);
+                  if (mounted && ok) nav.pop();
+                },
+                icon: const Icon(Icons.flash_on_rounded, size: 16),
+                label: const Text(
+                  '⚡ PIN Olmadan Doğrudan Bağlan (Port 5555 Açık)',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
           TextField(
             controller: _pinController,
-            keyboardType: TextInputType.number,
+            keyboardType: TextInputType.visiblePassword,
+            textCapitalization: TextCapitalization.characters,
             maxLength: 6,
             style: TextStyle(
               color: primaryText,
@@ -3106,13 +4099,16 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
               letterSpacing: 4,
             ),
             decoration: InputDecoration(
-              labelText: '6 Haneli TV PIN Kodu (Örn: 123456)',
+              labelText: '6 Karakterli TV PIN Kodu (Örn: 123456 veya A1B2C3)',
               labelStyle: TextStyle(color: goldText, fontSize: 12),
               counterText: '',
+              filled: true,
+              fillColor: cardBg,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
+            onSubmitted: (_) => _submitPinAndPair(),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -3123,17 +4119,15 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
                 foregroundColor: const Color(0xFF090A0F),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              onPressed: () async {
-                final pin = _pinController.text.trim();
-                final nav = Navigator.of(context);
-                await ref
-                    .read(cueDeckProvider.notifier)
-                    .pairWithSelectedTvPin6466(pin, customIp: widget.targetIp);
-                if (mounted) nav.pop();
-              },
-              child: const Text(
-                'PIN ile Eşleştir ve Bağlan',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              onPressed: _isVerifyingPin ? null : _submitPinAndPair,
+              child: Text(
+                _isVerifyingPin
+                    ? 'PIN Doğrulanıyor...'
+                    : 'PIN ile Eşleştir ve Bağlan',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),

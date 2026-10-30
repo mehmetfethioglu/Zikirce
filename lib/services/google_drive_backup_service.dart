@@ -342,7 +342,7 @@ class GoogleDriveBackupService {
       'WatchCueItems': rawItems,
       'AppSettings': <String, dynamic>{
         'isDarkMode': rawSettings['isDarkMode'] ?? true,
-        'tvIp': rawSettings['tvIp'] ?? '192.168.1.123',
+        'tvIp': rawSettings['tvIp'] ?? '',
       },
     });
     return sha256.convert(utf8.encode(canonical)).toString();

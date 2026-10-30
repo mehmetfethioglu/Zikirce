@@ -57,15 +57,15 @@ class _FakeAdbTvService extends AdbTvService {
 
   @override
   Future<List<TvDevice>> discoverDevices({
-    String preferredIp = '192.168.1.123',
+    String preferredIp = '',
     bool forceFullSubnetScan = false,
   }) async {
     return <TvDevice>[
-      TvDevice(
-        name: 'Redline Android TV (Salon)',
-        ip: preferredIp,
+      const TvDevice(
+        name: 'TCL Google TV (Salon)',
+        ip: '192.168.1.42',
         port: 5555,
-        boardInfo: 'Realtek RTD2851P • CleanYourTV OS',
+        boardInfo: 'TCL • Google TV 12',
         isOnline: true,
       ),
       const TvDevice(
@@ -75,7 +75,29 @@ class _FakeAdbTvService extends AdbTvService {
         boardInfo: 'Sony BRAVIA • Android TV 12',
         isOnline: true,
       ),
+      const TvDevice(
+        name: 'Arçelik 43" Smart TV',
+        ip: '192.168.1.188',
+        port: 8085,
+        protocol: TvConnectionProtocol.arcelikGrundig8085,
+        boardInfo: 'Arçelik Smart Inter@ctive TV • Port 8085 Aktif',
+        isOnline: true,
+        isPaired: true,
+      ),
     ];
+  }
+
+  @override
+  Future<Map<String, dynamic>> startPin6467PairingSession(
+    TvDevice device, {
+    int pairingPort = 6467,
+  }) async {
+    return <String, dynamic>{
+      'pinDisplayed': true,
+      'adb5555Open': true,
+      'message':
+          'TV ekranında 6 haneli PIN kodu gösteriliyor (${device.ip}). Lütfen ekrandaki kodu girin.',
+    };
   }
 
   @override
@@ -90,8 +112,9 @@ class _FakeAdbTvService extends AdbTvService {
   @override
   Future<TvDevice> pairWithPin6466(
     TvDevice device,
-    String sixDigitPin,
-  ) async {
+    String sixDigitPin, {
+    int pairingPort = 6467,
+  }) async {
     return device.copyWith(
       port: 6466,
       protocol: TvConnectionProtocol.remotePort6466,
@@ -195,7 +218,8 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('CueDeck'), findsOneWidget);
-      expect(find.text('Redline Android TV (Salon)'), findsOneWidget);
+      expect(find.text('Redline Android TV (Salon)'), findsNothing);
+      expect(find.text('TCL Google TV (Salon)'), findsOneWidget);
       expect(
         find.byKey(const Key('scan_network_devices_button')),
         findsOneWidget,
@@ -229,21 +253,39 @@ void main() {
         findsOneWidget,
       );
 
-      // Select discovered Sony BRAVIA TV chip and trigger RSA pairing
-      final sonyChip = find.textContaining('Sony BRAVIA 4K TV (192.168.1.145)');
-      await tester.ensureVisible(sonyChip);
+      // Open Modern TV Discovery Popup via "🔍 Ağdaki Cihazları Ara" and select Sony BRAVIA 4K TV
+      final scanBtn = find.byKey(const Key('scan_network_devices_button'));
+      await tester.ensureVisible(scanBtn);
       await tester.pumpAndSettle();
-      await tester.tap(sonyChip);
+      await tester.tap(scanBtn);
       await tester.pumpAndSettle();
-      final pairBtn = find.text('🔐 TV Eşleştir (RSA Onayı)');
+      expect(find.byKey(const Key('tv_discovery_modal_sheet')), findsOneWidget);
+      expect(find.text('📡 Ağdaki Akıllı TV Cihazları'), findsOneWidget);
+
+      final sonyCard = find.byKey(const Key('discovered_tv_card_192.168.1.145'));
+      await tester.ensureVisible(sonyCard);
+      await tester.tap(sonyCard);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Sony BRAVIA 4K TV'), findsWidgets);
+
+      // Open Interactive RSA Pairing Sheet via "🔐 TV Eşleştir (RSA Onayı)"
+      final pairBtn = find.byKey(const Key('pair_tv_rsa_button'));
       await tester.ensureVisible(pairBtn);
       await tester.pumpAndSettle();
       await tester.tap(pairBtn);
       await tester.pumpAndSettle();
       expect(
-        find.textContaining('Eşleşti ve Bağlandı: Sony BRAVIA 4K TV'),
+        find.byKey(const Key('interactive_tv_pairing_sheet')),
         findsOneWidget,
       );
+      expect(
+        find.textContaining('Eşleşti ve Bağlandı: Sony BRAVIA 4K TV'),
+        findsWidgets,
+      );
+      Navigator.of(
+        tester.element(find.byKey(const Key('interactive_tv_pairing_sheet'))),
+      ).pop();
+      await tester.pumpAndSettle();
 
       // Test customizing Remote Shortcut Slot 0 ("1. Sol Üst") to Prime Video
       final slot0 = find.byKey(const Key('settings_shortcut_slot_0'));
@@ -392,15 +434,15 @@ void main() {
       expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
       expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
       expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(find.text('📋 Sürüm Notları (v1.9.6)'), findsOneWidget);
+      expect(find.text('📋 Sürüm Notları (v1.9.7)'), findsOneWidget);
 
       // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(find.text('📋 Sürüm Notları (v1.9.6)'));
+      await tester.tap(find.text('📋 Sürüm Notları (v1.9.7)'));
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
         find.text(
-          'Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton',
+          'Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips Smart TV Desteği',
         ),
         findsOneWidget,
       );
@@ -601,11 +643,26 @@ void main() {
   );
 
   test(
-    'AdbTvService validates 6-digit PIN and builds Port 6466 Android TV Remote v2 protobuf frames',
+    'AdbTvService validates 6-digit/hex PIN and builds Port 6466/6467 Android TV Remote v2 protobuf frames',
     () {
       expect(AdbTvService.isValidSixDigitPin('123456'), isTrue);
       expect(AdbTvService.isValidSixDigitPin('12345'), isFalse);
       expect(AdbTvService.isValidSixDigitPin('12a456'), isFalse);
+      expect(AdbTvService.isValidPairingPinCode('123456'), isTrue);
+      expect(AdbTvService.isValidPairingPinCode('A1B2C3'), isTrue);
+
+      final initFrames = AdbTvService.buildPin6467InitiationFrames(
+        clientName: 'CueDeck',
+      );
+      expect(initFrames.length, 3);
+      for (final f in initFrames) {
+        expect(f.isNotEmpty, isTrue);
+        expect(f[0], f.length - 1);
+      }
+
+      final secretFrame = AdbTvService.buildPin6467SecretFrame('A1B2C3');
+      expect(secretFrame.isNotEmpty, isTrue);
+      expect(secretFrame[0], secretFrame.length - 1);
 
       final frame = AdbTvService.buildRemote6466KeyFrame(
         TvKeyCommand.ok.keyCode,
@@ -615,6 +672,60 @@ void main() {
       expect(frame[0], frame.length - 1);
       // Second byte is RemoteMessage.remote_key_inject tag (0x52)
       expect(frame[1], 0x52);
+    },
+  );
+
+  test(
+    'Smart TV protocols support Arçelik/Grundig Port 8085, Vestel/Arçelik Port 56789, Samsung Tizen Port 8001, LG webOS Port 3000, Philips 1925, and Roku 8060',
+    () {
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 8085),
+        TvConnectionProtocol.arcelikGrundig8085,
+      );
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 56789),
+        TvConnectionProtocol.vestelSmart56789,
+      );
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 8001),
+        TvConnectionProtocol.samsungTizen8001,
+      );
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 3000),
+        TvConnectionProtocol.lgWebOs3000,
+      );
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 1925),
+        TvConnectionProtocol.philipsJointSpace1925,
+      );
+      expect(
+        TvConnectionProtocol.fromNameOrPort('', 8060),
+        TvConnectionProtocol.rokuEcp8060,
+      );
+      expect(TvConnectionProtocol.arcelikGrundig8085.isNonAndroidSmartTv, isTrue);
+      expect(TvConnectionProtocol.vestelSmart56789.isNonAndroidSmartTv, isTrue);
+      expect(TvConnectionProtocol.adbPort5555.isNonAndroidSmartTv, isFalse);
+
+      expect(
+        AdbTvService.arcelikGrundigQueryForCommand(TvKeyCommand.ok),
+        'keyid=-2490&keysymbol=13',
+      );
+      expect(
+        AdbTvService.arcelikGrundigQueryForCommand(TvKeyCommand.volUp),
+        'keyid=-2475&keysymbol=-4020',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.ok),
+        '<remote><key code=1029/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.home),
+        '<remote><key code=1044/></remote>',
+      );
+      expect(
+        AdbTvService.samsungKeyForCommand(TvKeyCommand.volUp),
+        'KEY_VOLUP',
+      );
     },
   );
 }
