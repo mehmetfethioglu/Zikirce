@@ -162,6 +162,21 @@ void main() {
       expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
       expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
       expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
+      expect(
+        find.byKey(const Key('remote_touchpad_toggle_button')),
+        findsOneWidget,
+      );
+
+      // Toggle D-Pad into Mouse / Touchpad surface and back via the minimal corner button
+      await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dpad_touchpad_surface')), findsOneWidget);
+      expect(find.text('TOUCHPAD'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('dpad_touchpad_surface')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
       expect(find.byIcon(Icons.home_filled), findsOneWidget);
       expect(find.text('YouTube'), findsOneWidget);
       expect(find.text('NETFLIX'), findsOneWidget);
@@ -357,14 +372,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Open Voice Sheet via the center Google Assistant button
+      // Open Voice Sheet via the center Google Assistant button (auto-starts voice listening with 1 tap)
       await tester.tap(find.byTooltip('Sesli Komut (Asistan)'));
       await tester.pumpAndSettle();
 
       expect(find.text('Sesli Komut & Akıllı TV Arama'), findsOneWidget);
-      await tester.tap(find.text('Telefon Mikrofonuyla Konuş'));
-      await tester.pumpAndSettle();
-
       expect(
         find.textContaining('Son Algılanan: "YouTube\'da Haberler"'),
         findsOneWidget,
@@ -380,14 +392,16 @@ void main() {
       expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
       expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
       expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(find.text('📋 Sürüm Notları (v1.9.5)'), findsOneWidget);
+      expect(find.text('📋 Sürüm Notları (v1.9.6)'), findsOneWidget);
 
       // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(find.text('📋 Sürüm Notları (v1.9.5)'));
+      await tester.tap(find.text('📋 Sürüm Notları (v1.9.6)'));
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Doğal iOS en0 (IP_BOUND_IF) & Bonjour Ağ Motoru'),
+        find.text(
+          'Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton',
+        ),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));
@@ -511,7 +525,13 @@ void main() {
       );
       expect(payloads.length, 2);
       expect(payloads.first['title'], contains('15 dk sonra: Gece Maratonu'));
+      expect(payloads.first['isLeadReminder'], isTrue);
+      expect(
+        payloads.first['watchStartMillis'],
+        nextWatch!.millisecondsSinceEpoch,
+      );
       expect(payloads.last['title'], contains('İzleme Vakti (21:30) • Netflix'));
+      expect(payloads.last['isLeadReminder'], isFalse);
     },
   );
 

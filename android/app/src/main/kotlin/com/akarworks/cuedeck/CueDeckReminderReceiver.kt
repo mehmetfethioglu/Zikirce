@@ -29,6 +29,16 @@ class CueDeckReminderReceiver : BroadcastReceiver() {
                 val body = intent.getStringExtra(EXTRA_BODY) ?: "Planlanan izleme seansı zamanı geldi."
                 val subText = intent.getStringExtra(EXTRA_SUB_TEXT)
                 val cueId = intent.getStringExtra(EXTRA_CUE_ID)
+                val isLeadReminder = intent.getBooleanExtra(EXTRA_IS_LEAD_REMINDER, false)
+                val watchStartMillis = intent.getLongExtra(EXTRA_WATCH_START_MILLIS, 0L)
+
+                // If a lead reminder ("15 dk sonra") was delayed because the phone was off,
+                // and the actual watch start time has already arrived/passed, skip the stale lead
+                // notification so both notifications do not pile up simultaneously.
+                val now = System.currentTimeMillis()
+                if (isLeadReminder && watchStartMillis > 0L && now >= watchStartMillis - 45_000L) {
+                    return
+                }
 
                 CueDeckNotificationHelper.showSystemNotification(
                     context = context,
@@ -40,7 +50,9 @@ class CueDeckReminderReceiver : BroadcastReceiver() {
                 )
             }
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+            "android.intent.action.QUICKBOOT_POWERON",
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
                 CueDeckNotificationHelper.reschedulePersistedAlarms(context)
             }
         }
@@ -53,6 +65,8 @@ class CueDeckReminderReceiver : BroadcastReceiver() {
         const val EXTRA_BODY = "body"
         const val EXTRA_SUB_TEXT = "sub_text"
         const val EXTRA_CUE_ID = "cue_id"
+        const val EXTRA_IS_LEAD_REMINDER = "is_lead_reminder"
+        const val EXTRA_WATCH_START_MILLIS = "watch_start_millis"
     }
 }
 
@@ -194,6 +208,8 @@ object CueDeckNotificationHelper {
             val body = (entry["body"] as? String)?.trim().orEmpty()
             val subText = (entry["subText"] as? String)?.trim().orEmpty()
             val cueId = (entry["cueId"] as? String)?.trim().orEmpty()
+            val isLeadReminder = (entry["isLeadReminder"] as? Boolean) ?: false
+            val watchStartMillis = (entry["watchStartMillis"] as? Number)?.toLong() ?: 0L
             if (title.isEmpty()) continue
 
             scheduleSingleAlarm(
@@ -204,7 +220,9 @@ object CueDeckNotificationHelper {
                 title = title,
                 body = body,
                 subText = subText,
-                cueId = cueId
+                cueId = cueId,
+                isLeadReminder = isLeadReminder,
+                watchStartMillis = watchStartMillis
             )
 
             persistedArray.put(
@@ -215,6 +233,8 @@ object CueDeckNotificationHelper {
                     put("body", body)
                     put("subText", subText)
                     put("cueId", cueId)
+                    put("isLeadReminder", isLeadReminder)
+                    put("watchStartMillis", watchStartMillis)
                 }
             )
             scheduledCount++
@@ -280,7 +300,9 @@ object CueDeckNotificationHelper {
                     title = obj.optString("title", "CueDeck İzleme Vakti"),
                     body = obj.optString("body", ""),
                     subText = obj.optString("subText", ""),
-                    cueId = obj.optString("cueId", "")
+                    cueId = obj.optString("cueId", ""),
+                    isLeadReminder = obj.optBoolean("isLeadReminder", false),
+                    watchStartMillis = obj.optLong("watchStartMillis", 0L)
                 )
             }
         } catch (_: Exception) {
@@ -295,15 +317,20 @@ object CueDeckNotificationHelper {
         title: String,
         body: String,
         subText: String,
-        cueId: String
+        cueId: String,
+        isLeadReminder: Boolean = false,
+        watchStartMillis: Long = 0L
     ) {
         val intent = Intent(context, CueDeckReminderReceiver::class.java).apply {
             action = CueDeckReminderReceiver.ACTION_WATCH_REMINDER
+            addFlags(Intent.FLAG_RECEIVER_FOREGROUND or Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
             putExtra(CueDeckReminderReceiver.EXTRA_NOTIFICATION_ID, alarmId)
             putExtra(CueDeckReminderReceiver.EXTRA_TITLE, title)
             putExtra(CueDeckReminderReceiver.EXTRA_BODY, body)
             putExtra(CueDeckReminderReceiver.EXTRA_SUB_TEXT, subText)
             putExtra(CueDeckReminderReceiver.EXTRA_CUE_ID, cueId)
+            putExtra(CueDeckReminderReceiver.EXTRA_IS_LEAD_REMINDER, isLeadReminder)
+            putExtra(CueDeckReminderReceiver.EXTRA_WATCH_START_MILLIS, watchStartMillis)
         }
 
         val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -314,13 +341,28 @@ object CueDeckNotificationHelper {
 
         val pi = PendingIntent.getBroadcast(context, alarmId, intent, pendingFlags)
 
+        val showIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val showPendingIntent = PendingIntent.getActivity(
+            context,
+            alarmId,
+            showIntent,
+            pendingFlags
+        )
+
         try {
             val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 am.canScheduleExactAlarms()
             } else {
                 true
             }
-            if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // setAlarmClock wakes the device out of Deep Doze & HyperOS/MIUI battery saver
+                // at the exact second without deferral.
+                val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMillis, showPendingIntent)
+                am.setAlarmClock(clockInfo, pi)
+            } else if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
@@ -328,10 +370,18 @@ object CueDeckNotificationHelper {
                 am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
             }
         } catch (_: SecurityException) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
-            } else {
-                am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                } else {
+                    am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                }
+            } catch (_: Exception) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                } else {
+                    am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                }
             }
         } catch (_: Exception) {
         }

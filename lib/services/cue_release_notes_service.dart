@@ -40,11 +40,38 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.5+17';
-  static const String currentShortVersion = 'v1.9.5';
+  static const String currentVersion = '1.9.6+18';
+  static const String currentShortVersion = 'v1.9.6';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.6+18',
+      versionLabel: 'v1.9.6 (Build 18)',
+      releaseDate: '30 Ekim 2026',
+      headline:
+          'Tam Vaktinde Arka Plan Bildirimleri (AlarmClock), Kumanda Mouse/Touchpad Dönüştürücü & Tek Dokunuşla Sesli Komut',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'BİLDİRİM',
+          title: 'Tam Vaktinde Arka Plan Bildirimleri (Android AlarmClock & iOS UNUserNotification)',
+          description:
+              'Uygulama kapalıyken bildirimlerin gecikmesini önleyen Android AlarmManager.setAlarmClock (USE_EXACT_ALARM + FOREGROUND_RECEIVER) ve iOS UNCalendarNotificationTrigger köprüsü devreye alındı.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TOUCHPAD',
+          title: 'Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton',
+          description:
+              'Kumanda üzerindeki yön tuşlarının sağ üst köşesine eklenen minimal fare butonu ile D-Pad alanı 120 FPS dokunmatik Touchpad/Mouse yüzeyine dönüşür; parmağınızı kaldırmadan kaydırıp dokunarak tıklayabilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TEK DOKUNUŞ',
+          title: 'Kumandadan Tek Dokunuşla Anında Mikrofon & iOS Speech (tr-TR)',
+          description:
+              'Kumanda üzerindeki Sesli Asistan tuşuna dokunduğunuz anda mikrofon otomatik dinlemeye başlar; iPhone 17 Pro Max için doğal Apple SFSpeechRecognizer + AVAudioEngine ses tanıma motoru eklendi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.5+17',
       versionLabel: 'v1.9.5 (Build 17)',

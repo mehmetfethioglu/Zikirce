@@ -148,15 +148,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.5 (Build 17) Yenilikleri:
-      • Doğal iOS en0 (IP_BOUND_IF) & Bonjour TV Tarayıcı: iPhone 17 Pro Max ve iOS cihazlarda hücresel veri / Özel Geçiş engellerini aşarak doğrudan en0 Wi-Fi donanımına bağlanan doğal Swift ADB & alt ağ tarayıcısı.
-      • 2-Aşamalı Wi-Fi ARP Uyandırma & Tam /24 Ağ Taraması: Wi-Fi güç tasarrufundaki TV'leri önce ARP uyandırma paketiyle uyandırıp ardından 5555/6466 portlarını tarayan keşif motoru.
-      • iPhone «Yerel Ağ» İzin Denetimi & Tek Dokunuşla Ayarlar Kısayolu.
+      CueDeck v1.9.6 (Build 18) Yenilikleri:
+      • Kumandadan Tek Dokunuşla Sesli Komut & Doğal iOS Speech (tr-TR): Sesli Asistan tuşuna dokunduğunuz anda mikrofon otomatik dinlemeye başlar; iPhone 17 Pro Max için doğal Apple SFSpeechRecognizer + AVAudioEngine ses tanıma motoru eklendi.
+      • Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton: Kumanda üzerindeki minimal fare butonuyla D-Pad alanı 120 FPS dokunmatik Touchpad/Mouse yüzeyine dönüşür.
+      • Tam Vaktinde Arka Plan Bildirimleri: Uygulama kapalıyken bildirimleri tam dakikasında ileten iOS UNUserNotificationCenter ve Android AlarmClock mimarisi devreye alındı.
 
-      What's New in CueDeck v1.9.5 (Build 17):
-      • Native iOS en0 (IP_BOUND_IF) & Bonjour Scanner: Hardware-bound Wi-Fi socket discovery and ADB shell transport for iPhone 17 Pro Max.
-      • 2-Stage Wi-Fi ARP Warmup & Full /24 Subnet Sweep: Wakes sleeping 802.11 TVs before probing Ports 5555 and 6466.
-      • Automatic iOS Local Network Permission Detection & 1-Tap Settings Shortcut.
+      What's New in CueDeck v1.9.6 (Build 18):
+      • 1-Tap Instant Voice Command & Native iOS Speech (tr-TR): Tapping the Voice Assistant button starts listening immediately with native Apple SFSpeechRecognizer + AVAudioEngine on iPhone 17 Pro Max.
+      • Minimal D-Pad to 120 FPS Mouse / Touchpad Toggle Button on the G10 remote chassis.
+      • Exact On-Time Background Notifications via UNCalendarNotificationTrigger and Android AlarmClock.
     CHANGELOG
 
     begin

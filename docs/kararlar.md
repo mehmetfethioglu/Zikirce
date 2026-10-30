@@ -1,5 +1,21 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-019] 2026-10-30: Tam Vaktinde Arka Plan Bildirimleri (`AlarmManager.setAlarmClock` & iOS `UNUserNotificationCenter`), Kumanda Mouse/Touchpad Dönüştürücü Minimal Buton, Tek Dokunuşla Sesli Komut ve iOS `SFSpeechRecognizer` (`v1.9.6+18`)
+- **Tarih & Ajanlar:** `2026-10-30` — Kanuni, El-Cezeri & Piri Reis, Mimar Sinan, Kâtip Çelebi (Denetçiler: Ebussuud — `KARAR: GEÇTİ`)
+- **Bağlam:**
+  1. Kullanıcı zamanlanmış izleme bildirimlerinin uygulama kapalıyken vaktinde gelmediğini, yalnızca uygulamayı açınca (`16:03` ön hatırlatma ve `16:18` izleme vakti bildirimlerinin `17:15`'te aynı anda) geldiğini bildirdi.
+  2. Ayrıca TV uygulamalarında mouse/izleme dörtgeni gibi kullanılmak üzere kumandadaki yön tuşları (D-Pad) bölümünü **Touchpad** özelliğine dönüştüren minimal bir buton eklenmesini, kumandadaki Sesli Asistan butonuna basıldığında ikinci dokunuş israfı olmadan doğrudan mikrofonun açılmasını ve iPhone 17 Pro Max'te sesli komutun çalışmasını talep etti.
+- **Karar & Çözüm:**
+  1. **Tam Vaktinde Arka Plan Bildirimleri (`AlarmManager.setAlarmClock` + `FLAG_RECEIVER_FOREGROUND` + iOS `UNUserNotificationCenter`):**
+     - [`AndroidManifest.xml`](file:///c:/Users/theak/source/repos/cuedeck/android/app/src/main/AndroidManifest.xml#L6-L62) içerisine `USE_EXACT_ALARM`, `WAKE_LOCK` ve `directBootAware="true"` eklendi; [`CueDeckReminderReceiver.kt`](file:///c:/Users/theak/source/repos/cuedeck/android/app/src/main/kotlin/com/akarworks/cuedeck/CueDeckReminderReceiver.kt#L24-L390) içindeki `scheduleSingleAlarm` metodu Android Doze ve Xiaomi HyperOS pil tasarrufunu tam saniyesinde uyandıran **`am.setAlarmClock(AlarmManager.AlarmClockInfo(...), pi)`** ve **`Intent.FLAG_RECEIVER_FOREGROUND`** mimarisine yükseltildi; telefon kapalıyken geciken `"⏰ 15 dk sonra"` ön hatırlatmasının asıl izleme saati geldiğinde mükerrer düşmesini önleyen bayat bildirim filtresi eklendi.
+     - [`ios/Runner/AppDelegate.swift`](file:///c:/Users/theak/source/repos/cuedeck/ios/Runner/AppDelegate.swift#L72-L214) içerisine `com.akarworks.cuedeck/notifications` (`UNUserNotificationCenter` + `UNCalendarNotificationTrigger`) köprüsü eklendi ve [`CueDeckNotifier._checkScheduledRemindersAndActivePlayback`](file:///c:/Users/theak/source/repos/cuedeck/lib/providers/cuedeck_providers.dart#L368-L395) içindeki uygulama açılışında gecikmeli mükerrer OS bildirimi tetiklemesi kaldırıldı.
+  2. **Yön Tuşlarını Mouse / Touchpad Yüzeyine Dönüştüren Minimal Buton ([`TactileDpadDialWidget`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L687-L986), [`TactileDpadPainter`](file:///c:/Users/theak/source/repos/cuedeck/lib/widgets/tactile_dpad_painter.dart#L9-L188)):**
+     - Kumanda üzerindeki D-Pad halkasının sağ üst köşesine dikey yüksekliği 0 px artıran minimal `30x30` **`remote_touchpad_toggle_button`** (`Icons.mouse_outlined` ↔ `Icons.control_camera_rounded`) eklendi.
+     - Aktif edildiğinde `204x204` D-Pad alanı altın çerçeveli, nişangâh ızgaralı ve parmak hareketini 120 FPS takip eden ışıklı imleç küreli **Mouse / Touchpad** yüzeyine dönüşür; parmağı kaldırmadan sürüklemek (`_stepThresholdPx = 26.0`) kesintisiz yön/imleç hareketi, dokunmak sol tık (`OK`), basılı tutmak ise sağ tık/menü (`Menu`) gönderir.
+  3. **Tek Dokunuşla Anında Sesli Komut & Doğal iOS `SFSpeechRecognizer` ([`_VoiceControlSheet`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L3840-L4180), [`AppDelegate.swift`](file:///c:/Users/theak/source/repos/cuedeck/ios/Runner/AppDelegate.swift#L216-L375)):** Kumandadaki Sesli Asistan tuşuna basıldığında alt çekmece açılır açılmaz mikrofon dinlemesi otomatik başlar; iOS için doğal `SFSpeechRecognizer` (`tr-TR`) + `AVAudioEngine` + `1.35 sn` sessizlik algılayıcısı devreye alındı.
+
+---
+
 ## [ADR-018] 2026-10-29: Doğal iOS `en0` (`IP_BOUND_IF`) & Bonjour Ağ Köprüsü, 2-Aşamalı Wi-Fi ARP Uyandırma (`/24` Tam Tarama) ve iOS Yerel Ağ İzin Kalkanı (`v1.9.5+17`)
 - **Tarih & Ajanlar:** `2026-10-29` — Kanuni, El-Cezeri & Piri Reis, Mimar Sinan, Kâtip Çelebi, Barbaros (Denetçiler: Ebussuud — `KARAR: GEÇTİ`)
 - **Bağlam & Canlı Ağ Teşhisi (`192.168.1.125`):**

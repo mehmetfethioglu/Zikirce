@@ -174,7 +174,7 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                 ),
                 _AssistantVoiceCenterButton(
                   isDarkMode: isDarkMode,
-                  onTap: () => _showVoiceControlSheet(context),
+                  onTap: () => _showVoiceControlSheet(context, ref),
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 18),
@@ -276,14 +276,16 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
     );
   }
 
-  void _showVoiceControlSheet(BuildContext context) {
+  void _showVoiceControlSheet(BuildContext context, WidgetRef ref) {
     HapticFeedback.mediumImpact();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => const _VoiceControlSheet(),
-    );
+    ).whenComplete(() {
+      ref.read(cueDeckProvider.notifier).cancelVoiceCommandSession();
+    });
   }
 
   void _showRemoteKeyboardSheet(BuildContext context) {
@@ -682,125 +684,314 @@ class _VerticalRockerPill extends StatelessWidget {
   }
 }
 
-/// Google TV G10 Reference Donut D-Pad Ring (`204x204`) with both 4-way + OK tap
-/// targets and swipe gestures (`onHorizontalDragEnd` / `onVerticalDragEnd`).
-class TactileDpadDialWidget extends ConsumerWidget {
+/// Google TV G10 Reference Donut D-Pad Ring (`204x204`) with a minimal corner
+/// toggle button (`remote_touchpad_toggle_button`) that transforms the D-Pad area
+/// into an interactive Mouse / Touchpad surface (`isTouchpadMode`).
+class TactileDpadDialWidget extends ConsumerStatefulWidget {
   const TactileDpadDialWidget({super.key, this.isDarkMode = true});
 
   final bool isDarkMode;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TactileDpadDialWidget> createState() =>
+      _TactileDpadDialWidgetState();
+}
+
+class _TactileDpadDialWidgetState extends ConsumerState<TactileDpadDialWidget> {
+  Offset? _touchPosition;
+  double _accumDx = 0;
+  double _accumDy = 0;
+
+  static const double _stepThresholdPx = 26.0;
+
+  void _trigger(TvKeyCommand cmd) {
+    HapticFeedback.lightImpact();
+    ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
+  }
+
+  void _handleTouchpadPanUpdate(DragUpdateDetails details) {
+    setState(() {
+      _touchPosition = details.localPosition;
+    });
+    _accumDx += details.delta.dx;
+    _accumDy += details.delta.dy;
+
+    while (_accumDx.abs() >= _stepThresholdPx) {
+      if (_accumDx > 0) {
+        _accumDx -= _stepThresholdPx;
+        HapticFeedback.selectionClick();
+        ref.read(cueDeckProvider.notifier).sendRemoteKey(TvKeyCommand.right);
+      } else {
+        _accumDx += _stepThresholdPx;
+        HapticFeedback.selectionClick();
+        ref.read(cueDeckProvider.notifier).sendRemoteKey(TvKeyCommand.left);
+      }
+    }
+
+    while (_accumDy.abs() >= _stepThresholdPx) {
+      if (_accumDy > 0) {
+        _accumDy -= _stepThresholdPx;
+        HapticFeedback.selectionClick();
+        ref.read(cueDeckProvider.notifier).sendRemoteKey(TvKeyCommand.down);
+      } else {
+        _accumDy += _stepThresholdPx;
+        HapticFeedback.selectionClick();
+        ref.read(cueDeckProvider.notifier).sendRemoteKey(TvKeyCommand.up);
+      }
+    }
+  }
+
+  void _clearTouchpadPosition() {
+    _accumDx = 0;
+    _accumDy = 0;
+    if (_touchPosition != null) {
+      setState(() {
+        _touchPosition = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final activeDirection = ref.watch(
       cueDeckProvider.select((s) => s.lastPressedDirection),
     );
+    final isTouchpadMode = ref.watch(
+      cueDeckProvider.select((s) => s.isTouchpadMode),
+    );
+    final isDarkMode = widget.isDarkMode;
+    final goldColor =
+        isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
 
-    void trigger(TvKeyCommand cmd) {
-      HapticFeedback.lightImpact();
-      ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
-    }
-
-    return Center(
-      child: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          final vx = details.primaryVelocity ?? 0;
-          if (vx > 120) {
-            trigger(TvKeyCommand.right);
-          } else if (vx < -120) {
-            trigger(TvKeyCommand.left);
-          }
-        },
-        onVerticalDragEnd: (details) {
-          final vy = details.primaryVelocity ?? 0;
-          if (vy > 120) {
-            trigger(TvKeyCommand.down);
-          } else if (vy < -120) {
-            trigger(TvKeyCommand.up);
-          }
-        },
-        child: SizedBox(
-          width: 204,
-          height: 204,
-          child: Stack(
-            alignment: Alignment.center,
-            children: <Widget>[
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: TactileDpadPainter(
-                    activeDirection: activeDirection,
-                    accentColor: const Color(0xFFE2A84B),
-                    isDarkMode: isDarkMode,
+    return SizedBox(
+      width: double.infinity,
+      height: 204,
+      child: Stack(
+        alignment: Alignment.center,
+        children: <Widget>[
+          // Center 204x204 D-Pad or Touchpad/Mouse Surface
+          SizedBox(
+            width: 204,
+            height: 204,
+            child: isTouchpadMode
+                ? GestureDetector(
+                    key: const Key('dpad_touchpad_surface'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _trigger(TvKeyCommand.ok),
+                    onLongPress: () {
+                      HapticFeedback.mediumImpact();
+                      ref
+                          .read(cueDeckProvider.notifier)
+                          .sendRemoteKey(TvKeyCommand.menu);
+                    },
+                    onPanStart: (details) {
+                      _accumDx = 0;
+                      _accumDy = 0;
+                      setState(() {
+                        _touchPosition = details.localPosition;
+                      });
+                    },
+                    onPanUpdate: _handleTouchpadPanUpdate,
+                    onPanEnd: (_) => _clearTouchpadPosition(),
+                    onPanCancel: _clearTouchpadPosition,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: TactileDpadPainter(
+                              activeDirection: activeDirection,
+                              accentColor: const Color(0xFFE2A84B),
+                              isDarkMode: isDarkMode,
+                              isTouchpadMode: true,
+                              touchPosition: _touchPosition,
+                            ),
+                          ),
+                        ),
+                        IgnorePointer(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(
+                                Icons.mouse_rounded,
+                                size: 20,
+                                color: goldColor.withValues(alpha: 0.65),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'TOUCHPAD',
+                                style: TextStyle(
+                                  color: goldColor.withValues(alpha: 0.78),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 9.5,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                              Text(
+                                'Kaydır • Dokun (OK)',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.48),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 8.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : GestureDetector(
+                    onHorizontalDragEnd: (details) {
+                      final vx = details.primaryVelocity ?? 0;
+                      if (vx > 120) {
+                        _trigger(TvKeyCommand.right);
+                      } else if (vx < -120) {
+                        _trigger(TvKeyCommand.left);
+                      }
+                    },
+                    onVerticalDragEnd: (details) {
+                      final vy = details.primaryVelocity ?? 0;
+                      if (vy > 120) {
+                        _trigger(TvKeyCommand.down);
+                      } else if (vy < -120) {
+                        _trigger(TvKeyCommand.up);
+                      }
+                    },
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: TactileDpadPainter(
+                              activeDirection: activeDirection,
+                              accentColor: const Color(0xFFE2A84B),
+                              isDarkMode: isDarkMode,
+                            ),
+                          ),
+                        ),
+                        // UP tap target
+                        Positioned(
+                          top: 4,
+                          child: Tooltip(
+                            message: 'Yukarı',
+                            child: InkResponse(
+                              key: const Key('dpad_up'),
+                              radius: 28,
+                              onTap: () => _trigger(TvKeyCommand.up),
+                              child: const SizedBox(width: 64, height: 50),
+                            ),
+                          ),
+                        ),
+                        // DOWN tap target
+                        Positioned(
+                          bottom: 4,
+                          child: Tooltip(
+                            message: 'Aşağı',
+                            child: InkResponse(
+                              key: const Key('dpad_down'),
+                              radius: 28,
+                              onTap: () => _trigger(TvKeyCommand.down),
+                              child: const SizedBox(width: 64, height: 50),
+                            ),
+                          ),
+                        ),
+                        // LEFT tap target
+                        Positioned(
+                          left: 4,
+                          child: Tooltip(
+                            message: 'Sol',
+                            child: InkResponse(
+                              key: const Key('dpad_left'),
+                              radius: 28,
+                              onTap: () => _trigger(TvKeyCommand.left),
+                              child: const SizedBox(width: 50, height: 64),
+                            ),
+                          ),
+                        ),
+                        // RIGHT tap target
+                        Positioned(
+                          right: 4,
+                          child: Tooltip(
+                            message: 'Sağ',
+                            child: InkResponse(
+                              key: const Key('dpad_right'),
+                              radius: 28,
+                              onTap: () => _trigger(TvKeyCommand.right),
+                              child: const SizedBox(width: 50, height: 64),
+                            ),
+                          ),
+                        ),
+                        // CENTER OK flat circle tap target
+                        Tooltip(
+                          message: 'Tamam (OK)',
+                          child: GestureDetector(
+                            key: const Key('dpad_ok'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _trigger(TvKeyCommand.ok),
+                            child: const SizedBox(
+                              width: 80,
+                              height: 80,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-              // UP tap target
-              Positioned(
-                top: 4,
-                child: Tooltip(
-                  message: 'Yukarı',
-                  child: InkResponse(
-                    key: const Key('dpad_up'),
-                    radius: 28,
-                    onTap: () => trigger(TvKeyCommand.up),
-                    child: const SizedBox(width: 64, height: 50),
-                  ),
-                ),
-              ),
-              // DOWN tap target
-              Positioned(
-                bottom: 4,
-                child: Tooltip(
-                  message: 'Aşağı',
-                  child: InkResponse(
-                    key: const Key('dpad_down'),
-                    radius: 28,
-                    onTap: () => trigger(TvKeyCommand.down),
-                    child: const SizedBox(width: 64, height: 50),
-                  ),
-                ),
-              ),
-              // LEFT tap target
-              Positioned(
-                left: 4,
-                child: Tooltip(
-                  message: 'Sol',
-                  child: InkResponse(
-                    key: const Key('dpad_left'),
-                    radius: 28,
-                    onTap: () => trigger(TvKeyCommand.left),
-                    child: const SizedBox(width: 50, height: 64),
-                  ),
-                ),
-              ),
-              // RIGHT tap target
-              Positioned(
-                right: 4,
-                child: Tooltip(
-                  message: 'Sağ',
-                  child: InkResponse(
-                    key: const Key('dpad_right'),
-                    radius: 28,
-                    onTap: () => trigger(TvKeyCommand.right),
-                    child: const SizedBox(width: 50, height: 64),
-                  ),
-                ),
-              ),
-              // CENTER OK flat circle tap target
-              Tooltip(
-                message: 'Tamam (OK)',
-                child: GestureDetector(
-                  key: const Key('dpad_ok'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => trigger(TvKeyCommand.ok),
-                  child: const SizedBox(
-                    width: 80,
-                    height: 80,
-                  ),
-                ),
-              ),
-            ],
           ),
-        ),
+
+          // Minimal corner toggle button to switch between Classic D-Pad and Mouse/Touchpad mode
+          Positioned(
+            top: 2,
+            right: 2,
+            child: Tooltip(
+              message: isTouchpadMode
+                  ? 'Klasik Yön Tuşlarına (D-Pad) Dön'
+                  : 'Mouse / Touchpad Moduna Geç',
+              child: Material(
+                color: isTouchpadMode
+                    ? const Color(0xFFE2A84B).withValues(alpha: 0.18)
+                    : (isDarkMode
+                        ? const Color(0xFF111318)
+                        : const Color(0xFFECEDF2)),
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: isTouchpadMode
+                        ? const Color(0xFFE2A84B)
+                        : (isDarkMode
+                            ? const Color(0xFF252832)
+                            : const Color(0xFFCFD4DE)),
+                    width: isTouchpadMode ? 1.3 : 1.0,
+                  ),
+                ),
+                child: InkWell(
+                  key: const Key('remote_touchpad_toggle_button'),
+                  customBorder: const CircleBorder(),
+                  onTap: () {
+                    HapticFeedback.mediumImpact();
+                    _clearTouchpadPosition();
+                    ref.read(cueDeckProvider.notifier).toggleTouchpadMode();
+                  },
+                  child: SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: Icon(
+                      isTouchpadMode
+                          ? Icons.control_camera_rounded
+                          : Icons.mouse_outlined,
+                      size: 15,
+                      color: isTouchpadMode
+                          ? goldColor
+                          : (isDarkMode
+                              ? const Color(0xFFB8C0CE)
+                              : const Color(0xFF3E4656)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3679,6 +3870,10 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
     super.initState();
     _voiceInputController = TextEditingController();
     _voiceInputFocusNode = FocusNode();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(cueDeckProvider.notifier).startVoiceCommandSession();
+    });
   }
 
   @override
@@ -3696,6 +3891,12 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
     );
     final lastTranscript = ref.watch(
       cueDeckProvider.select((s) => s.lastVoiceTranscript),
+    );
+    final lastStatus = ref.watch(
+      cueDeckProvider.select((s) => s.lastCommandStatus),
+    );
+    final voicePermDenied = ref.watch(
+      cueDeckProvider.select((s) => s.voicePermissionDenied),
     );
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
@@ -3753,11 +3954,13 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                     ),
                     minimumSize: Size.zero,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    ref
-                        .read(cueDeckProvider.notifier)
-                        .triggerTvNativeVoiceAssistant();
+                    final notifier = ref.read(cueDeckProvider.notifier);
+                    if (isListening) {
+                      await notifier.cancelVoiceCommandSession();
+                    }
+                    await notifier.triggerTvNativeVoiceAssistant();
                   },
                   icon: const Icon(Icons.assistant_rounded, size: 15),
                   label: const Text(
@@ -3774,6 +3977,7 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
+                key: const Key('voice_sheet_mic_button'),
                 style: FilledButton.styleFrom(
                   backgroundColor: isListening
                       ? const Color(0xFFFF5252)
@@ -3787,7 +3991,15 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                 ),
                 onPressed: () {
                   HapticFeedback.mediumImpact();
-                  ref.read(cueDeckProvider.notifier).startVoiceCommandSession();
+                  if (isListening) {
+                    ref
+                        .read(cueDeckProvider.notifier)
+                        .stopVoiceCommandSession();
+                  } else {
+                    ref
+                        .read(cueDeckProvider.notifier)
+                        .startVoiceCommandSession();
+                  }
                 },
                 icon: Icon(
                   isListening ? Icons.graphic_eq_rounded : Icons.mic_rounded,
@@ -3795,7 +4007,7 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                 ),
                 label: Text(
                   isListening
-                      ? 'Dinleniyor... TV komutu veya aranacak içeriği söyleyin'
+                      ? 'Dinleniyor... Konuşun (Bitirmek için dokunun)'
                       : 'Telefon Mikrofonuyla Konuş',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3806,6 +4018,38 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                 ),
               ),
             ),
+            if (voicePermDenied) ...<Widget>[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFFF5252),
+                    side: const BorderSide(color: Color(0xFFFF5252)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    ref
+                        .read(cueDeckProvider.notifier)
+                        .openIosLocalNetworkSettings();
+                  },
+                  icon: const Icon(Icons.settings_voice_rounded, size: 17),
+                  label: const Text(
+                    '📲 Ayarlarda Mikrofon & Ses Tanıma İznini Aç',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
             if (lastTranscript.isNotEmpty) ...<Widget>[
               const SizedBox(height: 10),
               Container(
@@ -3845,6 +4089,21 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                 ),
               ),
             ],
+            if (lastStatus.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                lastStatus,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: voicePermDenied
+                      ? const Color(0xFFFF5252)
+                      : secondaryText,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11.5,
+                ),
+              ),
+            ],
             const SizedBox(height: 14),
             Text(
               'HIZLI SESLİ KOMUTLAR (TEK DOKUNUŞ)',
@@ -3873,11 +4132,13 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                       fontSize: 11.5,
                     ),
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     HapticFeedback.selectionClick();
-                    ref
-                        .read(cueDeckProvider.notifier)
-                        .runVoiceTranscript(prompt);
+                    final notifier = ref.read(cueDeckProvider.notifier);
+                    if (isListening) {
+                      await notifier.cancelVoiceCommandSession();
+                    }
+                    await notifier.runVoiceTranscript(prompt);
                   },
                 );
               }).toList(),
@@ -3890,6 +4151,13 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
                     controller: _voiceInputController,
                     focusNode: _voiceInputFocusNode,
                     style: TextStyle(color: primaryText, fontSize: 13),
+                    onTap: () {
+                      if (isListening) {
+                        ref
+                            .read(cueDeckProvider.notifier)
+                            .cancelVoiceCommandSession();
+                      }
+                    },
                     decoration: InputDecoration(
                       hintText: 'Sesli komut veya arama metni yazın...',
                       hintStyle: TextStyle(
@@ -3937,10 +4205,14 @@ class _VoiceControlSheetState extends ConsumerState<_VoiceControlSheet> {
     );
   }
 
-  void _submitCustomTranscript(String raw) {
+  Future<void> _submitCustomTranscript(String raw) async {
     final text = raw.trim();
     if (text.isEmpty) return;
-    ref.read(cueDeckProvider.notifier).runVoiceTranscript(text);
+    final notifier = ref.read(cueDeckProvider.notifier);
+    if (ref.read(cueDeckProvider).isListeningVoice) {
+      await notifier.cancelVoiceCommandSession();
+    }
+    await notifier.runVoiceTranscript(text);
     _voiceInputController.clear();
   }
 }

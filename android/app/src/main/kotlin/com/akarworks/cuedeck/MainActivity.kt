@@ -78,6 +78,11 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
+                "stopVoiceRecognition", "cancelVoiceRecognition" -> {
+                    pendingVoiceResult?.success(null)
+                    pendingVoiceResult = null
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

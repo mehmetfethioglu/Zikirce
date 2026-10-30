@@ -43,6 +43,7 @@ class CueDeckState {
     this.entitlement = const CueEntitlementState(),
     this.localWifiIp = '',
     this.localNetworkPermissionDenied = false,
+    this.voicePermissionDenied = false,
   });
 
   final int activeTab;
@@ -68,6 +69,7 @@ class CueDeckState {
   final CueEntitlementState entitlement;
   final String localWifiIp;
   final bool localNetworkPermissionDenied;
+  final bool voicePermissionDenied;
 
   /// True when the user owns the one-time Lifetime Pro upgrade.
   bool get isProLifetime => entitlement.isProLifetime;
@@ -159,6 +161,7 @@ class CueDeckState {
     CueEntitlementState? entitlement,
     String? localWifiIp,
     bool? localNetworkPermissionDenied,
+    bool? voicePermissionDenied,
   }) {
     return CueDeckState(
       activeTab: activeTab ?? this.activeTab,
@@ -193,6 +196,8 @@ class CueDeckState {
       localWifiIp: localWifiIp ?? this.localWifiIp,
       localNetworkPermissionDenied:
           localNetworkPermissionDenied ?? this.localNetworkPermissionDenied,
+      voicePermissionDenied:
+          voicePermissionDenied ?? this.voicePermissionDenied,
     );
   }
 }
@@ -384,13 +389,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             ? '⏰ Hatırlatıcı: "${dueReminder.title}" saati yaklaştı!'
             : state.lastCommandStatus,
       );
-      if (dueReminder != null) {
-        unawaited(
-          ref
-              .read(cueNotificationServiceProvider)
-              .showReminderNotification(dueReminder, isLeadReminder: true),
-        );
-      }
       _persistState(triggerAutoBackup: false);
     }
   }
@@ -1009,10 +1007,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   /// Listens to the phone's microphone via native speech recognizer and executes
   /// the spoken command or YouTube search directly on the TV.
-  Future<void> startVoiceCommandSession() async {
-    if (state.isListeningVoice) return;
+  /// Returns `true` when a spoken transcript was recognized and executed.
+  Future<bool> startVoiceCommandSession() async {
+    if (state.isListeningVoice) return false;
     state = state.copyWith(
       isListeningVoice: true,
+      voicePermissionDenied: false,
       lastCommandStatus: '🎙️ Telefon mikrofonu dinleniyor... Lütfen konuşun',
     );
 
@@ -1020,19 +1020,45 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     final transcript = await service.listenPhoneMicrophone();
 
     if (transcript == null || transcript.trim().isEmpty) {
+      final permDenied = service.voicePermissionDenied;
       state = state.copyWith(
         isListeningVoice: false,
-        lastCommandStatus:
-            '🎙️ Sesli komut iptal edildi veya ses algılanamadı',
+        voicePermissionDenied: permDenied,
+        lastCommandStatus: permDenied
+            ? '⚠️ Mikrofon / Ses Tanıma izni kapalı! Ayarlar > CueDeck üzerinden izin verin.'
+            : '🎙️ Sesli komut hazır — konuşmak için dokunun veya hızlı komut seçin',
       );
-      return;
+      return false;
     }
 
     state = state.copyWith(
       isListeningVoice: false,
+      voicePermissionDenied: false,
       lastVoiceTranscript: transcript,
     );
     await runVoiceTranscript(transcript);
+    return true;
+  }
+
+  /// Finalizes an active voice recording session on the phone so any spoken words
+  /// are processed immediately without waiting for the silence timer.
+  Future<void> stopVoiceCommandSession() async {
+    if (!state.isListeningVoice) return;
+    final service = ref.read(adbTvServiceProvider);
+    await service.stopPhoneMicrophone();
+  }
+
+  /// Cancels an active voice recording session immediately (e.g., when closing the sheet).
+  Future<void> cancelVoiceCommandSession() async {
+    if (!state.isListeningVoice) return;
+    final service = ref.read(adbTvServiceProvider);
+    await service.cancelPhoneMicrophone();
+    if (state.isListeningVoice) {
+      state = state.copyWith(
+        isListeningVoice: false,
+        lastCommandStatus: '🎙️ Sesli dinleme durduruldu',
+      );
+    }
   }
 
   /// Executes a spoken or preset voice transcript on the TV.

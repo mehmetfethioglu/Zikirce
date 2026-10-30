@@ -81,6 +81,8 @@ class CueNotificationService {
 
       final subText =
           '${item.platform.label} • ${item.recurrenceSummary} • ${item.sessionMinutes}dk/seans';
+      final nextWatch = item.nextWatchDateTime(referenceNow);
+      final watchStartMillis = nextWatch?.millisecondsSinceEpoch ?? 0;
 
       // 1. Lead reminder alarm (scheduledTime - reminderMinutesBefore)
       if (item.reminderMinutesBefore > 0) {
@@ -94,12 +96,13 @@ class CueNotificationService {
                 '${item.platform.label} (${item.formattedClock}) • ${item.checkpointSummary}',
             'subText': subText,
             'cueId': item.id,
+            'isLeadReminder': true,
+            'watchStartMillis': watchStartMillis,
           });
         }
       }
 
       // 2. Exact watch start time alarm (scheduledTime)
-      final nextWatch = item.nextWatchDateTime(referenceNow);
       if (nextWatch != null && nextWatch.isAfter(referenceNow)) {
         alarms.add(<String, dynamic>{
           'alarmId': computeNotificationId(item.id, slot: 1),
@@ -109,6 +112,8 @@ class CueNotificationService {
           'body': '${item.title} — ${item.checkpointSummary}',
           'subText': subText,
           'cueId': item.id,
+          'isLeadReminder': false,
+          'watchStartMillis': watchStartMillis,
         });
       }
     }

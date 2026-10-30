@@ -216,6 +216,7 @@ class AdbTvService {
   bool _sentAuthPublicKey = false;
   bool _lastConnectRequiredPairingPrompt = false;
   bool _localNetworkPermissionDenied = false;
+  bool _voicePermissionDenied = false;
   String _detectedWifiIp = '';
   int _nextLocalId = 1;
   final List<int> _rxBuffer = <int>[];
@@ -239,6 +240,9 @@ class AdbTvService {
   /// `EHOSTUNREACH (errno 65)` / `EPERM (errno 1)` because Local Network permission
   /// (`iPhone Ayarlar > Uygulamalar > CueDeck > Yerel Ağ`) is turned off.
   bool get localNetworkPermissionDenied => _localNetworkPermissionDenied;
+
+  /// True when the phone OS rejected Microphone or Speech Recognition permission.
+  bool get voicePermissionDenied => _voicePermissionDenied;
 
   /// The phone's detected Wi-Fi IPv4 address on `en0` / `wlan0` (e.g. `192.168.1.107`).
   String get detectedWifiIp => _detectedWifiIp;
@@ -1472,20 +1476,45 @@ class AdbTvService {
     return _executeShellCommand(device, 'input text "$sanitized"');
   }
 
-  /// Opens the native Android speech recognizer on the phone and returns the
+  /// Opens the native Android/iOS speech recognizer on the phone and returns the
   /// spoken transcript string (or `null` if canceled/unavailable).
   Future<String?> listenPhoneMicrophone({String locale = 'tr-TR'}) async {
+    _voicePermissionDenied = false;
     try {
       final result = await _voiceChannel.invokeMethod<String>(
         'startVoiceRecognition',
         <String, dynamic>{'locale': locale},
       );
       final trimmed = result?.trim();
+      if (trimmed == '__PERMISSION_DENIED__') {
+        _voicePermissionDenied = true;
+        return null;
+      }
       if (trimmed == null || trimmed.isEmpty) return null;
       return trimmed;
+    } on PlatformException catch (e) {
+      if (e.code == 'PERMISSION_DENIED') {
+        _voicePermissionDenied = true;
+      }
+      return null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Finalizes an active speech recognition session on the phone and processes
+  /// any partial words spoken so far.
+  Future<void> stopPhoneMicrophone() async {
+    try {
+      await _voiceChannel.invokeMethod<void>('stopVoiceRecognition');
+    } catch (_) {}
+  }
+
+  /// Cancels an active speech recognition session on the phone immediately.
+  Future<void> cancelPhoneMicrophone() async {
+    try {
+      await _voiceChannel.invokeMethod<void>('cancelVoiceRecognition');
+    } catch (_) {}
   }
 
   /// Parses a natural-language Turkish/English voice transcript and executes
@@ -1637,6 +1666,106 @@ class AdbTvService {
       return ok
           ? '🎙️ TV\'de Zikirce açıldı'
           : '⚡ Zikirce başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['prime video', 'amazon prime', 'prime aç'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.primeVideo,
+      );
+      return ok
+          ? '🎙️ TV\'de Prime Video açıldı'
+          : '⚡ Prime Video başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['disney'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.disneyPlus,
+      );
+      return ok
+          ? '🎙️ TV\'de Disney+ açıldı'
+          : '⚡ Disney+ başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['exxen'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.exxen,
+      );
+      return ok
+          ? '🎙️ TV\'de Exxen açıldı'
+          : '⚡ Exxen başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['blutv', 'blu tv', 'max aç', 'hbo'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.blutv,
+      );
+      return ok
+          ? '🎙️ TV\'de Max / BluTV açıldı'
+          : '⚡ Max / BluTV başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['s sport', 'ssport'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.ssportPlus,
+      );
+      return ok
+          ? '🎙️ TV\'de S Sport+ açıldı'
+          : '⚡ S Sport+ başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['tod tv', 'tod aç'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.todTv,
+      );
+      return ok
+          ? '🎙️ TV\'de TOD TV açıldı'
+          : '⚡ TOD TV başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['spotify'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.spotify,
+      );
+      return ok
+          ? '🎙️ TV\'de Spotify açıldı'
+          : '⚡ Spotify başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['twitch'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.twitch,
+      );
+      return ok
+          ? '🎙️ TV\'de Twitch açıldı'
+          : '⚡ Twitch başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['kodi', 'iptv'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.kodi,
+      );
+      return ok
+          ? '🎙️ TV\'de Kodi / IPTV açıldı'
+          : '⚡ Kodi / IPTV başlatma sinyali gönderildi';
+    }
+
+    if (matchesAny(<String>['vlc'])) {
+      final ok = await launchPlatformOrDeepLink(
+        device,
+        platform: StreamingPlatform.vlc,
+      );
+      return ok
+          ? '🎙️ TV\'de VLC Player açıldı'
+          : '⚡ VLC Player başlatma sinyali gönderildi';
     }
 
     if (lower == 'youtube' ||

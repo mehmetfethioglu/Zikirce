@@ -2,16 +2,40 @@ import Flutter
 import UIKit
 import Foundation
 import Darwin
+import Speech
+import AVFoundation
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var netServiceBrowsers: [NetServiceBrowser] = []
+  private var audioEngine: AVAudioEngine?
+  private var speechRecognizer: SFSpeechRecognizer?
+  private var speechRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+  private var speechRecognitionTask: SFSpeechRecognitionTask?
+  private var pendingVoiceResult: FlutterResult?
+  private var latestVoiceTranscript: String = ""
+  private var voiceSilenceTimer: Timer?
+  private var voiceMaxTimeoutTimer: Timer?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    UNUserNotificationCenter.current().delegate = self
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if #available(iOS 14.0, *) {
+      completionHandler([.banner, .list, .sound, .badge])
+    } else {
+      completionHandler([.alert, .sound, .badge])
+    }
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
@@ -30,6 +54,326 @@ import Darwin
         self.handleNetworkMethodCall(call: call, result: result)
       }
     }
+
+    if let voiceRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "CueDeckIosVoiceBridge") {
+      let voiceChannel = FlutterMethodChannel(
+        name: "com.akarworks.cuedeck/voice",
+        binaryMessenger: voiceRegistrar.messenger()
+      )
+      voiceChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self = self else {
+          result(FlutterError(code: "DISPOSED", message: "AppDelegate disposed", details: nil))
+          return
+        }
+        self.handleVoiceMethodCall(call: call, result: result)
+      }
+    }
+
+    if let notifRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "CueDeckIosNotificationBridge") {
+      let notifChannel = FlutterMethodChannel(
+        name: "com.akarworks.cuedeck/notifications",
+        binaryMessenger: notifRegistrar.messenger()
+      )
+      notifChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self = self else {
+          result(FlutterError(code: "DISPOSED", message: "AppDelegate disposed", details: nil))
+          return
+        }
+        self.handleNotificationMethodCall(call: call, result: result)
+      }
+    }
+  }
+
+  private func handleNotificationMethodCall(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    switch call.method {
+    case "requestNotificationPermission":
+      center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+        DispatchQueue.main.async {
+          result(granted)
+        }
+      }
+
+    case "showNotificationNow":
+      let args = call.arguments as? [String: Any]
+      let notificationId = (args?["notificationId"] as? Int) ?? 2001
+      let title = (args?["title"] as? String) ?? "CueDeck İzleme Vakti"
+      let body = (args?["body"] as? String) ?? ""
+      let subText = (args?["subText"] as? String) ?? ""
+      let cueId = (args?["cueId"] as? String) ?? ""
+
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      if !subText.isEmpty {
+        content.subtitle = subText
+      }
+      content.sound = .default
+      if !cueId.isEmpty {
+        content.userInfo = ["cueId": cueId]
+      }
+
+      let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.25, repeats: false)
+      let req = UNNotificationRequest(
+        identifier: "cuedeck_immediate_\(notificationId)",
+        content: content,
+        trigger: trigger
+      )
+      center.add(req) { err in
+        DispatchQueue.main.async {
+          result(err == nil)
+        }
+      }
+
+    case "syncScheduledNotifications":
+      let args = call.arguments as? [String: Any]
+      let rawAlarms = (args?["alarms"] as? [[String: Any]]) ?? []
+      center.getPendingNotificationRequests { pending in
+        let oldIds = pending
+          .map { $0.identifier }
+          .filter { $0.hasPrefix("cuedeck_alarm_") }
+        if !oldIds.isEmpty {
+          center.removePendingNotificationRequests(withIdentifiers: oldIds)
+        }
+
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+        var scheduledCount = 0
+        let calendar = Calendar.current
+
+        for entry in rawAlarms {
+          guard let alarmId = (entry["alarmId"] as? NSNumber)?.intValue,
+                let triggerAtMillis = (entry["triggerAtMillis"] as? NSNumber)?.int64Value,
+                triggerAtMillis > nowMs else {
+            continue
+          }
+          let title = (entry["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          if title.isEmpty { continue }
+          let body = (entry["body"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          let subText = (entry["subText"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          let cueId = (entry["cueId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+          let content = UNMutableNotificationContent()
+          content.title = title
+          content.body = body
+          if !subText.isEmpty {
+            content.subtitle = subText
+          }
+          content.sound = .default
+          if !cueId.isEmpty {
+            content.userInfo = ["cueId": cueId]
+          }
+
+          let fireDate = Date(timeIntervalSince1970: TimeInterval(triggerAtMillis) / 1000.0)
+          let comps = calendar.dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: fireDate
+          )
+          let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+          let req = UNNotificationRequest(
+            identifier: "cuedeck_alarm_\(alarmId)",
+            content: content,
+            trigger: trigger
+          )
+          center.add(req, withCompletionHandler: nil)
+          scheduledCount += 1
+        }
+
+        DispatchQueue.main.async {
+          result(scheduledCount)
+        }
+      }
+
+    case "cancelAllNotifications":
+      center.removeAllPendingNotificationRequests()
+      result(true)
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func handleVoiceMethodCall(call: FlutterMethodCall, result: @escaping FlutterResult) {
+    switch call.method {
+    case "startVoiceRecognition":
+      let args = call.arguments as? [String: Any]
+      let localeId = (args?["locale"] as? String) ?? "tr-TR"
+      DispatchQueue.main.async {
+        if self.pendingVoiceResult != nil {
+          self.finishVoiceSession(with: nil)
+        }
+        self.pendingVoiceResult = result
+        self.latestVoiceTranscript = ""
+
+        SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
+          DispatchQueue.main.async {
+            guard let self = self else { return }
+            guard authStatus == .authorized else {
+              self.finishVoiceSession(with: "__PERMISSION_DENIED__")
+              return
+            }
+            self.requestMicrophonePermission { micGranted in
+              DispatchQueue.main.async {
+                guard micGranted else {
+                  self.finishVoiceSession(with: "__PERMISSION_DENIED__")
+                  return
+                }
+                self.beginIosSpeechCapture(localeId: localeId)
+              }
+            }
+          }
+        }
+      }
+
+    case "stopVoiceRecognition":
+      DispatchQueue.main.async {
+        let captured = self.latestVoiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.finishVoiceSession(with: captured.isEmpty ? nil : captured)
+        result(nil)
+      }
+
+    case "cancelVoiceRecognition":
+      DispatchQueue.main.async {
+        self.finishVoiceSession(with: nil)
+        result(nil)
+      }
+
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  private func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
+    if #available(iOS 17.0, *) {
+      AVAudioApplication.requestRecordPermission { granted in
+        completion(granted)
+      }
+    } else {
+      AVAudioSession.sharedInstance().requestRecordPermission { granted in
+        completion(granted)
+      }
+    }
+  }
+
+  private func beginIosSpeechCapture(localeId: String) {
+    stopAudioEngineAndTimers()
+
+    let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeId))
+      ?? SFSpeechRecognizer(locale: Locale(identifier: "tr-TR"))
+      ?? SFSpeechRecognizer(locale: Locale.current)
+      ?? SFSpeechRecognizer()
+
+    guard let activeRecognizer = recognizer, activeRecognizer.isAvailable else {
+      finishVoiceSession(with: nil)
+      return
+    }
+    self.speechRecognizer = activeRecognizer
+
+    let audioSession = AVAudioSession.sharedInstance()
+    do {
+      do {
+        try audioSession.setCategory(
+          .playAndRecord,
+          mode: .measurement,
+          options: [.duckOthers, .defaultToSpeaker, .allowBluetooth]
+        )
+      } catch {
+        try audioSession.setCategory(.record, mode: .default, options: [])
+      }
+      try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+    } catch {
+      finishVoiceSession(with: nil)
+      return
+    }
+
+    let request = SFSpeechAudioBufferRecognitionRequest()
+    request.shouldReportPartialResults = true
+    self.speechRecognitionRequest = request
+
+    let engine = AVAudioEngine()
+    self.audioEngine = engine
+    let inputNode = engine.inputNode
+    let recordingFormat = inputNode.outputFormat(forBus: 0)
+    guard recordingFormat.sampleRate > 0 && recordingFormat.channelCount > 0 else {
+      finishVoiceSession(with: nil)
+      return
+    }
+
+    inputNode.removeTap(onBus: 0)
+    inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+      self?.speechRecognitionRequest?.append(buffer)
+    }
+
+    do {
+      engine.prepare()
+      try engine.start()
+    } catch {
+      finishVoiceSession(with: nil)
+      return
+    }
+
+    // Max initial silence / session timeout (7.5 seconds)
+    self.voiceMaxTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 7.5, repeats: false) { [weak self] _ in
+      guard let self = self else { return }
+      let captured = self.latestVoiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      self.finishVoiceSession(with: captured.isEmpty ? nil : captured)
+    }
+
+    self.speechRecognitionTask = activeRecognizer.recognitionTask(with: request) { [weak self] res, err in
+      DispatchQueue.main.async {
+        guard let self = self, self.pendingVoiceResult != nil else { return }
+        if let res = res {
+          let text = res.bestTranscription.formattedString.trimmingCharacters(in: .whitespacesAndNewlines)
+          if !text.isEmpty {
+            self.latestVoiceTranscript = text
+            if res.isFinal {
+              self.finishVoiceSession(with: text)
+              return
+            }
+            // Reset 1.35s post-speech silence endpoint timer
+            self.voiceSilenceTimer?.invalidate()
+            self.voiceSilenceTimer = Timer.scheduledTimer(withTimeInterval: 1.35, repeats: false) { [weak self] _ in
+              guard let self = self else { return }
+              let finalText = self.latestVoiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+              self.finishVoiceSession(with: finalText.isEmpty ? nil : finalText)
+            }
+          }
+        }
+        if err != nil {
+          let captured = self.latestVoiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+          self.finishVoiceSession(with: captured.isEmpty ? nil : captured)
+        }
+      }
+    }
+  }
+
+  private func stopAudioEngineAndTimers() {
+    voiceSilenceTimer?.invalidate()
+    voiceSilenceTimer = nil
+    voiceMaxTimeoutTimer?.invalidate()
+    voiceMaxTimeoutTimer = nil
+
+    if let engine = audioEngine {
+      if engine.isRunning {
+        engine.stop()
+      }
+      engine.inputNode.removeTap(onBus: 0)
+    }
+    audioEngine = nil
+
+    speechRecognitionRequest?.endAudio()
+    speechRecognitionRequest = nil
+
+    speechRecognitionTask?.cancel()
+    speechRecognitionTask = nil
+
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+  }
+
+  private func finishVoiceSession(with transcript: String?) {
+    stopAudioEngineAndTimers()
+    guard let callback = pendingVoiceResult else { return }
+    pendingVoiceResult = nil
+    callback(transcript)
   }
 
   private func handleNetworkMethodCall(call: FlutterMethodCall, result: @escaping FlutterResult) {

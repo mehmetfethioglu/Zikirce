@@ -11,11 +11,15 @@ class TactileDpadPainter extends CustomPainter {
     required this.activeDirection,
     required this.accentColor,
     this.isDarkMode = true,
+    this.isTouchpadMode = false,
+    this.touchPosition,
   });
 
   final TvKeyCommand? activeDirection;
   final Color accentColor;
   final bool isDarkMode;
+  final bool isTouchpadMode;
+  final Offset? touchPosition;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -49,14 +53,61 @@ class TactileDpadPainter extends CustomPainter {
       ).createShader(ringRect);
     canvas.drawCircle(center, outerRadius, ringPaint);
 
-    // 3. Outer rim hairline border
+    // 3. Outer rim hairline border (glows Champagne Gold when Mouse/Touchpad mode is active)
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = isDarkMode
-          ? const Color(0xFF2C3140)
-          : Colors.black.withValues(alpha: 0.35);
+      ..strokeWidth = isTouchpadMode ? 1.6 : 1.2
+      ..color = isTouchpadMode
+          ? accentColor.withValues(alpha: 0.72)
+          : (isDarkMode
+              ? const Color(0xFF2C3140)
+              : Colors.black.withValues(alpha: 0.35));
     canvas.drawCircle(center, outerRadius, borderPaint);
+
+    if (isTouchpadMode) {
+      // Touchpad / Mouse Surface Mode: subtle trackpad crosshair grid + live cursor orb
+      final gridPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8
+        ..color = accentColor.withValues(alpha: isDarkMode ? 0.13 : 0.18);
+
+      canvas.drawCircle(center, outerRadius * 0.68, gridPaint);
+      canvas.drawCircle(center, outerRadius * 0.34, gridPaint);
+      canvas.drawLine(
+        Offset(center.dx - outerRadius * 0.76, center.dy),
+        Offset(center.dx + outerRadius * 0.76, center.dy),
+        gridPaint,
+      );
+      canvas.drawLine(
+        Offset(center.dx, center.dy - outerRadius * 0.76),
+        Offset(center.dx, center.dy + outerRadius * 0.76),
+        gridPaint,
+      );
+
+      if (touchPosition != null) {
+        final dx = touchPosition!.dx - center.dx;
+        final dy = touchPosition!.dy - center.dy;
+        final dist = math.sqrt(dx * dx + dy * dy);
+        final maxOrbDist = outerRadius - 14;
+        final clampedPos = dist > maxOrbDist && dist > 0
+            ? Offset(
+                center.dx + (dx / dist) * maxOrbDist,
+                center.dy + (dy / dist) * maxOrbDist,
+              )
+            : touchPosition!;
+
+        final haloPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = accentColor.withValues(alpha: 0.24);
+        canvas.drawCircle(clampedPos, 16, haloPaint);
+
+        final corePaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = accentColor;
+        canvas.drawCircle(clampedPos, 5.5, corePaint);
+      }
+      return;
+    }
 
     // 4. Active directional quadrant arc highlight
     if (activeDirection != null && activeDirection != TvKeyCommand.ok) {
@@ -130,7 +181,9 @@ class TactileDpadPainter extends CustomPainter {
   bool shouldRepaint(covariant TactileDpadPainter oldDelegate) {
     return oldDelegate.activeDirection != activeDirection ||
         oldDelegate.accentColor != accentColor ||
-        oldDelegate.isDarkMode != isDarkMode;
+        oldDelegate.isDarkMode != isDarkMode ||
+        oldDelegate.isTouchpadMode != isTouchpadMode ||
+        oldDelegate.touchPosition != touchPosition;
   }
 }
 

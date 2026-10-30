@@ -570,7 +570,7 @@ class WatchCueItem {
       scheduledTime.minute,
     );
     final diffMinutes = todayScheduled.difference(now).inMinutes;
-    return diffMinutes <= reminderMinutesBefore && diffMinutes >= -30;
+    return diffMinutes <= reminderMinutesBefore && diffMinutes >= -2;
   }
 
   /// Computes the next upcoming scheduled watch start [DateTime] after [now],
