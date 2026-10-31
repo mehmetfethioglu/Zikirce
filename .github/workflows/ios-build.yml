@@ -86,7 +86,6 @@ jobs:
     needs: build-ios
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: ${{ secrets.APP_STORE_KEY_ID != '' && secrets.APP_STORE_ISSUER_ID != '' && secrets.APP_STORE_PRIVATE_KEY != '' }}
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
@@ -94,9 +93,11 @@ jobs:
 
     steps:
       - name: Install PyJWT and Cryptography
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: pip install pyjwt cryptography requests
 
       - name: Configure v2.2.0 Release Notes, Attach Build 66 & Submit to Review
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, jwt, requests
