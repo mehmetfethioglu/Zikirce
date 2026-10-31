@@ -81,4 +81,239 @@ jobs:
           path: build/ios/ipa/Zikirce.ipa
           retention-days: 14
 
+  submit-appstore:
+    name: Submit v2.2.0 (Build 66) to App Store Connect Review
+    needs: build-ios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ secrets.APP_STORE_KEY_ID != '' && secrets.APP_STORE_ISSUER_ID != '' && secrets.APP_STORE_PRIVATE_KEY != '' }}
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
 
+    steps:
+      - name: Install PyJWT and Cryptography
+        run: pip install pyjwt cryptography requests
+
+      - name: Configure v2.2.0 Release Notes, Attach Build 66 & Submit to Review
+        run: |
+          python3 - << 'EOF'
+          import os, sys, time, json, jwt, requests
+
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+
+          def make_headers():
+              now = int(time.time())
+              payload = {
+                  "iss": issuer_id,
+                  "iat": now - 30,
+                  "exp": now + 1100,
+                  "aud": "appstoreconnect-v1",
+              }
+              token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"})
+              return {
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json",
+              }
+
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+
+          # 1. Find App ID for com.akarworks.zikirce
+          r = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.zikirce", headers=make_headers())
+          r.raise_for_status()
+          apps = r.json().get("data", [])
+          if not apps:
+              print("ERROR: App com.akarworks.zikirce not found!")
+              sys.exit(1)
+          app_id = apps[0]["id"]
+          print(f"✅ Found App ID: {app_id}")
+
+          # 2. Find or create App Store Version 2.2.0
+          r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
+          r.raise_for_status()
+          versions = r.json().get("data", [])
+          target_version_id = None
+          editable_version = None
+
+          for v in versions:
+              v_str = v["attributes"]["versionString"]
+              v_state = v["attributes"]["appStoreState"]
+              print(f"  Existing version: {v_str} (state: {v_state}, id: {v['id']})")
+              if v_str == "2.2.0":
+                  target_version_id = v["id"]
+                  break
+              if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "INVALID_BINARY"):
+                  editable_version = v
+
+          if not target_version_id and editable_version:
+              target_version_id = editable_version["id"]
+              print(f"🔄 Updating editable version {editable_version['attributes']['versionString']} -> 2.2.0 ({target_version_id})")
+              up = requests.patch(
+                  f"{BASE}/appStoreVersions/{target_version_id}",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersions",
+                          "id": target_version_id,
+                          "attributes": {"versionString": "2.2.0"},
+                      }
+                  },
+              )
+              print("  Update versionString status:", up.status_code, up.text[:300])
+
+          if not target_version_id:
+              print("➕ Creating new App Store Version 2.2.0...")
+              cr = requests.post(
+                  f"{BASE}/appStoreVersions",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersions",
+                          "attributes": {
+                              "platform": "IOS",
+                              "versionString": "2.2.0",
+                              "releaseType": "AFTER_APPROVAL",
+                          },
+                          "relationships": {
+                              "app": {"data": {"type": "apps", "id": app_id}}
+                          },
+                      }
+                  },
+              )
+              print("  Create version status:", cr.status_code)
+              if cr.status_code in (200, 201):
+                  target_version_id = cr.json()["data"]["id"]
+              else:
+                  print("  Create version response:", cr.text)
+                  sys.exit(1)
+
+          print(f"✅ Target App Store Version ID for 2.2.0: {target_version_id}")
+
+          # 3. Set What's New (Release Notes) for TR and EN
+          whats_new_tr = (
+              "Zikirce v2.2.0 Yenilikleri:\n"
+              "• 40 Eserlik Külliyat, 16 Cep Risalesi & 84.141 Maddelik Risale-i Nur Lügati: Külliyat kitaplığına DİB Asıl Nüsha Tashihli 16 müstakil Risale-i Nur Küçük Eseri ve 84.141 kelime/tamlama içeren Risale-i Nur Büyük Lügati eklendi. Osmanlıca kelime ve izafet terkipleri tema uyumlu kehribar/bakır kök renklendirmesiyle gösterilir; üzerine dokunulduğunda anında lügat mânâsı açılır. Kitaplardaki tüm Arapça ibareler Kur’ân hattı ve kırmızı Lafzatullah vurgusuyla sunulur.\n"
+              "• Diyanet Birebir Ses-Kelime Senkronizasyonu, Kayan Kırmızı Ok Takibi & Besmele: Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve resmi Diyanet zaman damgası veritabanı ile 6.236 âyette sıfır gecikmeli ses-kelime uyumu, kelimenin altında sağdan sola kayan kırmızı Ok Takibi ve Besmele-i Şerîf ile başlama özelliği eklendi.\n"
+              "• Külliyat Ana Ekran ve Kilit Ekranı Widget’ı: Son okuduğunuz eseri, ilerleme yüzdesini (%XX) ve tek dokunuşla kaldığınız sayfadan devam etme özelliğini sunan iOS Ana Ekran ve Kilit Ekranı Widget’ı eklendi.\n"
+              "• Dinamik Âyet/Hadis Paylaşım Stüdyosu, Sayfa İçi Secde Rozetleri & Vakit Koruması: Paylaşım kartlarına 60+ âyet/hadis seçici ve rastgele değiştirme, tüm Kur’ân okuma modlarında sayfa içi Tilâvet Secdesi rozetleri, vakti girmeyen namaz koruması ve günlük hedeflere klavye ile sayı girişi eklendi."
+          )
+
+          whats_new_en = (
+              "What's New in Zikirce v2.2.0:\n"
+              "• 40-Volume Islamic Library, 16 Pocket Risales & 84,141-Entry Risale-i Nur Dictionary: Expanded the Külliyat library to 40 volumes with 16 standalone Pocket Risale works and the 84,141-entry Risale-i Nur Ottoman-Turkish Dictionary. Ottoman words and compound izafet phrases are highlighted with theme-adaptive root coloring for instant tap-to-view definitions, and all embedded Arabic verses and phrases render in authentic Quranic calligraphy with ruby-red Divine Name highlights.\n"
+              "• Exact Diyanet Audio-to-Word Sync, Sliding Red Arrow Tracking & Basmala Start: Re-engineered Mukabele, Word-by-Word Listening (Talim), and Mushaf audio players with single-track per-verse playback and official Diyanet wordTrack timestamps across all 6,236 verses, smooth right-to-left sliding red Arrow Pointer tracking, and automatic Basmala recitation at session start.\n"
+              "• Külliyat Home Screen & Lock Screen Widgets: Track your classical bookshelf, last read book, page/ayah progress (%XX), and resume reading with a single tap from your iOS Home Screen and Lock Screen.\n"
+              "• Dynamic Verse/Hadith Sharing Studio, In-Page Sajdah Badges & Prayer Time Guard: Added a 60+ Verse & Hadith picker across all share cards, inline Sajdah al-Tilawah badges across all Quran modes, a future prayer time guard, and direct keyboard goal input."
+          )
+
+          loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
+          loc_r.raise_for_status()
+          locs = loc_r.json().get("data", [])
+          for loc in locs:
+              locale = loc["attributes"]["locale"]
+              loc_id = loc["id"]
+              text = whats_new_tr if locale.startswith("tr") else whats_new_en
+              pr = requests.patch(
+                  f"{BASE}/appStoreVersionLocalizations/{loc_id}",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersionLocalizations",
+                          "id": loc_id,
+                          "attributes": {"whatsNew": text},
+                      }
+                  },
+              )
+              print(f"📝 Updated whatsNew for locale '{locale}': status {pr.status_code}")
+
+          # 4. Wait for Build 66 to finish Apple processing (if needed) and attach to Version 2.2.0
+          build_id = None
+          for attempt in range(30):
+              br = requests.get(
+                  f"{BASE}/builds?filter[app]={app_id}&filter[version]=66&sort=-uploadedDate&limit=5",
+                  headers=make_headers(),
+              )
+              br.raise_for_status()
+              b_list = br.json().get("data", [])
+              if b_list:
+                  b = b_list[0]
+                  state = b["attributes"].get("processingState")
+                  print(f"📦 Build 66 found (id: {b['id']}, state: {state})")
+                  if state == "VALID":
+                      build_id = b["id"]
+                      break
+                  elif state in ("FAILED", "INVALID"):
+                      print("❌ Build 66 state is invalid/failed!")
+                      break
+              else:
+                  print(f"⏳ Attempt {attempt+1}/30: Build 66 still processing on Apple servers, waiting 25s...")
+              time.sleep(25)
+
+          if build_id:
+              requests.patch(
+                  f"{BASE}/builds/{build_id}",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "builds",
+                          "id": build_id,
+                          "attributes": {"usesNonExemptEncryption": False},
+                      }
+                  },
+              )
+              att = requests.patch(
+                  f"{BASE}/appStoreVersions/{target_version_id}/relationships/build",
+                  headers=make_headers(),
+                  json={"data": {"type": "builds", "id": build_id}},
+              )
+              print(f"🔗 Attached Build 66 ({build_id}) to Version 2.2.0: status {att.status_code}")
+
+              sub_create = requests.post(
+                  f"{BASE}/reviewSubmissions",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "reviewSubmissions",
+                          "attributes": {"platform": "IOS"},
+                          "relationships": {
+                              "app": {"data": {"type": "apps", "id": app_id}}
+                          },
+                      }
+                  },
+              )
+              if sub_create.status_code in (200, 201):
+                  sub_id = sub_create.json()["data"]["id"]
+                  item_res = requests.post(
+                      f"{BASE}/reviewSubmissionItems",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "reviewSubmissionItems",
+                              "relationships": {
+                                  "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub_id}},
+                                  "appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}},
+                              },
+                          }
+                      },
+                  )
+                  print("  Added item to reviewSubmission:", item_res.status_code)
+                  confirm = requests.patch(
+                      f"{BASE}/reviewSubmissions/{sub_id}",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "reviewSubmissions",
+                              "id": sub_id,
+                              "attributes": {"submitted": True},
+                          }
+                      },
+                  )
+                  print("🚀 Submitted Version 2.2.0 (Build 66) for App Store Review:", confirm.status_code, confirm.text[:300])
+              else:
+                  print("ℹ️ reviewSubmissions note:", sub_create.status_code, sub_create.text[:400])
+          else:
+              print("⚠️ Build 66 is still in Apple TestFlight processing queue; Version 2.2.0 and TR/EN Release Notes are saved and ready in App Store Connect!")
+          EOF

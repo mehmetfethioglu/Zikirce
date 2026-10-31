@@ -193,11 +193,23 @@ class TilavetSecdesiData {
     for (final item in allSecdeVerses) item.page: item,
   };
 
+  static final Map<String, TilavetSecdeItem> _verseMap = {
+    for (final item in allSecdeVerses) '${item.sureId}:${item.ayetId}': item,
+  };
+
   /// Belirtilen sayfada secde âyeti var mı?
   static bool isSecdePage(int page) => _pageMap.containsKey(page);
 
   /// Belirtilen sayfanın secde âyeti bilgisini döner (yoksa null).
   static TilavetSecdeItem? getSecdeForPage(int page) => _pageMap[page];
+
+  /// Belirtilen sûre ve âyet numarası bir tilâvet secdesi âyeti mi?
+  static bool isSecdeVerse(int sureId, int ayetId) =>
+      _verseMap.containsKey('$sureId:$ayetId');
+
+  /// Belirtilen sûre ve âyetin tilâvet secdesi bilgisini döner (yoksa null).
+  static TilavetSecdeItem? getSecdeForVerse(int sureId, int ayetId) =>
+      _verseMap['$sureId:$ayetId'];
 
   /// Tilâvet secdesinin adım adım yapılış rehberi
   static const List<TilavetStep> guideSteps = [

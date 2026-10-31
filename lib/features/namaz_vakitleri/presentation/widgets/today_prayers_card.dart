@@ -52,12 +52,16 @@ class TodayPrayersCard extends ConsumerWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final todayPrayersAsync = ref.watch(todayPrayersProvider);
     final timingsAsync = ref.watch(prayerTimingsProvider);
+    final selectedCity = ref.watch(selectedCityProvider);
     final nextPrayerName = ref.watch(nextPrayerInfoProvider.select((i) => i?.name));
+    // Vakit değişiminde kartın anında yeniden değerlendirilmesi için aktif vakit indeksini izle
+    ref.watch(nextPrayerInfoProvider.select((i) => i?.activePrayerIndex));
     final nextPrayerTime = showCountdownHeader
         ? ref.watch(nextPrayerInfoProvider.select((i) => i?.time))
         : null;
 
-    final timings = timingsAsync.valueOrNull;
+    final timings = timingsAsync.valueOrNull ??
+        PrayerTimesService.calculateOfflinePrayerTimes(selectedCity, DateTime.now());
     final rawPrayers = todayPrayersAsync.valueOrNull ?? [];
     
     // Asla boş kart kalmaması için 5 vakit garantisi
@@ -204,7 +208,21 @@ class TodayPrayersCard extends ConsumerWidget {
             children: prayers.map((item) {
               final timeStr = _getPrayerTime(timings, item.prayerName);
               final isUpcoming = _isUpcoming(item.prayerName, nextPrayerName);
-              return _buildPrayerItem(context, ref, item, timeStr, isUpcoming, completedCount, colors, isDark);
+              final isTimeEntered = PrayerTrackingService.isPrayerTimeEntered(
+                item.prayerName,
+                timings,
+              );
+              return _buildPrayerItem(
+                context,
+                ref,
+                item,
+                timeStr,
+                isUpcoming,
+                isTimeEntered,
+                completedCount,
+                colors,
+                isDark,
+              );
             }).toList(),
           ),
         ],
@@ -218,16 +236,51 @@ class TodayPrayersCard extends ConsumerWidget {
     TodayPrayerStatusItem item,
     String timeStr,
     bool isUpcoming,
+    bool isTimeEntered,
     int completedCount,
     AppThemeColors colors,
     bool isDark,
   ) {
-    final isDone = item.isCompleted;
+    final isDone = isTimeEntered && item.isCompleted;
+    final l10n = context.l10n;
 
     return Expanded(
       child: GestureDetector(
         onTap: () async {
           HapticService.selectionClick();
+          if (!isTimeEntered) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFF334155),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 3),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  content: Row(
+                    children: [
+                      const Text('⏳', style: TextStyle(fontSize: 20)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          l10n.isTurkish
+                              ? '${item.prayerName} namazının vakti henüz girmedi${timeStr.isNotEmpty ? ' ($timeStr)' : ''}. Vakti girmeden kılındı olarak işaretlenemez.'
+                              : '${item.prayerName} prayer time has not entered yet${timeStr.isNotEmpty ? ' ($timeStr)' : ''}. It cannot be marked as completed before its time.',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return;
+          }
+
           final db = ref.read(databaseProvider);
           final earnedDiamond = await PrayerTrackingService.toggleTodayPrayer(db, item.prayerName);
 
@@ -321,9 +374,12 @@ class TodayPrayersCard extends ConsumerWidget {
           child: Column(
             children: [
               // Icon
-              Text(
-                item.icon,
-                style: const TextStyle(fontSize: 17),
+              Opacity(
+                opacity: isTimeEntered ? 1.0 : 0.48,
+                child: Text(
+                  item.icon,
+                  style: const TextStyle(fontSize: 17),
+                ),
               ),
               const SizedBox(height: 4),
 
@@ -335,7 +391,9 @@ class TodayPrayersCard extends ConsumerWidget {
                   fontWeight: FontWeight.bold,
                   color: isDone
                       ? (isDark ? const Color(0xFF34D399) : const Color(0xFF065F46))
-                      : colors.primaryText,
+                      : (isTimeEntered
+                          ? colors.primaryText
+                          : colors.secondaryTextAlt.withValues(alpha: 0.7)),
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -361,13 +419,15 @@ class TodayPrayersCard extends ConsumerWidget {
                   shape: BoxShape.circle,
                   color: isDone
                       ? (isDark ? const Color(0xFF10B981) : const Color(0xFF059669))
-                      : Colors.transparent,
+                      : (!isTimeEntered
+                          ? colors.secondaryTextAlt.withValues(alpha: 0.08)
+                          : Colors.transparent),
                   border: Border.all(
                     color: isDone
                         ? Colors.transparent
                         : (isUpcoming
                             ? colors.accent.withValues(alpha: 0.7)
-                            : colors.secondaryTextAlt.withValues(alpha: 0.4)),
+                            : colors.secondaryTextAlt.withValues(alpha: isTimeEntered ? 0.4 : 0.25)),
                     width: 1.5,
                   ),
                 ),
@@ -378,7 +438,15 @@ class TodayPrayersCard extends ConsumerWidget {
                         size: 13,
                         color: Colors.white,
                       )
-                    : null,
+                    : (!isTimeEntered
+                        ? Icon(
+                            Icons.schedule_rounded,
+                            size: 11,
+                            color: isUpcoming
+                                ? colors.accent.withValues(alpha: 0.85)
+                                : colors.secondaryTextAlt.withValues(alpha: 0.55),
+                          )
+                        : null),
               ),
             ],
           ),

@@ -711,6 +711,265 @@ enum KazaDataHelper {
     }
 }
 
+// MARK: - Külliyat & Reading Progress Models
+struct KulliyatShelfBookItem: Identifiable {
+    let id: String
+    let title: String
+    let author: String
+    let category: String
+    let currentPage: Int
+    let totalPages: Int
+    let progressPercent: Int
+    let paletteIndex: Int
+    let hasStarted: Bool
+}
+
+struct KulliyatEntry: TimelineEntry {
+    let date: Date
+    let lastBookId: String
+    let lastBookTitle: String
+    let lastBookFullTitle: String
+    let lastBookAuthor: String
+    let lastBookCategory: String
+    let lastBookPage: Int
+    let lastBookTotalPages: Int
+    let lastBookPercent: Int
+    let lastBookPaletteIndex: Int
+    let lastBookReference: String
+    let startedCount: Int
+    let totalBooksCount: Int
+    let bookmarksCount: Int
+    let highlightsCount: Int
+    let shelfBooks: [KulliyatShelfBookItem]
+    let isSample: Bool
+
+    var progress: Double {
+        return min(1.0, max(0.0, Double(lastBookPercent) / 100.0))
+    }
+
+    static var placeholder: KulliyatEntry {
+        KulliyatEntry(
+            date: Date(),
+            lastBookId: "book_mushaf",
+            lastBookTitle: "Kur’ân-ı Kerîm",
+            lastBookFullTitle: "Kur’ân-ı Kerîm (Mushaf-ı Şerîf)",
+            lastBookAuthor: "Diyanet Mushafları İnceleme Kurulu",
+            lastBookCategory: "Kur’ân-ı Kerîm",
+            lastBookPage: 1,
+            lastBookTotalPages: 604,
+            lastBookPercent: 1,
+            lastBookPaletteIndex: 0,
+            lastBookReference: "Sayfa 1 / 604",
+            startedCount: 1,
+            totalBooksCount: 23,
+            bookmarksCount: 0,
+            highlightsCount: 0,
+            shelfBooks: KulliyatDataHelper.defaultShelfBooks(mushafPage: 1),
+            isSample: true
+        )
+    }
+}
+
+enum BookCoverPalette {
+    static func bookPalette(for index: Int) -> (primary: Color, secondary: Color, gold: Color, spine: Color) {
+        switch index {
+        case 0: // Hünkâr Zümrüdü
+            return (Color(hex: 0x123F30), Color(hex: 0x0A241B), Color(hex: 0xD4AF37), Color(hex: 0x0E3226))
+        case 1: // Osmanlı Yakutu
+            return (Color(hex: 0x4E141C), Color(hex: 0x2B090E), Color(hex: 0xE5C158), Color(hex: 0x3B0E15))
+        case 2: // Semerkand Lâciverdi
+            return (Color(hex: 0x162944), Color(hex: 0x0C1728), Color(hex: 0xDFB85C), Color(hex: 0x102036))
+        case 3: // Kâbe Kisvesi
+            return (Color(hex: 0x1C1C20), Color(hex: 0x0F0F12), Color(hex: 0xD4AF37), Color(hex: 0x141417))
+        case 4: // Endülüs Kehribarı
+            return (Color(hex: 0x523214), Color(hex: 0x301C0A), Color(hex: 0xF0C96B), Color(hex: 0x3F250E))
+        case 5: // Uhud Turkuazı
+            return (Color(hex: 0x134047), Color(hex: 0x0A2327), Color(hex: 0xD6B45A), Color(hex: 0x0E3136))
+        case 6: // Buhara Mürdümü
+            return (Color(hex: 0x3B1A3D), Color(hex: 0x200D22), Color(hex: 0xE2BE62), Color(hex: 0x2C122E))
+        case 7: // Tahrir Deri Kahvesi
+            return (Color(hex: 0x4A3321), Color(hex: 0x2A1C11), Color(hex: 0xE6C675), Color(hex: 0x382618))
+        default:
+            return (Color(hex: 0x123F30), Color(hex: 0x0A241B), Color(hex: 0xD4AF37), Color(hex: 0x0E3226))
+        }
+    }
+}
+
+enum KulliyatDataHelper {
+    static func defaultShelfBooks(mushafPage: Int = 1) -> [KulliyatShelfBookItem] {
+        let clampedMushaf = min(604, max(1, mushafPage))
+        let mushafPct = mushafPage > 1 ? min(100, max(1, Int((Double(clampedMushaf) / 604.0 * 100.0).rounded()))) : 0
+        return [
+            KulliyatShelfBookItem(
+                id: "book_mushaf",
+                title: "Kur’ân-ı Kerîm",
+                author: "Diyanet Mushafları İnceleme Kurulu",
+                category: "Kur’ân-ı Kerîm",
+                currentPage: clampedMushaf,
+                totalPages: 604,
+                progressPercent: mushafPct,
+                paletteIndex: 0,
+                hasStarted: mushafPage > 1
+            ),
+            KulliyatShelfBookItem(
+                id: "book_meal_diyanet",
+                title: "Diyanet Meâli",
+                author: "Türkiye Diyanet Vakfı Heyeti",
+                category: "Meâller",
+                currentPage: 1,
+                totalPages: 604,
+                progressPercent: 0,
+                paletteIndex: 4,
+                hasStarted: false
+            ),
+            KulliyatShelfBookItem(
+                id: "book_tafseer_kuran_yolu",
+                title: "Kur’ân Yolu",
+                author: "Karaman, Çağrıcı, Dönmez, Gümüş",
+                category: "Tefsirler",
+                currentPage: 1,
+                totalPages: 6236,
+                progressPercent: 0,
+                paletteIndex: 2,
+                hasStarted: false
+            ),
+            KulliyatShelfBookItem(
+                id: "book_hadith_buhari",
+                title: "Sahîh-i Buhârî",
+                author: "İmam Muhammed b. İsmâil el-Buhârî",
+                category: "Kütüb-i Sitte & Hadis",
+                currentPage: 1,
+                totalPages: 7521,
+                progressPercent: 0,
+                paletteIndex: 1,
+                hasStarted: false
+            ),
+            KulliyatShelfBookItem(
+                id: "book_hadith_riyazus_salihin",
+                title: "Riyâzü’s-Sâlihîn",
+                author: "İmam Muhyiddîn en-Nevevî",
+                category: "Kütüb-i Sitte & Hadis",
+                currentPage: 1,
+                totalPages: 1600,
+                progressPercent: 0,
+                paletteIndex: 5,
+                hasStarted: false
+            ),
+            KulliyatShelfBookItem(
+                id: "book_rn_sozler",
+                title: "Sözler",
+                author: "Bediüzzaman Said Nursî",
+                category: "Risale-i Nur Külliyatı",
+                currentPage: 1,
+                totalPages: 931,
+                progressPercent: 0,
+                paletteIndex: 1,
+                hasStarted: false
+            )
+        ]
+    }
+
+    static func loadEntry() -> KulliyatEntry {
+        fetchKulliyat()
+    }
+
+    static func fetchKulliyat() -> KulliyatEntry {
+        guard let prefs = WidgetConstants.userDefaults else {
+            return .placeholder
+        }
+
+        let fallbackMushafPage = max(1, prefs.integer(forKey: "LastReadPage"))
+        let lastBookId = prefs.string(forKey: "KulliyatLastBookId") ?? "book_mushaf"
+        let lastBookTitle = prefs.string(forKey: "KulliyatLastBookTitle") ?? "Kur’ân-ı Kerîm"
+        let lastBookFullTitle = prefs.string(forKey: "KulliyatLastBookFullTitle") ?? "Kur’ân-ı Kerîm (Mushaf-ı Şerîf)"
+        let lastBookAuthor = prefs.string(forKey: "KulliyatLastBookAuthor") ?? "Diyanet Mushafları İnceleme Kurulu"
+        let lastBookCategory = prefs.string(forKey: "KulliyatLastBookCategory") ?? "Kur’ân-ı Kerîm"
+
+        let rawPage = prefs.integer(forKey: "KulliyatLastBookPage")
+        let lastBookPage = rawPage > 0 ? rawPage : fallbackMushafPage
+
+        let rawTotal = prefs.integer(forKey: "KulliyatLastBookTotalPages")
+        let lastBookTotalPages = rawTotal > 0 ? rawTotal : 604
+
+        let rawPct = prefs.integer(forKey: "KulliyatLastBookPercent")
+        let lastBookPercent: Int
+        if rawPct > 0 {
+            lastBookPercent = min(100, rawPct)
+        } else if lastBookPage > 1 && lastBookTotalPages > 0 {
+            lastBookPercent = min(100, max(1, Int((Double(lastBookPage) / Double(lastBookTotalPages) * 100.0).rounded())))
+        } else {
+            lastBookPercent = 0
+        }
+
+        let lastBookPaletteIndex = max(0, prefs.integer(forKey: "KulliyatLastBookPaletteIndex"))
+        let lastBookReference = prefs.string(forKey: "KulliyatLastBookReference") ?? "Sayfa \(lastBookPage) / \(lastBookTotalPages)"
+
+        let rawStarted = prefs.integer(forKey: "KulliyatStartedCount")
+        let startedCount = rawStarted > 0 ? rawStarted : (lastBookPage > 1 ? 1 : 0)
+
+        let rawTotalBooks = prefs.integer(forKey: "KulliyatTotalBooksCount")
+        let totalBooksCount = rawTotalBooks > 0 ? rawTotalBooks : 23
+
+        let bookmarksCount = max(0, prefs.integer(forKey: "KulliyatBookmarksCount"))
+        let highlightsCount = max(0, prefs.integer(forKey: "KulliyatHighlightsCount"))
+
+        var shelfBooks: [KulliyatShelfBookItem] = []
+        if let jsonStr = prefs.string(forKey: "KulliyatShelfBooksJson"),
+           let data = jsonStr.data(using: .utf8),
+           let array = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+            for dict in array {
+                let id = (dict["id"] as? String) ?? "book_mushaf"
+                let title = (dict["t"] as? String) ?? (dict["title"] as? String) ?? "Eser"
+                let author = (dict["a"] as? String) ?? (dict["author"] as? String) ?? ""
+                let category = (dict["c"] as? String) ?? (dict["category"] as? String) ?? ""
+                let page = (dict["p"] as? Int) ?? (dict["currentPage"] as? Int) ?? 1
+                let total = (dict["tp"] as? Int) ?? (dict["totalPages"] as? Int) ?? 604
+                let pct = (dict["pct"] as? Int) ?? (dict["progressPercent"] as? Int) ?? 0
+                let pal = (dict["pal"] as? Int) ?? (dict["paletteIndex"] as? Int) ?? 0
+                let started = (dict["st"] as? Bool) ?? (dict["hasStarted"] as? Bool) ?? (pct > 0)
+
+                shelfBooks.append(
+                    KulliyatShelfBookItem(
+                        id: id,
+                        title: title,
+                        author: author,
+                        category: category,
+                        currentPage: page,
+                        totalPages: total,
+                        progressPercent: pct,
+                        paletteIndex: pal,
+                        hasStarted: started
+                    )
+                )
+            }
+        }
+
+        if shelfBooks.isEmpty {
+            shelfBooks = defaultShelfBooks(mushafPage: lastBookPage)
+        }
+
+        return KulliyatEntry(
+            date: Date(),
+            lastBookId: lastBookId,
+            lastBookTitle: lastBookTitle,
+            lastBookFullTitle: lastBookFullTitle,
+            lastBookAuthor: lastBookAuthor,
+            lastBookCategory: lastBookCategory,
+            lastBookPage: lastBookPage,
+            lastBookTotalPages: lastBookTotalPages,
+            lastBookPercent: lastBookPercent,
+            lastBookPaletteIndex: lastBookPaletteIndex,
+            lastBookReference: lastBookReference,
+            startedCount: startedCount,
+            totalBooksCount: totalBooksCount,
+            bookmarksCount: bookmarksCount,
+            highlightsCount: highlightsCount,
+            shelfBooks: shelfBooks,
+            isSample: false
+        )
+    }
+}
+
 // MARK: - Widget View Extension for Cross-iOS Compatibility
 extension View {
     @ViewBuilder

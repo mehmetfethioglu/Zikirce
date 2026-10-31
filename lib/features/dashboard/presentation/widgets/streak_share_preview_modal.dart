@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/utils/share_utils.dart';
+import 'package:zikirce/features/zikir/domain/share_card_data_helper.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 import 'streak_share_card_widget.dart';
 
@@ -62,14 +63,17 @@ class StreakSharePreviewModal extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<StreakSharePreviewModal> createState() => _StreakSharePreviewModalState();
+  ConsumerState<StreakSharePreviewModal> createState() =>
+      _StreakSharePreviewModalState();
 }
 
-class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModal> {
+class _StreakSharePreviewModalState
+    extends ConsumerState<StreakSharePreviewModal> {
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
   late ZikirShareCardTheme _selectedTheme;
+  late SpiritualQuote _selectedQuote;
   bool _isGeneratingImage = false;
 
   @override
@@ -79,6 +83,34 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
         (widget.isGoldCompleted
             ? ZikirShareCardTheme.midnightGold
             : ZikirShareThemeData.themeForGoalOrTask(goalType: 'streak'));
+    _selectedQuote = ShareCardDataHelper.nextRandomQuote(
+      topic: 'devamlilik',
+    );
+  }
+
+  void _randomizeQuote() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _selectedQuote = ShareCardDataHelper.nextRandomQuote(
+        topic: 'devamlilik',
+        avoidQuote: _selectedQuote,
+        acrossAllTopics: true,
+      );
+    });
+  }
+
+  Future<void> _openQuotePicker() async {
+    HapticFeedback.selectionClick();
+    final picked = await SpiritualQuotePickerSheet.show(
+      context: context,
+      currentQuote: _selectedQuote,
+      initialTopic: 'devamlilik',
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedQuote = picked;
+      });
+    }
   }
 
   Future<void> _shareAsImage() async {
@@ -91,13 +123,15 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
     try {
       await Future.delayed(const Duration(milliseconds: 60));
 
-      final boundary = _cardRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _cardRepaintKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
       final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
         throw Exception('Görsel baytları oluşturulamadı.');
@@ -105,13 +139,14 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
 
       final pngBytes = byteData.buffer.asUint8List();
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'zikirce_seri_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'zikirce_seri_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
 
       final caption = l10n.isTurkish
-          ? '🔥 ${widget.currentStreak} Günlük İbadet Serisi • Makam: ${widget.rankName}\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
-          : '🔥 ${widget.currentStreak} Days Dhikr Streak • Rank: ${widget.rankName}\n— Zikirce Islamic Life & Dhikr Assistant';
+          ? '🔥 ${widget.currentStreak} Günlük İbadet Serisi • “${_selectedQuote.text}” (${_selectedQuote.source})\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+          : '🔥 ${widget.currentStreak} Days Dhikr Streak • “${_selectedQuote.text}” (${_selectedQuote.source})\n— Zikirce Islamic Life & Dhikr Assistant';
 
       if (mounted) {
         await ShareUtils.shareXFiles(
@@ -142,8 +177,8 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
     final shareText = l10n.isTurkish
-        ? '🔥 ${widget.currentStreak} Günlük İbadet Serisi!\n🏆 En İyi Seri: ${widget.bestStreak} Gün\n🗓️ Toplam: ${widget.totalDays} Gün\n🌱 Makam: ${widget.rankName}\n\n“Amellerin Allah’a en sevimli olanı, az da olsa devamlı olanıdır.” (Buhârî)\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
-        : '🔥 ${widget.currentStreak} Days Dhikr Streak!\n🏆 Best: ${widget.bestStreak} Days\n🗓️ Total: ${widget.totalDays} Days\n🌱 Rank: ${widget.rankName}\n\n“The most beloved deeds to Allah are those done regularly, even if small.” (Bukhari)\n\n— Zikirce Islamic Life & Dhikr Assistant';
+        ? '🔥 ${widget.currentStreak} Günlük İbadet Serisi!\n🏆 En İyi Seri: ${widget.bestStreak} Gün\n🗓️ Toplam: ${widget.totalDays} Gün\n🌱 Makam: ${widget.rankName}\n\n“${_selectedQuote.text}” (${_selectedQuote.source})\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+        : '🔥 ${widget.currentStreak} Days Dhikr Streak!\n🏆 Best: ${widget.bestStreak} Days\n🗓️ Total: ${widget.totalDays} Days\n🌱 Rank: ${widget.rankName}\n\n“${_selectedQuote.text}” (${_selectedQuote.source})\n\n— Zikirce Islamic Life & Dhikr Assistant';
 
     try {
       await ShareUtils.shareText(
@@ -159,7 +194,7 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.44;
+    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.42;
 
     return Container(
       decoration: BoxDecoration(
@@ -189,7 +224,7 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Title Row
               Row(
@@ -217,13 +252,26 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+
+              // AYET / HADİS RASTGELE & SEÇ KONTROL ÇUBUĞU
+              ShareQuoteControlBar(
+                activeQuote: _selectedQuote,
+                onRandomize: _randomizeQuote,
+                onOpenPicker: _openQuotePicker,
+                isDark: isDark,
+                compact: true,
+              ),
+              const SizedBox(height: 8),
 
               // Controls Bar: Format Segmented Control
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7),
+                  color: isDark
+                      ? const Color(0xFF1A232E)
+                      : const Color(0xFFF2F4F7),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Row(
@@ -232,10 +280,12 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                     _buildFormatChip(
                       title: 'Hikâye (9:16)',
                       icon: Icons.stay_current_portrait_rounded,
-                      isSelected: _selectedFormat == ZikirShareCardFormat.story9x16,
+                      isSelected:
+                          _selectedFormat == ZikirShareCardFormat.story9x16,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        setState(() => _selectedFormat = ZikirShareCardFormat.story9x16);
+                        setState(() =>
+                            _selectedFormat = ZikirShareCardFormat.story9x16);
                       },
                       isDark: isDark,
                     ),
@@ -243,10 +293,12 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                     _buildFormatChip(
                       title: 'Kare (1:1)',
                       icon: Icons.crop_square_rounded,
-                      isSelected: _selectedFormat == ZikirShareCardFormat.square1x1,
+                      isSelected:
+                          _selectedFormat == ZikirShareCardFormat.square1x1,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        setState(() => _selectedFormat = ZikirShareCardFormat.square1x1);
+                        setState(() =>
+                            _selectedFormat = ZikirShareCardFormat.square1x1);
                       },
                       isDark: isDark,
                     ),
@@ -254,7 +306,7 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                 ),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // Interactive Live Card Preview
               ConstrainedBox(
@@ -272,11 +324,12 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                     isGoldCompleted: widget.isGoldCompleted,
                     format: _selectedFormat,
                     theme: _selectedTheme,
+                    quote: _selectedQuote,
                   ),
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
               // Theme Palette Row
               Column(
@@ -299,7 +352,8 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                     physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: ZikirShareCardTheme.values.map((themeOption) {
-                        final themeData = ZikirShareThemeData.fromEnum(themeOption);
+                        final themeData =
+                            ZikirShareThemeData.fromEnum(themeOption);
                         final isSelected = _selectedTheme == themeOption;
 
                         return GestureDetector(
@@ -310,7 +364,8 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -322,13 +377,16 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                               ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isSelected ? themeData.accentColor : Colors.white12,
+                                color: isSelected
+                                    ? themeData.accentColor
+                                    : Colors.white12,
                                 width: isSelected ? 2.5 : 1,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: themeData.accentColor.withValues(alpha: 0.35),
+                                        color: themeData.accentColor
+                                            .withValues(alpha: 0.35),
                                         blurRadius: 10,
                                         spreadRadius: 1,
                                       ),
@@ -339,14 +397,17 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (isSelected) ...[
-                                  Icon(Icons.check_circle_rounded, size: 14, color: themeData.accentColor),
+                                  Icon(Icons.check_circle_rounded,
+                                      size: 14, color: themeData.accentColor),
                                   const SizedBox(width: 5),
                                 ],
                                 Text(
                                   themeData.nameTr.split(' ').first,
                                   style: TextStyle(
                                     fontSize: 11.5,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
                                     color: Colors.white,
                                   ),
                                 ),
@@ -360,7 +421,7 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
                 ],
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
 
               // Action Buttons
               SizedBox(
@@ -448,7 +509,9 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.gold500.withValues(alpha: 0.6) : Colors.transparent,
+            color: isSelected
+                ? AppColors.gold500.withValues(alpha: 0.6)
+                : Colors.transparent,
             width: 1,
           ),
           boxShadow: isSelected
@@ -466,7 +529,9 @@ class _StreakSharePreviewModalState extends ConsumerState<StreakSharePreviewModa
             Icon(
               icon,
               size: 14,
-              color: isSelected ? AppColors.gold500 : (isDark ? Colors.white54 : Colors.black54),
+              color: isSelected
+                  ? AppColors.gold500
+                  : (isDark ? Colors.white54 : Colors.black54),
             ),
             const SizedBox(width: 4),
             Text(

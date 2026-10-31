@@ -1281,6 +1281,26 @@ class _KulliyatManagementAndSettingsSheetState
                   settings.copyWith(showArabicText: v),
                 ),
               ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Risale-i Nur Lügati Kelime Vurgusu',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                subtitle: Text(
+                  'Lügatte bulunan kelimeleri belirt, dokununca mânâ popup’ı aç',
+                  style: TextStyle(fontSize: 11, color: subColor),
+                ),
+                value: settings.showLugatWords,
+                activeThumbColor: goldColor,
+                onChanged: (v) => notifier.updateSettings(
+                  settings.copyWith(showLugatWords: v),
+                ),
+              ),
             ],
           ),
         ),

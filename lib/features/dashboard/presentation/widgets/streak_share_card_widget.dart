@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zikirce/features/zikir/domain/share_card_data_helper.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 
 /// Tahrir Estetiğiyle Yenilenen Minimalist İstikrar Serisi Kartı
@@ -12,6 +13,7 @@ class StreakShareCardWidget extends StatelessWidget {
   final bool isGoldCompleted;
   final ZikirShareCardFormat format;
   final ZikirShareCardTheme theme;
+  final SpiritualQuote? quote;
 
   const StreakShareCardWidget({
     super.key,
@@ -23,12 +25,22 @@ class StreakShareCardWidget extends StatelessWidget {
     this.isGoldCompleted = false,
     this.format = ZikirShareCardFormat.story9x16,
     this.theme = ZikirShareCardTheme.fajrDawn,
+    this.quote,
   });
+
+  double _computeQuoteFontSize(String text, bool isStory) {
+    final len = text.length;
+    if (len <= 70) return isStory ? 20.5 : 17.0;
+    if (len <= 130) return isStory ? 18.0 : 15.0;
+    return isStory ? 15.5 : 13.5;
+  }
 
   @override
   Widget build(BuildContext context) {
     final themeData = ZikirShareThemeData.fromEnum(theme);
     final isStory = format == ZikirShareCardFormat.story9x16;
+    final activeQuote =
+        quote ?? ShareCardDataHelper.getQuotesForTopic('devamlilik').first;
 
     const double canvasWidth = 400.0;
     final double canvasHeight = isStory ? 711.0 : 400.0;
@@ -69,78 +81,94 @@ class StreakShareCardWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Spacer(flex: 2),
-
-                  Text(
-                    '“',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: isStory ? 48 : 38,
-                      fontWeight: FontWeight.w700,
-                      color: themeData.accentColor,
-                      height: 0.75,
-                    ),
-                  ),
-                  SizedBox(height: isStory ? 10 : 6),
-
-                  Text(
-                    'Allah katında amellerin en sevimlisi, az da olsa devamlı olanıdır.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: isStory ? 20.5 : 17.0,
-                      fontWeight: FontWeight.w600,
-                      color: themeData.primaryTextColor,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Buhârî, Rikâk, 18',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.0,
-                      fontWeight: FontWeight.w700,
-                      color: themeData.secondaryTextColor,
-                    ),
-                  ),
-
-                  SizedBox(height: isStory ? 20 : 12),
-                  Container(
-                    width: 44,
-                    height: 1.5,
-                    color: themeData.accentColor.withValues(alpha: 0.65),
-                  ),
-                  SizedBox(height: isStory ? 20 : 12),
-
-                  Text(
-                    '$currentStreak GÜN',
-                    style: GoogleFonts.outfit(
-                      fontSize: isStory ? 36 : 28,
-                      fontWeight: FontWeight.w800,
-                      color: themeData.accentColor,
-                      height: 1.05,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Aralıksız İbadet & Zikir İstikrarı',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: themeData.primaryTextColor,
-                    ),
-                  ),
-                  if (bestStreak > 0 || totalDays > 0) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'En İyi Seri: $bestStreak Gün  •  Toplam: $totalDays Gün',
-                      style: GoogleFonts.outfit(
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w500,
-                        color: themeData.secondaryTextColor,
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: canvasWidth - (isStory ? 68.0 : 56.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '“',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: isStory ? 48 : 38,
+                                  fontWeight: FontWeight.w700,
+                                  color: themeData.accentColor,
+                                  height: 0.75,
+                                ),
+                              ),
+                              SizedBox(height: isStory ? 10 : 6),
+                              Text(
+                                activeQuote.text,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: _computeQuoteFontSize(
+                                    activeQuote.text,
+                                    isStory,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  color: themeData.primaryTextColor,
+                                  height: 1.45,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                activeQuote.source,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.0,
+                                  fontWeight: FontWeight.w700,
+                                  color: themeData.secondaryTextColor,
+                                ),
+                              ),
+                              SizedBox(height: isStory ? 20 : 12),
+                              Container(
+                                width: 44,
+                                height: 1.5,
+                                color:
+                                    themeData.accentColor.withValues(alpha: 0.65),
+                              ),
+                              SizedBox(height: isStory ? 20 : 12),
+                              Text(
+                                '$currentStreak GÜN',
+                                style: GoogleFonts.outfit(
+                                  fontSize: isStory ? 36 : 28,
+                                  fontWeight: FontWeight.w800,
+                                  color: themeData.accentColor,
+                                  height: 1.05,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Aralıksız İbadet & Zikir İstikrarı',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: themeData.primaryTextColor,
+                                ),
+                              ),
+                              if (bestStreak > 0 || totalDays > 0) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  'En İyi Seri: $bestStreak Gün  •  Toplam: $totalDays Gün',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.0,
+                                    fontWeight: FontWeight.w500,
+                                    color: themeData.secondaryTextColor,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                  ],
+                  ),
 
-                  const Spacer(flex: 2),
+                  const SizedBox(height: 10),
 
                   Row(
                     mainAxisSize: MainAxisSize.min,

@@ -62,4 +62,25 @@ post_install do |installer|
       Pod::UI.puts "share_plus patch note: #{e.message}"
     end
   end
+
+  # Fix just_audio 0.9.x iOS AVQueuePlayer gapless transition position reset in onComplete:
+  just_audio_files = Dir.glob(File.join(File.dirname(__FILE__), '.symlinks', 'plugins', 'just_audio', '**', 'AudioPlayer.m')) +
+                     Dir.glob(File.join(installer.sandbox.root.to_s, '**', 'AudioPlayer.m'))
+  just_audio_files.uniq.each do |ja_file|
+    next unless File.exist?(ja_file)
+    begin
+      content = File.read(ja_file)
+      if content.include?('_index = [_order[([_orderInv[_index] intValue] + 1)] intValue];') &&
+         !content.include?('// zikirce_gapless_position_fix')
+        File.chmod(0644, ja_file) rescue nil
+        patched = content.gsub(
+          "_index = [_order[([_orderInv[_index] intValue] + 1)] intValue];\n        [self updateEndAction];\n        [self broadcastPlaybackEvent];",
+          "_index = [_order[([_orderInv[_index] intValue] + 1)] intValue];\n        // zikirce_gapless_position_fix\n        _updatePosition = 0;\n        _updateTime = (UInt64)([[NSDate date] timeIntervalSince1970] * 1000.0);\n        [self updateEndAction];\n        [self broadcastPlaybackEvent];"
+        )
+        File.write(ja_file, patched) if patched != content
+      end
+    rescue => e
+      Pod::UI.puts "just_audio patch note: #{e.message}"
+    end
+  end
 end

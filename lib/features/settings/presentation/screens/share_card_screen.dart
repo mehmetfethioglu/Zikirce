@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -10,11 +11,50 @@ import '../../../zikir/domain/share_card_data_helper.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 
-class ShareCardScreen extends ConsumerWidget {
+class ShareCardScreen extends ConsumerStatefulWidget {
   const ShareCardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShareCardScreen> createState() => _ShareCardScreenState();
+}
+
+class _ShareCardScreenState extends ConsumerState<ShareCardScreen> {
+  late SpiritualQuote _activeQuote;
+
+  @override
+  void initState() {
+    super.initState();
+    _activeQuote = ShareCardDataHelper.nextRandomQuote(
+      acrossAllTopics: true,
+    );
+  }
+
+  void _randomizeQuote() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _activeQuote = ShareCardDataHelper.nextRandomQuote(
+        avoidQuote: _activeQuote,
+        acrossAllTopics: true,
+      );
+    });
+  }
+
+  Future<void> _openQuotePicker() async {
+    HapticFeedback.selectionClick();
+    final picked = await SpiritualQuotePickerSheet.show(
+      context: context,
+      currentQuote: _activeQuote,
+      initialTopic: _activeQuote.topic,
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _activeQuote = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final streakAsync = ref.watch(userStreakStreamProvider);
     final isEzberGoalEnabled = ref.watch(
       userSettingsProvider.select((s) => s.isHafizlikRepeatGoalEnabled),
@@ -42,12 +82,12 @@ class ShareCardScreen extends ConsumerWidget {
             child: Column(
               children: [
                 const Spacer(),
-                // Tahrir Estetiği Önizleme Kartı
+                // Tahrir Estetiği Canlı Önizleme Kartı (Dinamik + Rastgele & Seç Özellikli)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 30,
+                    horizontal: 26,
+                    vertical: 26,
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF7EEDB),
@@ -67,6 +107,83 @@ class ShareCardScreen extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Üst Rastgele & Seç Kontrol Butonları
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          InkWell(
+                            onTap: _randomizeQuote,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFE2C8),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(0xFFD5C3A3),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.shuffle_rounded,
+                                    size: 14,
+                                    color: Color(0xFFA64B2A),
+                                  ),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'Rastgele Değiştir',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF382A1E),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: _openQuotePicker,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFA64B2A),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.menu_book_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 5),
+                                  Text(
+                                    'Ayet / Hadis Seç',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       Text(
                         '“',
                         style: GoogleFonts.playfairDisplay(
@@ -78,31 +195,34 @@ class ShareCardScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Kalpler ancak Allah’ı anmakla huzur bulur.',
+                        _activeQuote.text,
                         textAlign: TextAlign.center,
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.playfairDisplay(
-                          fontSize: 21,
+                          fontSize: _activeQuote.text.length > 100 ? 17.5 : 20.5,
                           fontWeight: FontWeight.w600,
                           color: const Color(0xFF382A1E),
                           height: 1.42,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       Container(
                         width: 44,
                         height: 1.5,
                         color: const Color(0xFFA64B2A).withValues(alpha: 0.65),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Text(
-                        'Ra’d Sûresi, 28. Âyet',
+                        _activeQuote.source,
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
                           color: const Color(0xFF382A1E),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -134,7 +254,7 @@ class ShareCardScreen extends ConsumerWidget {
                           );
                         }).toList(),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -187,6 +307,7 @@ class ShareCardScreen extends ConsumerWidget {
                         context: context,
                         zikirName: 'Günlük Zikir & Kalbin Huzuru',
                         category: 'Zikir',
+                        initialQuote: _activeQuote,
                         initialTheme: ZikirShareCardTheme.fajrDawn,
                         initialShowCounterStats: false,
                       );

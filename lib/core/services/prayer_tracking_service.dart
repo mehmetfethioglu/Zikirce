@@ -61,50 +61,89 @@ class PrayerTrackingService {
     'Yatsı': ('🌃', '#E1C5ED'),
   };
 
+  static Future<String> _getSavedCity() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('SelectedCity') ??
+          prefs.getString('AppCity') ??
+          prefs.getString('selected_city') ??
+          'İstanbul';
+    } catch (_) {
+      return 'İstanbul';
+    }
+  }
+
+  /// Checks whether the prescribed time for [prayerName] has entered today as of [date/now].
+  static bool isPrayerTimeEntered(
+    String prayerName,
+    PrayerTimings? timings, [
+    DateTime? date,
+  ]) {
+    final now = date ?? DateTime.now();
+    final effectiveTimings =
+        timings ?? PrayerTimesService.calculateOfflinePrayerTimes('İstanbul', now);
+
+    String hhmm;
+    switch (prayerName) {
+      case 'Sabah':
+        hhmm = effectiveTimings.fajr;
+        break;
+      case 'Öğle':
+        hhmm = effectiveTimings.dhuhr;
+        break;
+      case 'İkindi':
+        hhmm = effectiveTimings.asr;
+        break;
+      case 'Akşam':
+        hhmm = effectiveTimings.maghrib;
+        break;
+      case 'Yatsı':
+        hhmm = effectiveTimings.isha;
+        break;
+      default:
+        return true;
+    }
+
+    final clean = hhmm.trim().split(' ').first;
+    final parts = clean.split(':');
+    if (parts.length >= 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) {
+        final prayerDateTime = DateTime(now.year, now.month, now.day, h, m);
+        return !now.isBefore(prayerDateTime);
+      }
+    }
+
+    switch (prayerName) {
+      case 'Sabah':
+        return now.hour >= 5;
+      case 'Öğle':
+        return now.hour >= 13;
+      case 'İkindi':
+        return now.hour >= 16;
+      case 'Akşam':
+        return now.hour >= 19;
+      case 'Yatsı':
+        return now.hour >= 21;
+      default:
+        return true;
+    }
+  }
+
   /// Returns the list of fard prayers whose time has entered (arrived) today up to [date/now]
   static Future<List<String>> getDuePrayersForToday([DateTime? date]) async {
     final now = date ?? DateTime.now();
     try {
-      final timings = await PrayerTimesService.getPrayerTimes();
-
-      DateTime parseTime(String hhmm) {
-        final parts = hhmm.split(':');
-        final h = int.parse(parts[0]);
-        final m = int.parse(parts[1]);
-        return DateTime(now.year, now.month, now.day, h, m);
-      }
-
-      final tFajr = parseTime(timings.fajr);
-      final tDhuhr = parseTime(timings.dhuhr);
-      final tAsr = parseTime(timings.asr);
-      final tMaghrib = parseTime(timings.maghrib);
-      final tIsha = parseTime(timings.isha);
-
-      final due = <String>[];
-      if (now.isAfter(tFajr) || now.isAtSameMomentAs(tFajr)) {
-        due.add('Sabah');
-      }
-      if (now.isAfter(tDhuhr) || now.isAtSameMomentAs(tDhuhr)) {
-        due.add('Öğle');
-      }
-      if (now.isAfter(tAsr) || now.isAtSameMomentAs(tAsr)) {
-        due.add('İkindi');
-      }
-      if (now.isAfter(tMaghrib) || now.isAtSameMomentAs(tMaghrib)) {
-        due.add('Akşam');
-      }
-      if (now.isAfter(tIsha) || now.isAtSameMomentAs(tIsha)) {
-        due.add('Yatsı');
-      }
-      return due;
+      final city = await _getSavedCity();
+      final timings = await PrayerTimesService.getPrayerTimes(city: city);
+      return fardPrayers
+          .where((p) => isPrayerTimeEntered(p, timings, now))
+          .toList();
     } catch (_) {
-      final due = <String>[];
-      if (now.hour >= 5) due.add('Sabah');
-      if (now.hour >= 13) due.add('Öğle');
-      if (now.hour >= 16) due.add('İkindi');
-      if (now.hour >= 19) due.add('Akşam');
-      if (now.hour >= 21) due.add('Yatsı');
-      return due;
+      return fardPrayers
+          .where((p) => isPrayerTimeEntered(p, null, now))
+          .toList();
     }
   }
 
@@ -200,6 +239,16 @@ class PrayerTrackingService {
     bool answeredYes,
   ) async {
     try {
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      if (dateStr == todayStr && answeredYes) {
+        final city = await _getSavedCity();
+        final timings = await PrayerTimesService.getPrayerTimes(city: city);
+        if (!isPrayerTimeEntered(prayerName, timings, now)) {
+          return;
+        }
+      }
+
       final previousAnswer = await getPrayerAnswer(db, dateStr, prayerName);
 
       if (answeredYes) {
@@ -232,7 +281,22 @@ class PrayerTrackingService {
     try {
       final now = DateTime.now();
       final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final city = await _getSavedCity();
+      final timings = await PrayerTimesService.getPrayerTimes(city: city);
+      final timeEntered = isPrayerTimeEntered(prayerName, timings, now);
       final previousAnswer = await getPrayerAnswer(db, todayStr, prayerName);
+
+      // Vakti henüz girmeyen namaz kılındı olarak işaretlenemez
+      if (!timeEntered) {
+        if (previousAnswer == true) {
+          await (db.delete(db.prayerAnswerLogs)
+                ..where((t) =>
+                    t.dateStr.equals(todayStr) & t.prayerType.equals(prayerName)))
+              .go();
+          await _syncHomeWidgets(db);
+        }
+        return false;
+      }
 
       if (previousAnswer == true) {
         // Unmarking today's completed prayer -> Mark as Hayır and increment debt
@@ -278,7 +342,17 @@ class PrayerTrackingService {
   ]) async {
     try {
       final now = DateTime.now();
-      final today = dateStr ?? '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final actualTodayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final today = dateStr ?? actualTodayStr;
+      final isCheckingToday = today == actualTodayStr;
+
+      PrayerTimings? timings;
+      if (isCheckingToday) {
+        try {
+          final city = await _getSavedCity();
+          timings = await PrayerTimesService.getPrayerTimes(city: city);
+        } catch (_) {}
+      }
 
       final logs = await (db.select(db.prayerAnswerLogs)..where((t) => t.dateStr.equals(today))).get();
       final answerMap = {for (final l in logs) l.prayerType: l.isPerformed};
@@ -289,10 +363,22 @@ class PrayerTrackingService {
       final result = <TodayPrayerStatusItem>[];
       for (final prayer in fardPrayers) {
         final meta = prayerMeta[prayer] ?? ('🕌', '#D4A574');
+        final timeEntered = !isCheckingToday || isPrayerTimeEntered(prayer, timings, now);
+
+        // Vakti henüz girmemiş bir namaz daha önce yanlışlıkla kılındı işaretlendiyse temizle
+        if (!timeEntered && answerMap[prayer] == true) {
+          try {
+            await (db.delete(db.prayerAnswerLogs)
+                  ..where((t) =>
+                      t.dateStr.equals(today) & t.prayerType.equals(prayer)))
+                .go();
+          } catch (_) {}
+        }
+
         result.add(
           TodayPrayerStatusItem(
             prayerName: prayer,
-            isCompleted: answerMap[prayer] == true,
+            isCompleted: timeEntered && (answerMap[prayer] == true),
             kazaCount: kazaMap[prayer] ?? 0,
             icon: meta.$1,
             badgeColorHex: meta.$2,

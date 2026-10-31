@@ -1,7 +1,10 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:home_widget/home_widget.dart';
 import '../core/services/cloud_sync_engine.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
@@ -36,6 +39,8 @@ class ZikirceApp extends ConsumerStatefulWidget {
 }
 
 class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObserver {
+  StreamSubscription<Uri?>? _widgetClickSub;
+
   @override
   void initState() {
     super.initState();
@@ -45,11 +50,49 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
       ref.read(cloudSyncProvider.notifier);
       CloudSyncEngine.instance.syncOnAppResume(ref);
       CloudSyncEngine.instance.startPeriodicSync(ref);
+      _initWidgetDeepLinkListener();
     });
+  }
+
+  Future<void> _initWidgetDeepLinkListener() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    try {
+      final initialUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      if (initialUri != null) {
+        _handleWidgetUri(initialUri);
+      }
+      _widgetClickSub = HomeWidget.widgetClicked.listen((uri) {
+        if (uri != null) {
+          _handleWidgetUri(uri);
+        }
+      });
+    } catch (_) {}
+  }
+
+  void _handleWidgetUri(Uri uri) {
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+    if (host == 'kulliyat' || path.contains('kulliyat')) {
+      final bookId = uri.queryParameters['bookId'] ?? '';
+      final page = uri.queryParameters['page'] ?? '1';
+      appRouter.go('/kuran');
+      if (bookId.isNotEmpty) {
+        Future.microtask(() {
+          appRouter.push('/kulliyat?bookId=$bookId&page=$page');
+        });
+      }
+    } else if (host == 'kuran' || path.contains('kuran')) {
+      appRouter.go('/kuran');
+    } else if (host == 'namaz' || path.contains('namaz')) {
+      appRouter.go('/namaz');
+    } else if (host == 'zikir' || path.contains('zikir')) {
+      appRouter.go('/zikir');
+    }
   }
 
   @override
   void dispose() {
+    _widgetClickSub?.cancel();
     CloudSyncEngine.instance.stopPeriodicSync();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

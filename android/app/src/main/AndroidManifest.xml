@@ -291,6 +291,21 @@
                 android:resource="@xml/widget_prayer_mini_info" />
         </receiver>
 
+        <!-- 14. Külliyat & Okuma Rafı Widget (4x2 / 2x2) -->
+        <receiver
+            android:name=".widgets.KulliyatWidgetProvider"
+            android:label="@string/widget_kulliyat_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.USER_PRESENT" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_kulliyat_info" />
+        </receiver>
+
         <!-- Alarm & Time Tick Receivers -->
         <receiver
             android:name=".widgets.WidgetPrayerAlarmReceiver"

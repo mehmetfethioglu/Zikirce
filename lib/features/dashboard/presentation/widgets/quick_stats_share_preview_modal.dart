@@ -11,6 +11,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/islamic_special_days_service.dart';
 import '../../../../core/utils/share_utils.dart';
+import 'package:zikirce/features/zikir/domain/share_card_data_helper.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 import 'quick_stats_share_card_widget.dart';
 
@@ -67,14 +68,17 @@ class QuickStatsSharePreviewModal extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<QuickStatsSharePreviewModal> createState() => _QuickStatsSharePreviewModalState();
+  ConsumerState<QuickStatsSharePreviewModal> createState() =>
+      _QuickStatsSharePreviewModalState();
 }
 
-class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePreviewModal> {
+class _QuickStatsSharePreviewModalState
+    extends ConsumerState<QuickStatsSharePreviewModal> {
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
   late ZikirShareCardTheme _selectedTheme;
+  late SpiritualQuote _selectedQuote;
   bool _isGeneratingImage = false;
   String _selectedGreetingMode = 'auto';
 
@@ -82,6 +86,33 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   void initState() {
     super.initState();
     _selectedTheme = widget.initialTheme ?? ZikirShareCardTheme.emeraldSufi;
+    _selectedQuote = ShareCardDataHelper.nextRandomQuote(
+      acrossAllTopics: true,
+    );
+  }
+
+  void _randomizeQuote() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _selectedQuote = ShareCardDataHelper.nextRandomQuote(
+        avoidQuote: _selectedQuote,
+        acrossAllTopics: true,
+      );
+    });
+  }
+
+  Future<void> _openQuotePicker() async {
+    HapticFeedback.selectionClick();
+    final picked = await SpiritualQuotePickerSheet.show(
+      context: context,
+      currentQuote: _selectedQuote,
+      initialTopic: 'zikir',
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedQuote = picked;
+      });
+    }
   }
 
   String? _resolveCurrentGreeting() {
@@ -112,13 +143,15 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
     try {
       await Future.delayed(const Duration(milliseconds: 60));
 
-      final boundary = _cardRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _cardRepaintKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
       final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
         throw Exception('Görsel baytları oluşturulamadı.');
@@ -126,15 +159,16 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
 
       final pngBytes = byteData.buffer.asUint8List();
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'zikirce_istatistik_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'zikirce_istatistik_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
 
       final greeting = _resolveCurrentGreeting();
       final greetingPart = greeting != null ? ' — $greeting ✨' : '';
       final caption = l10n.isTurkish
-          ? '📊 İbadet & Zikir Özeti • Zikirce İslâmî Yaşam ve Zikir Asistanı$greetingPart'
-          : '📊 Spiritual Worship & Dhikr Summary • Zikirce Islamic Assistant$greetingPart';
+          ? '📊 İbadet & Zikir Özeti • “${_selectedQuote.text}” (${_selectedQuote.source})$greetingPart'
+          : '📊 Spiritual Worship & Dhikr Summary • “${_selectedQuote.text}” (${_selectedQuote.source})$greetingPart';
 
       if (mounted) {
         await ShareUtils.shareXFiles(
@@ -168,8 +202,8 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
     final greetingPart = greeting != null ? '✨ $greeting ✨\n\n' : '';
 
     final shareText = l10n.isTurkish
-        ? '$greetingPart📊 Zikirce İbadet & Maneviyat Özeti\n\n🎯 Bugün: ${widget.todayZikir} Zikir\n📅 Bu Hafta: ${widget.thisWeekZikir} Zikir\n📈 Günlük Ortalama: ${widget.dailyAvgZikir} Zikir\n✨ Toplam Zikir: ${widget.totalZikir}\n📖 Kur\'an Okuma: ${widget.quranPages} Sayfa\n🌱 Manevi Makam: ${widget.rankBadge} ${widget.rankName}\n\n“Beni anın ki, Ben de sizi anayım.” (Bakara, 152)\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
-        : '$greetingPart📊 Zikirce Spiritual Summary\n\n🎯 Today: ${widget.todayZikir} Dhikr\n📅 This Week: ${widget.thisWeekZikir} Dhikr\n📈 Daily Avg: ${widget.dailyAvgZikir} Dhikr\n✨ Total: ${widget.totalZikir}\n📖 Quran Reading: ${widget.quranPages} Pages\n🌱 Spiritual Rank: ${widget.rankBadge} ${widget.rankName}\n\n“Remember Me; I will remember you.” (Baqarah, 152)\n— Zikirce Islamic Life & Dhikr Assistant';
+        ? '$greetingPart📊 Zikirce İbadet & Maneviyat Özeti\n\n🎯 Bugün: ${widget.todayZikir} Zikir\n📅 Bu Hafta: ${widget.thisWeekZikir} Zikir\n📈 Günlük Ortalama: ${widget.dailyAvgZikir} Zikir\n✨ Toplam Zikir: ${widget.totalZikir}\n📖 Kur\'an Okuma: ${widget.quranPages} Sayfa\n🌱 Manevi Makam: ${widget.rankBadge} ${widget.rankName}\n\n“${_selectedQuote.text}” (${_selectedQuote.source})\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
+        : '$greetingPart📊 Zikirce Spiritual Summary\n\n🎯 Today: ${widget.todayZikir} Dhikr\n📅 This Week: ${widget.thisWeekZikir} Dhikr\n📈 Daily Avg: ${widget.dailyAvgZikir} Dhikr\n✨ Total: ${widget.totalZikir}\n📖 Quran Reading: ${widget.quranPages} Pages\n🌱 Spiritual Rank: ${widget.rankBadge} ${widget.rankName}\n\n“${_selectedQuote.text}” (${_selectedQuote.source})\n— Zikirce Islamic Life & Dhikr Assistant';
 
     try {
       await ShareUtils.shareText(
@@ -185,7 +219,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.44;
+    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.40;
     final activeGreeting = _resolveCurrentGreeting();
 
     return Container(
@@ -216,7 +250,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Title Row
               Row(
@@ -224,7 +258,8 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.insights_rounded, color: AppColors.gold500, size: 22),
+                      const Icon(Icons.insights_rounded,
+                          color: AppColors.gold500, size: 22),
                       const SizedBox(width: 8),
                       Text(
                         'İbadet Karnesi Paylaş',
@@ -244,13 +279,26 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+
+              // AYET / HADİS RASTGELE & SEÇ KONTROL ÇUBUĞU
+              ShareQuoteControlBar(
+                activeQuote: _selectedQuote,
+                onRandomize: _randomizeQuote,
+                onOpenPicker: _openQuotePicker,
+                isDark: isDark,
+                compact: true,
+              ),
+              const SizedBox(height: 8),
 
               // Controls Bar: Format Segmented Control
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7),
+                  color: isDark
+                      ? const Color(0xFF1A232E)
+                      : const Color(0xFFF2F4F7),
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Row(
@@ -259,10 +307,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                     _buildFormatChip(
                       title: 'Hikâye (9:16)',
                       icon: Icons.stay_current_portrait_rounded,
-                      isSelected: _selectedFormat == ZikirShareCardFormat.story9x16,
+                      isSelected:
+                          _selectedFormat == ZikirShareCardFormat.story9x16,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        setState(() => _selectedFormat = ZikirShareCardFormat.story9x16);
+                        setState(() =>
+                            _selectedFormat = ZikirShareCardFormat.story9x16);
                       },
                       isDark: isDark,
                     ),
@@ -270,10 +320,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                     _buildFormatChip(
                       title: 'Kare (1:1)',
                       icon: Icons.crop_square_rounded,
-                      isSelected: _selectedFormat == ZikirShareCardFormat.square1x1,
+                      isSelected:
+                          _selectedFormat == ZikirShareCardFormat.square1x1,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        setState(() => _selectedFormat = ZikirShareCardFormat.square1x1);
+                        setState(() =>
+                            _selectedFormat = ZikirShareCardFormat.square1x1);
                       },
                       isDark: isDark,
                     ),
@@ -281,12 +333,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // Special Day Greeting Picker
               _buildGreetingPicker(isDark),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               // Interactive Live Card Preview
               ConstrainedBox(
@@ -306,11 +358,12 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                     format: _selectedFormat,
                     theme: _selectedTheme,
                     specialDayGreeting: activeGreeting,
+                    quote: _selectedQuote,
                   ),
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
 
               // Theme Palette Row
               Column(
@@ -330,7 +383,8 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                   ),
                   Row(
                     children: ZikirShareCardTheme.values.map((themeOption) {
-                      final themeData = ZikirShareThemeData.fromEnum(themeOption);
+                      final themeData =
+                          ZikirShareThemeData.fromEnum(themeOption);
                       final isSelected = _selectedTheme == themeOption;
 
                       return Expanded(
@@ -354,13 +408,16 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                               ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isSelected ? themeData.accentColor : Colors.white12,
+                                color: isSelected
+                                    ? themeData.accentColor
+                                    : Colors.white12,
                                 width: isSelected ? 2.5 : 1,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: themeData.accentColor.withValues(alpha: 0.35),
+                                        color: themeData.accentColor
+                                            .withValues(alpha: 0.35),
                                         blurRadius: 10,
                                         spreadRadius: 1,
                                       ),
@@ -374,7 +431,9 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 10.5,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
                                 color: Colors.white,
                               ),
                             ),
@@ -386,7 +445,7 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                 ],
               ),
 
-              const SizedBox(height: 22),
+              const SizedBox(height: 18),
 
               // Action Buttons
               SizedBox(
@@ -498,14 +557,18 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppColors.gold500.withValues(alpha: 0.22)
-                        : (isDark ? const Color(0xFF1F2937) : const Color(0xFFE5E7EB)),
+                        : (isDark
+                            ? const Color(0xFF1F2937)
+                            : const Color(0xFFE5E7EB)),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isSelected ? AppColors.gold500 : Colors.transparent,
+                      color:
+                          isSelected ? AppColors.gold500 : Colors.transparent,
                       width: 1.2,
                     ),
                   ),
@@ -518,7 +581,8 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
                         g['label']!,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
                           color: isSelected
                               ? AppColors.gold500
                               : (isDark ? Colors.white70 : Colors.black87),
@@ -553,7 +617,9 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.gold500.withValues(alpha: 0.6) : Colors.transparent,
+            color: isSelected
+                ? AppColors.gold500.withValues(alpha: 0.6)
+                : Colors.transparent,
             width: 1,
           ),
           boxShadow: isSelected
@@ -571,7 +637,9 @@ class _QuickStatsSharePreviewModalState extends ConsumerState<QuickStatsSharePre
             Icon(
               icon,
               size: 14,
-              color: isSelected ? AppColors.gold500 : (isDark ? Colors.white54 : Colors.black54),
+              color: isSelected
+                  ? AppColors.gold500
+                  : (isDark ? Colors.white54 : Colors.black54),
             ),
             const SizedBox(width: 4),
             Text(

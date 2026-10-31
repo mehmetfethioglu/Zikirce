@@ -169,6 +169,16 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.2.0 Yenilikleri:
+      • 40 Eserlik Külliyat, 16 Cep Risalesi & 84.141 Maddelik Risale-i Nur Lügati: Külliyat kitaplığına 16 müstakil Risale-i Nur Küçük Eseri ve 84.141 maddelik Risale-i Nur Büyük Lügati eklendi. Osmanlıca kelime ve kalıp tamlamalar tema uyumlu kehribar/bakır kök renklendirmesiyle gösterilir; üzerine dokunulduğunda anında lügat mânâsı açılır ve Arapça metinler Kur'ân hattıyla (Allah ve Rab lafızları kırmızı) sunulur.
+      • Diyanet Birebir Ses-Kelime Senkronizasyonu, Sağdan Sola Kayan Kırmızı "Ok Takibi" & Besmele: Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve resmi Diyanet zaman damgalarıyla 6.236 âyette sıfır gecikmeli ses-kelime uyumu, sağdan sola kayan kırmızı Ok Takibi ve Besmele-i Şerîf ile başlama özelliği eklendi.
+      • Külliyat Ana Ekran / Kilit Ekranı Widget'ı & Dinamik Âyet/Hadis Paylaşım Stüdyosu: iOS Ana Ekran ve Kilit Ekranı Külliyat Widget'ı, paylaşım kartlarında 60+ âyet/hadis seçici, sayfa içi Tilâvet Secdesi rozetleri ve vakti girmeyen namaz koruması eklendi.
+
+      What's New in v2.2.0:
+      • 40-Volume Islamic Library, 16 Pocket Risales & 84,141-Entry Risale-i Nur Dictionary: Added 16 standalone Pocket Risales and the 84,141-entry Risale-i Nur Ottoman-Turkish Dictionary with theme-adaptive root coloring, instant tap-to-view definitions, and Quranic calligraphy with ruby-red Divine Name highlights.
+      • Exact Diyanet Audio-to-Word Sync, Sliding Red Arrow Tracking & Basmala Start: Zero-drift synchronization across all 6,236 verses with single-track per-verse playback, smooth right-to-left sliding red Arrow Pointer tracking matching the Diyanet Quran Platform, and Basmala recitation at session start.
+      • Külliyat Home & Lock Screen Widgets & Dynamic Verse/Hadith Sharing Studio: Added iOS Home and Lock Screen Library Widgets, a 60+ Verse & Hadith picker for share cards, in-page Sajdah al-Tilawah badges, and a prayer time guard.
+
       Zikirce v2.1.10 Yenilikleri:
       • iOS Paylaşım Kartı & Görsel Paylaşım Düzeltmesi: iPhone ve iPad cihazlarda zikir, seri, namaz ve ibadet karnesi kartlarını paylaşırken oluşan sistem paylaşım penceresi (sharePositionOrigin) hatası kalıcı olarak giderildi.
       • Bulut Senkronizasyonu & Yedek Paylaşım Kararlılığı: Google Drive senkronizasyon geri dönüşü ve yedek dışa aktarım adımları güçlendirildi.

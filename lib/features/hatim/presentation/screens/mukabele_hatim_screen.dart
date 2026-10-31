@@ -24,6 +24,7 @@ import '../../../kuran/data/tilavet_secdesi_data.dart';
 import '../../../kuran/providers/tilavet_secdesi_provider.dart';
 import '../../../kuran/presentation/widgets/tilavet_secdesi_floating_banner.dart';
 import '../../../kuran/presentation/widgets/tilavet_secdesi_exit_dialog.dart';
+import '../../../kuran/presentation/widgets/tilavet_secdesi_guide_sheet.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
@@ -88,12 +89,15 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   List<_MukabeleQueueItemMeta> _playlistItems = [];
   int _currentVerseIndex = 0;
   int _activeWordOrder = 0;
+  int _activeWordDurationMs = 500;
   int _lastHandledQueueIndex = -1;
   int _queueGeneration = 0;
   bool _isAdvancingWindowsItem = false;
-  DateTime _lastQueueTransitionTime = DateTime.fromMillisecondsSinceEpoch(0);
   final Stopwatch _verseStopwatch = Stopwatch();
+  final Stopwatch _microInterpStopwatch = Stopwatch();
   double _verseSeekAnchorMs = 0.0;
+  double _lastSampledPlayerMs = -1.0;
+  double _maxObservedVerseMs = 0.0;
   Timer? _wordSyncTimer;
 
   StreamSubscription? _posSub;
@@ -152,6 +156,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     _pageTransitionTimer?.cancel();
     _wordSyncTimer?.cancel();
     _verseStopwatch.stop();
+    _microInterpStopwatch.stop();
     _currentIndexSub?.cancel();
     _posSub?.cancel();
     _stateSub?.cancel();
@@ -210,7 +215,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
   void _resetVerseClock({int seekMs = 0, bool isPlaying = true}) {
     _verseSeekAnchorMs = seekMs.toDouble();
+    _lastSampledPlayerMs = -1.0;
+    _maxObservedVerseMs = seekMs.toDouble();
     _verseStopwatch.reset();
+    _microInterpStopwatch.reset();
     final isReady = _player.processingState == ProcessingState.ready;
     if (isPlaying && !_isBuffering && isReady) {
       _verseStopwatch.start();
@@ -218,109 +226,39 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   double _currentEffectivePositionMs() {
-    if (_player.processingState == ProcessingState.loading ||
-        _player.processingState == ProcessingState.buffering ||
+    if (_isAdvancingWindowsItem ||
+        _player.processingState == ProcessingState.loading ||
         _player.processingState == ProcessingState.idle) {
       return _verseSeekAnchorMs;
     }
 
     final playerMs = _player.position.inMilliseconds.toDouble();
-    final timeSinceTransitionMs =
-        DateTime.now().difference(_lastQueueTransitionTime).inMilliseconds;
-
-    if (!Platform.isWindows) {
-      if (timeSinceTransitionMs < 350 &&
-          playerMs > 1200 &&
-          _verseSeekAnchorMs == 0) {
-        return 0.0;
-      }
-      return playerMs.clamp(0.0, 600000.0);
+    if ((playerMs - _lastSampledPlayerMs).abs() >= 1.0) {
+      _lastSampledPlayerMs = playerMs;
+      _microInterpStopwatch
+        ..reset()
+        ..start();
     }
 
-    final stopwatchMs = _verseSeekAnchorMs +
-        (_verseStopwatch.elapsedMilliseconds * _playbackSpeed);
-
-    if (timeSinceTransitionMs < 350 && playerMs > stopwatchMs + 300) {
-      return stopwatchMs.clamp(0.0, 600000.0);
-    }
-    if ((playerMs - stopwatchMs).abs() <= 280 && playerMs >= 0) {
-      return playerMs;
-    }
-    return stopwatchMs.clamp(0.0, 600000.0);
-  }
-
-  void _applyQueueIndexTransition(int qIdx) {
-    if (qIdx < 0 ||
-        qIdx >= _playlistItems.length ||
-        qIdx == _lastHandledQueueIndex) {
-      return;
-    }
-    _lastHandledQueueIndex = qIdx;
-    _lastQueueTransitionTime = DateTime.now();
-    final meta = _playlistItems[qIdx];
-    final prevVerseIndex = _currentVerseIndex;
-    final wasPlayingBesmele = _isPlayingBesmele;
-    _isPlayingBesmele = meta.isBesmele;
-    _currentVerseIndex = meta.verseIndex;
-    _resetVerseClock(seekMs: 0, isPlaying: _player.playing);
-
-    if (mounted) {
-      setState(() {
-        _activeWordOrder = meta.isBesmele ? 0 : 1;
-      });
+    double effectiveMs = playerMs;
+    if (_player.playing &&
+        _player.processingState == ProcessingState.ready &&
+        playerMs > 0) {
+      final interpDelta =
+          (_microInterpStopwatch.elapsedMilliseconds * _playbackSpeed)
+              .clamp(0.0, 45.0);
+      effectiveMs = playerMs + interpDelta;
     }
 
-    if (!meta.isBesmele &&
-        _currentVerseIndex >= 0 &&
-        _currentVerseIndex < _pageVerses.length) {
-      final verse = _pageVerses[_currentVerseIndex];
-      ref
-          .read(kuranAudioNotifierProvider.notifier)
-          .syncExternalState(KuranAudioState(
-            isPlaying: _isPlaying,
-            isLoading: _isBuffering,
-            currentSurahId: verse.sureId,
-            currentAyahId: verse.ayetId,
-            currentWordOrder: 1,
-            playbackProgress: 0.0,
-          ));
+    if (effectiveMs > _maxObservedVerseMs) {
+      _maxObservedVerseMs = effectiveMs;
     }
-
-    if (!meta.isBesmele &&
-        (wasPlayingBesmele || prevVerseIndex != _currentVerseIndex)) {
-      if (!_isMushafView) {
-        _scrollToActiveVerse();
-      }
-      _prefetchUpcomingVerses(_currentVerseIndex);
-    }
-    _syncNowPlaying();
+    return effectiveMs.clamp(0.0, 600000.0);
   }
 
   void _tickWordSync() {
     if (!mounted) return;
-    if (!Platform.isWindows) {
-      final currentQIdx = _player.currentIndex;
-      if (currentQIdx != null && currentQIdx != _lastHandledQueueIndex) {
-        _applyQueueIndexTransition(currentQIdx);
-      }
-    }
-    if (_isPlayingBesmele) {
-      // 1_1.mp3 speech completes at 6270ms ("er-Rahîm"); trim only trailing silence after 6380ms
-      final besmeleMs = _currentEffectivePositionMs();
-      if (besmeleMs >= 6380 &&
-          _lastHandledQueueIndex >= 0 &&
-          _lastHandledQueueIndex + 1 < _playlistItems.length) {
-        final nextIdx = _lastHandledQueueIndex + 1;
-        if (Platform.isWindows) {
-          if (!_isAdvancingWindowsItem) {
-            _isAdvancingWindowsItem = true;
-            unawaited(_playWindowsSingleQueueItem(nextIdx));
-          }
-        } else {
-          _applyQueueIndexTransition(nextIdx);
-          unawaited(_player.seek(Duration.zero, index: nextIdx));
-        }
-      }
+    if (_isAdvancingWindowsItem || _isPlayingBesmele) {
       return;
     }
     if (!_isPlaying && !_player.playing) return;
@@ -330,17 +268,27 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
     final verse = _pageVerses[_currentVerseIndex];
     final ms = _currentEffectivePositionMs();
-    final wordCount = _parseAyahWords(verse.ayetText).length;
+    final words = _parseAyahWords(verse.ayetText);
+    final pureWords = words.map((w) => w.pureWord).toList();
     final activeWord = AudioSyncService.getActiveWordOrder(
       verse.sureId,
       verse.ayetId,
       ms,
-      renderedWordCount: wordCount,
+      renderedWordCount: words.length,
+      ayahWords: pureWords,
     );
 
     if (activeWord != _activeWordOrder && mounted) {
+      final wordDur = AudioSyncService.getWordDurationMs(
+        verse.sureId,
+        verse.ayetId,
+        activeWord,
+        ayahWords: pureWords,
+        trackDurationMs: _player.duration?.inMilliseconds,
+      );
       setState(() {
         _activeWordOrder = activeWord;
+        _activeWordDurationMs = wordDur;
       });
 
       if (!_isMushafView && !_isMealOnlyView) {
@@ -350,11 +298,13 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       ref
           .read(kuranAudioNotifierProvider.notifier)
           .syncExternalState(KuranAudioState(
-            isPlaying: _isPlaying,
+            isPlaying: _isPlaying || _player.playing,
             isLoading: _isBuffering,
             currentSurahId: verse.sureId,
             currentAyahId: verse.ayetId,
             currentWordOrder: activeWord,
+            activeWordDurationMs: wordDur,
+            playbackSpeed: _playbackSpeed,
             playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
                 ? (ms / (_player.duration?.inMilliseconds ?? 1)).clamp(0.0, 1.0)
                 : 0.0,
@@ -363,11 +313,6 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   void _initAudioListeners() {
-    _currentIndexSub = _player.currentIndexStream.listen((qIdx) {
-      if (Platform.isWindows || qIdx == null) return;
-      _applyQueueIndexTransition(qIdx);
-    });
-
     _posSub = _player
         .createPositionStream(
           steps: 1000,
@@ -435,6 +380,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   currentSurahId: verse.sureId,
                   currentAyahId: verse.ayetId,
                   currentWordOrder: _activeWordOrder,
+                  activeWordDurationMs: _activeWordDurationMs,
+                  playbackSpeed: _playbackSpeed,
                   playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
                       ? ((_player.position.inMilliseconds) /
                               (_player.duration?.inMilliseconds ?? 1))
@@ -445,25 +392,15 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         }
       }
 
-      if (pState.processingState == ProcessingState.completed) {
-        if (Platform.isWindows) {
-          if (!_isAdvancingWindowsItem &&
-              _verseStopwatch.elapsedMilliseconds > 220) {
-            _isAdvancingWindowsItem = true;
-            if (_lastHandledQueueIndex >= 0 &&
-                _lastHandledQueueIndex + 1 < _playlistItems.length) {
-              unawaited(_playWindowsSingleQueueItem(_lastHandledQueueIndex + 1));
-            } else {
-              _handlePageCompleted();
-            }
-          }
+      if (pState.processingState == ProcessingState.completed &&
+          !_isAdvancingWindowsItem) {
+        _isAdvancingWindowsItem = true;
+        if (_lastHandledQueueIndex >= 0 &&
+            _lastHandledQueueIndex + 1 < _playlistItems.length) {
+          unawaited(_playWindowsSingleQueueItem(_lastHandledQueueIndex + 1));
         } else {
-          final atLastQueueItem = _playlistItems.isEmpty ||
-              ((_player.currentIndex ?? _lastHandledQueueIndex) >=
-                  _playlistItems.length - 1);
-          if (atLastQueueItem && _verseStopwatch.elapsedMilliseconds > 350) {
-            _handlePageCompleted();
-          }
+          _isAdvancingWindowsItem = false;
+          _handlePageCompleted();
         }
       }
     });
@@ -528,16 +465,12 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         ref.read(settingsProvider).isPlayBesmeleOnStartEnabled;
     if (!isBesmeleEnabled) return false;
 
-    // Surah 1 (Fatihah) 1st ayah is already Besmele
+    // Never play extra Besmele for Al-Fatihah 1:1 (which is already Besmele) or At-Tawbah (Surah 9)
     if (verse.sureId == 1 && verse.ayetId == 1) return false;
+    if (verse.sureId == 9) return false;
 
-    // Surah 9 (Tawbah) 1st ayah does NOT have Besmele
-    if (verse.sureId == 9 && verse.ayetId == 1) return false;
-
-    if (isSessionStart) return true;
-
-    // In-session surah transition (new surah starts at verse 1, except Fatihah & Tawbah)
-    if (verse.ayetId == 1 && verse.sureId != 1 && verse.sureId != 9) {
+    // Play Besmele at the start of a Mukabele session or when a new Surah starts at verse 1
+    if (isSessionStart || verse.ayetId == 1) {
       return true;
     }
 
@@ -566,7 +499,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   void _prefetchUpcomingVerses(int fromVerseIndex) {
-    for (int offset = 0; offset < _pageVerses.length - fromVerseIndex; offset++) {
+    for (int offset = 0; offset <= 4; offset++) {
       final idx = fromVerseIndex + offset;
       if (idx >= 0 && idx < _pageVerses.length) {
         final v = _pageVerses[idx];
@@ -596,7 +529,6 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     final wasPlayingBesmele = _isPlayingBesmele;
 
     _lastHandledQueueIndex = qIdx;
-    _lastQueueTransitionTime = DateTime.now();
     _isPlayingBesmele = meta.isBesmele;
     _currentVerseIndex = meta.verseIndex;
     _resetVerseClock(seekMs: seekMs, isPlaying: false);
@@ -631,6 +563,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         useFallbackCdn: useFallbackCdn,
       );
 
+      if (_player.playing) {
+        await _player.pause();
+      }
       await _player.setLoopMode(LoopMode.off);
       await _player.setAudioSource(
         source,
@@ -641,12 +576,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       if (!mounted || myGen != _queueGeneration) return;
 
       await _player.setSpeed(_playbackSpeed);
-      _lastQueueTransitionTime = DateTime.now();
-      _isAdvancingWindowsItem = false;
       _resetVerseClock(seekMs: seekMs, isPlaying: true);
+      _isAdvancingWindowsItem = false;
       unawaited(_player.play());
 
-      if (!meta.isBesmele) {
+      if (meta.isBesmele) {
         ref
             .read(kuranAudioNotifierProvider.notifier)
             .syncExternalState(KuranAudioState(
@@ -654,7 +588,45 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               isLoading: false,
               currentSurahId: verse.sureId,
               currentAyahId: verse.ayetId,
-              currentWordOrder: 1,
+              currentWordOrder: 0,
+              playbackSpeed: _playbackSpeed,
+              playbackProgress: 0.0,
+            ));
+      } else {
+        final pureWords =
+            _parseAyahWords(verse.ayetText).map((w) => w.pureWord).toList();
+        final initialWord = seekMs > 0
+            ? AudioSyncService.getActiveWordOrder(
+                verse.sureId,
+                verse.ayetId,
+                seekMs.toDouble(),
+                renderedWordCount: pureWords.length,
+                ayahWords: pureWords,
+              )
+            : 1;
+        final firstWordDur = AudioSyncService.getWordDurationMs(
+          verse.sureId,
+          verse.ayetId,
+          initialWord,
+          ayahWords: pureWords,
+          trackDurationMs: _player.duration?.inMilliseconds,
+        );
+        if (mounted) {
+          setState(() {
+            _activeWordOrder = initialWord;
+            _activeWordDurationMs = firstWordDur;
+          });
+        }
+        ref
+            .read(kuranAudioNotifierProvider.notifier)
+            .syncExternalState(KuranAudioState(
+              isPlaying: true,
+              isLoading: false,
+              currentSurahId: verse.sureId,
+              currentAyahId: verse.ayetId,
+              currentWordOrder: initialWord,
+              activeWordDurationMs: firstWordDur,
+              playbackSpeed: _playbackSpeed,
               playbackProgress: 0.0,
             ));
       }
@@ -669,7 +641,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       _syncNowPlaying();
     } catch (e) {
       _isAdvancingWindowsItem = false;
-      debugPrint('[MukabeleHatimScreen] Windows single item error: $e');
+      debugPrint('[MukabeleHatimScreen] Single item playback error: $e');
       if (!useFallbackCdn && myGen == _queueGeneration) {
         await _playWindowsSingleQueueItem(
           qIdx,
@@ -710,152 +682,51 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     await AudioSyncService.configureAudioSession();
     await IosNowPlayingService.beginTransitionTask();
 
-    try {
-      final soundsDir = await AudioDownloadService.getSoundsDirectory();
-      final soundsDirPath = soundsDir.path;
+    final metas = <_MukabeleQueueItemMeta>[];
+    int initialQueueIndex = 0;
 
-      // Ensure the starting verses (and Besmele if needed) are downloaded locally first
-      // so playback starts with zero HTTP stream timebase drift.
-      final startVerse = _pageVerses[startVerseIndex];
-      final startWantsBesmele = includeInitialBesmele &&
-          seekMs == 0 &&
-          _shouldPlayBesmeleForVerse(startVerse, isSessionStart: true);
-      final initialDownloads = <Future<void>>[
-        if (startWantsBesmele)
-          AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1),
-        for (int k = startVerseIndex; k < _pageVerses.length; k++)
-          AudioDownloadService.ensureVerseDownloaded(
-            _pageVerses[k].sureId,
-            _pageVerses[k].ayetId,
-            pageId: _currentPage,
-          ),
-      ];
-      await Future.wait(initialDownloads)
-          .timeout(const Duration(milliseconds: 2200), onTimeout: () => []);
+    for (int i = 0; i < _pageVerses.length; i++) {
+      final v = _pageVerses[i];
+      final isStartVerse = (i == startVerseIndex);
+      final wantBesmele = isStartVerse
+          ? (includeInitialBesmele &&
+              seekMs == 0 &&
+              _shouldPlayBesmeleForVerse(v, isSessionStart: true))
+          : _shouldPlayBesmeleForVerse(v, isSessionStart: false);
 
-      if (!mounted || myQueueGen != _queueGeneration) return;
+      final firstIdxForThisVerse = metas.length;
 
-      final children = <AudioSource>[];
-      final metas = <_MukabeleQueueItemMeta>[];
-      int initialQueueIndex = 0;
-
-      for (int i = 0; i < _pageVerses.length; i++) {
-        final v = _pageVerses[i];
-        final isStartVerse = (i == startVerseIndex);
-        final wantBesmele = isStartVerse
-            ? (includeInitialBesmele &&
-                seekMs == 0 &&
-                _shouldPlayBesmeleForVerse(v, isSessionStart: true))
-            : _shouldPlayBesmeleForVerse(v, isSessionStart: false);
-
-        final firstIdxForThisVerse = children.length;
-
-        if (wantBesmele) {
-          children.add(_createAyahAudioSource(
-            soundsDirPath,
-            1,
-            1,
-            pageId: 1,
-            useFallbackCdn: useFallbackCdn,
-          ));
-          metas.add(_MukabeleQueueItemMeta(
-            verseIndex: i,
-            isBesmele: true,
-          ));
-          unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
-        }
-
-        final firstAyahQueueIdx = children.length;
-        children.add(_createAyahAudioSource(
-          soundsDirPath,
-          v.sureId,
-          v.ayetId,
-          pageId: _currentPage,
-          useFallbackCdn: useFallbackCdn,
-        ));
+      if (wantBesmele) {
         metas.add(_MukabeleQueueItemMeta(
           verseIndex: i,
-          isBesmele: false,
+          isBesmele: true,
         ));
-
-        if (isStartVerse) {
-          initialQueueIndex = (wantBesmele && seekMs == 0)
-              ? firstIdxForThisVerse
-              : firstAyahQueueIdx;
-        }
+        unawaited(AudioDownloadService.ensureVerseDownloaded(1, 1, pageId: 1));
       }
 
-      _playlistItems = metas;
-      _lastHandledQueueIndex = initialQueueIndex;
-      _lastQueueTransitionTime = DateTime.now();
-      final initialMeta = metas[initialQueueIndex];
-      _isPlayingBesmele = initialMeta.isBesmele;
-      _currentVerseIndex = initialMeta.verseIndex;
-      _activeWordOrder = initialMeta.isBesmele ? 0 : 1;
+      final firstAyahQueueIdx = metas.length;
+      metas.add(_MukabeleQueueItemMeta(
+        verseIndex: i,
+        isBesmele: false,
+      ));
 
-      if (mounted) {
-        setState(() {});
-      }
-
-      if (Platform.isWindows) {
-        await _playWindowsSingleQueueItem(
-          initialQueueIndex,
-          seekMs: seekMs,
-          useFallbackCdn: useFallbackCdn,
-        );
-        return;
-      }
-
-      await _player.setLoopMode(LoopMode.off);
-
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: children,
-      );
-
-      await _player.setAudioSource(
-        playlist,
-        initialIndex: initialQueueIndex,
-        initialPosition:
-            seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
-      );
-
-      if (!mounted || myQueueGen != _queueGeneration) return;
-
-      // Re-assert queue state after setAudioSource in case stream events fired during setup
-      _lastHandledQueueIndex = initialQueueIndex;
-      _lastQueueTransitionTime = DateTime.now();
-      _isPlayingBesmele = initialMeta.isBesmele;
-      _currentVerseIndex = initialMeta.verseIndex;
-      _activeWordOrder = initialMeta.isBesmele ? 0 : 1;
-
-      await _player.setSpeed(_playbackSpeed);
-      _resetVerseClock(seekMs: seekMs, isPlaying: true);
-      unawaited(_player.play());
-      _syncNowPlaying();
-
-      if (!_isMushafView) {
-        _scrollToActiveVerse();
-      }
-      _prefetchUpcomingVerses(_currentVerseIndex);
-    } catch (e) {
-      debugPrint('[MukabeleHatimScreen] Playlist playback error: $e');
-      if (!useFallbackCdn && myQueueGen == _queueGeneration) {
-        await _buildAndPlayPageQueue(
-          startVerseIndex,
-          includeInitialBesmele: includeInitialBesmele,
-          seekMs: seekMs,
-          useFallbackCdn: true,
-        );
-        return;
-      }
-      if (mounted) {
-        setState(() {
-          _isPlaying = false;
-          _isBuffering = false;
-        });
+      if (isStartVerse) {
+        initialQueueIndex = (wantBesmele && seekMs == 0)
+            ? firstIdxForThisVerse
+            : firstAyahQueueIdx;
       }
     }
+
+    if (!mounted || myQueueGen != _queueGeneration) return;
+
+    _playlistItems = metas;
+    _prefetchUpcomingVerses(startVerseIndex);
+
+    await _playWindowsSingleQueueItem(
+      initialQueueIndex,
+      seekMs: seekMs,
+      useFallbackCdn: useFallbackCdn,
+    );
   }
 
   Future<void> _prepareAndPlayVerse(int verseIndex, {int seekMs = 0}) async {
@@ -866,40 +737,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         (m) => m.verseIndex == verseIndex && !m.isBesmele,
       );
       if (targetQIdx != -1) {
-        if (Platform.isWindows) {
-          await _playWindowsSingleQueueItem(targetQIdx, seekMs: seekMs);
-          return;
-        }
-        if (_player.audioSource != null &&
-            _player.processingState != ProcessingState.idle &&
-            _player.processingState != ProcessingState.completed) {
-          _lastHandledQueueIndex = targetQIdx;
-          _lastQueueTransitionTime = DateTime.now();
-          _isPlayingBesmele = false;
-          _currentVerseIndex = verseIndex;
-          _resetVerseClock(seekMs: seekMs, isPlaying: true);
-          if (mounted) {
-            setState(() {
-              _activeWordOrder = 0;
-            });
-          }
-          try {
-            await _player.seek(
-              seekMs > 0 ? Duration(milliseconds: seekMs) : Duration.zero,
-              index: targetQIdx,
-            );
-            _resetVerseClock(seekMs: seekMs, isPlaying: true);
-            if (!_player.playing) {
-              unawaited(_player.play());
-            }
-            _syncNowPlaying();
-            if (!_isMushafView) {
-              _scrollToActiveVerse();
-            }
-            _prefetchUpcomingVerses(verseIndex);
-            return;
-          } catch (_) {}
-        }
+        await _playWindowsSingleQueueItem(targetQIdx, seekMs: seekMs);
+        return;
       }
     }
 
@@ -1191,18 +1030,33 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   void _onWordTapped(int verseIndex, int wordOrder) {
-    if (_isPlayingBesmele) return;
     if (verseIndex < 0 || verseIndex >= _pageVerses.length) return;
     final verse = _pageVerses[verseIndex];
+    final words = _parseAyahWords(verse.ayetText);
+    final pureWords = words.map((w) => w.pureWord).toList();
     final ts = AudioSyncService.getWordTimestamp(
-        verse.sureId, verse.ayetId, wordOrder);
+      verse.sureId,
+      verse.ayetId,
+      wordOrder,
+      ayahWords: pureWords,
+    );
 
-    if (verseIndex == _currentVerseIndex && _player.duration != null) {
+    if (!_isPlayingBesmele &&
+        verseIndex == _currentVerseIndex &&
+        _player.duration != null) {
       if (ts != null) {
         final seekTarget = (ts.startTime - 25.0).clamp(0.0, 999999.0).toInt();
+        final wordDur = AudioSyncService.getWordDurationMs(
+          verse.sureId,
+          verse.ayetId,
+          wordOrder,
+          ayahWords: pureWords,
+          trackDurationMs: _player.duration?.inMilliseconds,
+        );
         _resetVerseClock(seekMs: seekTarget, isPlaying: true);
         setState(() {
           _activeWordOrder = wordOrder;
+          _activeWordDurationMs = wordDur;
         });
         _player.seek(Duration(milliseconds: seekTarget));
         if (!_isPlaying) _player.play();
@@ -1215,7 +1069,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   void _previousAyah() {
-    if (_isPlayingBesmele) return;
+    if (_isPlayingBesmele) {
+      _prepareAndPlayVerse(_currentVerseIndex);
+      return;
+    }
     if (_currentVerseIndex > 0) {
       _prepareAndPlayVerse(_currentVerseIndex - 1);
     } else if (_currentPage > 1) {
@@ -1224,7 +1081,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   }
 
   void _nextAyah() {
-    if (_isPlayingBesmele) return;
+    if (_isPlayingBesmele) {
+      _prepareAndPlayVerse(_currentVerseIndex);
+      return;
+    }
     if (_currentVerseIndex < _pageVerses.length - 1) {
       _prepareAndPlayVerse(_currentVerseIndex + 1);
     } else if (_currentPage < 605) {
@@ -1763,6 +1623,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         final isActive = index == _currentVerseIndex;
         final key = _verseKeys.putIfAbsent(index, () => GlobalKey());
         final meal = _pageMeals['${verse.sureId}_${verse.ayetId}'] ?? '';
+        final secdeItem = TilavetSecdesiData.getSecdeForVerse(
+          verse.sureId,
+          verse.ayetId,
+        );
+        final isSecdeAyah = secdeItem != null;
 
         return Container(
           key: key,
@@ -1771,13 +1636,17 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           decoration: BoxDecoration(
             color: isActive
                 ? (isDark ? const Color(0xFF1E2824) : const Color(0xFFE8F3EE))
-                : (isDark ? const Color(0xFF181B20) : Colors.white),
+                : (isSecdeAyah
+                    ? (isDark ? const Color(0xFF1F1914) : const Color(0xFFFFFBEB))
+                    : (isDark ? const Color(0xFF181B20) : Colors.white)),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isActive
                   ? (isDark ? AppColors.gold400 : const Color(0xFF2D7D76))
-                  : (isDark ? AppColors.darkBorder : const Color(0xFFE5DFC9)),
-              width: isActive ? 1.5 : 1.0,
+                  : (isSecdeAyah
+                      ? const Color(0xFFD97706).withValues(alpha: 0.65)
+                      : (isDark ? AppColors.darkBorder : const Color(0xFFE5DFC9))),
+              width: isActive || isSecdeAyah ? 1.5 : 1.0,
             ),
           ),
           child: Column(
@@ -1787,28 +1656,51 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? (isDark
-                              ? AppColors.gold500
-                              : const Color(0xFF2D7D76))
-                          : (isDark
-                              ? Colors.white12
-                              : Colors.black.withValues(alpha: 0.06)),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${verse.sure?.sureNameTurkish ?? ''} • ${verse.ayetId}. Âyet',
-                      style: TextStyle(
-                        color: isActive
-                            ? (isDark ? Colors.black : Colors.white)
-                            : (isDark ? Colors.white70 : Colors.black87),
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  Flexible(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? (isDark
+                                      ? AppColors.gold500
+                                      : const Color(0xFF2D7D76))
+                                  : (isDark
+                                      ? Colors.white12
+                                      : Colors.black.withValues(alpha: 0.06)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${verse.sure?.sureNameTurkish ?? ''} • ${verse.ayetId}. Âyet',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isActive
+                                    ? (isDark ? Colors.black : Colors.white)
+                                    : (isDark ? Colors.white70 : Colors.black87),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (isSecdeAyah) ...[
+                          const SizedBox(width: 6),
+                          ZikirceSecdeInlineBadge(
+                            isDark: isDark,
+                            compact: true,
+                            label: '${secdeItem.no}. Secde Âyeti',
+                            onTap: () => TilavetSecdesiGuideSheet.show(
+                              context,
+                              initialSecdeItem: secdeItem,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   Row(
@@ -1819,7 +1711,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                             color: AppColors.gold400, size: 18),
                         const SizedBox(width: 4),
                         Text(
-                          'Okunuyor',
+                          _isPlayingBesmele ? 'Besmele-i Şerif' : 'Okunuyor',
                           style: TextStyle(
                               color: isDark
                                   ? AppColors.gold400
@@ -2017,11 +1909,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 final isDivine = pureWord.isNotEmpty &&
                     QuranWordHighlighter.isDivineWord(pureWord);
 
-                final activeArrowTextColor = isDivine
-                    ? divineColor
-                    : (isDark
-                        ? const Color(0xFFFBBF24)
-                        : const Color(0xFF047857));
+                final activeArrowTextColor =
+                    QuranWordHighlighter.getDiyanetTrackingWordColor(isDark);
+                final activeArrowShadows =
+                    QuranWordHighlighter.getDiyanetTrackingShadows(isDark);
 
                 return Row(
                   key: isWordActive ? _activeWordKey : null,
@@ -2035,7 +1926,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 45),
                           padding: isArrowTracking
-                              ? const EdgeInsets.fromLTRB(6, 2, 6, 13)
+                              ? const EdgeInsets.fromLTRB(5, 2, 5, 8)
                               : const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
@@ -2043,13 +1934,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                                 ? (isDark
                                     ? const Color(0xFF059669)
                                     : const Color(0xFF10B981))
-                                : (isArrowTracking && isWordActive
-                                    ? (isDark
-                                        ? const Color(0xFFFBBF24)
-                                            .withValues(alpha: 0.08)
-                                        : const Color(0xFF10B981)
-                                            .withValues(alpha: 0.08))
-                                    : Colors.transparent),
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(10),
                             boxShadow: [
                               if (!isArrowTracking && isWordActive)
@@ -2071,8 +1956,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                                 style: TextStyle(
                                   fontFamily: fontFamily,
                                   fontSize: fontSize,
-                                  fontWeight: (isBoldArabic ||
-                                          (isArrowTracking && isWordActive))
+                                  fontWeight: isBoldArabic
                                       ? FontWeight.bold
                                       : FontWeight.normal,
                                   color: isWordActive
@@ -2084,18 +1968,26 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                                           : (isDark
                                               ? Colors.white
                                               : const Color(0xFF1E2B27))),
+                                  shadows: (isWordActive && isArrowTracking)
+                                      ? activeArrowShadows
+                                      : null,
                                   height: 1.6,
                                   letterSpacing: -0.1,
                                 ),
                               ),
                               if (isArrowTracking && isWordActive)
                                 Positioned(
-                                  bottom: -11,
+                                  bottom: -6,
                                   left: 0,
                                   right: 0,
                                   child: QuranWordTrackingPointer(
                                     isDark: isDark,
-                                    height: 11.0,
+                                    height: 7.5,
+                                    durationMs: _activeWordDurationMs,
+                                    playbackSpeed: _playbackSpeed,
+                                    isPlaying: _isPlaying,
+                                    wordIdentity:
+                                        '${verse.sureId}_${verse.ayetId}_$wordOrder',
                                   ),
                                 ),
                             ],
@@ -2133,6 +2025,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 size: 28,
                 isDark: isDark,
                 isHighlight: isActiveVerse,
+                isSecde: TilavetSecdesiData.isSecdeVerse(
+                  verse.sureId,
+                  verse.ayetId,
+                ),
                 fontFamily: fontFamily,
               ),
             ),

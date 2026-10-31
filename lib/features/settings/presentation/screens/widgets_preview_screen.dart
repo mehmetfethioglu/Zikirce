@@ -5,6 +5,7 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/widget_sync_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/utils/hijri_calendar.dart';
+import '../../../kuran/data/islamic_bookshelf_models.dart';
 import '../../../namaz_vakitleri/providers/prayer_providers.dart';
 import '../../../namaz_vakitleri/presentation/widgets/analog_prayer_clock.dart';
 
@@ -45,6 +46,34 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
     final l10n = context.l10n;
     final prayerAsync = ref.watch(prayerTimingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBook = ref.watch(
+      islamicBookshelfProvider.select((books) {
+        final visible = books.where((b) => b.isVisible).toList();
+        final list = visible.isNotEmpty ? visible : books;
+        final started = list.where((b) => b.hasStartedReading);
+        return started.isNotEmpty ? started.first : list.first;
+      }),
+    );
+    final topShelfBooks = ref.watch(
+      islamicBookshelfProvider.select((books) {
+        final visible = books.where((b) => b.isVisible).toList();
+        final list = visible.isNotEmpty ? visible : books;
+        return list.take(6).toList();
+      }),
+    );
+    final startedBooksCount = ref.watch(
+      islamicBookshelfProvider.select(
+        (books) => books.where((b) => b.hasStartedReading).length,
+      ),
+    );
+    final totalVisibleBooksCount = ref.watch(
+      islamicBookshelfProvider.select(
+        (books) => books.where((b) => b.isVisible).length,
+      ),
+    );
+    final bookmarksCount = ref.watch(
+      islamicBookAnnotationsProvider.select((s) => s.bookmarks.length),
+    );
 
     return Scaffold(
       backgroundColor: colors.pageBackground,
@@ -184,6 +213,29 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
             colors: colors,
             child: _buildStreakMock(colors, isDark),
           ),
+          const SizedBox(height: 16),
+
+          // 10. Külliyat & Okuma Rafı (4x2 / 2x2)
+          _buildWidgetCard(
+            title: l10n.isTurkish
+                ? '10. Külliyat & Okuma Rafı'
+                : '10. Islamic Library & Reading Shelf',
+            sizeLabel: '4x2 / 2x2',
+            description: l10n.isTurkish
+                ? 'Tahrir klasik cilt rafınız, son okunan eserin sayfası, okuma yüzdesi ve tek tıkla okumaya devam etme kartı.'
+                : 'Classical leather-bound bookshelf, active book page progress, and one-tap resume reading.',
+            colors: colors,
+            child: _buildKulliyatWidgetMock(
+              colors: colors,
+              isDark: isDark,
+              l10n: l10n,
+              activeBook: activeBook,
+              shelfBooks: topShelfBooks,
+              startedCount: startedBooksCount,
+              totalCount: totalVisibleBooksCount,
+              bookmarksCount: bookmarksCount,
+            ),
+          ),
           const SizedBox(height: 24),
 
           // How to add widgets guide
@@ -211,7 +263,7 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  l10n.isTurkish ? '9 Zengin Ana Ekran Widget\'ı' : '9 Rich Home Screen Widgets',
+                  l10n.isTurkish ? '10 Zengin Ana Ekran Widget\'ı' : '10 Rich Home Screen Widgets',
                   style: TextStyle(
                     color: colors.primaryText,
                     fontSize: 15,
@@ -659,6 +711,373 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
     );
   }
 
+  Widget _buildKulliyatWidgetMock({
+    required AppThemeColors colors,
+    required bool isDark,
+    required AppLocalizations l10n,
+    required IslamicShelfBook activeBook,
+    required List<IslamicShelfBook> shelfBooks,
+    required int startedCount,
+    required int totalCount,
+    required int bookmarksCount,
+  }) {
+    final activePalette = activeBook.palette;
+    final unitLabel =
+        activeBook.category == IslamicBookCategory.tafseer ? 'Âyet' : 'Sayfa';
+    final referenceText =
+        '$unitLabel ${activeBook.currentPage} / ${activeBook.totalPages}';
+    final progressPct = activeBook.progressPercent;
+    final progressFraction =
+        (progressPct / 100.0).clamp(0.04, 1.0);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0A0E0D) : const Color(0xFFFFFDF9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: const Color(0xFFD4AF37).withValues(alpha: isDark ? 0.35 : 0.45),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Sol yarı: Minyatür Tahrir klasik cilt sırtları + ceviz ahşap raf
+          Expanded(
+            flex: 11,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      l10n.isTurkish ? 'KÜLLİYAT RAFI' : 'BOOKSHELF',
+                      style: const TextStyle(
+                        color: Color(0xFFD4AF37),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    Text(
+                      '$startedCount/$totalCount',
+                      style: TextStyle(
+                        color: colors.secondaryTextAlt,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 78,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Sol pirinç kitap desteği
+                      Container(
+                        width: 3,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(1.5),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFD4AF37), Color(0xFF8A6621)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      ...shelfBooks.map((book) {
+                        final pal = book.palette;
+                        final isCurrent = book.id == activeBook.id;
+                        return Expanded(
+                          child: Container(
+                            height: isCurrent ? 76 : 70,
+                            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [pal.primaryLeather, pal.spineColor],
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                              ),
+                              borderRadius: BorderRadius.circular(3),
+                              border: Border.all(
+                                color: isCurrent
+                                    ? pal.goldAccent
+                                    : pal.goldAccent.withValues(alpha: 0.28),
+                                width: isCurrent ? 1.1 : 0.5,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  height: 2,
+                                  margin: const EdgeInsets.only(top: 4),
+                                  color: pal.goldAccent.withValues(alpha: 0.85),
+                                ),
+                                Container(
+                                  width: 4,
+                                  height: 4,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: pal.goldAccent.withValues(
+                                      alpha: isCurrent ? 0.95 : 0.45,
+                                    ),
+                                  ),
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '%${book.progressPercent}',
+                                      style: const TextStyle(
+                                        color: Color(0xFFFDF8EE),
+                                        fontSize: 6.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      maxLines: 1,
+                                    ),
+                                    Container(
+                                      height: 2,
+                                      margin: const EdgeInsets.only(
+                                        top: 2,
+                                        bottom: 3,
+                                      ),
+                                      color: pal.goldAccent.withValues(
+                                        alpha: 0.85,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                      const SizedBox(width: 2),
+                      // Sağ pirinç kitap desteği
+                      Container(
+                        width: 3,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(1.5),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFD4AF37), Color(0xFF8A6621)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Ceviz ahşap raf tablası
+                Container(
+                  height: 7,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF5E3A1E), Color(0xFF3B2311)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    border: const Border(
+                      top: BorderSide(color: Color(0x88D4AF37), width: 0.8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Sağ yarı: Son okunan kitabın gerçek zamanlı bilgileri
+          Expanded(
+            flex: 12,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: activePalette.primaryLeather,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: activePalette.goldAccent,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        activeBook.category.label,
+                        style: const TextStyle(
+                          color: Color(0xFFD4AF37),
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (bookmarksCount > 0)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.bookmark_rounded,
+                            color: Color(0xFFD4AF37),
+                            size: 10,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            '$bookmarksCount',
+                            style: const TextStyle(
+                              color: Color(0xFFD4AF37),
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  activeBook.shortTitle,
+                  style: TextStyle(
+                    color: colors.primaryText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  activeBook.author,
+                  style: TextStyle(
+                    color: colors.secondaryTextAlt,
+                    fontSize: 9.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      referenceText,
+                      style: TextStyle(
+                        color: colors.primaryText,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '%$progressPct',
+                      style: const TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 5,
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: isDark
+                              ? const Color(0xFF1F2421)
+                              : const Color(0xFFEAE3D5),
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: progressFraction,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  activePalette.goldAccent,
+                                  const Color(0xFF10B981),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        activePalette.primaryLeather,
+                        activePalette.secondaryLeather,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: activePalette.goldAccent.withValues(alpha: 0.55),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.menu_book_rounded,
+                        color: activePalette.goldAccent,
+                        size: 11,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          l10n.isTurkish
+                              ? 'Okumaya Devam Et'
+                              : 'Continue Reading',
+                          style: const TextStyle(
+                            color: Color(0xFFFDF8EE),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: Color(0xFFFDF8EE),
+                        size: 13,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHowToAddGuide(AppThemeColors colors, AppLocalizations l10n) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -684,7 +1103,7 @@ class _WidgetsPreviewScreenState extends ConsumerState<WidgetsPreviewScreen> {
           _buildGuideStep('1', l10n.isTurkish ? 'Telefonunuzun ana ekranında boş bir alana basılı tutun.' : 'Long-press on an empty area of your device home screen.', colors),
           _buildGuideStep('2', l10n.isTurkish ? 'Açılan menüden "Widget\'lar / Araçlar" seçeneğine dokunun.' : 'Tap on "Widgets" from the popup menu.', colors),
           _buildGuideStep('3', l10n.isTurkish ? 'Listeden "Zikirce" uygulamasını bulun.' : 'Find "Zikirce" in the widget list.', colors),
-          _buildGuideStep('4', l10n.isTurkish ? 'İstediğiniz widget\'ı seçip ana ekranınıza sürükleyip bırakın.' : 'Select any of the 9 widgets and drag it to your screen.', colors),
+          _buildGuideStep('4', l10n.isTurkish ? 'İstediğiniz widget\'ı seçip ana ekranınıza sürükleyip bırakın.' : 'Select any of the 10 widgets and drag it to your screen.', colors),
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../features/kuran/data/islamic_bookshelf_models.dart';
 import '../database/app_database.dart';
 import '../utils/pref_utils.dart';
 import '../utils/hijri_calendar.dart';
@@ -40,6 +41,7 @@ class WidgetSyncService {
     'StreakWidgetProvider',
     'KazaQuickWidgetProvider',
     'PrayerMiniWidgetProvider',
+    'KulliyatWidgetProvider',
   ];
 
   static const List<String> iosWidgetKinds = [
@@ -56,6 +58,7 @@ class WidgetSyncService {
     'KalpSagligiWidget',
     'ZikirCounterWidget',
     'StreakWidget',
+    'KulliyatWidget',
   ];
 
   /// Synchronize prayer times for a city and push to all widgets
@@ -215,6 +218,154 @@ class WidgetSyncService {
     }
   }
 
+  /// Synchronizes Külliyat bookshelf state, active book reading progress, and annotations to Home Screen Widgets
+  static Future<void> syncKulliyatFromPrefs([List<IslamicShelfBook>? currentBooks]) async {
+    try {
+      await _ensureInitialized();
+      final prefs = await SharedPreferences.getInstance();
+      final defaults = IslamicBookshelfCatalog.defaultBooks();
+      final lastMushafPage = prefs.getInt('LastReadPage') ?? 1;
+      final lastReadBookId = prefs.getString('zikirce_kulliyat_last_book_id') ?? '';
+
+      List<IslamicShelfBook> books;
+      if (currentBooks != null && currentBooks.isNotEmpty) {
+        books = currentBooks;
+      } else {
+        final raw = prefs.getString('zikirce_tahrir_bookshelf_v2') ??
+            prefs.getString('zikirce_tahrir_bookshelf_v1');
+        if (raw == null || raw.isEmpty) {
+          books = defaults.map((b) {
+            if (b.id == 'book_mushaf' && lastMushafPage > 1) {
+              return b.copyWith(
+                currentPage: lastMushafPage.clamp(1, 604),
+                hasStartedReading: true,
+              );
+            }
+            return b;
+          }).toList();
+        } else {
+          final decoded = jsonDecode(raw) as List<dynamic>;
+          final savedMap = <String, Map<String, dynamic>>{};
+          for (final item in decoded) {
+            if (item is Map<String, dynamic> && item['id'] is String) {
+              savedMap[item['id'] as String] = item;
+            }
+          }
+          books = defaults.map((def) {
+            final s = savedMap[def.id];
+            if (s == null) return def;
+            int curPage = (s['currentPage'] as num?)?.toInt() ?? def.currentPage;
+            bool started = (s['hasStartedReading'] as bool?) ?? def.hasStartedReading;
+            if (def.id == 'book_mushaf' && lastMushafPage > curPage) {
+              curPage = lastMushafPage.clamp(1, 604);
+              started = true;
+            }
+            return def.copyWith(
+              sortOrder: (s['sortOrder'] as num?)?.toInt() ?? def.sortOrder,
+              isVisible: (s['isVisible'] as bool?) ?? def.isVisible,
+              currentPage: curPage.clamp(1, def.totalPages),
+              totalPages: def.totalPages,
+              hasStartedReading: started,
+              paletteIndex: (s['paletteIndex'] as num?)?.toInt() ?? def.paletteIndex,
+              coverStyle: (s['coverStyle'] as num?)?.toInt() ?? def.coverStyle,
+            );
+          }).toList()
+            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        }
+      }
+
+      final visibleBooks = books.where((b) => b.isVisible).toList();
+      final effectiveList = visibleBooks.isNotEmpty ? visibleBooks : books;
+
+      // Determine active / last read book
+      IslamicShelfBook activeBook = effectiveList.first;
+      if (lastReadBookId.isNotEmpty) {
+        final match = effectiveList.where((b) => b.id == lastReadBookId);
+        if (match.isNotEmpty) {
+          activeBook = match.first;
+        }
+      } else {
+        final startedBooks = effectiveList.where((b) => b.hasStartedReading).toList();
+        if (startedBooks.isNotEmpty) {
+          activeBook = startedBooks.first;
+        }
+      }
+
+      final startedCount = books.where((b) => b.hasStartedReading).length;
+      final totalVisible = effectiveList.length;
+
+      int bookmarksCount = 0;
+      int highlightsCount = 0;
+      try {
+        final rawB = prefs.getString('zikirce_book_bookmarks_v1');
+        if (rawB != null && rawB.isNotEmpty) {
+          bookmarksCount = (jsonDecode(rawB) as List<dynamic>).length;
+        }
+        final rawH = prefs.getString('zikirce_book_highlights_v1');
+        if (rawH != null && rawH.isNotEmpty) {
+          highlightsCount = (jsonDecode(rawH) as List<dynamic>).length;
+        }
+      } catch (_) {}
+
+      final unitLabel = activeBook.category == IslamicBookCategory.tafseer ? 'Âyet' : 'Sayfa';
+      final referenceStr = '$unitLabel ${activeBook.currentPage} / ${activeBook.totalPages}';
+
+      // Build top 6 shelf books JSON for native miniature bookshelf rendering
+      final shelfBooksPayload = effectiveList.take(6).map((b) => {
+        'id': b.id,
+        't': b.shortTitle,
+        'a': b.author,
+        'c': b.category.label,
+        'p': b.currentPage,
+        'tp': b.totalPages,
+        'pct': b.progressPercent,
+        'pal': b.paletteIndex,
+        'st': b.hasStartedReading,
+      }).toList();
+      final shelfJsonStr = jsonEncode(shelfBooksPayload);
+
+      // Persist to SharedPreferences for Android FlutterSharedPreferences direct fallback
+      await prefs.setString('KulliyatLastBookId', activeBook.id);
+      await prefs.setString('KulliyatLastBookTitle', activeBook.shortTitle);
+      await prefs.setString('KulliyatLastBookFullTitle', activeBook.title);
+      await prefs.setString('KulliyatLastBookAuthor', activeBook.author);
+      await prefs.setString('KulliyatLastBookCategory', activeBook.category.label);
+      await prefs.setInt('KulliyatLastBookPage', activeBook.currentPage);
+      await prefs.setInt('KulliyatLastBookTotalPages', activeBook.totalPages);
+      await prefs.setInt('KulliyatLastBookPercent', activeBook.progressPercent);
+      await prefs.setInt('KulliyatLastBookPaletteIndex', activeBook.paletteIndex);
+      await prefs.setString('KulliyatLastBookReference', referenceStr);
+      await prefs.setInt('KulliyatStartedCount', startedCount);
+      await prefs.setInt('KulliyatTotalBooksCount', totalVisible);
+      await prefs.setInt('KulliyatBookmarksCount', bookmarksCount);
+      await prefs.setInt('KulliyatHighlightsCount', highlightsCount);
+      await prefs.setString('KulliyatShelfBooksJson', shelfJsonStr);
+
+      if (Platform.isAndroid || Platform.isIOS) {
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookId', activeBook.id);
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookTitle', activeBook.shortTitle);
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookFullTitle', activeBook.title);
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookAuthor', activeBook.author);
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookCategory', activeBook.category.label);
+        await HomeWidget.saveWidgetData<int>('KulliyatLastBookPage', activeBook.currentPage);
+        await HomeWidget.saveWidgetData<int>('KulliyatLastBookTotalPages', activeBook.totalPages);
+        await HomeWidget.saveWidgetData<int>('KulliyatLastBookPercent', activeBook.progressPercent);
+        await HomeWidget.saveWidgetData<int>('KulliyatLastBookPaletteIndex', activeBook.paletteIndex);
+        await HomeWidget.saveWidgetData<String>('KulliyatLastBookReference', referenceStr);
+        await HomeWidget.saveWidgetData<int>('KulliyatStartedCount', startedCount);
+        await HomeWidget.saveWidgetData<int>('KulliyatTotalBooksCount', totalVisible);
+        await HomeWidget.saveWidgetData<int>('KulliyatBookmarksCount', bookmarksCount);
+        await HomeWidget.saveWidgetData<int>('KulliyatHighlightsCount', highlightsCount);
+        await HomeWidget.saveWidgetData<String>('KulliyatShelfBooksJson', shelfJsonStr);
+        await triggerWidgetUpdate();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[WidgetSyncService] syncKulliyatFromPrefs error: $e');
+      }
+    }
+  }
+
   /// Synchronizes full app state from SQLite database and current settings
   static Future<void> syncAll(AppDatabase db, {String? sessionId}) async {
     try {
@@ -283,7 +434,10 @@ class WidgetSyncService {
       final kazaLastDate = prefs.getString('KazaLastCompletedDate');
       await syncKazaCounts(kazaMap, lastCompletedDate: kazaLastDate);
 
-      // 4. Background auto backup (debounced)
+      // 4. Külliyat Bookshelf & Reading Progress
+      await syncKulliyatFromPrefs();
+
+      // 5. Background auto backup (debounced)
       BackupService.triggerAutoBackupBackground(db, sessionId: sessionId);
     } catch (e) {
       if (kDebugMode) {

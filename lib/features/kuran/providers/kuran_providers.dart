@@ -7,6 +7,7 @@ import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -138,6 +139,8 @@ class KuranAudioState {
   final int currentSurahId;
   final int currentAyahId;
   final int currentWordOrder;
+  final int activeWordDurationMs;
+  final double playbackSpeed;
   final double playbackProgress;
   final bool isBarVisible;
 
@@ -147,6 +150,8 @@ class KuranAudioState {
     this.currentSurahId = 1,
     this.currentAyahId = 1,
     this.currentWordOrder = 0,
+    this.activeWordDurationMs = 500,
+    this.playbackSpeed = 1.0,
     this.playbackProgress = 0.0,
     this.isBarVisible = false,
   });
@@ -157,6 +162,8 @@ class KuranAudioState {
     int? currentSurahId,
     int? currentAyahId,
     int? currentWordOrder,
+    int? activeWordDurationMs,
+    double? playbackSpeed,
     double? playbackProgress,
     bool? isBarVisible,
   }) {
@@ -166,6 +173,8 @@ class KuranAudioState {
       currentSurahId: currentSurahId ?? this.currentSurahId,
       currentAyahId: currentAyahId ?? this.currentAyahId,
       currentWordOrder: currentWordOrder ?? this.currentWordOrder,
+      activeWordDurationMs: activeWordDurationMs ?? this.activeWordDurationMs,
+      playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       playbackProgress: playbackProgress ?? this.playbackProgress,
       isBarVisible: isBarVisible ?? this.isBarVisible,
     );
@@ -178,13 +187,17 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   StreamSubscription? _stateSub;
   StreamSubscription<int?>? _indexSub;
 
-  List<({int surahId, int ayahId, int pageId})> _queueVerses = [];
+  List<({int surahId, int ayahId, int pageId, List<String> words})>
+      _queueVerses = [];
   int _lastIndex = -1;
+  bool _isAdvancingItem = false;
   int? _activePageId;
   int _queueGen = 0;
-  DateTime _lastTransitionTime = DateTime.fromMillisecondsSinceEpoch(0);
   final Stopwatch _verseStopwatch = Stopwatch();
+  final Stopwatch _microInterpStopwatch = Stopwatch();
   double _verseSeekAnchorMs = 0.0;
+  double _lastSampledPlayerMs = -1.0;
+  double _maxObservedVerseMs = 0.0;
   Timer? _wordSyncTimer;
 
   KuranAudioNotifier() : super(KuranAudioState()) {
@@ -193,7 +206,10 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
 
   void _resetVerseClock({int seekMs = 0, bool isPlaying = true}) {
     _verseSeekAnchorMs = seekMs.toDouble();
+    _lastSampledPlayerMs = -1.0;
+    _maxObservedVerseMs = seekMs.toDouble();
     _verseStopwatch.reset();
+    _microInterpStopwatch.reset();
     final isReady = _player.processingState == ProcessingState.ready;
     if (isPlaying && !state.isLoading && isReady) {
       _verseStopwatch.start();
@@ -201,72 +217,55 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   }
 
   double _currentEffectivePositionMs() {
-    if (_player.processingState == ProcessingState.loading ||
-        _player.processingState == ProcessingState.buffering ||
+    if (_isAdvancingItem ||
+        _player.processingState == ProcessingState.loading ||
         _player.processingState == ProcessingState.idle) {
       return _verseSeekAnchorMs;
     }
 
-    final stopwatchMs = _verseSeekAnchorMs + _verseStopwatch.elapsedMilliseconds;
     final playerMs = _player.position.inMilliseconds.toDouble();
-    final timeSinceTransitionMs =
-        DateTime.now().difference(_lastTransitionTime).inMilliseconds;
-
-    if (!Platform.isWindows) {
-      if (timeSinceTransitionMs < 350 && playerMs > 1200 && _verseSeekAnchorMs == 0) {
-        return 0.0;
-      }
-      return playerMs.clamp(0.0, 600000.0);
+    if ((playerMs - _lastSampledPlayerMs).abs() >= 1.0) {
+      _lastSampledPlayerMs = playerMs;
+      _microInterpStopwatch
+        ..reset()
+        ..start();
     }
 
-    if (timeSinceTransitionMs < 350 && playerMs > stopwatchMs + 300) {
-      return stopwatchMs.clamp(0.0, 600000.0);
+    double effectiveMs = playerMs;
+    if (_player.playing &&
+        _player.processingState == ProcessingState.ready &&
+        playerMs > 0) {
+      final interpDelta =
+          (_microInterpStopwatch.elapsedMilliseconds * state.playbackSpeed)
+              .clamp(0.0, 45.0);
+      effectiveMs = playerMs + interpDelta;
     }
-    if ((playerMs - stopwatchMs).abs() <= 280 && playerMs >= 0) {
-      return playerMs;
-    }
-    return stopwatchMs.clamp(0.0, 600000.0);
-  }
 
-  void _applyQueueIndex(int idx) {
-    if (idx < 0 || idx >= _queueVerses.length || idx == _lastIndex) {
-      return;
+    if (effectiveMs > _maxObservedVerseMs) {
+      _maxObservedVerseMs = effectiveMs;
     }
-    _lastIndex = idx;
-    _lastTransitionTime = DateTime.now();
-    _resetVerseClock(seekMs: 0, isPlaying: _player.playing);
-    final item = _queueVerses[idx];
-    state = state.copyWith(
-      currentSurahId: item.surahId,
-      currentAyahId: item.ayahId,
-      currentWordOrder: 1,
-      playbackProgress: 0.0,
-    );
-    _syncNowPlaying();
-
-    if (idx + 1 < _queueVerses.length) {
-      final next = _queueVerses[idx + 1];
-      unawaited(AudioDownloadService.ensureVerseDownloaded(
-        next.surahId,
-        next.ayahId,
-        pageId: next.pageId,
-      ));
-    }
+    return effectiveMs.clamp(0.0, 600000.0);
   }
 
   void _tickWordSync() {
-    if (!state.isBarVisible || (!_player.playing && !state.isPlaying)) {
+    if (_isAdvancingItem ||
+        !state.isBarVisible ||
+        (!_player.playing && !state.isPlaying)) {
       return;
     }
-    final currentQIdx = _player.currentIndex;
-    if (currentQIdx != null && currentQIdx != _lastIndex) {
-      _applyQueueIndex(currentQIdx);
-    }
     final ms = _currentEffectivePositionMs();
+    final currentWords = (_lastIndex >= 0 && _lastIndex < _queueVerses.length)
+        ? _queueVerses[_lastIndex].words
+        : null;
     final activeWord = AudioSyncService.getActiveWordOrder(
       state.currentSurahId,
       state.currentAyahId,
       ms,
+      renderedWordCount:
+          (currentWords != null && currentWords.isNotEmpty)
+              ? currentWords.length
+              : null,
+      ayahWords: currentWords,
     );
 
     final total = _player.duration?.inMilliseconds ?? 1;
@@ -274,19 +273,24 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
 
     if (activeWord != state.currentWordOrder ||
         (prog - state.playbackProgress).abs() > 0.01) {
+      final wordDur = activeWord != state.currentWordOrder
+          ? AudioSyncService.getWordDurationMs(
+              state.currentSurahId,
+              state.currentAyahId,
+              activeWord,
+              ayahWords: currentWords,
+              trackDurationMs: _player.duration?.inMilliseconds,
+            )
+          : state.activeWordDurationMs;
       state = state.copyWith(
         currentWordOrder: activeWord,
+        activeWordDurationMs: wordDur,
         playbackProgress: prog,
       );
     }
   }
 
   void _initAudioListeners() {
-    _indexSub = _player.currentIndexStream.listen((idx) {
-      if (idx == null) return;
-      _applyQueueIndex(idx);
-    });
-
     _posSub = _player
         .createPositionStream(
           steps: 1000,
@@ -316,15 +320,16 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
         }
       }
 
-      final atLastQueueItem = _queueVerses.isEmpty ||
-          ((_player.currentIndex ?? _lastIndex) >= _queueVerses.length - 1);
-
       if (pState.processingState == ProcessingState.completed &&
-          atLastQueueItem &&
-          _verseStopwatch.elapsedMilliseconds > 350) {
-        if (_activePageId != null && _activePageId! < 604) {
+          !_isAdvancingItem) {
+        _isAdvancingItem = true;
+        if (_lastIndex >= 0 && _lastIndex + 1 < _queueVerses.length) {
+          unawaited(_playSingleQueueItem(_lastIndex + 1));
+        } else if (_activePageId != null && _activePageId! < 604) {
+          _isAdvancingItem = false;
           _advanceToNextPage(_activePageId! + 1);
         } else {
+          _isAdvancingItem = false;
           state = state.copyWith(isPlaying: false, currentWordOrder: 0);
           IosNowPlayingService.clearNowPlaying();
         }
@@ -371,6 +376,101 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
     }
   }
 
+  Future<void> _playSingleQueueItem(
+    int idx, {
+    bool useFallbackCdn = false,
+  }) async {
+    if (idx < 0 || idx >= _queueVerses.length) {
+      _isAdvancingItem = false;
+      return;
+    }
+
+    final myGen = ++_queueGen;
+    _isAdvancingItem = true;
+    _lastIndex = idx;
+    final item = _queueVerses[idx];
+    _resetVerseClock(seekMs: 0, isPlaying: false);
+
+    final initialWordDur = AudioSyncService.getWordDurationMs(
+      item.surahId,
+      item.ayahId,
+      1,
+      ayahWords: item.words.isNotEmpty ? item.words : null,
+    );
+
+    state = state.copyWith(
+      currentSurahId: item.surahId,
+      currentAyahId: item.ayahId,
+      currentWordOrder: 1,
+      activeWordDurationMs: initialWordDur,
+      playbackProgress: 0.0,
+      isBarVisible: true,
+    );
+
+    try {
+      final soundsDir = await AudioDownloadService.getSoundsDirectory();
+      final soundsDirPath = soundsDir.path;
+
+      await AudioDownloadService.ensureVerseDownloaded(
+        item.surahId,
+        item.ayahId,
+        pageId: item.pageId,
+      ).timeout(const Duration(milliseconds: 1800), onTimeout: () => null);
+
+      if (myGen != _queueGen) return;
+
+      final localPath =
+          '$soundsDirPath${Platform.pathSeparator}audio_${item.surahId}_${item.ayahId}.mp3';
+      final localFile = File(localPath);
+      final AudioSource source;
+      if (AudioDownloadService.isValidDiyanetAudioFile(localFile)) {
+        source = AudioSource.file(localPath);
+      } else {
+        final url = AudioDownloadService.getDiyanetAudioUrl(
+          item.surahId,
+          item.ayahId,
+          pageId: item.pageId,
+        );
+        source = AudioSource.uri(Uri.parse(url));
+      }
+
+      if (_player.playing) {
+        await _player.pause();
+      }
+      await _player.setLoopMode(LoopMode.off);
+      await _player.setAudioSource(
+        source,
+        initialPosition: Duration.zero,
+      );
+
+      if (myGen != _queueGen) return;
+
+      _resetVerseClock(seekMs: 0, isPlaying: true);
+      _isAdvancingItem = false;
+      unawaited(_player.play());
+      _syncNowPlaying();
+
+      for (int offset = 1; offset <= 3; offset++) {
+        final nextIdx = idx + offset;
+        if (nextIdx < _queueVerses.length) {
+          final next = _queueVerses[nextIdx];
+          unawaited(AudioDownloadService.ensureVerseDownloaded(
+            next.surahId,
+            next.ayahId,
+            pageId: next.pageId,
+          ));
+        }
+      }
+    } catch (_) {
+      _isAdvancingItem = false;
+      if (!useFallbackCdn && myGen == _queueGen) {
+        await _playSingleQueueItem(idx, useFallbackCdn: true);
+        return;
+      }
+      state = state.copyWith(isPlaying: false, isLoading: false);
+    }
+  }
+
   Future<void> playVerse(
     int surahId,
     int ayahId, {
@@ -393,10 +493,10 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
         togglePlayPause();
       } else if (cmd == 'togglePlayPause') {
         togglePlayPause();
-      } else if (cmd == 'next' && _player.hasNext) {
-        _player.seekToNext();
-      } else if (cmd == 'previous' && _player.hasPrevious) {
-        _player.seekToPrevious();
+      } else if (cmd == 'next' && _lastIndex + 1 < _queueVerses.length) {
+        _playSingleQueueItem(_lastIndex + 1);
+      } else if (cmd == 'previous' && _lastIndex > 0) {
+        _playSingleQueueItem(_lastIndex - 1);
       }
     });
 
@@ -405,24 +505,20 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
     await IosNowPlayingService.beginTransitionTask();
 
     try {
-      final soundsDir = await AudioDownloadService.getSoundsDirectory();
-      final soundsDirPath = soundsDir.path;
-
-      await AudioDownloadService.ensureVerseDownloaded(
-        surahId,
-        ayahId,
-        pageId: pageId,
-      );
-      if (myGen != _queueGen) return;
-
-      final queueItems = <({int surahId, int ayahId, int pageId})>[];
+      final queueItems =
+          <({int surahId, int ayahId, int pageId, List<String> words})>[];
       int initialIdx = 0;
 
       if (pageId != null) {
         final pageData = await QuranPageRepository.getPage(pageId);
         for (int i = 0; i < pageData.quranAyats.length; i++) {
           final a = pageData.quranAyats[i];
-          queueItems.add((surahId: a.sureId, ayahId: a.ayetId, pageId: pageId));
+          queueItems.add((
+            surahId: a.sureId,
+            ayahId: a.ayetId,
+            pageId: pageId,
+            words: QuranWordHighlighter.extractPureWords(a.ayetText),
+          ));
           if (a.sureId == surahId && a.ayetId == ayahId) {
             initialIdx = i;
           }
@@ -430,61 +526,20 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
       }
 
       if (queueItems.isEmpty) {
-        queueItems.add((surahId: surahId, ayahId: ayahId, pageId: pageId ?? 1));
+        queueItems.add((
+          surahId: surahId,
+          ayahId: ayahId,
+          pageId: pageId ?? 1,
+          words: const <String>[],
+        ));
         initialIdx = 0;
       }
 
-      final children = <AudioSource>[];
-      for (final item in queueItems) {
-        final localPath =
-            '$soundsDirPath${Platform.pathSeparator}audio_${item.surahId}_${item.ayahId}.mp3';
-        final localFile = File(localPath);
-        if (AudioDownloadService.isValidDiyanetAudioFile(localFile)) {
-          children.add(AudioSource.file(localPath));
-        } else {
-          final url = AudioDownloadService.getDiyanetAudioUrl(
-            item.surahId,
-            item.ayahId,
-            pageId: item.pageId,
-          );
-          children.add(AudioSource.uri(Uri.parse(url)));
-        }
-      }
+      if (myGen != _queueGen) return;
 
       _queueVerses = queueItems;
-      _lastIndex = initialIdx;
-      _lastTransitionTime = DateTime.now();
-      _resetVerseClock(seekMs: 0, isPlaying: true);
-
-      final playlist = ConcatenatingAudioSource(
-        useLazyPreparation: true,
-        children: children,
-      );
-
-      await _player.setLoopMode(LoopMode.off);
-      await _player.setAudioSource(
-        playlist,
-        initialIndex: initialIdx,
-        initialPosition: Duration.zero,
-      );
-      unawaited(_player.play());
-      _resetVerseClock(seekMs: 0, isPlaying: true);
-      _syncNowPlaying();
-      unawaited(AudioDownloadService.ensureVerseDownloaded(
-        surahId,
-        ayahId,
-        pageId: pageId,
-      ));
-    } catch (e) {
-      if (!useFallbackCdn) {
-        await playVerse(
-          surahId,
-          ayahId,
-          pageId: pageId,
-          useFallbackCdn: true,
-        );
-        return;
-      }
+      await _playSingleQueueItem(initialIdx, useFallbackCdn: useFallbackCdn);
+    } catch (_) {
       state = state.copyWith(isPlaying: false, isLoading: false);
     }
   }
@@ -533,6 +588,7 @@ class KuranAudioNotifier extends StateNotifier<KuranAudioState> {
   void dispose() {
     _wordSyncTimer?.cancel();
     _verseStopwatch.stop();
+    _microInterpStopwatch.stop();
     _indexSub?.cancel();
     _posSub?.cancel();
     _stateSub?.cancel();

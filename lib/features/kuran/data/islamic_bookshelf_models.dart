@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/widget_sync_service.dart';
 
 /// Kütüphane rafındaki kitap kategorileri
 enum IslamicBookCategory {
@@ -434,6 +435,7 @@ class IslamicBookAnnotationsNotifier
         _highlightsKey,
         jsonEncode(state.highlights.map((e) => e.toJson()).toList()),
       );
+      await WidgetSyncService.syncKulliyatFromPrefs();
     } catch (_) {}
   }
 
@@ -531,6 +533,7 @@ class IslamicBookReaderSettings {
   final bool justifyText;
   final bool showArabicText;
   final bool isFlowingBookLayout; // true: Akıcı Kitap Sayfası, false: Kart Düzeni
+  final bool showLugatWords; // true: Risale-i Nur Lügati kelimelerini belirt ve dokununca mânâ popup'ı aç
 
   const IslamicBookReaderSettings({
     this.themeIndex = 0,
@@ -542,6 +545,7 @@ class IslamicBookReaderSettings {
     this.justifyText = true,
     this.showArabicText = true,
     this.isFlowingBookLayout = true,
+    this.showLugatWords = true,
   });
 
   Color get backgroundColor {
@@ -624,6 +628,7 @@ class IslamicBookReaderSettings {
     bool? justifyText,
     bool? showArabicText,
     bool? isFlowingBookLayout,
+    bool? showLugatWords,
   }) {
     return IslamicBookReaderSettings(
       themeIndex: themeIndex ?? this.themeIndex,
@@ -635,6 +640,7 @@ class IslamicBookReaderSettings {
       justifyText: justifyText ?? this.justifyText,
       showArabicText: showArabicText ?? this.showArabicText,
       isFlowingBookLayout: isFlowingBookLayout ?? this.isFlowingBookLayout,
+      showLugatWords: showLugatWords ?? this.showLugatWords,
     );
   }
 
@@ -648,6 +654,7 @@ class IslamicBookReaderSettings {
         'justifyText': justifyText,
         'showArabicText': showArabicText,
         'isFlowingBookLayout': isFlowingBookLayout,
+        'showLugatWords': showLugatWords,
       };
 
   factory IslamicBookReaderSettings.fromJson(Map<String, dynamic> json) {
@@ -661,6 +668,7 @@ class IslamicBookReaderSettings {
       justifyText: (json['justifyText'] as bool?) ?? true,
       showArabicText: (json['showArabicText'] as bool?) ?? true,
       isFlowingBookLayout: (json['isFlowingBookLayout'] as bool?) ?? true,
+      showLugatWords: (json['showLugatWords'] as bool?) ?? true,
     );
   }
 }
@@ -975,6 +983,229 @@ class IslamicBookshelfCatalog {
         coverStyle: 2,
         sourceKey: 'rn_asayi_musa',
       ),
+
+      // ==================== RİSALE-İ NUR KÜÇÜK ESERLER / CEP RİSALELERİ ====================
+      IslamicShelfBook(
+        id: 'book_rn_kucuk_sozler',
+        title: 'Küçük Sözler (Risale-i Nur Külliyatı)',
+        shortTitle: 'Küçük Sözler',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 1–9. Sözler, Besmele Sırrı & Namaz-Vesvese • 79 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 23,
+        totalPages: 79,
+        paletteIndex: 1, // Osmanlı Yakutu
+        coverStyle: 0,
+        sourceKey: 'rn_kucuk_sozler',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_meyve_risalesi',
+        title: 'Meyve Risalesi (Denizli Hapsinin Meyvesi)',
+        shortTitle: 'Meyve Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 11 Mesele • İman, Gençlik ve Haşir Dersleri • 104 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 24,
+        totalPages: 104,
+        paletteIndex: 0, // Hünkâr Zümrüdü
+        coverStyle: 1,
+        sourceKey: 'rn_meyve_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_hastalar_risalesi',
+        title: 'Hastalar Risalesi (Yirmi Beşinci Lem’a)',
+        shortTitle: 'Hastalar Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 25 Deva ve Çocuk Taziyenamesi • 41 Sayfa Tam Metin',
+        category: IslamicBookCategory.risale,
+        sortOrder: 25,
+        totalPages: 41,
+        paletteIndex: 5, // Uhud Turkuazı
+        coverStyle: 1,
+        sourceKey: 'rn_hastalar_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_genclik_rehberi',
+        title: 'Gençlik Rehberi (Risale-i Nur Külliyatı)',
+        shortTitle: 'Gençlik Rehberi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Gençlik, İffet, İstikamet ve İman Dersleri • 144 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 26,
+        totalPages: 144,
+        paletteIndex: 2, // Semerkand Lâciverdi
+        coverStyle: 0,
+        sourceKey: 'rn_genclik_rehberi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_hanimlar_rehberi',
+        title: 'Hanımlar Rehberi (Risale-i Nur Külliyatı)',
+        shortTitle: 'Hanımlar Rehberi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Şefkat, Aile Saadeti, Tesettür ve İhlâs • 95 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 27,
+        totalPages: 95,
+        paletteIndex: 6, // Buhara Mürdümü
+        coverStyle: 2,
+        sourceKey: 'rn_hanimlar_rehberi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_ihlas_uhuvvet',
+        title: 'İhlâs ve Uhuvvet Risaleleri (Risale-i Nur)',
+        shortTitle: 'İhlâs & Uhuvvet',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 20–21. Lem’a, 22. Mektup ve Sünnet-i Seniyye • 74 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 28,
+        totalPages: 74,
+        paletteIndex: 4, // Endülüs Kehribarı
+        coverStyle: 0,
+        sourceKey: 'rn_ihlas_uhuvvet',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_ramazan_iktisat_sukur',
+        title: 'Ramazan, İktisat ve Şükür Risalesi',
+        shortTitle: 'Ramazan & İktisat',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Orucun 9 Nüktesi, İktisat ve Şükür Risaleleri • 28 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 29,
+        totalPages: 28,
+        paletteIndex: 7, // Tahrir Deri Kahvesi
+        coverStyle: 1,
+        sourceKey: 'rn_ramazan_iktisat_sukur',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_hasir_risalesi',
+        title: 'Haşir Risalesi (Onuncu Söz & Dokuzuncu Şuâ)',
+        shortTitle: 'Haşir Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 12 Suret, 12 Hakikat ve Mukaddime-i Haşriye • 148 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 30,
+        totalPages: 148,
+        paletteIndex: 1, // Osmanlı Yakutu
+        coverStyle: 3,
+        sourceKey: 'rn_hasir_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_tabiat_risalesi',
+        title: 'Tabiat Risalesi (Yirmi Üçüncü Lem’a)',
+        shortTitle: 'Tabiat Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Tevhid Bürhanları, 3 Muhal ve 9 Emir • 31 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 31,
+        totalPages: 31,
+        paletteIndex: 0, // Hünkâr Zümrüdü
+        coverStyle: 0,
+        sourceKey: 'rn_tabiat_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_ihtiyarlar_risalesi',
+        title: 'İhtiyarlar Risalesi (Yirmi Altıncı Lem’a)',
+        shortTitle: 'İhtiyarlar Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 16 Rica • İhtiyarlıkta İman ve Âhiret Tesellisi • 73 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 32,
+        totalPages: 73,
+        paletteIndex: 3, // Kâbe Kisvesi
+        coverStyle: 2,
+        sourceKey: 'rn_ihtiyarlar_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_ayetul_kubra',
+        title: 'Âyetü’l-Kübrâ (Yedinci Şuâ)',
+        shortTitle: 'Âyetü’l-Kübrâ',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Kâinattan Hâlık’ını Soran Seyyahın Müşâhedâtı • 95 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 33,
+        totalPages: 95,
+        paletteIndex: 2, // Semerkand Lâciverdi
+        coverStyle: 3,
+        sourceKey: 'rn_ayetul_kubra',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_munacat_risalesi',
+        title: 'Münâcat Risalesi (Lem’alar & Üçüncü Şuâ)',
+        shortTitle: 'Münâcat Risalesi',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Münâcat-ı Kur’âniye ve Bâb-ı Tefekkür • 50 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 34,
+        totalPages: 50,
+        paletteIndex: 4, // Endülüs Kehribarı
+        coverStyle: 1,
+        sourceKey: 'rn_munacat_risalesi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_mirac_kader',
+        title: 'Mi’rac ve Kader Risalesi (31. ve 26. Sözler)',
+        shortTitle: 'Mi’rac & Kader',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Mi’rac-ı Nebevî ve Kader-Cüz’-i İhtiyarî • 59 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 35,
+        totalPages: 59,
+        paletteIndex: 5, // Uhud Turkuazı
+        coverStyle: 0,
+        sourceKey: 'rn_mirac_kader',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_hutbe_munazarat',
+        title: 'Hutbe-i Şâmiye, Münâzarat & Divan-ı Harb-i Örfî',
+        shortTitle: 'Hutbe-i Şâmiye',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Altı Kelime İlacı, Münâzarat ve Müdafaalar • 197 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 36,
+        totalPages: 197,
+        paletteIndex: 7, // Tahrir Deri Kahvesi
+        coverStyle: 2,
+        sourceKey: 'rn_hutbe_munazarat',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_nurun_ilk_kapisi',
+        title: 'Nur’un İlk Kapısı, Sünûhat, Tulûat & İşârat',
+        shortTitle: 'Nur’un İlk Kapısı',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • 14 Ders, Sünûhat, Tulûat ve İşârat Risaleleri • 186 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 37,
+        totalPages: 186,
+        paletteIndex: 6, // Buhara Mürdümü
+        coverStyle: 1,
+        sourceKey: 'rn_nurun_ilk_kapisi',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_muhakemat',
+        title: 'Muhâkemat (Reçetetü’l-Ulemâ)',
+        shortTitle: 'Muhâkemat',
+        author: 'Bediüzzaman Said Nursî',
+        subtitle: 'DİB Asıl Nüsha • Hakikat, Belâgat ve Akîde Usûlü • 144 Sayfa Tam Metin',
+        category: IslamicBookCategory.risale,
+        sortOrder: 38,
+        totalPages: 144,
+        paletteIndex: 3, // Kâbe Kisvesi
+        coverStyle: 0,
+        sourceKey: 'rn_muhakemat',
+      ),
+      IslamicShelfBook(
+        id: 'book_rn_lugat',
+        title: 'Risale-i Nur Lügati (Osmanlıca – Türkçe Külliyat Sözlüğü)',
+        shortTitle: 'Risale-i Nur Lügati',
+        author: 'Abdullah Yeğin • Risale-i Nur Enstitüsü',
+        subtitle: '29 Harf Babı • 84.141 Kelime, Terkip ve Külliyat Istılahı • 1.683 Sayfa',
+        category: IslamicBookCategory.risale,
+        sortOrder: 39,
+        totalPages: 1683,
+        paletteIndex: 4, // Endülüs Kehribarı
+        coverStyle: 0,
+        sourceKey: 'rn_lugat',
+      ),
     ];
   }
 }
@@ -1044,14 +1275,21 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
       state = merged;
+      if (savedMap.length < defaults.length) {
+        await _saveToPrefs();
+      }
     } catch (_) {}
   }
 
-  Future<void> _saveToPrefs() async {
+  Future<void> _saveToPrefs({String? lastReadBookId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final encoded = jsonEncode(state.map((b) => b.toJson()).toList());
       await prefs.setString(_prefsKey, encoded);
+      if (lastReadBookId != null && lastReadBookId.isNotEmpty) {
+        await prefs.setString('zikirce_kulliyat_last_book_id', lastReadBookId);
+      }
+      await WidgetSyncService.syncKulliyatFromPrefs(state);
     } catch (_) {}
   }
 
@@ -1072,7 +1310,7 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
         else
           b,
     ];
-    await _saveToPrefs();
+    await _saveToPrefs(lastReadBookId: bookId);
   }
 
   /// Mushaf sayfası değiştiğinde Kur'ân-ı Kerîm kitabının yüzdesini senkronize eder

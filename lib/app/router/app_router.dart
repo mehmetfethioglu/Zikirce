@@ -16,6 +16,7 @@ import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/privacy_policy_screen.dart';
 import '../../features/settings/presentation/screens/session_management_screen.dart';
 import '../../features/settings/presentation/screens/user_guide_screen.dart';
+import '../../features/kuran/presentation/screens/islamic_book_reader_screen.dart';
 import '../../features/ezber/presentation/screens/memorization_screen.dart';
 import '../../features/namaz_vakitleri/presentation/screens/fiqh_library_screen.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -122,6 +123,19 @@ final appRouter = GoRouter(
       path: '/guide',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const UserGuideScreen(),
+    ),
+    GoRoute(
+      path: '/kulliyat',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final bookId = state.uri.queryParameters['bookId'] ?? 'book_tafseer_kuran_yolu';
+        if (bookId == 'book_mushaf') {
+          final pageStr = state.uri.queryParameters['page'];
+          final page = int.tryParse(pageStr ?? '') ?? 1;
+          return MushafScreen(initialPage: page);
+        }
+        return IslamicBookReaderScreen(bookId: bookId);
+      },
     ),
     GoRoute(
       path: '/fiqh',

@@ -27,4 +27,6 @@
     <string name="widget_kaza_quick_description">Tahiyyat silüetiyle en çok borçlu namazı gösterir ve tek dokunuşla -1 düşürür. Kaza kılınan gün yeşile bürünür.</string>
     <string name="widget_prayer_mini_name">Mini Vakit</string>
     <string name="widget_prayer_mini_description">Vakit adı, ezan saati ve kalan süreyi alt alta gösteren ultra kompakt dikey widget.</string>
+    <string name="widget_kulliyat_name">Külliyat &amp; Okuma Rafı</string>
+    <string name="widget_kulliyat_description">Külliyat rafınızdaki eserleri, son okuduğunuz kitabı ve sayfa ilerlemenizi ana ekrandan takip edin.</string>
 </resources>

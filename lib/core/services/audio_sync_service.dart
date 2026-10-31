@@ -50,9 +50,10 @@ class VerseAudioInfo {
 }
 
 class AudioSyncService {
-  static const int _expectedDbUserVersion = 20261025;
+  static const int _expectedDbUserVersion = 20261031;
   static sql.Database? _db;
   static final Map<String, List<WordTimestamp>> _ayahCache = {};
+  static final Set<String> _weightedCacheKeys = {};
 
   /// Initializes the SQLite audio sync database by copying it from assets if needed.
   static Future<void> initialize() async {
@@ -198,11 +199,48 @@ class AudioSyncService {
     }
   }
 
-  /// Gets all word timestamps for an ayah (with in-memory caching)
-  static List<WordTimestamp> getAyahTimestamps(int surahId, int ayahId) {
+  /// Computes phonetic weight of an Arabic word (base letters, long vowels, shadda, madd)
+  static (double weight, int baseLetters, bool hasMadd) _wordAcousticMetrics(String word) {
+    int baseLetters = 0;
+    double weight = 0.0;
+    bool hasMadd = false;
+    for (int i = 0; i < word.length; i++) {
+      final code = word.codeUnitAt(i);
+      if ((code >= 0x0621 && code <= 0x063A) ||
+          (code >= 0x0641 && code <= 0x064A) ||
+          (code >= 0x0671 && code <= 0x06D3)) {
+        baseLetters++;
+        weight += 1.0;
+        if (code == 0x0627 || code == 0x0648 || code == 0x064A || code == 0x0649) {
+          weight += 0.35;
+        }
+      } else if (code == 0x0670) {
+        // Dagger alif
+        weight += 0.6;
+      } else if (code == 0x0651) {
+        // Shadda
+        weight += 0.85;
+      } else if (code == 0x0653 || code == 0x06E4) {
+        // Maddah (4-6 harakat)
+        hasMadd = true;
+        weight += 4.5;
+      }
+    }
+    return (weight.clamp(1.0, 25.0), baseLetters, hasMadd);
+  }
+
+  /// Gets all word timestamps for an ayah (with in-memory caching and optional phonetic weighting)
+  static List<WordTimestamp> getAyahTimestamps(
+    int surahId,
+    int ayahId, {
+    List<String>? ayahWords,
+  }) {
     final cacheKey = '${surahId}_$ayahId';
+    final hasWords = ayahWords != null && ayahWords.isNotEmpty;
     if (_ayahCache.containsKey(cacheKey)) {
-      return _ayahCache[cacheKey]!;
+      if (!hasWords || _weightedCacheKeys.contains(cacheKey)) {
+        return _ayahCache[cacheKey]!;
+      }
     }
 
     if (_db == null) return [];
@@ -241,9 +279,9 @@ class AudioSyncService {
 
       final list = _normalizeAyahWordOrders(surahId, ayahId, rawList);
 
-      // Safe split for consecutive words with identical start times in Diyanet DB
-      // (e.g. short particle + main word like "وَلَا الضَّٓالّٖينَ", "لَا رَيْبَ")
-      // Never exceeds nextGroupStart and caps short particle slice at 450ms.
+      // Phonetic split for consecutive words with identical start times in Diyanet DB
+      // (e.g. short particle + main word like "وَلَا الضَّٓالّٖينَ", "لَا رَيْبَ"
+      //  or full words like "وَبِالْاٰخِرَةِ هُمْ", "اشْتَرَوُا الضَّلَالَةَ").
       int idx = 0;
       while (idx < list.length) {
         int next = idx;
@@ -256,23 +294,63 @@ class AudioSyncService {
           final groupStart = list[idx].startTime;
           final nextGroupStart = (next + 1 < list.length)
               ? list[next + 1].startTime
-              : (groupStart + (count * 450.0));
+              : (groupStart + (count * 950.0));
           final availableSpan =
               (nextGroupStart - groupStart).clamp(40.0, 30000.0);
-          final slice = (availableSpan / count).clamp(20.0, 450.0);
-          for (int k = 0; k < count; k++) {
-            final computedStart = groupStart + (k * slice);
-            final computedEnd = (k == count - 1)
-                ? nextGroupStart
-                : (groupStart + ((k + 1) * slice));
-            list[idx + k] = WordTimestamp(
-              surahId: list[idx + k].surahId,
-              ayahId: list[idx + k].ayahId,
-              pageId: list[idx + k].pageId,
-              wordOrder: list[idx + k].wordOrder,
-              startTime: computedStart,
-              endTime: computedEnd,
-            );
+
+          if (hasWords && ayahWords.length > next) {
+            final metrics = <({double weight, int baseLetters, bool hasMadd})>[];
+            double totalWeight = 0.0;
+            for (int k = 0; k < count; k++) {
+              final (w, bl, hm) = _wordAcousticMetrics(ayahWords[idx + k]);
+              metrics.add((weight: w, baseLetters: bl, hasMadd: hm));
+              totalWeight += w;
+            }
+            double cursor = groupStart;
+            for (int k = 0; k < count; k++) {
+              final computedStart = cursor;
+              double computedEnd;
+              if (k == count - 1) {
+                computedEnd = nextGroupStart;
+              } else {
+                final m = metrics[k];
+                final isShortParticle = m.baseLetters <= 3 && !m.hasMadd;
+                final maxSlice = isShortParticle ? 280.0 : 480.0;
+                final minSlice = (availableSpan / (count * 4)).clamp(20.0, 140.0);
+                final rawSlice = totalWeight > 0
+                    ? availableSpan * (m.weight / totalWeight)
+                    : availableSpan / count;
+                final remainingSpan = (nextGroupStart - cursor - ((count - 1 - k) * 40.0))
+                    .clamp(20.0, 30000.0);
+                final slice = rawSlice.clamp(minSlice, maxSlice).clamp(20.0, remainingSpan);
+                computedEnd = cursor + slice;
+                cursor = computedEnd;
+              }
+              list[idx + k] = WordTimestamp(
+                surahId: list[idx + k].surahId,
+                ayahId: list[idx + k].ayahId,
+                pageId: list[idx + k].pageId,
+                wordOrder: list[idx + k].wordOrder,
+                startTime: computedStart,
+                endTime: computedEnd,
+              );
+            }
+          } else {
+            final slice = (availableSpan * (0.28 / (count - 1).clamp(1, 5))).clamp(20.0, 320.0);
+            for (int k = 0; k < count; k++) {
+              final computedStart = groupStart + (k * slice);
+              final computedEnd = (k == count - 1)
+                  ? nextGroupStart
+                  : (groupStart + ((k + 1) * slice));
+              list[idx + k] = WordTimestamp(
+                surahId: list[idx + k].surahId,
+                ayahId: list[idx + k].ayahId,
+                pageId: list[idx + k].pageId,
+                wordOrder: list[idx + k].wordOrder,
+                startTime: computedStart,
+                endTime: computedEnd,
+              );
+            }
           }
           idx = next + 1;
         } else {
@@ -282,6 +360,9 @@ class AudioSyncService {
 
       if (list.isNotEmpty) {
         _ayahCache[cacheKey] = list;
+        if (hasWords) {
+          _weightedCacheKeys.add(cacheKey);
+        }
       }
       return list;
     } catch (e) {
@@ -428,8 +509,13 @@ class AudioSyncService {
     int ayahId,
     double currentMs, {
     int? renderedWordCount,
+    List<String>? ayahWords,
   }) {
-    final timestamps = getAyahTimestamps(surahId, ayahId);
+    final timestamps = getAyahTimestamps(
+      surahId,
+      ayahId,
+      ayahWords: ayahWords,
+    );
     if (timestamps.isEmpty) return 0;
 
     int matchedIdx = 0;
@@ -448,8 +534,17 @@ class AudioSyncService {
   }
 
   /// Gets specific word timestamp for an ayah
-  static WordTimestamp? getWordTimestamp(int surahId, int ayahId, int wordOrder) {
-    final timestamps = getAyahTimestamps(surahId, ayahId);
+  static WordTimestamp? getWordTimestamp(
+    int surahId,
+    int ayahId,
+    int wordOrder, {
+    List<String>? ayahWords,
+  }) {
+    final timestamps = getAyahTimestamps(
+      surahId,
+      ayahId,
+      ayahWords: ayahWords,
+    );
     if (timestamps.isEmpty) return null;
 
     try {
@@ -459,5 +554,44 @@ class AudioSyncService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Gets the duration in milliseconds for the active word (mirrors Diyanet's arrow duration calculation)
+  static int getWordDurationMs(
+    int surahId,
+    int ayahId,
+    int wordOrder, {
+    List<String>? ayahWords,
+    int? trackDurationMs,
+  }) {
+    final timestamps = getAyahTimestamps(
+      surahId,
+      ayahId,
+      ayahWords: ayahWords,
+    );
+    if (timestamps.isEmpty) return 500;
+
+    final currentIdx = timestamps.indexWhere((w) => w.wordOrder == wordOrder);
+    if (currentIdx < 0) return 500;
+
+    final current = timestamps[currentIdx];
+    if (currentIdx + 1 < timestamps.length) {
+      final next = timestamps[currentIdx + 1];
+      final diff = (next.startTime - current.startTime).round();
+      return diff.clamp(120, 8000);
+    }
+
+    if (trackDurationMs != null && trackDurationMs > current.startTime + 250) {
+      return ((trackDurationMs - current.startTime - 180).round())
+          .clamp(250, 6000);
+    }
+
+    if (timestamps.length > 1) {
+      final firstStart = timestamps.first.startTime;
+      final lastStart = timestamps.last.startTime;
+      final avg = ((lastStart - firstStart) / (timestamps.length - 1)).round();
+      return avg.clamp(250, 4000);
+    }
+    return 500;
   }
 }

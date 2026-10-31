@@ -51,11 +51,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 65;
-  static const String currentVersionName = '2.1.10';
+  static const int currentVersionCode = 66;
+  static const String currentVersionName = '2.2.0';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 66,
+      versionName: '2.2.0',
+      releaseDateTr: 'Ekim 2026',
+      releaseDateEn: 'October 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '40 Eserlik Külliyat, 16 Cep Risalesi & 84.141 Maddelik Risale-i Nur Lügati',
+          titleEn: '40-Volume Library, 16 Pocket Risales & 84,141-Entry Risale-i Nur Dictionary',
+          descTr: 'Külliyat rafına 16 müstakil Risale-i Nur Küçük Eseri ve 84.141 maddelik Risale-i Nur Büyük Lügati eklendi. Eserleri okurken Osmanlıca kelime ve kalıp tamlamalar tema uyumlu kehribar/bakır kök renklendirmesiyle vurgulanır, dokunulduğunda anında lügat mânâsı açılır ve Arapça metinler Kur’ân hattıyla (Allah ve Rab lafızları kırmızı) gösterilir.',
+          descEn: 'Added 16 standalone Pocket Risale works and the 84,141-entry Risale-i Nur Dictionary. Ottoman words and compound phrases are highlighted with theme-adaptive root coloring for instant tap-to-view definitions, and all embedded Arabic texts render in authentic Quranic calligraphy with ruby-red Divine Name highlights.',
+          icon: Icons.menu_book_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Diyanet Birebir Ses-Kelime Senkronizasyonu, Kayan Kırmızı Ok Takibi & Besmele',
+          titleEn: 'Exact Diyanet Audio-Word Sync, Sliding Red Arrow Tracking & Basmala Start',
+          descTr: 'Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve güncellenen Diyanet zaman damgası veritabanı ile 6.236 âyette sıfır gecikmeli ses-kelime uyumu, kelimenin altında sağdan sola akıcı kayan kırmızı "Ok ile Takip" işaretçisi ve Besmele-i Şerîf ile başlama özelliği sunuldu.',
+          descEn: 'Achieved zero-drift audio-to-word synchronization across all 6,236 verses with single-track per-verse playback, smooth right-to-left sliding red Arrow Pointer tracking matching the Diyanet Quran Platform, and Basmala recitation at session start.',
+          icon: Icons.graphic_eq_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Külliyat Ana Ekran / Kilit Ekranı Widget’ı & Dinamik Âyet/Hadis Paylaşım Stüdyosu',
+          titleEn: 'Library Home / Lock Screen Widgets & Dynamic Verse/Hadith Sharing Studio',
+          descTr: 'Son okunan eseri, ilerleme yüzdesini ve tek dokunuşla kaldığınız sayfadan devam etme özelliğini sunan Külliyat Widget’ı; paylaşım kartlarında 60+ âyet/hadis seçici, sayfa içi Tilâvet Secdesi rozetleri ve vakti girmeyen namaz koruması eklendi.',
+          descEn: 'Added Home and Lock Screen Library Widgets with one-tap resume reading, a 60+ dynamic Verse/Hadith picker for share cards, in-page Sajdah al-Tilawah badges across all Quran modes, and a prayer time guard.',
+          icon: Icons.widgets_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 65,
       versionName: '2.1.10',

@@ -143,6 +143,14 @@ class WidgetTimeTickReceiver : BroadcastReceiver() {
                         KazaQuickWidgetProvider.updateWidget(context, appWidgetManager, id)
                     }
                 }
+
+                // 14. Külliyat & Okuma Rafı Widget
+                val kulliyatIds = appWidgetManager.getAppWidgetIds(ComponentName(context, KulliyatWidgetProvider::class.java))
+                if (kulliyatIds != null && kulliyatIds.isNotEmpty()) {
+                    for (id in kulliyatIds) {
+                        KulliyatWidgetProvider.updateWidget(context, appWidgetManager, id)
+                    }
+                }
             } catch (_: Exception) {}
         }
     }

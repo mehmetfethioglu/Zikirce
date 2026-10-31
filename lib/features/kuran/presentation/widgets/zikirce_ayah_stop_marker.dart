@@ -6,6 +6,7 @@ class ZikirceAyahStopMarker extends StatelessWidget {
   final String number;
   final bool isDark;
   final bool isHighlight;
+  final bool isSecde;
   final String fontFamily;
   final double size;
 
@@ -15,21 +16,28 @@ class ZikirceAyahStopMarker extends StatelessWidget {
     required this.isDark,
     required this.isHighlight,
     required this.fontFamily,
+    this.isSecde = false,
     this.size = 26.0,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Dynamic emerald & gold palette
+    // Dynamic emerald & gold palette (with amber-crimson secde distinction)
     final emeraldPrimary = isHighlight
         ? const Color(0xFFD4AF37)
-        : (isDark ? const Color(0xFF135B47) : const Color(0xFF0F4335));
+        : (isSecde
+            ? (isDark ? const Color(0xFFB45309) : const Color(0xFF9A3412))
+            : (isDark ? const Color(0xFF135B47) : const Color(0xFF0F4335)));
     final emeraldSecondary = isHighlight
         ? const Color(0xFFFFD54F)
-        : (isDark ? const Color(0xFF082E24) : const Color(0xFF072B21));
+        : (isSecde
+            ? (isDark ? const Color(0xFF78350F) : const Color(0xFF6B210B))
+            : (isDark ? const Color(0xFF082E24) : const Color(0xFF072B21)));
     final goldBorder = isHighlight
         ? const Color(0xFFFFE082)
-        : (isDark ? const Color(0xFFD4AF37) : const Color(0xFFC5A358));
+        : (isSecde
+            ? const Color(0xFFF59E0B)
+            : (isDark ? const Color(0xFFD4AF37) : const Color(0xFFC5A358)));
     final textColor = isHighlight
         ? const Color(0xFF452B00)
         : (isDark ? const Color(0xFFFFF8E7) : const Color(0xFFFFFDF8));
@@ -42,7 +50,7 @@ class ZikirceAyahStopMarker extends StatelessWidget {
           primaryColor: emeraldPrimary,
           secondaryColor: emeraldSecondary,
           goldBorderColor: goldBorder,
-          isHighlight: isHighlight,
+          isHighlight: isHighlight || isSecde,
         ),
         child: SizedBox(
           width: size,
@@ -60,6 +68,76 @@ class ZikirceAyahStopMarker extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sayfa içerisinde secde âyetinin hemen yanında veya kart başlığında gösterilen zarif secde nişanı
+class ZikirceSecdeInlineBadge extends StatelessWidget {
+  final bool isDark;
+  final VoidCallback? onTap;
+  final String? label;
+  final bool compact;
+
+  const ZikirceSecdeInlineBadge({
+    super.key,
+    required this.isDark,
+    this.onTap,
+    this.label,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = isDark
+        ? const Color(0xFF78350F).withValues(alpha: 0.48)
+        : const Color(0xFFFEF3C7);
+    final borderColor = isDark
+        ? const Color(0xFFF59E0B).withValues(alpha: 0.65)
+        : const Color(0xFFD97706).withValues(alpha: 0.55);
+    final textColor = isDark
+        ? const Color(0xFFFDE68A)
+        : const Color(0xFF92400E);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 6 : 8,
+          vertical: compact ? 2 : 3,
+        ),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor, width: 1.0),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '۩',
+              style: TextStyle(
+                fontSize: compact ? 11.5 : 13,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+                height: 1.0,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label ?? 'سَجْدَة • Secde',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: compact ? 10.5 : 11.5,
+                fontWeight: FontWeight.w800,
+                color: textColor,
+                height: 1.1,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -87,7 +165,7 @@ class _ZikirceEightRingRosettePainter extends CustomPainter {
     // Glowing aura if highlighted
     if (isHighlight) {
       final glowPaint = Paint()
-        ..color = goldBorderColor.withOpacity(0.55)
+        ..color = goldBorderColor.withValues(alpha: 0.55)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
       canvas.drawCircle(center, radius * 0.9, glowPaint);
     }
@@ -125,14 +203,14 @@ class _ZikirceEightRingRosettePainter extends CustomPainter {
 
     // Inner gold ring
     final innerRingPaint = Paint()
-      ..color = goldBorderColor.withOpacity(0.9)
+      ..color = goldBorderColor.withValues(alpha: 0.9)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8;
     canvas.drawCircle(center, coreRadius, innerRingPaint);
 
     // Subtle 8 inner mini gold dots on petal roots
     final dotPaint = Paint()
-      ..color = goldBorderColor.withOpacity(0.85)
+      ..color = goldBorderColor.withValues(alpha: 0.85)
       ..style = PaintingStyle.fill;
     final double dotDistance = radius * 0.72;
     for (int i = 0; i < lobes; i++) {

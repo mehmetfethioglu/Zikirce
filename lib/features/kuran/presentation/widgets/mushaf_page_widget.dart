@@ -11,7 +11,9 @@ import '../../providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
+import '../../data/tilavet_secdesi_data.dart';
 import 'tafseer_bottom_sheet.dart';
+import 'tilavet_secdesi_guide_sheet.dart';
 import 'zikirce_ayah_stop_marker.dart';
 
 enum MushafReadingMode {
@@ -237,6 +239,10 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     required bool isDark,
     required bool isAyahPlaying,
     int? activeWordOrder,
+    int activeWordDurationMs = 500,
+    double playbackSpeed = 1.0,
+    int surahId = 0,
+    int ayahId = 0,
   }) {
     final cleanedText = QuranWordHighlighter.cleanArabicText(rawText).trim();
     final words = cleanedText.isEmpty
@@ -277,10 +283,9 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       if (isWordActive) {
         if (isArrowTracking) {
           wordStyle = baseStyle.copyWith(
-            color: isDivine
-                ? divineColor
-                : (isDark ? const Color(0xFFFBBF24) : const Color(0xFF047857)),
-            fontWeight: FontWeight.bold,
+            color: QuranWordHighlighter.getDiyanetTrackingWordColor(isDark),
+            shadows: QuranWordHighlighter.getDiyanetTrackingShadows(isDark),
+            backgroundColor: Colors.transparent,
           );
         } else {
           wordStyle = baseStyle.copyWith(
@@ -314,12 +319,16 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                       style: wordStyle.copyWith(height: 1.0),
                     ),
                     Positioned(
-                      bottom: -9,
+                      bottom: -7,
                       left: 0,
                       right: 0,
                       child: QuranWordTrackingPointer(
                         isDark: isDark,
-                        height: 10.0,
+                        height: 7.5,
+                        durationMs: activeWordDurationMs,
+                        playbackSpeed: playbackSpeed,
+                        isPlaying: isAyahPlaying,
+                        wordIdentity: '${surahId}_${ayahId}_$wordOrder',
                       ),
                     ),
                   ],
@@ -545,47 +554,72 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                             children: [
                               // Mushaf sayfasının kendi iç üst bilgi şeridi (Klasik Kitap Serlevhası)
                               if (mode == MushafReadingMode.mushaf) ...[
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 7),
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  decoration: BoxDecoration(
-                                    color: tezhipGold.withValues(
-                                        alpha: isDark ? 0.10 : 0.08),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: tezhipGold.withValues(alpha: 0.28),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          topSurahVerseInfo,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontFamily: 'Outfit',
-                                            color: headerFooterTextColor,
-                                            fontSize: 12.0,
-                                            fontWeight: FontWeight.w700,
+                                Builder(
+                                  builder: (context) {
+                                    final secdeOnPage =
+                                        TilavetSecdesiData.getSecdeForPage(
+                                            widget.pageData.pageNo);
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 7),
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      decoration: BoxDecoration(
+                                        color: tezhipGold.withValues(
+                                            alpha: isDark ? 0.10 : 0.08),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: secdeOnPage != null
+                                              ? const Color(0xFFD97706)
+                                                  .withValues(alpha: 0.55)
+                                              : tezhipGold.withValues(
+                                                  alpha: 0.28),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              topSurahVerseInfo,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontFamily: 'Outfit',
+                                                color: headerFooterTextColor,
+                                                fontSize: 12.0,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
                                           ),
-                                        ),
+                                          if (secdeOnPage != null) ...[
+                                            const SizedBox(width: 6),
+                                            ZikirceSecdeInlineBadge(
+                                              isDark: isDark,
+                                              compact: true,
+                                              label:
+                                                  'Secde (${secdeOnPage.sureName} ${secdeOnPage.ayetId})',
+                                              onTap: () =>
+                                                  TilavetSecdesiGuideSheet.show(
+                                                context,
+                                                initialSecdeItem: secdeOnPage,
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            '${widget.pageData.cuzNo}. Cüz • S. ${widget.pageData.pageNo}',
+                                            style: TextStyle(
+                                              fontFamily: 'Outfit',
+                                              color: headerFooterTextColor,
+                                              fontSize: 12.0,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '${widget.pageData.cuzNo}. Cüz • S. ${widget.pageData.pageNo}',
-                                        style: TextStyle(
-                                          fontFamily: 'Outfit',
-                                          color: headerFooterTextColor,
-                                          fontSize: 12.0,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
                               ],
 
@@ -718,6 +752,13 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                             ? (baseFontSize + 2.0)
                                             : baseFontSize;
 
+                                        final secdeItem =
+                                            TilavetSecdesiData.getSecdeForVerse(
+                                          ayat.sureId,
+                                          ayat.ayetId,
+                                        );
+                                        final isSecdeAyah = secdeItem != null;
+
                                         final baseAyatStyle = TextStyle(
                                           fontFamily: fontFamily,
                                           fontSize: effectiveFontSize,
@@ -735,7 +776,13 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                                       .withValues(alpha: 0.14)
                                                   : const Color(0xFF10B981)
                                                       .withValues(alpha: 0.12))
-                                              : Colors.transparent,
+                                              : (isSecdeAyah
+                                                  ? (isDark
+                                                      ? const Color(0xFFB45309)
+                                                          .withValues(alpha: 0.16)
+                                                      : const Color(0xFFF59E0B)
+                                                          .withValues(alpha: 0.12))
+                                                  : Colors.transparent),
                                           height: lineHeight,
                                           letterSpacing: -0.1,
                                         );
@@ -756,6 +803,12 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                           activeWordOrder: isCurrentAyahPlaying
                                               ? audioState.currentWordOrder
                                               : null,
+                                          activeWordDurationMs:
+                                              audioState.activeWordDurationMs,
+                                          playbackSpeed:
+                                              audioState.playbackSpeed,
+                                          surahId: ayat.sureId,
+                                          ayahId: ayat.ayetId,
                                         );
 
                                         return [
@@ -771,6 +824,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                                 isDark: isDark,
                                                 isHighlight:
                                                     isCurrentAyahPlaying,
+                                                isSecde: isSecdeAyah,
                                                 fontFamily: fontFamily,
                                                 size:
                                                     (effectiveFontSize * 1.15)
@@ -778,6 +832,22 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                               ),
                                             ),
                                           ),
+                                          if (isSecdeAyah)
+                                            WidgetSpan(
+                                              alignment:
+                                                  PlaceholderAlignment.middle,
+                                              child: ZikirceSecdeInlineBadge(
+                                                isDark: isDark,
+                                                compact: true,
+                                                label: 'سَجْدَة • Secde',
+                                                onTap: () =>
+                                                    TilavetSecdesiGuideSheet
+                                                        .show(
+                                                  context,
+                                                  initialSecdeItem: secdeItem,
+                                                ),
+                                              ),
+                                            ),
                                           const TextSpan(text: ' \u200F'),
                                         ];
                                       }).toList(),
@@ -1378,6 +1448,14 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                 a.ayetId >= entry.startVerse &&
                 a.ayetId <= entry.endVerse)
             .toList();
+        TilavetSecdeItem? tafseerSecdeItem;
+        for (final a in matchingAyats) {
+          final found = TilavetSecdesiData.getSecdeForVerse(a.sureId, a.ayetId);
+          if (found != null) {
+            tafseerSecdeItem = found;
+            break;
+          }
+        }
         final combinedArabic = matchingAyats
             .map((a) =>
                 '${QuranWordHighlighter.cleanArabicText(a.ayetText)} ﴿${a.ayetId}﴾')
@@ -1390,7 +1468,10 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
             color: cardBg,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: tezhipGold.withValues(alpha: 0.32),
+              color: tafseerSecdeItem != null
+                  ? const Color(0xFFD97706).withValues(alpha: 0.65)
+                  : tezhipGold.withValues(alpha: 0.32),
+              width: tafseerSecdeItem != null ? 1.4 : 1.0,
             ),
           ),
           child: Column(
@@ -1418,6 +1499,18 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                       ),
                     ),
                   ),
+                  if (tafseerSecdeItem != null) ...[
+                    const SizedBox(width: 6),
+                    ZikirceSecdeInlineBadge(
+                      isDark: isDark,
+                      compact: true,
+                      label: '${tafseerSecdeItem.no}. Secde Âyeti',
+                      onTap: () => TilavetSecdesiGuideSheet.show(
+                        context,
+                        initialSecdeItem: tafseerSecdeItem,
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -1562,6 +1655,16 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                 }
 
                 final recognizer = _createRecognizer(onVerseTap);
+                final secdeItem = TilavetSecdesiData.getSecdeForVerse(
+                  ayat.sureId,
+                  ayat.ayetId,
+                );
+                final isSecdeAyah = secdeItem != null;
+                final secdeBg = isSecdeAyah
+                    ? (isDark
+                        ? const Color(0xFFB45309).withValues(alpha: 0.18)
+                        : const Color(0xFFF59E0B).withValues(alpha: 0.14))
+                    : null;
 
                 return [
                   TextSpan(
@@ -1570,20 +1673,40 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                       fontFamily: 'Outfit',
                       fontSize: mealFontSize - 2.0,
                       fontWeight: FontWeight.w800,
-                      color: headerFooterTextColor,
+                      color: isSecdeAyah
+                          ? (isDark
+                              ? const Color(0xFFFBBF24)
+                              : const Color(0xFFB45309))
+                          : headerFooterTextColor,
+                      backgroundColor: secdeBg,
                     ),
                     recognizer: recognizer,
                   ),
                   TextSpan(
-                    text: '$mealText  ',
+                    text: '$mealText ',
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: mealFontSize + 0.5,
                       height: 1.78,
                       color: primaryTextColor,
+                      backgroundColor: secdeBg,
                     ),
                     recognizer: recognizer,
                   ),
+                  if (isSecdeAyah)
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: ZikirceSecdeInlineBadge(
+                        isDark: isDark,
+                        compact: true,
+                        label: '${secdeItem.no}. Secde Âyeti',
+                        onTap: () => TilavetSecdesiGuideSheet.show(
+                          context,
+                          initialSecdeItem: secdeItem,
+                        ),
+                      ),
+                    ),
+                  const TextSpan(text: ' '),
                 ];
               }).toList(),
             ),
@@ -1642,6 +1765,11 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     final compEntries = _comparativeMealsByKey[key] ?? const [];
     final surahTitle =
         ayat.sure?.sureNameTurkish ?? widget.pageData.mealSureLabel;
+    final secdeItem = TilavetSecdesiData.getSecdeForVerse(
+      ayat.sureId,
+      ayat.ayetId,
+    );
+    final isSecdeAyah = secdeItem != null;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1649,13 +1777,17 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       decoration: BoxDecoration(
         color: isCurrentAyahPlaying
             ? (isDark ? const Color(0xFF1A2823) : const Color(0xFFEAF5F0))
-            : (isDark ? const Color(0xFF15191F) : const Color(0xFFFFFDF8)),
+            : (isSecdeAyah
+                ? (isDark ? const Color(0xFF1F1914) : const Color(0xFFFFFBEB))
+                : (isDark ? const Color(0xFF15191F) : const Color(0xFFFFFDF8))),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isCurrentAyahPlaying
               ? AppColors.emerald500
-              : tezhipGold.withValues(alpha: 0.25),
-          width: isCurrentAyahPlaying ? 1.5 : 1.0,
+              : (isSecdeAyah
+                  ? const Color(0xFFD97706).withValues(alpha: 0.65)
+                  : tezhipGold.withValues(alpha: 0.25)),
+          width: isCurrentAyahPlaying || isSecdeAyah ? 1.5 : 1.0,
         ),
       ),
       child: Column(
@@ -1681,6 +1813,18 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                   ),
                 ),
               ),
+              if (isSecdeAyah) ...[
+                const SizedBox(width: 6),
+                ZikirceSecdeInlineBadge(
+                  isDark: isDark,
+                  compact: true,
+                  label: '${secdeItem.no}. Secde Âyeti',
+                  onTap: () => TilavetSecdesiGuideSheet.show(
+                    context,
+                    initialSecdeItem: secdeItem,
+                  ),
+                ),
+              ],
               const Spacer(),
               IconButton(
                 icon: Icon(
@@ -1792,26 +1936,57 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
             const SizedBox(height: 10),
             Text.rich(
               TextSpan(
-                children: _buildAyahWordSpans(
-                  rawText: ayat.ayetText,
-                  baseStyle: TextStyle(
+                children: [
+                  ..._buildAyahWordSpans(
+                    rawText: ayat.ayetText,
+                    baseStyle: TextStyle(
+                      fontFamily: fontFamily,
+                      fontSize: arabicFontSize,
+                      fontWeight:
+                          isBoldArabic ? FontWeight.bold : FontWeight.normal,
+                      color: primaryTextColor,
+                      height: lineHeight,
+                    ),
+                    waqfColor: waqfColor,
                     fontFamily: fontFamily,
-                    fontSize: arabicFontSize,
-                    fontWeight:
-                        isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                    color: primaryTextColor,
-                    height: lineHeight,
+                    recognizer: null,
+                    onAyahTap: null,
+                    highlightDivineWords: highlightDivineWords,
+                    isDark: isDark,
+                    isAyahPlaying: isCurrentAyahPlaying,
+                    activeWordOrder:
+                        isCurrentAyahPlaying ? audioState.currentWordOrder : null,
+                    activeWordDurationMs: audioState.activeWordDurationMs,
+                    playbackSpeed: audioState.playbackSpeed,
+                    surahId: ayat.sureId,
+                    ayahId: ayat.ayetId,
                   ),
-                  waqfColor: waqfColor,
-                  fontFamily: fontFamily,
-                  recognizer: null,
-                  onAyahTap: null,
-                  highlightDivineWords: highlightDivineWords,
-                  isDark: isDark,
-                  isAyahPlaying: isCurrentAyahPlaying,
-                  activeWordOrder:
-                      isCurrentAyahPlaying ? audioState.currentWordOrder : null,
-                ),
+                  const TextSpan(text: '\u200F '),
+                  WidgetSpan(
+                    alignment: PlaceholderAlignment.middle,
+                    child: ZikirceAyahStopMarker(
+                      number: ayat.ayetNumber,
+                      isDark: isDark,
+                      isHighlight: isCurrentAyahPlaying,
+                      isSecde: isSecdeAyah,
+                      fontFamily: fontFamily,
+                      size: (arabicFontSize * 1.1).clamp(24.0, 38.0),
+                    ),
+                  ),
+                  if (isSecdeAyah)
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: ZikirceSecdeInlineBadge(
+                        isDark: isDark,
+                        compact: true,
+                        label: 'سَجْدَة',
+                        onTap: () => TilavetSecdesiGuideSheet.show(
+                          context,
+                          initialSecdeItem: secdeItem,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               textAlign: TextAlign.right,
               textDirection: TextDirection.rtl,
@@ -2350,6 +2525,47 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                 ),
                 child: Column(
                   children: [
+                    if (TilavetSecdesiData.isSecdeVerse(
+                        ayat.sureId, ayat.ayetId)) ...[
+                      Builder(
+                        builder: (_) {
+                          final secdeItem =
+                              TilavetSecdesiData.getSecdeForVerse(
+                                  ayat.sureId, ayat.ayetId)!;
+                          return ListTile(
+                            leading: const Text(
+                              '🕌',
+                              style: TextStyle(fontSize: 22),
+                            ),
+                            title: Text(
+                              'Tilâvet Secdesi Rehberi (${secdeItem.no}. Secde Âyeti)',
+                              style: TextStyle(
+                                color: isDark
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFB45309),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Bu âyet tilâvet secdesi âyetidir (Vâcip). Secde rehberini ve takibini aç.',
+                              style: TextStyle(
+                                color: titleColor.withValues(alpha: 0.65),
+                                fontSize: 11.5,
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.of(ctx).pop();
+                              TilavetSecdesiGuideSheet.show(
+                                context,
+                                initialSecdeItem: secdeItem,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                      Divider(height: 1, color: borderColor),
+                    ],
                     ListTile(
                       leading: const Icon(
                         Icons.play_arrow_rounded,

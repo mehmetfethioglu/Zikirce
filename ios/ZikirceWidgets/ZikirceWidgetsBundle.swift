@@ -21,6 +21,7 @@ struct SpiritualWidgetsGroup: WidgetBundle {
         KalpSagligiWidget()
         ZikirCounterWidget()
         StreakWidget()
+        KulliyatWidget()
     }
 }
 

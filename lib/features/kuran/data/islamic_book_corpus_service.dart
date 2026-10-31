@@ -161,17 +161,34 @@ class IslamicBookCorpusService {
     'rn_mesnevi': '0.2 MB',
     'rn_isaratul_icaz': '0.2 MB',
     'rn_asayi_musa': '0.2 MB',
+    'rn_kucuk_sozler': '0.1 MB',
+    'rn_meyve_risalesi': '0.1 MB',
+    'rn_hastalar_risalesi': '0.1 MB',
+    'rn_genclik_rehberi': '0.1 MB',
+    'rn_hanimlar_rehberi': '0.1 MB',
+    'rn_ihlas_uhuvvet': '0.1 MB',
+    'rn_ramazan_iktisat_sukur': '0.1 MB',
+    'rn_hasir_risalesi': '0.1 MB',
+    'rn_tabiat_risalesi': '0.1 MB',
+    'rn_ihtiyarlar_risalesi': '0.1 MB',
+    'rn_ayetul_kubra': '0.1 MB',
+    'rn_munacat_risalesi': '0.1 MB',
+    'rn_mirac_kader': '0.1 MB',
+    'rn_hutbe_munazarat': '0.2 MB',
+    'rn_nurun_ilk_kapisi': '0.1 MB',
+    'rn_muhakemat': '0.1 MB',
+    'rn_lugat': '3.0 MB',
   };
 
   String getApproxSizeLabel(String sourceKey) =>
-      _approxSizeLabels[sourceKey] ?? '1.0 MB';
+      _approxSizeLabels[sourceKey] ?? '0.2 MB';
 
   List<String> _downloadUrlsFor(String sourceKey) {
     final fileName = '${sourceKey}_v1.db.gz';
     return [
-      'https://raw.githubusercontent.com/mehmetfethioglu/zikirce-indir/3915af1/books/$fileName',
-      'https://raw.githubusercontent.com/mehmetfethioglu/zikirce-indir/main/books/$fileName?v=1',
-      'https://mehmetfethioglu.github.io/zikirce-indir/books/$fileName?v=1',
+      'https://raw.githubusercontent.com/mehmetfethioglu/zikirce-indir/eaab030/books/$fileName',
+      'https://raw.githubusercontent.com/mehmetfethioglu/zikirce-indir/main/books/$fileName?v=3',
+      'https://mehmetfethioglu.github.io/zikirce-indir/books/$fileName?v=3',
     ];
   }
 
@@ -196,7 +213,9 @@ class IslamicBookCorpusService {
     final file = File(path);
     if (!await file.exists()) return false;
     final len = await file.length();
-    return len > 16384;
+    if (len <= 16384) return false;
+    final db = await _getDb(sourceKey);
+    return db != null;
   }
 
   Future<bool> downloadBook(
@@ -256,6 +275,16 @@ class IslamicBookCorpusService {
     }
     try {
       final db = sql.sqlite3.open(dbPath, mode: sql.OpenMode.readOnly);
+      final tbl = db.select(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='pages' LIMIT 1",
+      );
+      if (tbl.isEmpty) {
+        db.dispose();
+        try {
+          await file.delete();
+        } catch (_) {}
+        return null;
+      }
       _openDbs[sourceKey] = db;
       return db;
     } catch (e) {

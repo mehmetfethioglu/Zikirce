@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 enum SpiritualQuoteType {
@@ -20,6 +21,17 @@ class SpiritualQuote {
     required this.type,
     this.topic = 'zikir',
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpiritualQuote &&
+          runtimeType == other.runtimeType &&
+          text == other.text &&
+          source == other.source;
+
+  @override
+  int get hashCode => Object.hash(text, source);
 }
 
 /// Goal/Topic preset for the multi-goal Spiritual Share Studio
@@ -46,6 +58,10 @@ class ShareGoalPreset {
 
 class ShareCardDataHelper {
   ShareCardDataHelper._();
+
+  static final Random _random = Random();
+  static final Map<String, int> _lastIndexByTopic = <String, int>{};
+  static SpiritualQuote? _lastGlobalQuote;
 
   /// All supported goal/spiritual presets for the Share Studio
   static const List<ShareGoalPreset> goalPresets = [
@@ -178,6 +194,34 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.ayet,
       topic: 'zikir',
     ),
+    SpiritualQuote(
+      text: 'Dilin daima Allah’ın zikriyle ıslak (meşgul) kalsın.',
+      source: 'Tirmizî, Daavât 4; İbn Mâce, Edeb 53',
+      arabic: 'لَا يَزَالُ لِسَانُكَ رَطْبًا مِنْ ذِكْرِ اللَّهِ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'zikir',
+    ),
+    SpiritualQuote(
+      text: 'Dile hafif, mizanda ağır, Rahmân’a sevgili olan iki kelime vardır: Sübhânallâhi ve bihamdihî, Sübhânallâhi’l-azîm.',
+      source: 'Buhârî, Daavât 65; Müslim, Zikir 31',
+      arabic: 'كَلِمَتَانِ خَفِيفَتَانِ عَلَى اللِّسَانِ ثَقِيلَتَانِ فِي الْمِيزَانِ حَبِيبَتَانِ إِلَى الرَّحْمَٰنِ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'zikir',
+    ),
+    SpiritualQuote(
+      text: 'Onlar ayaktayken, otururken ve yanları üzerine yatarken Allah’ı anarlar; göklerin ve yerin yaratılışı üzerinde tefekkür ederler.',
+      source: 'Âl-i İmrân Sûresi, 191',
+      arabic: 'الَّذِينَ يَذْكُرُونَ اللَّهَ قِيَامًا وَقُعُودًا وَعَلَىٰ جُنُوبِهِمْ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'zikir',
+    ),
+    SpiritualQuote(
+      text: 'Kulum Beni andığı ve dudakları Benim için kıpırdadığı sürece Ben onunla beraberim.',
+      source: 'Buhârî, Tevhîd 43; İbn Mâce, Edeb 53',
+      arabic: 'أَنَا مَعَ عَبْدِي مَا ذَكَرَنِي وَتَحَرَّكَتْ بِي شَفَتَاهُ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'zikir',
+    ),
 
     // --- 2. 5 VAKİT NAMAZ & SECDE ---
     SpiritualQuote(
@@ -211,6 +255,34 @@ class ShareCardDataHelper {
       text: 'Şüphesiz namaz, müminlere belirli vakitlere bağlı olarak farz kılınmıştır.',
       source: 'Nisâ Sûresi, 103',
       arabic: 'إِنَّ الصَّلَاةَ كَانَتْ عَلَى الْمُؤْمِنِينَ كِتَابًا مَوْقُوتًا',
+      type: SpiritualQuoteType.ayet,
+      topic: 'namaz',
+    ),
+    SpiritualQuote(
+      text: 'Namazlara ve orta (ikindi) namazına devam edin; gönülden boyun eğerek Allah için namaza durun.',
+      source: 'Bakara Sûresi, 238',
+      arabic: 'حَافِظُوا عَلَى الصَّلَوَاتِ وَالصَّلَاةِ الْوُسْطَىٰ وَقُومُوا لِلَّهِ قَانِتِينَ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'namaz',
+    ),
+    SpiritualQuote(
+      text: 'Müminler gerçekten kurtuluşa ermiştir; onlar ki namazlarında derin bir huşû içindedirler.',
+      source: 'Mü’minûn Sûresi, 1-2',
+      arabic: 'قَدْ أَفْلَحَ الْمُؤْمِنُونَ الَّذِينَ هُمْ فِي صَلَاتِهِمْ خَاشِعُونَ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'namaz',
+    ),
+    SpiritualQuote(
+      text: 'Gözümün nuru (huzuru) namazda kılındı.',
+      source: 'Nesâî, İşretü’n-Nisâ 1',
+      arabic: 'وَجُعِلَتْ قُرَّةُ عَيْنِي فِي الصَّلَاةِ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'namaz',
+    ),
+    SpiritualQuote(
+      text: 'Secde et ve Rabbine yaklaş!',
+      source: 'Alak Sûresi, 19',
+      arabic: 'وَاسْجُدْ وَاقْتَرِبْ',
       type: SpiritualQuoteType.ayet,
       topic: 'namaz',
     ),
@@ -250,6 +322,20 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.hadis,
       topic: 'kuran',
     ),
+    SpiritualQuote(
+      text: 'Şüphesiz bu Kur’an en doğru yola iletir ve salih ameller işleyen müminlere büyük bir mükâfat olduğunu müjdeler.',
+      source: 'İsrâ Sûresi, 9',
+      arabic: 'إِنَّ هَٰذَا الْقُرْآنَ يَهْدِي لِلَّتِي هِيَ أَقْوَمُ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'kuran',
+    ),
+    SpiritualQuote(
+      text: 'Kur’an’ı ağır ağır, tane tane (tertil üzere) oku.',
+      source: 'Müzzemmil Sûresi, 4',
+      arabic: 'وَرَتِّلِ الْقُرْآنَ تَرْتِيلًا',
+      type: SpiritualQuoteType.ayet,
+      topic: 'kuran',
+    ),
 
     // --- 4. EZBER & HAFIZLIK ---
     SpiritualQuote(
@@ -279,10 +365,17 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.hadis,
       topic: 'ezber',
     ),
+    SpiritualQuote(
+      text: 'Hayır, o (Kur’an), kendilerine ilim verilenlerin göğüslerinde (kalplerinde) apaçık âyetlerdir.',
+      source: 'Ankebût Sûresi, 49',
+      arabic: 'بَلْ هُوَ آيَاتٌ بَيِّنَاتٌ فِي صُدُورِ الَّذِينَ أُوتُوا الْعِلْمَ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'ezber',
+    ),
 
     // --- 5. KAZA TELAFİSİ & TÖVBE ---
     SpiritualQuote(
-      text: 'Gündüzün iki طرفında ve gecenin gündüze yakın vakitlerinde namaz kıl. Şüphesiz iyilikler kötülükleri giderir.',
+      text: 'Gündüzün iki tarafında ve gecenin gündüze yakın vakitlerinde namaz kıl. Şüphesiz iyilikler kötülükleri giderir.',
       source: 'Hûd Sûresi, 114',
       arabic: 'إِنَّ الْحَسَنَاتِ يُذْهِبْنَ السَّيِّئَاتِ ۚ ذَٰلِكَ ذِكْرَىٰ لِلذَّاكِرِينَ',
       type: SpiritualQuoteType.ayet,
@@ -306,6 +399,13 @@ class ShareCardDataHelper {
       text: 'Allah’ın rahmetinden ümidinizi kesmeyin. Şüphesiz Allah bütün günahları bağışlar.',
       source: 'Zümer Sûresi, 53',
       arabic: 'لَا تَقْنَطُوا مِنْ رَحْمَةِ اللَّهِ ۚ إِنَّ اللَّهَ يَغْفِرُ الذُّنُوبَ جَمِيعًا',
+      type: SpiritualQuoteType.ayet,
+      topic: 'kaza',
+    ),
+    SpiritualQuote(
+      text: 'Rabbinizden mağfiret dileyin; sonra O’na tövbe edin. Şüphesiz Rabbim çok merhametlidir, çok sevendir.',
+      source: 'Hûd Sûresi, 90',
+      arabic: 'وَاسْتَغْفِرُوا رَبَّكُمْ ثُمَّ تُوبُوا إِلَيْهِ ۚ إِنَّ رَبِّي رَحِيمٌ وَدُودٌ',
       type: SpiritualQuoteType.ayet,
       topic: 'kaza',
     ),
@@ -339,6 +439,26 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.ayet,
       topic: 'devamlilik',
     ),
+    SpiritualQuote(
+      text: '«Ey Allah’ın Resûlü! İslâm’da bana öyle bir söz söyle ki, senden başka kimseye sormayayım» dedim. Buyurdu ki: «Allah’a inandım de, sonra da dosdoğru ol!»',
+      source: 'Müslim, Îmân 62; Tirmizî, Zühd 61',
+      arabic: 'قُلْ آمَنْتُ بِاللَّهِ ثُمَّ اسْتَقِمْ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'devamlilik',
+    ),
+    SpiritualQuote(
+      text: 'Gece ve gündüz Allah’ı tesbih ederler, hiç usanmazlar.',
+      source: 'Enbiyâ Sûresi, 20',
+      arabic: 'يُسَبِّحُونَ اللَّيْلَ وَالنَّهَارَ لَا يَفْتُرُونَ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'devamlilik',
+    ),
+    SpiritualQuote(
+      text: 'Beş şey gelmeden önce beş şeyin kıymetini bil: İhtiyarlığından önce gençliğinin, hastalığından önce sağlığının, meşguliyetinden önce boş vaktinin...',
+      source: 'Hâkim, Müstedrek, IV, 341',
+      type: SpiritualQuoteType.hadis,
+      topic: 'devamlilik',
+    ),
 
     // --- 7. SALAVAT-I ŞERİFE & MUHABBET ---
     SpiritualQuote(
@@ -359,6 +479,20 @@ class ShareCardDataHelper {
       text: 'Kim bana bir defa salâtü selâm getirirse, Allah Teâlâ ona on defa rahmet eder.',
       source: 'Müslim, Salât 70',
       arabic: 'مَنْ صَلَّى عَلَيَّ وَاحِدَةً صَلَّى اللَّهُ عَلَيْهِ عَشْرًا',
+      type: SpiritualQuoteType.hadis,
+      topic: 'salavat',
+    ),
+    SpiritualQuote(
+      text: 'Biz seni ancak âlemlere rahmet olarak gönderdik.',
+      source: 'Enbiyâ Sûresi, 107',
+      arabic: 'وَمَا أَرْسَلْنَاكَ إِلَّا رَحْمَةً لِلْعَالَمِينَ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'salavat',
+    ),
+    SpiritualQuote(
+      text: 'Yeryüzünde Allah’ın seyyah melekleri vardır; ümmetimin selâmını bana ulaştırırlar.',
+      source: 'Nesâî, Sehv 46; Dârimî, Rikâk 58',
+      arabic: 'إِنَّ لِلَّهِ مَلَائِكَةً سَيَّاحِينَ فِي الْأَرْضِ يُبَلِّغُونِي مِنْ أُمَّتِي السَّلَامَ',
       type: SpiritualQuoteType.hadis,
       topic: 'salavat',
     ),
@@ -384,6 +518,13 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.ayet,
       topic: 'istigfar',
     ),
+    SpiritualQuote(
+      text: 'Vallahi ben günde yetmiş defadan (veya yüz defadan) fazla Allah’tan mağfiret diler ve O’na tövbe ederim.',
+      source: 'Buhârî, Daavât 3; Müslim, Zikir 41',
+      arabic: 'وَاللَّهِ إِنِّي لَأَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ فِي الْيَوْمِ أَكْثَرَ مِنْ سَبْعِينَ مَرَّةً',
+      type: SpiritualQuoteType.hadis,
+      topic: 'istigfar',
+    ),
 
     // --- 9. TEVHİD & ESMAÜL HÜSNA ---
     SpiritualQuote(
@@ -406,6 +547,20 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.hadis,
       topic: 'esma',
     ),
+    SpiritualQuote(
+      text: 'Kullarım sana Benden sorarlarsa, şüphesiz Ben çok yakınım. Bana dua edince, dua edenin duasına icâbet ederim.',
+      source: 'Bakara Sûresi, 186',
+      arabic: 'وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'esma',
+    ),
+    SpiritualQuote(
+      text: 'Dua ibadetin özüdür.',
+      source: 'Tirmizî, Daavât 1',
+      arabic: 'الدُّعَاءُ هُوَ الْعِبَادَةُ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'esma',
+    ),
 
     // --- 10. ŞÜKÜR & HAMD ---
     SpiritualQuote(
@@ -421,13 +576,137 @@ class ShareCardDataHelper {
       type: SpiritualQuoteType.hadis,
       topic: 'hamd',
     ),
+    SpiritualQuote(
+      text: 'Temizlik imanın yarısıdır. «Elhamdülillâh» mizanı doldurur. «Sübhânallâhi velhamdülillâh» ise göklerle yer arasını doldurur.',
+      source: 'Müslim, Tahâret 1; Tirmizî, Daavât 86',
+      arabic: 'الطُّهُورُ شَطْرُ الْإِيمَانِ وَالْحَمْدُ لِلَّهِ تَمْلَأُ الْمِيزَانَ',
+      type: SpiritualQuoteType.hadis,
+      topic: 'hamd',
+    ),
+    SpiritualQuote(
+      text: 'Rabbinin nimetine gelince; işte onu daima anlat (şükürle yâd et).',
+      source: 'Duhâ Sûresi, 11',
+      arabic: 'وَأَمَّا بِنِعْمَةِ رَبِّكَ فَحَدِّثْ',
+      type: SpiritualQuoteType.ayet,
+      topic: 'hamd',
+    ),
   ];
 
-  /// Returns all quotes matching a topic (with fallback to all quotes if none match)
-  static List<SpiritualQuote> getQuotesForTopic(String topic) {
-    final normalized = resolveTopicKey(zikirName: topic, category: topic);
-    final matches = curatedQuotes.where((q) => q.topic == normalized).toList();
-    return matches.isNotEmpty ? matches : curatedQuotes;
+  /// Topic categories for the quote selector UI
+  static const List<Map<String, String>> topicCategories = [
+    {'id': 'all', 'label': 'Tümü', 'emoji': '📚'},
+    {'id': 'zikir', 'label': 'Zikir & Huzur', 'emoji': '📿'},
+    {'id': 'namaz', 'label': 'Namaz & Secde', 'emoji': '🕌'},
+    {'id': 'kuran', 'label': 'Kur’an & Tilavet', 'emoji': '📖'},
+    {'id': 'devamlilik', 'label': 'İstikrar & Seri', 'emoji': '🌟'},
+    {'id': 'esma', 'label': 'Esma & Dua', 'emoji': '✨'},
+    {'id': 'salavat', 'label': 'Salavat', 'emoji': '🌹'},
+    {'id': 'istigfar', 'label': 'Tövbe & İstiğfar', 'emoji': '🤲'},
+    {'id': 'kaza', 'label': 'Kaza & Telafi', 'emoji': '⚖️'},
+    {'id': 'ezber', 'label': 'Ezber & Hafızlık', 'emoji': '🧠'},
+    {'id': 'hamd', 'label': 'Şükür & Hamd', 'emoji': '🌿'},
+  ];
+
+  /// Returns all quotes matching a topic (with fallback to all quotes if none match),
+  /// optionally prepending a custom parsed virtue if provided.
+  static List<SpiritualQuote> getQuotesForTopic(
+    String topic, {
+    String? rawVirtue,
+    String? customSource,
+    String? customArabic,
+  }) {
+    final normalized = (topic == 'all' || topic.trim().isEmpty)
+        ? 'all'
+        : resolveTopicKey(zikirName: topic, category: topic);
+    final List<SpiritualQuote> baseList = normalized == 'all'
+        ? List<SpiritualQuote>.from(curatedQuotes)
+        : curatedQuotes.where((q) => q.topic == normalized).toList();
+    final List<SpiritualQuote> matches =
+        baseList.isNotEmpty ? baseList : List<SpiritualQuote>.from(curatedQuotes);
+
+    if (customSource != null && customSource.trim().isNotEmpty && rawVirtue != null && rawVirtue.trim().isNotEmpty) {
+      final cleanSource = customSource.trim();
+      final lowerSrc = cleanSource.toLowerCase();
+      final isAyet = lowerSrc.contains('sure') ||
+          lowerSrc.contains('sûre') ||
+          lowerSrc.contains('ayet') ||
+          lowerSrc.contains('âyet');
+      final customQuote = SpiritualQuote(
+        text: rawVirtue.trim(),
+        source: cleanSource,
+        arabic: customArabic,
+        type: isAyet ? SpiritualQuoteType.ayet : SpiritualQuoteType.hadis,
+        topic: normalized == 'all' ? 'zikir' : normalized,
+      );
+      if (!matches.contains(customQuote)) {
+        matches.insert(0, customQuote);
+      }
+    } else if (rawVirtue != null && rawVirtue.trim().isNotEmpty) {
+      final parsed = _tryParseVirtue(
+        rawVirtue.trim(),
+        defaultArabic: customArabic,
+        defaultTopic: normalized == 'all' ? 'zikir' : normalized,
+      );
+      if (parsed != null && !matches.contains(parsed)) {
+        matches.insert(0, parsed);
+      }
+    }
+
+    return matches;
+  }
+
+  /// Picks a dynamic, non-repeating quote index every time a share card opens or is randomized.
+  static int nextDynamicQuoteIndex(
+    String topicContext, {
+    int? listLength,
+    int? avoidIndex,
+  }) {
+    final normalized = resolveTopicKey(zikirName: topicContext, category: topicContext);
+    final count = listLength ?? getQuotesForTopic(normalized).length;
+    if (count <= 1) return 0;
+
+    final lastIdx = avoidIndex ?? _lastIndexByTopic[normalized];
+    int candidate = _random.nextInt(count);
+    if (lastIdx != null && candidate == (lastIdx % count)) {
+      candidate = (candidate + 1 + _random.nextInt(count - 1)) % count;
+    }
+    _lastIndexByTopic[normalized] = candidate;
+    return candidate;
+  }
+
+  /// Picks a dynamic, non-repeating random quote across a topic or the entire library.
+  static SpiritualQuote nextRandomQuote({
+    String? topic,
+    SpiritualQuote? avoidQuote,
+    SpiritualQuoteType? filterType,
+    bool acrossAllTopics = false,
+  }) {
+    List<SpiritualQuote> pool = acrossAllTopics || topic == null || topic == 'all'
+        ? List<SpiritualQuote>.from(curatedQuotes)
+        : getQuotesForTopic(topic);
+
+    if (filterType != null) {
+      final typed = pool.where((q) => q.type == filterType).toList();
+      if (typed.isNotEmpty) {
+        pool = typed;
+      }
+    }
+
+    if (pool.isEmpty) {
+      return curatedQuotes.first;
+    }
+    if (pool.length == 1) {
+      return pool.first;
+    }
+
+    final currentToAvoid = avoidQuote ?? _lastGlobalQuote;
+    final candidates = currentToAvoid != null
+        ? pool.where((q) => q != currentToAvoid).toList()
+        : pool;
+    final effectivePool = candidates.isNotEmpty ? candidates : pool;
+    final picked = effectivePool[_random.nextInt(effectivePool.length)];
+    _lastGlobalQuote = picked;
+    return picked;
   }
 
   /// Resolves the canonical topic key ('namaz', 'zikir', 'kuran', 'ezber', 'kaza', 'devamlilik', 'salavat', 'istigfar', 'esma', 'hamd')
@@ -510,8 +789,13 @@ class ShareCardDataHelper {
     String? rawVirtue,
     String? customSource,
     String? customArabic,
+    SpiritualQuote? explicitQuote,
     int quoteIndex = 0,
   }) {
+    if (explicitQuote != null) {
+      return explicitQuote;
+    }
+
     if (customSource != null && customSource.trim().isNotEmpty && quoteIndex == 0) {
       final cleanSource = customSource.trim();
       final lowerSrc = cleanSource.toLowerCase();
@@ -531,15 +815,12 @@ class ShareCardDataHelper {
       );
     }
 
-    if (rawVirtue != null && rawVirtue.trim().isNotEmpty && quoteIndex == 0) {
-      final parsed = _tryParseVirtue(rawVirtue.trim());
-      if (parsed != null) {
-        return parsed;
-      }
-    }
-
-    final topic = resolveTopicKey(zikirName: zikirName, category: category);
-    final list = curatedQuotes.where((q) => q.topic == topic).toList();
+    final list = getQuotesForTopic(
+      '${zikirName ?? ''} ${category ?? ''}',
+      rawVirtue: rawVirtue,
+      customSource: customSource,
+      customArabic: customArabic,
+    );
     if (list.isNotEmpty) {
       return list[quoteIndex.abs() % list.length];
     }
@@ -547,7 +828,11 @@ class ShareCardDataHelper {
     return curatedQuotes.first;
   }
 
-  static SpiritualQuote? _tryParseVirtue(String virtue) {
+  static SpiritualQuote? _tryParseVirtue(
+    String virtue, {
+    String? defaultArabic,
+    String defaultTopic = 'zikir',
+  }) {
     final match = RegExp(r'^(.*?)\s*\(([^()]+)\)\s*$', dotAll: true).firstMatch(virtue);
     if (match != null) {
       final quoteText = match.group(1)?.trim() ?? virtue;
@@ -560,7 +845,9 @@ class ShareCardDataHelper {
         return SpiritualQuote(
           text: quoteText,
           source: source,
+          arabic: defaultArabic,
           type: isAyet ? SpiritualQuoteType.ayet : SpiritualQuoteType.hadis,
+          topic: defaultTopic,
         );
       }
     }
@@ -568,7 +855,9 @@ class ShareCardDataHelper {
       return SpiritualQuote(
         text: virtue,
         source: 'Hadis-i Şerif / Muteber Kaynak',
+        arabic: defaultArabic,
         type: SpiritualQuoteType.hadis,
+        topic: defaultTopic,
       );
     }
     return null;

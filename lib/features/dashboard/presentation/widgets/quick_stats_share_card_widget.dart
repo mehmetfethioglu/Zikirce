@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:zikirce/core/services/islamic_special_days_service.dart';
+import 'package:zikirce/features/zikir/domain/share_card_data_helper.dart';
 import 'package:zikirce/features/zikir/presentation/widgets/zikir_share_card_widget.dart';
 
 /// Tahrir Estetiğiyle Yenilenen Minimalist İbadet Özeti Kartı
@@ -15,6 +16,7 @@ class QuickStatsShareCardWidget extends StatelessWidget {
   final ZikirShareCardFormat format;
   final ZikirShareCardTheme theme;
   final String? specialDayGreeting;
+  final SpiritualQuote? quote;
 
   const QuickStatsShareCardWidget({
     super.key,
@@ -28,7 +30,15 @@ class QuickStatsShareCardWidget extends StatelessWidget {
     this.format = ZikirShareCardFormat.story9x16,
     this.theme = ZikirShareCardTheme.fajrDawn,
     this.specialDayGreeting,
+    this.quote,
   });
+
+  double _computeQuoteFontSize(String text, bool isStory) {
+    final len = text.length;
+    if (len <= 70) return isStory ? 21.0 : 17.5;
+    if (len <= 130) return isStory ? 18.5 : 15.5;
+    return isStory ? 16.0 : 13.8;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +46,7 @@ class QuickStatsShareCardWidget extends StatelessWidget {
     final isStory = format == ZikirShareCardFormat.story9x16;
     final activeGreeting = specialDayGreeting ??
         IslamicSpecialDaysService.getSpecialDay()?.greetingTr;
+    final activeQuote = quote ?? ShareCardDataHelper.curatedQuotes.first;
 
     const double canvasWidth = 400.0;
     final double canvasHeight = isStory ? 711.0 : 400.0;
@@ -93,94 +104,109 @@ class QuickStatsShareCardWidget extends StatelessWidget {
                       ),
                     ),
 
-                  const Spacer(flex: 2),
-
-                  Text(
-                    '“',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: isStory ? 48 : 38,
-                      fontWeight: FontWeight.w700,
-                      color: themeData.accentColor,
-                      height: 0.75,
+                  Expanded(
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.center,
+                        child: SizedBox(
+                          width: canvasWidth - (isStory ? 68.0 : 56.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '“',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: isStory ? 48 : 38,
+                                  fontWeight: FontWeight.w700,
+                                  color: themeData.accentColor,
+                                  height: 0.75,
+                                ),
+                              ),
+                              SizedBox(height: isStory ? 10 : 6),
+                              Text(
+                                activeQuote.text,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: _computeQuoteFontSize(
+                                    activeQuote.text,
+                                    isStory,
+                                  ),
+                                  fontWeight: FontWeight.w600,
+                                  color: themeData.primaryTextColor,
+                                  height: 1.42,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                activeQuote.source,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13.0,
+                                  fontWeight: FontWeight.w700,
+                                  color: themeData.secondaryTextColor,
+                                ),
+                              ),
+                              SizedBox(height: isStory ? 22 : 14),
+                              Container(
+                                width: 44,
+                                height: 1.5,
+                                color:
+                                    themeData.accentColor.withValues(alpha: 0.65),
+                              ),
+                              SizedBox(height: isStory ? 22 : 14),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _buildCleanStat(
+                                    value: todayZikir,
+                                    label: 'Bugün',
+                                    themeData: themeData,
+                                    isStory: isStory,
+                                  ),
+                                  Container(
+                                    width: 1,
+                                    height: isStory ? 36 : 28,
+                                    color: themeData.borderColor,
+                                  ),
+                                  _buildCleanStat(
+                                    value: thisWeekZikir,
+                                    label: 'Bu Hafta',
+                                    themeData: themeData,
+                                    isStory: isStory,
+                                  ),
+                                  Container(
+                                    width: 1,
+                                    height: isStory ? 36 : 28,
+                                    color: themeData.borderColor,
+                                  ),
+                                  _buildCleanStat(
+                                    value: totalZikir,
+                                    label: 'Toplam',
+                                    themeData: themeData,
+                                    isStory: isStory,
+                                  ),
+                                ],
+                              ),
+                              if (quranPages != '0' && quranPages.isNotEmpty) ...[
+                                SizedBox(height: isStory ? 16 : 10),
+                                Text(
+                                  '$quranPages Sayfa Kur’ân-ı Kerîm Tilaveti',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: themeData.accentColor,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  SizedBox(height: isStory ? 10 : 6),
 
-                  Text(
-                    'Kalpler ancak Allah’ı anmakla huzur bulur.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: isStory ? 21 : 17.5,
-                      fontWeight: FontWeight.w600,
-                      color: themeData.primaryTextColor,
-                      height: 1.42,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Ra’d Sûresi, 28. Âyet',
-                    style: GoogleFonts.outfit(
-                      fontSize: 13.0,
-                      fontWeight: FontWeight.w700,
-                      color: themeData.secondaryTextColor,
-                    ),
-                  ),
-
-                  SizedBox(height: isStory ? 22 : 14),
-                  Container(
-                    width: 44,
-                    height: 1.5,
-                    color: themeData.accentColor.withValues(alpha: 0.65),
-                  ),
-                  SizedBox(height: isStory ? 22 : 14),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildCleanStat(
-                        value: todayZikir,
-                        label: 'Bugün',
-                        themeData: themeData,
-                        isStory: isStory,
-                      ),
-                      Container(
-                        width: 1,
-                        height: isStory ? 36 : 28,
-                        color: themeData.borderColor,
-                      ),
-                      _buildCleanStat(
-                        value: thisWeekZikir,
-                        label: 'Bu Hafta',
-                        themeData: themeData,
-                        isStory: isStory,
-                      ),
-                      Container(
-                        width: 1,
-                        height: isStory ? 36 : 28,
-                        color: themeData.borderColor,
-                      ),
-                      _buildCleanStat(
-                        value: totalZikir,
-                        label: 'Toplam',
-                        themeData: themeData,
-                        isStory: isStory,
-                      ),
-                    ],
-                  ),
-
-                  if (quranPages != '0' && quranPages.isNotEmpty) ...[
-                    SizedBox(height: isStory ? 16 : 10),
-                    Text(
-                      '$quranPages Sayfa Kur’ân-ı Kerîm Tilaveti',
-                      style: GoogleFonts.outfit(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w600,
-                        color: themeData.accentColor,
-                      ),
-                    ),
-                  ],
-
-                  const Spacer(flex: 2),
+                  const SizedBox(height: 10),
 
                   Row(
                     mainAxisSize: MainAxisSize.min,

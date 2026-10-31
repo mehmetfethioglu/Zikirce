@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
@@ -1485,8 +1486,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   count: settings.dailyZikirGoal,
                   isEnabled: settings.isDailyZikirGoalEnabled,
                   onToggle: (val) => settingsNotifier.toggleDailyZikirGoal(val),
-                  onMinus: () => settingsNotifier.setDailyZikirGoal((settings.dailyZikirGoal - 10).clamp(10, 10000)),
-                  onPlus: () => settingsNotifier.setDailyZikirGoal(settings.dailyZikirGoal + 10),
+                  onMinus: () => settingsNotifier.setDailyZikirGoal((settings.dailyZikirGoal - 10).clamp(1, 100000)),
+                  onPlus: () => settingsNotifier.setDailyZikirGoal((settings.dailyZikirGoal + 10).clamp(1, 100000)),
+                  onValueChanged: (val) => settingsNotifier.setDailyZikirGoal(val.clamp(1, 100000)),
+                  min: 1,
+                  max: 100000,
                   colors: colors,
                 ),
                 const Divider(height: 20),
@@ -1497,8 +1501,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   count: settings.dailyQuranGoal,
                   isEnabled: settings.isDailyQuranGoalEnabled,
                   onToggle: (val) => settingsNotifier.toggleDailyQuranGoal(val),
-                  onMinus: () => settingsNotifier.setDailyQuranGoal((settings.dailyQuranGoal - 1).clamp(1, 100)),
-                  onPlus: () => settingsNotifier.setDailyQuranGoal(settings.dailyQuranGoal + 1),
+                  onMinus: () => settingsNotifier.setDailyQuranGoal((settings.dailyQuranGoal - 1).clamp(1, 604)),
+                  onPlus: () => settingsNotifier.setDailyQuranGoal((settings.dailyQuranGoal + 1).clamp(1, 604)),
+                  onValueChanged: (val) => settingsNotifier.setDailyQuranGoal(val.clamp(1, 604)),
+                  min: 1,
+                  max: 604,
                   colors: colors,
                 ),
                 const Divider(height: 20),
@@ -1523,8 +1530,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   count: settings.dailyKazaGoal,
                   isEnabled: settings.isDailyKazaGoalEnabled,
                   onToggle: (val) => settingsNotifier.toggleDailyKazaGoal(val),
-                  onMinus: () => settingsNotifier.setDailyKazaGoal((settings.dailyKazaGoal - 1).clamp(1, 50)),
-                  onPlus: () => settingsNotifier.setDailyKazaGoal(settings.dailyKazaGoal + 1),
+                  onMinus: () => settingsNotifier.setDailyKazaGoal((settings.dailyKazaGoal - 1).clamp(1, 500)),
+                  onPlus: () => settingsNotifier.setDailyKazaGoal((settings.dailyKazaGoal + 1).clamp(1, 500)),
+                  onValueChanged: (val) => settingsNotifier.setDailyKazaGoal(val.clamp(1, 500)),
+                  min: 1,
+                  max: 500,
                   colors: colors,
                 ),
                 const Divider(height: 20),
@@ -2660,7 +2670,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  Center(
+                                  const Center(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -2670,22 +2680,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                           style: TextStyle(
                                             fontFamily: 'SchherazadeNew',
                                             fontSize: 17,
-                                            fontWeight: FontWeight.bold,
-                                            color: colors.accent,
+                                            color: Color(0xFFE60000),
+                                            shadows: [
+                                              Shadow(
+                                                color: Color(0x4DFF0000),
+                                                blurRadius: 2.0,
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        Container(
-                                          width: 34,
-                                          height: 2.2,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFD97706),
-                                            borderRadius: BorderRadius.circular(2),
-                                          ),
-                                        ),
-                                        const Icon(
-                                          Icons.change_history_rounded,
-                                          size: 12,
-                                          color: Color(0xFFD97706),
+                                        Icon(
+                                          Icons.arrow_drop_up_rounded,
+                                          size: 18,
+                                          color: Color(0xFFE60000),
                                         ),
                                       ],
                                     ),
@@ -3389,6 +3396,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required VoidCallback onMinus,
     required VoidCallback onPlus,
     required AppThemeColors colors,
+    ValueChanged<int>? onValueChanged,
+    int min = 1,
+    int max = 100000,
     bool hideSwitch = false,
   }) {
     return Row(
@@ -3399,41 +3409,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.primaryText),
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          decoration: BoxDecoration(
-            color: colors.cardBackgroundAlt,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: colors.borderStroke),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InkWell(
-                onTap: onMinus,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.remove, size: 14, color: colors.primaryText),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  '$count',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.primaryText),
-                ),
-              ),
-              InkWell(
-                onTap: onPlus,
-                borderRadius: BorderRadius.circular(6),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.add, size: 14, color: colors.primaryText),
-                ),
-              ),
-            ],
-          ),
+        _EditableGoalCounter(
+          count: count,
+          min: min,
+          max: max,
+          onMinus: onMinus,
+          onPlus: onPlus,
+          onValueChanged: onValueChanged,
+          colors: colors,
         ),
         if (!hideSwitch) ...[
           const SizedBox(width: 8),
@@ -3963,4 +3946,174 @@ class _JuzAudioManagementSheetState extends ConsumerState<_JuzAudioManagementShe
     ),
   );
 }
+}
+
+/// Hem +/- butonları hem de doğrudan klavye ile sayısal giriş destekleyen hedef sayaç bileşeni
+class _EditableGoalCounter extends StatefulWidget {
+  final int count;
+  final int min;
+  final int max;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  final ValueChanged<int>? onValueChanged;
+  final AppThemeColors colors;
+
+  const _EditableGoalCounter({
+    required this.count,
+    required this.min,
+    required this.max,
+    required this.onMinus,
+    required this.onPlus,
+    required this.colors,
+    this.onValueChanged,
+  });
+
+  @override
+  State<_EditableGoalCounter> createState() => _EditableGoalCounterState();
+}
+
+class _EditableGoalCounterState extends State<_EditableGoalCounter> {
+  late final TextEditingController _controller;
+  late final FocusNode _focusNode;
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: '${widget.count}');
+    _focusNode = FocusNode();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (!mounted) return;
+    setState(() {
+      _isFocused = _focusNode.hasFocus;
+    });
+    if (!_focusNode.hasFocus) {
+      _commitValue();
+    } else {
+      // Odaklandığında tüm metni seç ki kullanıcı doğrudan yeni sayıyı yazabilsin
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _controller.text.length,
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditableGoalCounter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.count != widget.count && !_focusNode.hasFocus) {
+      _controller.text = '${widget.count}';
+    }
+  }
+
+  void _commitValue() {
+    final raw = _controller.text.trim();
+    final parsed = int.tryParse(raw);
+    if (parsed == null) {
+      _controller.text = '${widget.count}';
+      return;
+    }
+    final clamped = parsed.clamp(widget.min, widget.max);
+    _controller.text = '$clamped';
+    if (clamped != widget.count) {
+      widget.onValueChanged?.call(clamped);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = widget.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.cardBackgroundAlt,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _isFocused ? colors.accent : colors.borderStroke,
+          width: _isFocused ? 1.4 : 1.0,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: () {
+              if (_focusNode.hasFocus) {
+                _focusNode.unfocus();
+              }
+              HapticService.selectionClick();
+              widget.onMinus();
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: Icon(Icons.remove, size: 14, color: colors.primaryText),
+            ),
+          ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 46, maxWidth: 68),
+            child: IntrinsicWidth(
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                textAlign: TextAlign.center,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: colors.primaryText,
+                ),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  border: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                ),
+                onSubmitted: (_) {
+                  _commitValue();
+                  _focusNode.unfocus();
+                },
+                onTapOutside: (_) {
+                  if (_focusNode.hasFocus) {
+                    _focusNode.unfocus();
+                  }
+                },
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              if (_focusNode.hasFocus) {
+                _focusNode.unfocus();
+              }
+              HapticService.selectionClick();
+              widget.onPlus();
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: Icon(Icons.add, size: 14, color: colors.primaryText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

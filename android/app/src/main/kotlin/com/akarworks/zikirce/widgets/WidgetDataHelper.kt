@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.*
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -38,6 +39,35 @@ data class WidgetStatsData(
     var isGoldCompletedToday: Boolean = false,
     var weeklyDhikrCounts: List<Int> = listOf(0, 0, 0, 0, 0, 0, 0),
     var activeDatesInWeek: Set<String> = emptySet()
+)
+
+data class WidgetKulliyatBook(
+    val id: String,
+    val title: String,
+    val author: String,
+    val category: String,
+    val currentPage: Int,
+    val totalPages: Int,
+    val progressPercent: Int,
+    val paletteIndex: Int,
+    val hasStarted: Boolean
+)
+
+data class WidgetKulliyatData(
+    val lastBookId: String,
+    val lastBookTitle: String,
+    val lastBookAuthor: String,
+    val lastBookCategory: String,
+    val lastBookPage: Int,
+    val lastBookTotalPages: Int,
+    val lastBookPercent: Int,
+    val lastBookPaletteIndex: Int,
+    val lastBookReference: String,
+    val startedCount: Int,
+    val totalBooksCount: Int,
+    val bookmarksCount: Int,
+    val highlightsCount: Int,
+    val shelfBooks: List<WidgetKulliyatBook>
 )
 
 object WidgetDataHelper {
@@ -949,6 +979,248 @@ object WidgetDataHelper {
             saveStringPref(context, "KazaLastCompletedDate", todayStr)
         }
         return hasToday
+    }
+
+    fun getBookPaletteColors(paletteIndex: Int): IntArray {
+        return when (paletteIndex.coerceIn(0, 7)) {
+            0 -> intArrayOf(
+                Color.parseColor("#123F30"), // primaryLeather (Hünkâr Zümrüdü)
+                Color.parseColor("#0A241B"), // secondaryLeather
+                Color.parseColor("#D4AF37"), // goldAccent
+                Color.parseColor("#0E3226")  // spineColor
+            )
+            1 -> intArrayOf(
+                Color.parseColor("#4E141C"), // primaryLeather (Osmanlı Yakutu)
+                Color.parseColor("#2B090E"), // secondaryLeather
+                Color.parseColor("#E5C158"), // goldAccent
+                Color.parseColor("#3B0E15")  // spineColor
+            )
+            2 -> intArrayOf(
+                Color.parseColor("#162944"), // primaryLeather (Semerkand Lâciverdi)
+                Color.parseColor("#0C1728"), // secondaryLeather
+                Color.parseColor("#DFB85C"), // goldAccent
+                Color.parseColor("#102036")  // spineColor
+            )
+            3 -> intArrayOf(
+                Color.parseColor("#1C1C20"), // primaryLeather (Kâbe Kisvesi)
+                Color.parseColor("#0F0F12"), // secondaryLeather
+                Color.parseColor("#D4AF37"), // goldAccent
+                Color.parseColor("#141417")  // spineColor
+            )
+            4 -> intArrayOf(
+                Color.parseColor("#523214"), // primaryLeather (Endülüs Kehribarı)
+                Color.parseColor("#301C0A"), // secondaryLeather
+                Color.parseColor("#F0C96B"), // goldAccent
+                Color.parseColor("#3F250E")  // spineColor
+            )
+            5 -> intArrayOf(
+                Color.parseColor("#134047"), // primaryLeather (Uhud Turkuazı)
+                Color.parseColor("#0A2327"), // secondaryLeather
+                Color.parseColor("#D6B45A"), // goldAccent
+                Color.parseColor("#0E3136")  // spineColor
+            )
+            6 -> intArrayOf(
+                Color.parseColor("#3B1A3D"), // primaryLeather (Buhara Mürdümü)
+                Color.parseColor("#200D22"), // secondaryLeather
+                Color.parseColor("#E2BE62"), // goldAccent
+                Color.parseColor("#2C122E")  // spineColor
+            )
+            else -> intArrayOf(
+                Color.parseColor("#4A3321"), // primaryLeather (Tahrir Deri Kahvesi)
+                Color.parseColor("#2A1C11"), // secondaryLeather
+                Color.parseColor("#E6C675"), // goldAccent
+                Color.parseColor("#382618")  // spineColor
+            )
+        }
+    }
+
+    fun fetchKulliyatData(context: Context): WidgetKulliyatData {
+        val lastMushafPage = getIntPref(context, "LastReadPage", 1).coerceIn(1, 604)
+        val mushafStarted = lastMushafPage > 1
+        val mushafPct = if (mushafStarted) ((lastMushafPage * 100.0) / 604.0).roundToInt().coerceIn(1, 100) else 0
+
+        val defaultShelf = mutableListOf(
+            WidgetKulliyatBook(
+                id = "book_mushaf",
+                title = "Kur’ân-ı Kerîm",
+                author = "Diyanet Mushafları İnceleme Kurulu",
+                category = "Kur’ân-ı Kerîm",
+                currentPage = lastMushafPage,
+                totalPages = 604,
+                progressPercent = mushafPct,
+                paletteIndex = 0,
+                hasStarted = mushafStarted
+            ),
+            WidgetKulliyatBook(
+                id = "book_meal_diyanet",
+                title = "Diyanet Meâli",
+                author = "Türkiye Diyanet Vakfı Heyeti",
+                category = "Meâller",
+                currentPage = 1,
+                totalPages = 604,
+                progressPercent = 0,
+                paletteIndex = 4,
+                hasStarted = false
+            ),
+            WidgetKulliyatBook(
+                id = "book_tafseer_kuran_yolu",
+                title = "Kur’ân Yolu",
+                author = "Karaman, Çağrıcı, Dönmez, Gümüş",
+                category = "Tefsirler",
+                currentPage = 1,
+                totalPages = 6236,
+                progressPercent = 0,
+                paletteIndex = 2,
+                hasStarted = false
+            ),
+            WidgetKulliyatBook(
+                id = "book_hadith_buhari",
+                title = "Sahîh-i Buhârî",
+                author = "İmam Muhammed b. İsmâil el-Buhârî",
+                category = "Kütüb-i Sitte & Hadis",
+                currentPage = 1,
+                totalPages = 7563,
+                progressPercent = 0,
+                paletteIndex = 1,
+                hasStarted = false
+            ),
+            WidgetKulliyatBook(
+                id = "book_hadith_riyazus_salihin",
+                title = "Riyâzü’s-Sâlihîn",
+                author = "İmam Muhyiddîn en-Nevevî",
+                category = "Kütüb-i Sitte & Hadis",
+                currentPage = 1,
+                totalPages = 1896,
+                progressPercent = 0,
+                paletteIndex = 5,
+                hasStarted = false
+            ),
+            WidgetKulliyatBook(
+                id = "book_risale_sozler",
+                title = "Sözler",
+                author = "Bediüzzaman Said Nursî",
+                category = "Risale-i Nur Külliyatı",
+                currentPage = 1,
+                totalPages = 812,
+                progressPercent = 0,
+                paletteIndex = 1,
+                hasStarted = false
+            )
+        )
+
+        val shelfBooks = mutableListOf<WidgetKulliyatBook>()
+        val shelfJson = getStringPref(context, "KulliyatShelfBooksJson", "")
+        if (shelfJson.isNotEmpty()) {
+            try {
+                val arr = JSONArray(shelfJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val id = obj.optString("id", "book_$i")
+                    val title = obj.optString("t", "İslâmî Eser")
+                    val author = obj.optString("a", "")
+                    val category = obj.optString("c", "Külliyat")
+                    val curPage = obj.optInt("p", 1).coerceAtLeast(1)
+                    val totPages = obj.optInt("tp", 604).coerceAtLeast(1)
+                    val pct = obj.optInt("pct", 0).coerceIn(0, 100)
+                    val pal = obj.optInt("pal", i % 8).coerceIn(0, 7)
+                    val started = obj.optBoolean("st", curPage > 1 || pct > 0)
+                    shelfBooks.add(
+                        WidgetKulliyatBook(
+                            id = id,
+                            title = title,
+                            author = author,
+                            category = category,
+                            currentPage = curPage,
+                            totalPages = totPages,
+                            progressPercent = pct,
+                            paletteIndex = pal,
+                            hasStarted = started
+                        )
+                    )
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (shelfBooks.isEmpty()) {
+            val rawBookshelf = getStringPref(context, "zikirce_tahrir_bookshelf_v2", "")
+            if (rawBookshelf.isNotEmpty()) {
+                try {
+                    val arr = JSONArray(rawBookshelf)
+                    val savedMap = mutableMapOf<String, JSONObject>()
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i) ?: continue
+                        val id = item.optString("id", "")
+                        if (id.isNotEmpty()) {
+                            savedMap[id] = item
+                        }
+                    }
+                    for (def in defaultShelf) {
+                        val s = savedMap[def.id]
+                        if (s != null) {
+                            val tot = s.optInt("totalPages", def.totalPages).coerceAtLeast(1)
+                            var cur = s.optInt("currentPage", def.currentPage).coerceIn(1, tot)
+                            var st = s.optBoolean("hasStartedReading", def.hasStarted)
+                            if (def.id == "book_mushaf" && lastMushafPage > cur) {
+                                cur = lastMushafPage
+                                st = true
+                            }
+                            val pct = if (st) ((cur * 100.0) / tot.toDouble()).roundToInt().coerceIn(1, 100) else 0
+                            val pal = s.optInt("paletteIndex", def.paletteIndex).coerceIn(0, 7)
+                            shelfBooks.add(
+                                def.copy(
+                                    currentPage = cur,
+                                    totalPages = tot,
+                                    progressPercent = pct,
+                                    paletteIndex = pal,
+                                    hasStarted = st
+                                )
+                            )
+                        } else {
+                            shelfBooks.add(def)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        if (shelfBooks.isEmpty()) {
+            shelfBooks.addAll(defaultShelf)
+        }
+
+        val fallbackActive = shelfBooks.firstOrNull { it.hasStarted } ?: shelfBooks.first()
+        val lastBookId = getStringPref(context, "KulliyatLastBookId", fallbackActive.id)
+        val lastBookTitle = getStringPref(context, "KulliyatLastBookTitle", fallbackActive.title)
+        val lastBookAuthor = getStringPref(context, "KulliyatLastBookAuthor", fallbackActive.author)
+        val lastBookCategory = getStringPref(context, "KulliyatLastBookCategory", fallbackActive.category)
+        val lastBookPage = getIntPref(context, "KulliyatLastBookPage", fallbackActive.currentPage).coerceAtLeast(1)
+        val lastBookTotalPages = getIntPref(context, "KulliyatLastBookTotalPages", fallbackActive.totalPages).coerceAtLeast(1)
+        val lastBookPercent = getIntPref(context, "KulliyatLastBookPercent", fallbackActive.progressPercent).coerceIn(0, 100)
+        val lastBookPaletteIndex = getIntPref(context, "KulliyatLastBookPaletteIndex", fallbackActive.paletteIndex).coerceIn(0, 7)
+        val defaultRef = "Sayfa $lastBookPage / $lastBookTotalPages"
+        val lastBookReference = getStringPref(context, "KulliyatLastBookReference", defaultRef)
+
+        val defaultStartedCount = shelfBooks.count { it.hasStarted }
+        val startedCount = getIntPref(context, "KulliyatStartedCount", defaultStartedCount).coerceAtLeast(0)
+        val totalBooksCount = getIntPref(context, "KulliyatTotalBooksCount", 24).coerceAtLeast(shelfBooks.size)
+        val bookmarksCount = getIntPref(context, "KulliyatBookmarksCount", 0).coerceAtLeast(0)
+        val highlightsCount = getIntPref(context, "KulliyatHighlightsCount", 0).coerceAtLeast(0)
+
+        return WidgetKulliyatData(
+            lastBookId = lastBookId,
+            lastBookTitle = lastBookTitle,
+            lastBookAuthor = lastBookAuthor,
+            lastBookCategory = lastBookCategory,
+            lastBookPage = lastBookPage,
+            lastBookTotalPages = lastBookTotalPages,
+            lastBookPercent = lastBookPercent,
+            lastBookPaletteIndex = lastBookPaletteIndex,
+            lastBookReference = lastBookReference,
+            startedCount = startedCount,
+            totalBooksCount = totalBooksCount,
+            bookmarksCount = bookmarksCount,
+            highlightsCount = highlightsCount,
+            shelfBooks = shelfBooks
+        )
     }
 }
 

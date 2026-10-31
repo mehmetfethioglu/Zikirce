@@ -121,7 +121,7 @@ class QuranWordHighlighter {
         .replaceAll('\u200C', '')
         .replaceAll('\u200D', '')
         .replaceAll('\u200E', '')
-        .replaceAll('\u200F', '')
+        .replaceAll('\u200F', '').replaceAll('\u202E', '').replaceAll('\u202C', '')
         .replaceAll('\u061C', '')
         .replaceAll('\u00A0', ' ')
         .replaceAll('\u202F', ' ')
@@ -175,7 +175,7 @@ class QuranWordHighlighter {
     text = text.replaceAll('ی', 'ي');
     text = text.replaceAll('D', 'د');
     // strip non-arabic punctuation/stop markers
-    text = text.replaceAll(RegExp(r'[^\u0600-\u06FF]'), '');
+    text = text.replaceAll('\uFDF2', 'الله').replaceAll(RegExp(r'[\u0600-\u0620\u0640\u0660-\u066D\u06D4\u06DD\u06DE\u06E9]|[^\u0600-\u06FF]'), '');
     return text.trim();
   }
 
@@ -197,6 +197,12 @@ class QuranWordHighlighter {
     'ءالله',     // Ā-Allāhu (ءَآللّٰهُ / أَاللّٰهُ)
     'ءاللهم',    // Qul Allāhumma variant
     'االله',     // Normalized alif variant
+    'فوالله',    // Fa-wa-Allāh
+    'ابالله',    // A-bi-Allāh
+    'افالله',    // A-fa-Allāh
+    'فاللهم',    // Fa-Allāhumma
+    'كالله',     // Ka-Allāh
+    'وكالله',    // Wa-ka-Allāh
   };
 
   // Exact set of normalized Rab forms (Lord) in the Quran (960+ occurrences)
@@ -240,6 +246,42 @@ class QuranWordHighlighter {
   /// Returns true if the word is Rab
   static bool isRabWord(String word) {
     return _rabForms.contains(normalizeWord(word));
+  }
+
+  /// Diyanet Kur'an Platformu active word highlight color ("Ok Takibi" crimson red)
+  static Color getDiyanetTrackingWordColor(bool isDark) {
+    return isDark ? const Color(0xFFFF4D4D) : const Color(0xFFE60000);
+  }
+
+  /// Diyanet Kur'an Platformu subtle red text-shadow for active word (`0 0 2px rgba(255, 0, 0, .3)`)
+  static List<Shadow> getDiyanetTrackingShadows(bool isDark) {
+    return const [
+      Shadow(
+        color: Color(0x4DFF0000),
+        blurRadius: 2.0,
+      ),
+    ];
+  }
+
+  /// Extracts pure Arabic words (with waqf stop signs stripped) matching `_parseAyahWords` 1-to-1
+  static List<String> extractPureWords(String rawText) {
+    final cleaned = cleanArabicText(rawText).trim();
+    if (cleaned.isEmpty) return const [];
+    final rawWords = cleaned.split(RegExp(r'\s+'));
+    final result = <String>[];
+    for (final w in rawWords) {
+      final trimmed = w.trim();
+      if (trimmed.isEmpty) continue;
+      final buf = StringBuffer();
+      for (int i = 0; i < trimmed.length; i++) {
+        final ch = trimmed[i];
+        if (!stopSigns.contains(ch)) {
+          buf.write(ch);
+        }
+      }
+      result.add(buf.toString());
+    }
+    return result;
   }
 
   /// Builds a list of [InlineSpan]s for a given raw Arabic verse with divine words highlighted,
@@ -345,24 +387,121 @@ class QuranWordHighlighter {
   }
 }
 
-/// Custom-painted rahle/hilal upward tracking arrow pointer for "Ok ile Takip" mode.
-class QuranWordTrackingPointer extends StatelessWidget {
+/// Diyanet Kur'an Platformu style upward red tracking arrow pointer for "Ok ile Takip" mode.
+/// Slides smoothly from right to left (`0% { right: 0 }` -> `100% { right: 100% }`) linearly
+/// across the width of the active word over [durationMs] / [playbackSpeed].
+class QuranWordTrackingPointer extends StatefulWidget {
   final bool isDark;
   final double height;
+  final int durationMs;
+  final double playbackSpeed;
+  final bool isPlaying;
+  final bool animate;
+  final Object? wordIdentity;
 
   const QuranWordTrackingPointer({
     super.key,
     required this.isDark,
-    this.height = 11.0,
+    this.height = 7.5,
+    this.durationMs = 500,
+    this.playbackSpeed = 1.0,
+    this.isPlaying = true,
+    this.animate = true,
+    this.wordIdentity,
   });
 
   @override
+  State<QuranWordTrackingPointer> createState() =>
+      _QuranWordTrackingPointerState();
+}
+
+class _QuranWordTrackingPointerState extends State<QuranWordTrackingPointer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  Duration _computeEffectiveDuration() {
+    final speed = widget.playbackSpeed <= 0.1 ? 1.0 : widget.playbackSpeed;
+    final scaledMs = (widget.durationMs / speed).round().clamp(120, 8000);
+    return Duration(milliseconds: scaledMs);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: _computeEffectiveDuration(),
+      value: widget.animate ? 0.0 : 0.5,
+    );
+    if (widget.animate && widget.isPlaying) {
+      _controller.forward();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant QuranWordTrackingPointer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.animate) {
+      _controller.stop();
+      _controller.value = 0.5;
+      return;
+    }
+
+    final identityChanged = widget.wordIdentity != oldWidget.wordIdentity;
+    final timingChanged = widget.durationMs != oldWidget.durationMs ||
+        (widget.playbackSpeed - oldWidget.playbackSpeed).abs() > 0.01;
+
+    if (identityChanged) {
+      _controller.duration = _computeEffectiveDuration();
+      _controller.reset();
+      if (widget.isPlaying) {
+        _controller.forward();
+      }
+      return;
+    }
+
+    if (timingChanged) {
+      final currentVal = _controller.value;
+      _controller.duration = _computeEffectiveDuration();
+      if (widget.isPlaying && currentVal < 1.0) {
+        _controller.forward(from: currentVal);
+      }
+    }
+
+    if (widget.isPlaying != oldWidget.isPlaying) {
+      if (widget.isPlaying) {
+        if (_controller.value < 1.0) {
+          _controller.forward();
+        }
+      } else {
+        _controller.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      width: double.infinity,
-      child: CustomPaint(
-        painter: QuranTrackingArrowPainter(isDark: isDark),
+    return RepaintBoundary(
+      child: SizedBox(
+        height: widget.height,
+        width: double.infinity,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return CustomPaint(
+              painter: QuranTrackingArrowPainter(
+                isDark: widget.isDark,
+                progress: _controller.value,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -370,60 +509,55 @@ class QuranWordTrackingPointer extends StatelessWidget {
 
 class QuranTrackingArrowPainter extends CustomPainter {
   final bool isDark;
+  final double progress;
 
-  const QuranTrackingArrowPainter({required this.isDark});
+  const QuranTrackingArrowPainter({
+    required this.isDark,
+    this.progress = 0.0,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final primaryColor = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
-    final accentEmerald = isDark ? const Color(0xFF10B981) : const Color(0xFF059669);
+    // Diyanet CSS:
+    // border-left: 5px solid transparent;
+    // border-right: 5px solid transparent;
+    // border-bottom: 7px solid rgba(255, 0, 0, .9);
+    // @keyframes _slideWord { 0% { right: 0; } to { right: 100%; } }
+    final arrowColor =
+        isDark ? const Color(0xEBFF3B30) : const Color(0xEBE60000);
+    const halfBase = 5.0;
+    final arrowHeight = size.height.clamp(6.0, 8.0);
 
-    // 1. Soft glow under the active word baseline
-    final glowPaint = Paint()
-      ..color = primaryColor.withValues(alpha: isDark ? 0.45 : 0.30)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.5);
+    // At progress = 0.0, right edge of arrow is at right edge of word (right: 0).
+    // At progress = 1.0, right edge of arrow reaches left edge of word (right: 100%).
+    final t = progress.clamp(0.0, 1.0);
+    final startCenterX =
+        size.width > halfBase ? (size.width - halfBase) : (size.width / 2.0);
+    const endCenterX = 0.0;
+    final centerX = startCenterX - ((startCenterX - endCenterX) * t);
 
-    final barWidth = (size.width * 0.88).clamp(16.0, 140.0);
-    final barLeft = (size.width - barWidth) / 2.0;
-    final barRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(barLeft, 0.5, barWidth, 2.4),
-      const Radius.circular(2.0),
-    );
-    canvas.drawRRect(barRect, glowPaint);
-
-    // 2. Crisp baseline bar
-    final barPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [
-          accentEmerald.withValues(alpha: 0.85),
-          primaryColor,
-          accentEmerald.withValues(alpha: 0.85),
-        ],
-      ).createShader(Rect.fromLTWH(barLeft, 0, barWidth, 3.0));
-    canvas.drawRRect(barRect, barPaint);
-
-    // 3. Upward pointer arrow (rahle/mushaf indicator) centered under the word
-    final centerX = size.width / 2.0;
     final arrowPath = Path()
-      ..moveTo(centerX, 2.2) // Sharp tip pointing up at the word
-      ..lineTo(centerX - 5.2, size.height - 0.5)
-      ..quadraticBezierTo(centerX, size.height - 2.2, centerX + 5.2, size.height - 0.5)
+      ..moveTo(centerX, 0.0) // Sharp upward tip pointing at the word
+      ..lineTo(centerX - halfBase, arrowHeight)
+      ..lineTo(centerX + halfBase, arrowHeight)
       ..close();
 
-    final arrowGlow = Paint()
-      ..color = primaryColor.withValues(alpha: 0.45)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
-    canvas.drawPath(arrowPath, arrowGlow);
+    final glowPaint = Paint()
+      ..color = arrowColor.withValues(alpha: 0.28)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    canvas.drawPath(arrowPath, glowPaint);
 
     final arrowPaint = Paint()
-      ..color = primaryColor
-      ..style = PaintingStyle.fill;
+      ..color = arrowColor
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
     canvas.drawPath(arrowPath, arrowPaint);
   }
 
   @override
   bool shouldRepaint(covariant QuranTrackingArrowPainter oldDelegate) {
-    return oldDelegate.isDark != isDark;
+    return oldDelegate.isDark != isDark ||
+        (oldDelegate.progress - progress).abs() > 0.002;
   }
 }
 

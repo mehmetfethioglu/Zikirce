@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../../data/islamic_book_corpus_service.dart';
 import '../../data/islamic_bookshelf_models.dart';
+import '../../data/risale_lugat_service.dart';
 import '../../providers/kuran_providers.dart';
 import '../widgets/tahrir_bookshelf_section.dart';
 
@@ -44,6 +46,28 @@ class _IslamicBookReaderScreenState
 
   final Map<int, QuranPageData> _quranPagesCache = {};
   final Map<int, IslamicBookPageData> _corpusPagesCache = {};
+  final List<TapGestureRecognizer> _lugatTapRecognizers =
+      <TapGestureRecognizer>[];
+
+  void _disposeLugatRecognizers() {
+    for (final r in _lugatTapRecognizers) {
+      r.dispose();
+    }
+    _lugatTapRecognizers.clear();
+  }
+
+  TapGestureRecognizer _createLugatTapRecognizer(VoidCallback onTap) {
+    if (_lugatTapRecognizers.length > 900) {
+      const removeCount = 300;
+      for (int i = 0; i < removeCount; i++) {
+        _lugatTapRecognizers[i].dispose();
+      }
+      _lugatTapRecognizers.removeRange(0, removeCount);
+    }
+    final recognizer = TapGestureRecognizer()..onTap = onTap;
+    _lugatTapRecognizers.add(recognizer);
+    return recognizer;
+  }
 
   @override
   void initState() {
@@ -62,7 +86,10 @@ class _IslamicBookReaderScreenState
 
   Future<void> _initializeBook(IslamicShelfBook book) async {
     try {
-      await TafseerService.initialize();
+      await Future.wait<void>([
+        TafseerService.initialize(),
+        RisaleLugatService.instance.ensureLoaded(),
+      ]);
 
       if (book.category == IslamicBookCategory.tafseer) {
         final tafseerService = ref.read(tafseerServiceProvider);
@@ -140,6 +167,7 @@ class _IslamicBookReaderScreenState
 
   @override
   void dispose() {
+    _disposeLugatRecognizers();
     _pageController.dispose();
     super.dispose();
   }
@@ -457,6 +485,16 @@ class _IslamicBookReaderScreenState
           ],
         ),
         actions: [
+          // Risale-i Nur Lügati Arama & Kelime Vurgusu
+          IconButton(
+            tooltip: 'Risale-i Nur Lügati Sözlüğü',
+            onPressed: () => _openRisaleLugatSearchSheet(book, settings),
+            icon: Icon(
+              Icons.menu_book_rounded,
+              color: settings.showLugatWords ? accentColor : textColor,
+              size: 21,
+            ),
+          ),
           // Ayraç Ekle / Kaldır
           IconButton(
             tooltip: isBookmarked ? 'Ayracı Kaldır' : 'Bu Sayfaya Ayraç Koy',
@@ -595,6 +633,34 @@ class _IslamicBookReaderScreenState
                                           ...selectableRegionState
                                               .contextMenuButtonItems,
                                           if (_selectedText.trim().isNotEmpty) ...[
+                                            ContextMenuButtonItem(
+                                              label: 'Lügat Mânâsı',
+                                              onPressed: () {
+                                                final q = _selectedText.trim();
+                                                ContextMenuController
+                                                    .removeAny();
+                                                final found = RisaleLugatService
+                                                    .instance
+                                                    .lookupWord(
+                                                  q,
+                                                  includeStopwords: true,
+                                                );
+                                                if (found != null) {
+                                                  _showRisaleLugatPopup(
+                                                    entry: found,
+                                                    surfaceText: q,
+                                                    book: book,
+                                                    settings: settings,
+                                                  );
+                                                } else {
+                                                  _openRisaleLugatSearchSheet(
+                                                    book,
+                                                    settings,
+                                                    initialQuery: q,
+                                                  );
+                                                }
+                                              },
+                                            ),
                                             ContextMenuButtonItem(
                                               label: 'Vurgula',
                                               onPressed: () =>
@@ -894,6 +960,7 @@ class _IslamicBookReaderScreenState
   }
 
   /// Kur'ân okuma sayfasındakiyle birebir aynı kusursuz Arapça metin oluşturucu
+  /// (Allah ve Rab lafızları her zaman kırmızı vurgulanır).
   Widget _buildUnifiedArabicText({
     required String rawArabic,
     required IslamicBookReaderSettings settings,
@@ -903,7 +970,6 @@ class _IslamicBookReaderScreenState
   }) {
     final arabicFont = ref.watch(arabicFontFamilyProvider);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
-    final highlightDivine = ref.watch(highlightDivineWordsProvider);
 
     return Text.rich(
       TextSpan(
@@ -917,7 +983,7 @@ class _IslamicBookReaderScreenState
             height: 2.0,
           ),
           isDark: settings.isDarkTheme,
-          enabled: highlightDivine,
+          enabled: true,
           fontFamily: arabicFont,
           isBold: isBoldArabic,
           ayahNumber: ayahNumber,
@@ -929,15 +995,160 @@ class _IslamicBookReaderScreenState
     );
   }
 
-  /// Sayfadaki kayıtlı vurgulamaları (Highlights) metin içinde renkli olarak işaretler
+  static final RegExp _inlineArabicRunRegex = RegExp(
+    r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u202E\u202C]+(?:\s*[\-–—٭۞()«»\[\]،؛؟]*\s*[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u202E\u202C]+)*',
+  );
+
+  static bool _isPureArabicParagraph(String paragraph) {
+    final trimmed = paragraph.trim();
+    if (trimmed.isEmpty) return false;
+    final hasArabic = RegExp(
+      r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]',
+    ).hasMatch(trimmed);
+    if (!hasArabic) return false;
+    final hasLatin = RegExp(
+      r'[A-Za-zÂÎÛÊÔâîûêôÇĞIİÖŞÜçğıiöşü]',
+    ).hasMatch(trimmed);
+    return !hasLatin;
+  }
+
+  /// Tema indeksine göre göz yormayan, örnek görseldekiyle birebir uyumlu sıcak kehribar/bakır lügat rengi.
+  Color _resolveLugatWordColor(IslamicBookReaderSettings settings) {
+    switch (settings.themeIndex) {
+      case 0:
+        return const Color(0xFFB5652B); // Parşömen sıcak bakır/kehribar
+      case 1:
+        return const Color(0xFFA85720); // Klasik Sahife tok kehribar/bronz
+      case 2:
+        return const Color(0xFFE59852); // Safir Gece parlak sıcak kehribar
+      case 3:
+        return const Color(0xFFE8A856); // Zümrüt altın kehribar
+      case 4:
+        return const Color(0xFFEDA658); // AMOLED sıcak altın kehribar
+      default:
+        return const Color(0xFFB5652B);
+    }
+  }
+
+  /// Metin içindeki müstakil Arapça âyet/hadis/serlevha paragraflarını Kur'ân sayfası kalitesinde
+  /// (RTL, AmasyaAbay, kırmızı Lafzatullah) ve Türkçe paragrafları lügat/vurgulama ile oluşturur.
+  Widget _buildRichBodyWithArabicBlocks({
+    required String text,
+    required IslamicBookReaderSettings settings,
+    required List<BookHighlightItem> pageHighlights,
+    required IslamicShelfBook book,
+  }) {
+    if (text.trim().isEmpty) return const SizedBox.shrink();
+
+    final paragraphs = text.split(RegExp(r'\n{2,}'));
+    final hasStandaloneArabic = paragraphs.any(_isPureArabicParagraph);
+    if (!hasStandaloneArabic) {
+      return Text.rich(
+        _buildTextSpanWithHighlights(
+          text: text,
+          baseStyle: _resolveTurkishFont(settings),
+          pageHighlights: pageHighlights,
+          isDark: settings.isDarkTheme,
+        ),
+        textAlign: settings.justifyText ? TextAlign.justify : TextAlign.left,
+      );
+    }
+
+    final children = <Widget>[];
+    final trBuffer = <String>[];
+
+    void flushTurkishBuffer() {
+      if (trBuffer.isEmpty) return;
+      final joined = trBuffer.join('\n\n');
+      trBuffer.clear();
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text.rich(
+            _buildTextSpanWithHighlights(
+              text: joined,
+              baseStyle: _resolveTurkishFont(settings),
+              pageHighlights: pageHighlights,
+              isDark: settings.isDarkTheme,
+            ),
+            textAlign:
+                settings.justifyText ? TextAlign.justify : TextAlign.left,
+          ),
+        ),
+      );
+    }
+
+    for (final para in paragraphs) {
+      final trimmed = para.trim();
+      if (trimmed.isEmpty) continue;
+      if (_isPureArabicParagraph(trimmed)) {
+        flushTurkishBuffer();
+        if (settings.showArabicText) {
+          children.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: settings.cardColor.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: settings.accentColor.withValues(alpha: 0.18),
+                  ),
+                ),
+                child: _buildUnifiedArabicText(
+                  rawArabic: trimmed,
+                  settings: settings,
+                  textAlign: book.category == IslamicBookCategory.risale
+                      ? TextAlign.center
+                      : TextAlign.right,
+                ),
+              ),
+            ),
+          );
+        }
+      } else {
+        trBuffer.add(para);
+      }
+    }
+    flushTurkishBuffer();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+  }
+
+  /// Sayfadaki kayıtlı vurgulamaları (Highlights) ve Risale-i Nur Lügati kelimelerini
+  /// metin içinde işaretler; lügatte bulunan kelimelere dokunulduğunda modern mânâ popup'ı açar.
   TextSpan _buildTextSpanWithHighlights({
     required String text,
     required TextStyle baseStyle,
     required List<BookHighlightItem> pageHighlights,
     required bool isDark,
   }) {
-    if (pageHighlights.isEmpty || text.isEmpty) {
+    if (text.isEmpty) {
       return TextSpan(text: text, style: baseStyle);
+    }
+
+    final settings = ref.read(islamicBookReaderSettingsProvider);
+    final books = ref.read(islamicBookshelfProvider);
+    final currentBook = books.firstWhere(
+      (b) => b.id == widget.bookId,
+      orElse: () => books.first,
+    );
+
+    if (pageHighlights.isEmpty) {
+      return _buildLugatAnnotatedTextSpan(
+        text: text,
+        baseStyle: baseStyle,
+        settings: settings,
+        book: currentBook,
+      );
     }
 
     // En uzun eşleşmeden başlayarak vurgulamaları uygula
@@ -959,15 +1170,24 @@ class _IslamicBookReaderScreenState
       }
 
       if (earliestIndex == -1 || matchedHighlight == null) {
-        spans.add(TextSpan(text: remaining, style: baseStyle));
+        spans.add(
+          _buildLugatAnnotatedTextSpan(
+            text: remaining,
+            baseStyle: baseStyle,
+            settings: settings,
+            book: currentBook,
+          ),
+        );
         break;
       }
 
       if (earliestIndex > 0) {
         spans.add(
-          TextSpan(
+          _buildLugatAnnotatedTextSpan(
             text: remaining.substring(0, earliestIndex),
-            style: baseStyle,
+            baseStyle: baseStyle,
+            settings: settings,
+            book: currentBook,
           ),
         );
       }
@@ -976,15 +1196,17 @@ class _IslamicBookReaderScreenState
       final highlightedChunk =
           remaining.substring(earliestIndex, earliestIndex + needleLen);
       spans.add(
-        TextSpan(
+        _buildLugatAnnotatedTextSpan(
           text: highlightedChunk,
-          style: baseStyle.copyWith(
+          baseStyle: baseStyle.copyWith(
             backgroundColor: BookHighlightItem.colorForIndex(
               matchedHighlight.colorIndex,
               isDark: isDark,
             ),
             fontWeight: FontWeight.w600,
           ),
+          settings: settings,
+          book: currentBook,
         ),
       );
 
@@ -992,6 +1214,267 @@ class _IslamicBookReaderScreenState
     }
 
     return TextSpan(children: spans);
+  }
+
+  /// Metin parçasındaki satır içi Arapça ibareleri Kur'ân hattıyla (AmasyaAbay + kırmızı Lafzatullah)
+  /// ve Risale-i Nur Lügati kelimelerini/tamlamalarını tema uyumlu renklendirmeyle (alt çizgisiz,
+  /// yalnızca kök/tamlama kısmı renkli, Türkçe çekim ekleri normal metin renginde) oluşturur.
+  TextSpan _buildLugatAnnotatedTextSpan({
+    required String text,
+    required TextStyle baseStyle,
+    required IslamicBookReaderSettings settings,
+    required IslamicShelfBook book,
+  }) {
+    if (text.isEmpty) {
+      return TextSpan(text: text, style: baseStyle);
+    }
+
+    final arabicMatches = _inlineArabicRunRegex.allMatches(text).toList(
+          growable: false,
+        );
+    if (arabicMatches.isEmpty) {
+      return _buildLugatPureTurkishTextSpan(
+        text: text,
+        baseStyle: baseStyle,
+        settings: settings,
+        book: book,
+      );
+    }
+
+    final arabicFont = ref.read(arabicFontFamilyProvider);
+    final isBoldArabic = ref.read(isBoldArabicProvider);
+    final inlineArabicFontSize =
+        ((baseStyle.fontSize ?? settings.turkishFontSize) * 1.42)
+            .clamp(21.0, 38.0);
+
+    final spans = <InlineSpan>[];
+    int cursor = 0;
+
+    for (final arMatch in arabicMatches) {
+      if (arMatch.start > cursor) {
+        spans.add(
+          _buildLugatPureTurkishTextSpan(
+            text: text.substring(cursor, arMatch.start),
+            baseStyle: baseStyle,
+            settings: settings,
+            book: book,
+          ),
+        );
+      }
+
+      final arSegment = text.substring(arMatch.start, arMatch.end);
+      if (settings.showArabicText) {
+        spans.addAll(
+          QuranWordHighlighter.buildHighlightedSpans(
+            rawText: arSegment,
+            baseStyle: TextStyle(
+              fontFamily: arabicFont,
+              fontSize: inlineArabicFontSize,
+              fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
+              color: baseStyle.color ?? settings.textColor,
+              backgroundColor: baseStyle.backgroundColor,
+              height: 1.95,
+            ),
+            isDark: settings.isDarkTheme,
+            enabled: true,
+            fontFamily: arabicFont,
+            isBold: isBoldArabic,
+          ),
+        );
+      }
+
+      cursor = arMatch.end;
+    }
+
+    if (cursor < text.length) {
+      spans.add(
+        _buildLugatPureTurkishTextSpan(
+          text: text.substring(cursor),
+          baseStyle: baseStyle,
+          settings: settings,
+          book: book,
+        ),
+      );
+    }
+
+    return TextSpan(children: spans);
+  }
+
+  TextSpan _buildLugatPureTurkishTextSpan({
+    required String text,
+    required TextStyle baseStyle,
+    required IslamicBookReaderSettings settings,
+    required IslamicShelfBook book,
+  }) {
+    final lugatService = RisaleLugatService.instance;
+    if (!settings.showLugatWords || !lugatService.isLoaded || text.isEmpty) {
+      return TextSpan(text: text, style: baseStyle);
+    }
+
+    final matches = lugatService.findMatchesInText(text);
+    if (matches.isEmpty) {
+      return TextSpan(text: text, style: baseStyle);
+    }
+
+    final lugatWordColor = _resolveLugatWordColor(settings);
+    final children = <InlineSpan>[];
+    int cursor = 0;
+
+    for (final match in matches) {
+      if (match.start > cursor) {
+        children.add(
+          TextSpan(
+            text: text.substring(cursor, match.start),
+            style: baseStyle,
+          ),
+        );
+      }
+
+      final recognizer = _createLugatTapRecognizer(() {
+        HapticFeedback.selectionClick();
+        _showRisaleLugatPopup(
+          entry: match.entry,
+          surfaceText: match.coloredStemText,
+          book: book,
+          settings: settings,
+        );
+      });
+
+      // Yalnızca kök / tamlama kısmı (match.start .. match.stemEnd) tema uyumlu lügat rengiyle boyanır
+      children.add(
+        TextSpan(
+          text: match.coloredStemText,
+          recognizer: recognizer,
+          style: baseStyle.copyWith(
+            color: lugatWordColor,
+          ),
+        ),
+      );
+
+      // Türkçe çekim eki varsa (örn. hût[un], sahil-i selâmet[e], küre-i zemin[imizdir]) normal metin renginde kalır
+      if (match.stemEnd < match.end) {
+        children.add(
+          TextSpan(
+            text: text.substring(match.stemEnd, match.end),
+            recognizer: recognizer,
+            style: baseStyle,
+          ),
+        );
+      }
+
+      cursor = match.end;
+    }
+
+    if (cursor < text.length) {
+      children.add(
+        TextSpan(
+          text: text.substring(cursor),
+          style: baseStyle,
+        ),
+      );
+    }
+
+    return TextSpan(children: children);
+  }
+
+  /// Kelimeye dokunulduğunda açılan Modern Tahrir Risale-i Nur Lügati Popup'ı
+  void _showRisaleLugatPopup({
+    required RisaleLugatEntry entry,
+    required String surfaceText,
+    required IslamicShelfBook book,
+    required IslamicBookReaderSettings settings,
+  }) {
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Risale-i Nur Lügati',
+      barrierColor: Colors.black.withValues(alpha: 0.58),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (ctx, anim1, anim2) {
+        return Center(
+          child: _RisaleLugatWordPopupDialog(
+            entry: entry,
+            surfaceText: surfaceText,
+            book: book,
+            settings: settings,
+            arabicFontFamily: ref.read(arabicFontFamilyProvider),
+            onShareWord: () {
+              Navigator.of(ctx).pop();
+              final quote =
+                  '${entry.headword}${entry.ottomanScript.isNotEmpty ? ' (${entry.ottomanScript})' : ''}: ${entry.definition}';
+              _shareSelectedPassage(
+                book: book,
+                quoteText: quote,
+                arabicText:
+                    entry.ottomanScript.isNotEmpty ? entry.ottomanScript : null,
+                customRef:
+                    'Risale-i Nur Lügati • ${entry.headword} (${book.shortTitle})',
+              );
+            },
+            onOpenFullSearch: (query) {
+              Navigator.of(ctx).pop();
+              _openRisaleLugatSearchSheet(
+                book,
+                settings,
+                initialQuery: query,
+              );
+            },
+          ),
+        );
+      },
+      transitionBuilder: (ctx, anim1, anim2, child) {
+        final curved = CurvedAnimation(
+          parent: anim1,
+          curve: Curves.easeOutBack,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: anim1,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+  }
+
+  /// 54.039 Maddelik Tam Kapsamlı Risale-i Nur Lügati Arama ve Kelime Vurgusu Çekmecesi
+  void _openRisaleLugatSearchSheet(
+    IslamicShelfBook book,
+    IslamicBookReaderSettings settings, {
+    String initialQuery = '',
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _RisaleLugatSearchBottomSheet(
+        book: book,
+        settings: settings,
+        initialQuery: initialQuery,
+        arabicFontFamily: ref.read(arabicFontFamilyProvider),
+        onSelectEntry: (entry) {
+          Navigator.of(ctx).pop();
+          _showRisaleLugatPopup(
+            entry: entry,
+            surfaceText: entry.headword,
+            book: book,
+            settings: settings,
+          );
+        },
+        onOpenLugatBookOnShelf: () {
+          Navigator.of(ctx).pop();
+          if (book.id == 'book_rn_lugat') return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  const IslamicBookReaderScreen(bookId: 'book_rn_lugat'),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Widget _buildPageHighlightsFooter({
@@ -1312,17 +1795,13 @@ class _IslamicBookReaderScreenState
               ],
             ),
             const SizedBox(height: 10),
-            Text.rich(
-              _buildTextSpanWithHighlights(
-                text: tefsirBody.isNotEmpty
-                    ? tefsirBody
-                    : 'Bu âyet-i kerîmenin tefsiri bir önceki âyet grubu bütünlüğü içinde beyan edilmiştir.',
-                baseStyle: _resolveTurkishFont(settings),
-                pageHighlights: pageHighlights,
-                isDark: settings.isDarkTheme,
-              ),
-              textAlign:
-                  settings.justifyText ? TextAlign.justify : TextAlign.left,
+            _buildRichBodyWithArabicBlocks(
+              text: tefsirBody.isNotEmpty
+                  ? tefsirBody
+                  : 'Bu âyet-i kerîmenin tefsiri bir önceki âyet grubu bütünlüğü içinde beyan edilmiştir.',
+              settings: settings,
+              pageHighlights: pageHighlights,
+              book: book,
             ),
 
             _buildPageHighlightsFooter(
@@ -1484,16 +1963,12 @@ class _IslamicBookReaderScreenState
               const SizedBox(height: 16),
             ],
 
-            // Türkçe Tam Metin (Seçilebilir ve Vurgulanabilir)
-            Text.rich(
-              _buildTextSpanWithHighlights(
-                text: page.turkishText,
-                baseStyle: _resolveTurkishFont(settings),
-                pageHighlights: pageHighlights,
-                isDark: settings.isDarkTheme,
-              ),
-              textAlign:
-                  settings.justifyText ? TextAlign.justify : TextAlign.left,
+            // Türkçe ve Arapça Karma Tam Metin (Seçilebilir, Vurgulanabilir ve Kuran Hattıyla Render Edilir)
+            _buildRichBodyWithArabicBlocks(
+              text: page.turkishText,
+              settings: settings,
+              pageHighlights: pageHighlights,
+              book: book,
             ),
 
             if (page.reference.isNotEmpty) ...[
@@ -2347,6 +2822,805 @@ class _BookTableOfContentsSheetState
               onTap: () => widget.onSelectPage(ch.startPage),
             );
           },
+        );
+      },
+    );
+  }
+}
+
+/// Kelimeye dokunulduğunda açılan Modern Tahrir Estetiğinde Risale-i Nur Lügati Popup Kartı
+class _RisaleLugatWordPopupDialog extends StatelessWidget {
+  final RisaleLugatEntry entry;
+  final String surfaceText;
+  final IslamicShelfBook book;
+  final IslamicBookReaderSettings settings;
+  final String arabicFontFamily;
+  final VoidCallback onShareWord;
+  final ValueChanged<String> onOpenFullSearch;
+
+  const _RisaleLugatWordPopupDialog({
+    required this.entry,
+    required this.surfaceText,
+    required this.book,
+    required this.settings,
+    required this.arabicFontFamily,
+    required this.onShareWord,
+    required this.onOpenFullSearch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = settings.isDarkTheme;
+    final bgColor = isDark ? const Color(0xFF15201D) : const Color(0xFFFBF3E2);
+    final cardColor = isDark ? const Color(0xFF1E2D29) : const Color(0xFFF5E8CE);
+    final textColor = isDark ? const Color(0xFFF4EFE6) : const Color(0xFF231810);
+    final subColor = textColor.withValues(alpha: 0.68);
+    const goldColor = Color(0xFFD4AF37);
+
+    final bullets = entry.meaningBullets;
+    final risaleQuote = entry.risaleQuote;
+    final cleanSurface = surfaceText.trim();
+    final showSurfaceBadge = cleanSurface.isNotEmpty &&
+        cleanSurface.toLowerCase() != entry.headword.toLowerCase();
+
+    return Material(
+      color: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: 410,
+          maxHeight: 540,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: goldColor.withValues(alpha: 0.55),
+                width: 1.4,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.42),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Üst Klasik Tezhip Başlık Şeridi
+                Container(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 12, 12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDark
+                          ? const [Color(0xFF103327), Color(0xFF1A2622)]
+                          : const [Color(0xFF2C1E14), Color(0xFF422C1D)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(22.5),
+                    ),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: goldColor.withValues(alpha: 0.40),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          color: goldColor.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: goldColor.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.menu_book_rounded,
+                          size: 16,
+                          color: goldColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'RİSALE-İ NUR BÜYÜK LÜGATİ',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.9,
+                                color: goldColor,
+                              ),
+                            ),
+                            Text(
+                              'Osmanlıca – Türkçe Külliyat Sözlüğü',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: const Color(0xFFFDF8EE)
+                                    .withValues(alpha: 0.78),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.close_rounded,
+                          color: Color(0xFFFDF8EE),
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Kelime Başlığı + Osmanlıca Hat Rozeti
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.headword,
+                              style: GoogleFonts.merriweather(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: textColor,
+                              ),
+                            ),
+                            if (showSurfaceBadge) ...[
+                              const SizedBox(height: 5),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 3.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: goldColor.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: goldColor.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Metindeki Lafız: “$cleanSurface”',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? goldColor
+                                        : const Color(0xFF7A4B1E),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (entry.ottomanScript.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cardColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: goldColor.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Text(
+                            entry.ottomanScript,
+                            textDirection: TextDirection.rtl,
+                            style: TextStyle(
+                              fontFamily: arabicFontFamily,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: isDark
+                                  ? goldColor
+                                  : const Color(0xFF5A3514),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                Divider(
+                  height: 1,
+                  indent: 18,
+                  endIndent: 18,
+                  color: goldColor.withValues(alpha: 0.22),
+                ),
+
+                // Lügat Mânâları ve Risale-i Nur İktibası (Kaydırılabilir İçerik)
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ...List.generate(bullets.length, (idx) {
+                          final item = bullets[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: cardColor,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: goldColor.withValues(alpha: 0.22),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (bullets.length > 1) ...[
+                                    Container(
+                                      width: 22,
+                                      height: 22,
+                                      alignment: Alignment.center,
+                                      margin: const EdgeInsets.only(
+                                        right: 10,
+                                        top: 1,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: goldColor.withValues(alpha: 0.2),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color:
+                                              goldColor.withValues(alpha: 0.55),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${idx + 1}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: isDark
+                                              ? goldColor
+                                              : const Color(0xFF6B3F16),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      item,
+                                      style: GoogleFonts.merriweather(
+                                        fontSize: 14.2,
+                                        height: 1.58,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                        if (risaleQuote != null &&
+                            risaleQuote.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.all(13),
+                            decoration: BoxDecoration(
+                              color: goldColor.withValues(
+                                alpha: isDark ? 0.12 : 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: goldColor.withValues(alpha: 0.45),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.format_quote_rounded,
+                                      size: 16,
+                                      color: goldColor,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      'Risale-i Nur’dan İktibas / Misal',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark
+                                            ? goldColor
+                                            : const Color(0xFF6B3F16),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  risaleQuote,
+                                  style: GoogleFonts.merriweather(
+                                    fontSize: 12.8,
+                                    fontStyle: FontStyle.italic,
+                                    height: 1.52,
+                                    color: subColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Alt Aksiyon Çubuğu (Kopyala, Paylaşım Kartı, Lügatte Ara)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                  decoration: BoxDecoration(
+                    color: cardColor.withValues(alpha: 0.75),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(22.5),
+                    ),
+                    border: Border(
+                      top: BorderSide(
+                        color: goldColor.withValues(alpha: 0.22),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Kopyala
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textColor,
+                          side: BorderSide(
+                            color: goldColor.withValues(alpha: 0.42),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 8,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                        ),
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          Clipboard.setData(
+                            ClipboardData(
+                              text:
+                                  '${entry.headword}${entry.ottomanScript.isNotEmpty ? ' (${entry.ottomanScript})' : ''}: ${entry.definition}\n— Risale-i Nur Lügati',
+                            ),
+                          );
+                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '“${entry.headword}” lügat mânâsı panoya kopyalandı.',
+                              ),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 14),
+                        label: const Text(
+                          'Kopyala',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Paylaşım Kartı
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: textColor,
+                          side: BorderSide(
+                            color: goldColor.withValues(alpha: 0.42),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 8,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                        ),
+                        onPressed: onShareWord,
+                        icon: const Icon(Icons.ios_share_rounded, size: 14),
+                        label: const Text(
+                          'Paylaş',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      // Lügatte Ara
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: goldColor,
+                          foregroundColor: const Color(0xFF1F160E),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                        ),
+                        onPressed: () => onOpenFullSearch(entry.headword),
+                        icon: const Icon(Icons.search_rounded, size: 15),
+                        label: const Text(
+                          'Lügatte Ara',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 54.039 Maddelik Risale-i Nur Büyük Lügati Arama ve Kelime Vurgusu Yönetim Çekmecesi
+class _RisaleLugatSearchBottomSheet extends ConsumerStatefulWidget {
+  final IslamicShelfBook book;
+  final IslamicBookReaderSettings settings;
+  final String initialQuery;
+  final String arabicFontFamily;
+  final ValueChanged<RisaleLugatEntry> onSelectEntry;
+  final VoidCallback onOpenLugatBookOnShelf;
+
+  const _RisaleLugatSearchBottomSheet({
+    required this.book,
+    required this.settings,
+    required this.initialQuery,
+    required this.arabicFontFamily,
+    required this.onSelectEntry,
+    required this.onOpenLugatBookOnShelf,
+  });
+
+  @override
+  ConsumerState<_RisaleLugatSearchBottomSheet> createState() =>
+      _RisaleLugatSearchBottomSheetState();
+}
+
+class _RisaleLugatSearchBottomSheetState
+    extends ConsumerState<_RisaleLugatSearchBottomSheet> {
+  late final TextEditingController _searchController;
+  List<RisaleLugatEntry> _results = const <RisaleLugatEntry>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController(text: widget.initialQuery);
+    _runSearch(widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _runSearch(String query) {
+    final found = RisaleLugatService.instance.searchEntries(query, limit: 50);
+    setState(() => _results = found);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final liveSettings = ref.watch(islamicBookReaderSettingsProvider);
+    final isDark = liveSettings.isDarkTheme;
+    final bgColor = liveSettings.backgroundColor;
+    final cardColor = liveSettings.cardColor;
+    final textColor = liveSettings.textColor;
+    final accentColor = liveSettings.accentColor;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.80,
+      minChildSize: 0.50,
+      maxChildSize: 0.94,
+      expand: false,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: textColor.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 14, 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.menu_book_rounded,
+                      color: accentColor,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Risale-i Nur Büyük Lügati',
+                            style: GoogleFonts.merriweather(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                            ),
+                          ),
+                          Text(
+                            '84.141 Osmanlıca – Türkçe Kelime, Terkip ve Külliyat Istılahı',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: textColor.withValues(alpha: 0.65),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (widget.book.id != 'book_rn_lugat')
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: accentColor,
+                          backgroundColor: accentColor.withValues(alpha: 0.12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: widget.onOpenLugatBookOnShelf,
+                        icon: const Icon(Icons.auto_stories_rounded, size: 15),
+                        label: const Text(
+                          'Kitabı Aç',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+
+              // Sayfa İçi Kelime Vurgusu Hızlı Anahtarı
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: accentColor.withValues(alpha: 0.24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.touch_app_rounded,
+                        size: 17,
+                        color: accentColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Okurken lügatteki kelimeleri belirt ve dokununca mânâ göster',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: liveSettings.showLugatWords,
+                        activeThumbColor: accentColor,
+                        onChanged: (v) {
+                          ref
+                              .read(islamicBookReaderSettingsProvider.notifier)
+                              .updateSettings(
+                                liveSettings.copyWith(showLugatWords: v),
+                              );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Arama Çubuğu
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _runSearch,
+                  style: TextStyle(color: textColor, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText:
+                        'Kelime, terkip veya mânâ ara (örn: ubudiyet, tevekkül, ehadiyet)…',
+                    hintStyle: TextStyle(
+                      color: textColor.withValues(alpha: 0.45),
+                      fontSize: 12.5,
+                    ),
+                    prefixIcon: Icon(Icons.search_rounded, color: accentColor),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            onPressed: () {
+                              _searchController.clear();
+                              _runSearch('');
+                            },
+                            icon: Icon(
+                              Icons.clear_rounded,
+                              size: 18,
+                              color: textColor.withValues(alpha: 0.6),
+                            ),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: cardColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: accentColor.withValues(alpha: 0.30),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: accentColor.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: accentColor, width: 1.4),
+                    ),
+                  ),
+                ),
+              ),
+
+              Expanded(
+                child: _results.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Aranan lafza uygun lügat maddesi bulunamadı.',
+                          style: TextStyle(
+                            color: textColor.withValues(alpha: 0.65),
+                            fontSize: 13,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                        itemCount: _results.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = _results[index];
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(14),
+                            onTap: () => widget.onSelectEntry(item),
+                            child: Container(
+                              padding: const EdgeInsets.all(13),
+                              decoration: BoxDecoration(
+                                color: cardColor,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: accentColor.withValues(alpha: 0.22),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          item.headword,
+                                          style: GoogleFonts.merriweather(
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: isDark
+                                                ? const Color(0xFFD4AF37)
+                                                : accentColor,
+                                          ),
+                                        ),
+                                      ),
+                                      if (item.ottomanScript.isNotEmpty)
+                                        Text(
+                                          item.ottomanScript,
+                                          textDirection: TextDirection.rtl,
+                                          style: TextStyle(
+                                            fontFamily: widget.arabicFontFamily,
+                                            fontSize: 19,
+                                            fontWeight: FontWeight.bold,
+                                            color: accentColor,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    item.definition,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.merriweather(
+                                      fontSize: 12.8,
+                                      height: 1.48,
+                                      color: textColor.withValues(alpha: 0.88),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         );
       },
     );

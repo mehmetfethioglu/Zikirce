@@ -20,6 +20,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
   final String? arabicText;
   final String? virtue;
   final String? customSource;
+  final SpiritualQuote? initialQuote;
   final String category;
   final int currentCount;
   final int targetCount;
@@ -34,6 +35,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     this.arabicText,
     this.virtue,
     this.customSource,
+    this.initialQuote,
     required this.category,
     required this.currentCount,
     required this.targetCount,
@@ -49,6 +51,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
     String? arabicText,
     String? virtue,
     String? customSource,
+    SpiritualQuote? initialQuote,
     String category = 'Günlük Zikir',
     int currentCount = 0,
     int targetCount = 33,
@@ -68,6 +71,7 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
         arabicText: arabicText,
         virtue: virtue,
         customSource: customSource,
+        initialQuote: initialQuote,
         category: category,
         currentCount: currentCount,
         targetCount: targetCount,
@@ -80,15 +84,18 @@ class ZikirSharePreviewModal extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<ZikirSharePreviewModal> createState() => _ZikirSharePreviewModalState();
+  ConsumerState<ZikirSharePreviewModal> createState() =>
+      _ZikirSharePreviewModalState();
 }
 
-class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal> {
+class _ZikirSharePreviewModalState
+    extends ConsumerState<ZikirSharePreviewModal> {
   final GlobalKey _cardRepaintKey = GlobalKey();
 
   ZikirShareCardFormat _selectedFormat = ZikirShareCardFormat.story9x16;
   late ZikirShareCardTheme _selectedTheme;
-  ZikirShareTypographyStyle _selectedTypography = ZikirShareTypographyStyle.modernOutfit;
+  ZikirShareTypographyStyle _selectedTypography =
+      ZikirShareTypographyStyle.modernOutfit;
   ZikirSharePatternStyle _selectedPattern = ZikirSharePatternStyle.mihrapSufi;
 
   late String _activeZikirName;
@@ -96,6 +103,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   String? _activeArabicText;
   String? _activeVirtue;
   String? _activeSource;
+  SpiritualQuote? _explicitQuote;
   int _quoteIndex = 0;
 
   late bool _showCounterStats;
@@ -112,25 +120,63 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     _activeArabicText = widget.arabicText;
     _activeVirtue = widget.virtue;
     _activeSource = widget.customSource;
+    _explicitQuote = widget.initialQuote;
     _showCounterStats = widget.initialShowCounterStats;
     _selectedTheme = widget.initialTheme ??
         ZikirShareThemeData.themeForGoalOrTask(
           goalType: widget.zikirName,
           category: widget.category,
         );
+
+    final hasExplicitVerseFromReader =
+        widget.customSource != null && widget.customSource!.trim().isNotEmpty;
+    if (!hasExplicitVerseFromReader && widget.initialQuote == null) {
+      final topicQuotes = ShareCardDataHelper.getQuotesForTopic(
+        '$_activeZikirName $_activeCategory',
+        rawVirtue: _activeVirtue,
+        customSource: _activeSource,
+        customArabic: _activeArabicText,
+      );
+      _quoteIndex = ShareCardDataHelper.nextDynamicQuoteIndex(
+        '$_activeZikirName $_activeCategory',
+        listLength: topicQuotes.length,
+      );
+    }
+
     final autoDay = IslamicSpecialDaysService.detectSpecialDay();
     _selectedGreeting = autoDay?.greetingTr;
   }
 
+  SpiritualQuote _resolveActiveQuote() {
+    return ShareCardDataHelper.resolveQuote(
+      zikirName: _activeZikirName,
+      category: _activeCategory,
+      rawVirtue: _activeVirtue,
+      customSource: _activeSource,
+      customArabic: _activeArabicText,
+      explicitQuote: _explicitQuote,
+      quoteIndex: _quoteIndex,
+    );
+  }
+
   void _selectGoalPreset(ShareGoalPreset preset, bool isTurkish) {
     HapticFeedback.selectionClick();
+    final nextName = isTurkish ? preset.badgeTitleTr : preset.badgeTitleEn;
+    final nextCategory = isTurkish ? preset.labelTr : preset.labelEn;
+    final topicQuotes =
+        ShareCardDataHelper.getQuotesForTopic('$nextName $nextCategory');
     setState(() {
-      _activeZikirName = isTurkish ? preset.badgeTitleTr : preset.badgeTitleEn;
-      _activeCategory = isTurkish ? preset.labelTr : preset.labelEn;
+      _activeZikirName = nextName;
+      _activeCategory = nextCategory;
       _activeArabicText = null;
       _activeVirtue = null;
       _activeSource = null;
-      _quoteIndex = 0;
+      _explicitQuote = null;
+      _quoteIndex = ShareCardDataHelper.nextDynamicQuoteIndex(
+        '$nextName $nextCategory',
+        listLength: topicQuotes.length,
+        avoidIndex: _quoteIndex,
+      );
       _selectedTheme = ZikirShareThemeData.themeForGoalOrTask(
         goalType: preset.id,
         category: preset.topic,
@@ -138,15 +184,53 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     });
   }
 
-  void _cycleNextQuote() {
+  void _randomizeQuote() {
     HapticFeedback.lightImpact();
-    final topicQuotes = ShareCardDataHelper.getQuotesForTopic('$_activeZikirName $_activeCategory');
+    final current = _resolveActiveQuote();
+    final topicQuotes = ShareCardDataHelper.getQuotesForTopic(
+      '$_activeZikirName $_activeCategory',
+      rawVirtue: _activeVirtue,
+      customSource: _activeSource,
+      customArabic: _activeArabicText,
+    );
     setState(() {
-      _activeVirtue = null;
-      _activeArabicText = null;
-      _activeSource = null;
-      _quoteIndex = (_quoteIndex + 1) % topicQuotes.length;
+      _explicitQuote = null;
+      _quoteIndex = ShareCardDataHelper.nextDynamicQuoteIndex(
+        '$_activeZikirName $_activeCategory',
+        listLength: topicQuotes.length,
+        avoidIndex: _quoteIndex,
+      );
+      final candidate = _resolveActiveQuote();
+      if (candidate == current && topicQuotes.length > 1) {
+        _quoteIndex = (_quoteIndex + 1) % topicQuotes.length;
+      }
     });
+  }
+
+  Future<void> _openQuotePicker() async {
+    HapticFeedback.selectionClick();
+    final current = _resolveActiveQuote();
+    final topicKey = ShareCardDataHelper.resolveTopicKey(
+      zikirName: _activeZikirName,
+      category: _activeCategory,
+    );
+    final extraQuotes = ShareCardDataHelper.getQuotesForTopic(
+      '$_activeZikirName $_activeCategory',
+      rawVirtue: _activeVirtue,
+      customSource: _activeSource,
+      customArabic: _activeArabicText,
+    );
+    final picked = await SpiritualQuotePickerSheet.show(
+      context: context,
+      currentQuote: current,
+      initialTopic: topicKey,
+      extraQuotes: extraQuotes,
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _explicitQuote = picked;
+      });
+    }
   }
 
   Future<void> _shareAsImage() async {
@@ -159,13 +243,15 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
     try {
       await Future.delayed(const Duration(milliseconds: 60));
 
-      final boundary = _cardRepaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _cardRepaintKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) {
         throw Exception('RenderRepaintBoundary bulunamadı.');
       }
 
       final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
         throw Exception('Görsel baytları oluşturulamadı.');
@@ -173,22 +259,17 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
 
       final pngBytes = byteData.buffer.asUint8List();
       final tempDir = await getTemporaryDirectory();
-      final fileName = 'zikirce_kart_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'zikirce_kart_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File('${tempDir.path}/$fileName');
       await file.writeAsBytes(pngBytes);
 
-      final resolvedQuote = ShareCardDataHelper.resolveQuote(
-        zikirName: _activeZikirName,
-        category: _activeCategory,
-        rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
-        customSource: (_quoteIndex == 0) ? _activeSource : null,
-        customArabic: (_quoteIndex == 0) ? _activeArabicText : null,
-        quoteIndex: _quoteIndex,
-      );
+      final resolvedQuote = _resolveActiveQuote();
 
-      final greetingPart = (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
-          ? '✨ ${_selectedGreeting!}\n'
-          : '';
+      final greetingPart =
+          (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
+              ? '✨ ${_selectedGreeting!}\n'
+              : '';
 
       final caption = l10n.isTurkish
           ? '$greetingPart“${resolvedQuote.text}” (${resolvedQuote.source})\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
@@ -222,21 +303,16 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   Future<void> _shareAsText() async {
     HapticFeedback.lightImpact();
     final l10n = context.l10n;
-    final resolvedQuote = ShareCardDataHelper.resolveQuote(
-      zikirName: _activeZikirName,
-      category: _activeCategory,
-      rawVirtue: (_quoteIndex == 0) ? _activeVirtue : null,
-      customSource: (_quoteIndex == 0) ? _activeSource : null,
-      customArabic: (_quoteIndex == 0) ? _activeArabicText : null,
-      quoteIndex: _quoteIndex,
-    );
+    final resolvedQuote = _resolveActiveQuote();
 
-    final greetingPart = (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
-        ? '✨ ${_selectedGreeting!}\n\n'
-        : '';
-    final arabicPart = (resolvedQuote.arabic != null && resolvedQuote.arabic!.isNotEmpty)
-        ? '${resolvedQuote.arabic!}\n\n'
-        : '';
+    final greetingPart =
+        (_selectedGreeting != null && _selectedGreeting!.isNotEmpty)
+            ? '✨ ${_selectedGreeting!}\n\n'
+            : '';
+    final arabicPart =
+        (resolvedQuote.arabic != null && resolvedQuote.arabic!.isNotEmpty)
+            ? '${resolvedQuote.arabic!}\n\n'
+            : '';
 
     final shareText = l10n.isTurkish
         ? '$greetingPart$arabicPart“${resolvedQuote.text}”\n📖 (${resolvedQuote.source})\n\n— Zikirce İslâmî Yaşam ve Zikir Asistanı'
@@ -265,7 +341,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isTurkish = context.l10n.isTurkish;
-    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.40;
+    final maxPreviewHeight = MediaQuery.of(context).size.height * 0.39;
 
     final activePreset = ShareCardDataHelper.resolvePreset(
       zikirName: _activeZikirName,
@@ -275,13 +351,15 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
       userSettingsProvider.select((s) => s.isHafizlikRepeatGoalEnabled),
     );
     final visibleGoalPresets = ShareCardDataHelper.goalPresets
-        .where((p) => p.id != 'ezber' || isEzberGoalEnabled || activePreset.id == 'ezber')
+        .where((p) =>
+            p.id != 'ezber' || isEzberGoalEnabled || activePreset.id == 'ezber')
         .toList();
-    final topicQuotes = ShareCardDataHelper.getQuotesForTopic('$_activeZikirName $_activeCategory');
+    final activeQuote = _resolveActiveQuote();
     final activeNoteList = isTurkish
         ? ShareCardDataHelper.spiritualNotesTr
         : ShareCardDataHelper.spiritualNotesEn;
-    final activeSpiritualNote = activeNoteList[_selectedNoteIndex.clamp(0, activeNoteList.length - 1)];
+    final activeSpiritualNote =
+        activeNoteList[_selectedNoteIndex.clamp(0, activeNoteList.length - 1)];
 
     return Container(
       decoration: BoxDecoration(
@@ -313,16 +391,17 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
               ),
               const SizedBox(height: 10),
 
-              // Title Row + Quote Cycler Button
+              // Title Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.share_rounded, color: AppColors.gold500, size: 22),
+                      const Icon(Icons.share_rounded,
+                          color: AppColors.gold500, size: 22),
                       const SizedBox(width: 8),
                       Text(
-                        'Zikir Kartı Paylaş',
+                        'Manevi Paylaşım Kartı',
                         style: GoogleFonts.outfit(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -331,51 +410,15 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                       ),
                     ],
                   ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Quote Switcher Pill (YouVersion / Ayah Style)
-                      InkWell(
-                        onTap: _cycleNextQuote,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppColors.gold500.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: AppColors.gold500.withValues(alpha: 0.5),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.autorenew_rounded, size: 14, color: AppColors.gold500),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Ayet/Hadis (${(_quoteIndex % topicQuotes.length) + 1}/${topicQuotes.length})',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark ? AppColors.gold400 : const Color(0xFF92400E),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                        color: isDark ? Colors.white54 : Colors.black54,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ],
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: isDark ? Colors.white54 : Colors.black54,
+                    visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
               // 1. GOAL / TOPIC PRESET BAR (Her Hedef İçin Özel Konsept Seçici)
               SingleChildScrollView(
@@ -390,11 +433,14 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                         onTap: () => _selectGoalPreset(preset, isTurkish),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 11, vertical: 6),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.gold500.withValues(alpha: 0.22)
-                                : (isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7)),
+                                : (isDark
+                                    ? const Color(0xFF1A232E)
+                                    : const Color(0xFFF2F4F7)),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: isSelected
@@ -406,16 +452,23 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(preset.emoji, style: const TextStyle(fontSize: 12)),
+                              Text(preset.emoji,
+                                  style: const TextStyle(fontSize: 12)),
                               const SizedBox(width: 5),
                               Text(
                                 isTurkish ? preset.labelTr : preset.labelEn,
                                 style: TextStyle(
                                   fontSize: 11.5,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
                                   color: isSelected
-                                      ? (isDark ? AppColors.gold400 : const Color(0xFF92400E))
-                                      : (isDark ? Colors.white70 : Colors.black87),
+                                      ? (isDark
+                                          ? AppColors.gold400
+                                          : const Color(0xFF92400E))
+                                      : (isDark
+                                          ? Colors.white70
+                                          : Colors.black87),
                                 ),
                               ),
                             ],
@@ -428,11 +481,24 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
               ),
               const SizedBox(height: 8),
 
+              // 1b. AYET / HADİS RASTGELE & SEÇ KONTROL ÇUBUĞU
+              ShareQuoteControlBar(
+                activeQuote: activeQuote,
+                onRandomize: _randomizeQuote,
+                onOpenPicker: _openQuotePicker,
+                isDark: isDark,
+                compact: true,
+              ),
+              const SizedBox(height: 8),
+
               // 2. Controls Bar: Format Selector, Arabic Toggle & Stats Switch
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7),
+                  color: isDark
+                      ? const Color(0xFF1A232E)
+                      : const Color(0xFFF2F4F7),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -444,10 +510,12 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                         _buildFormatChip(
                           title: 'Hikâye (9:16)',
                           icon: Icons.stay_current_portrait_rounded,
-                          isSelected: _selectedFormat == ZikirShareCardFormat.story9x16,
+                          isSelected:
+                              _selectedFormat == ZikirShareCardFormat.story9x16,
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            setState(() => _selectedFormat = ZikirShareCardFormat.story9x16);
+                            setState(() => _selectedFormat =
+                                ZikirShareCardFormat.story9x16);
                           },
                           isDark: isDark,
                         ),
@@ -455,10 +523,12 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                         _buildFormatChip(
                           title: 'Kare (1:1)',
                           icon: Icons.crop_square_rounded,
-                          isSelected: _selectedFormat == ZikirShareCardFormat.square1x1,
+                          isSelected:
+                              _selectedFormat == ZikirShareCardFormat.square1x1,
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            setState(() => _selectedFormat = ZikirShareCardFormat.square1x1);
+                            setState(() => _selectedFormat =
+                                ZikirShareCardFormat.square1x1);
                           },
                           isDark: isDark,
                         ),
@@ -476,12 +546,19 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                           },
                           borderRadius: BorderRadius.circular(10),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 4),
                             child: Row(
                               children: [
                                 Icon(
-                                  _showArabicText ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                                  color: _showArabicText ? AppColors.gold500 : (isDark ? Colors.white38 : Colors.black38),
+                                  _showArabicText
+                                      ? Icons.check_box_rounded
+                                      : Icons.check_box_outline_blank_rounded,
+                                  color: _showArabicText
+                                      ? AppColors.gold500
+                                      : (isDark
+                                          ? Colors.white38
+                                          : Colors.black38),
                                   size: 18,
                                 ),
                                 const SizedBox(width: 3),
@@ -490,7 +567,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.white70 : Colors.black87,
+                                    color:
+                                        isDark ? Colors.white70 : Colors.black87,
                                   ),
                                 ),
                               ],
@@ -502,16 +580,24 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                         InkWell(
                           onTap: () {
                             HapticFeedback.selectionClick();
-                            setState(() => _showCounterStats = !_showCounterStats);
+                            setState(
+                                () => _showCounterStats = !_showCounterStats);
                           },
                           borderRadius: BorderRadius.circular(10),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 4),
                             child: Row(
                               children: [
                                 Icon(
-                                  _showCounterStats ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                                  color: _showCounterStats ? AppColors.gold500 : (isDark ? Colors.white38 : Colors.black38),
+                                  _showCounterStats
+                                      ? Icons.check_box_rounded
+                                      : Icons.check_box_outline_blank_rounded,
+                                  color: _showCounterStats
+                                      ? AppColors.gold500
+                                      : (isDark
+                                          ? Colors.white38
+                                          : Colors.black38),
                                   size: 18,
                                 ),
                                 const SizedBox(width: 3),
@@ -520,7 +606,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
-                                    color: isDark ? Colors.white70 : Colors.black87,
+                                    color:
+                                        isDark ? Colors.white70 : Colors.black87,
                                   ),
                                 ),
                               ],
@@ -533,7 +620,7 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 ),
               ),
 
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
               // 3. Interactive Live Card Preview (Framed inside RepaintBoundary)
               ConstrainedBox(
@@ -544,9 +631,10 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                   key: _cardRepaintKey,
                   child: ZikirShareCardWidget(
                     zikirName: _activeZikirName,
-                    arabicText: _activeArabicText,
-                    virtue: _activeVirtue,
-                    source: (_quoteIndex == 0) ? _activeSource : null,
+                    arabicText: activeQuote.arabic,
+                    virtue: activeQuote.text,
+                    source: activeQuote.source,
+                    customQuote: activeQuote,
                     specialDayGreeting: _selectedGreeting,
                     spiritualNote: activeSpiritualNote,
                     category: _activeCategory,
@@ -576,22 +664,28 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                     _buildSmallStudioChip(
                       label: 'Modern Yazı',
                       icon: Icons.text_format_rounded,
-                      isSelected: _selectedTypography == ZikirShareTypographyStyle.modernOutfit,
-                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.modernOutfit),
+                      isSelected: _selectedTypography ==
+                          ZikirShareTypographyStyle.modernOutfit,
+                      onTap: () => setState(() => _selectedTypography =
+                          ZikirShareTypographyStyle.modernOutfit),
                       isDark: isDark,
                     ),
                     _buildSmallStudioChip(
                       label: 'Klasik Kitap',
                       icon: Icons.menu_book_rounded,
-                      isSelected: _selectedTypography == ZikirShareTypographyStyle.classicAmiri,
-                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.classicAmiri),
+                      isSelected: _selectedTypography ==
+                          ZikirShareTypographyStyle.classicAmiri,
+                      onTap: () => setState(() => _selectedTypography =
+                          ZikirShareTypographyStyle.classicAmiri),
                       isDark: isDark,
                     ),
                     _buildSmallStudioChip(
                       label: 'Kitabe',
                       icon: Icons.account_balance_rounded,
-                      isSelected: _selectedTypography == ZikirShareTypographyStyle.royalCinzel,
-                      onTap: () => setState(() => _selectedTypography = ZikirShareTypographyStyle.royalCinzel),
+                      isSelected: _selectedTypography ==
+                          ZikirShareTypographyStyle.royalCinzel,
+                      onTap: () => setState(() => _selectedTypography =
+                          ZikirShareTypographyStyle.royalCinzel),
                       isDark: isDark,
                     ),
                     Container(
@@ -603,22 +697,28 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                     _buildSmallStudioChip(
                       label: 'Mihrap & Sufi',
                       icon: Icons.mosque_rounded,
-                      isSelected: _selectedPattern == ZikirSharePatternStyle.mihrapSufi,
-                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.mihrapSufi),
+                      isSelected: _selectedPattern ==
+                          ZikirSharePatternStyle.mihrapSufi,
+                      onTap: () => setState(() =>
+                          _selectedPattern = ZikirSharePatternStyle.mihrapSufi),
                       isDark: isDark,
                     ),
                     _buildSmallStudioChip(
                       label: 'Selçuklu',
                       icon: Icons.star_border_purple500_rounded,
-                      isSelected: _selectedPattern == ZikirSharePatternStyle.seljukStar,
-                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.seljukStar),
+                      isSelected: _selectedPattern ==
+                          ZikirSharePatternStyle.seljukStar,
+                      onTap: () => setState(() =>
+                          _selectedPattern = ZikirSharePatternStyle.seljukStar),
                       isDark: isDark,
                     ),
                     _buildSmallStudioChip(
                       label: 'Yalın Nur',
                       icon: Icons.blur_on_rounded,
-                      isSelected: _selectedPattern == ZikirSharePatternStyle.minimalGlow,
-                      onTap: () => setState(() => _selectedPattern = ZikirSharePatternStyle.minimalGlow),
+                      isSelected: _selectedPattern ==
+                          ZikirSharePatternStyle.minimalGlow,
+                      onTap: () => setState(() => _selectedPattern =
+                          ZikirSharePatternStyle.minimalGlow),
                       isDark: isDark,
                     ),
                   ],
@@ -633,7 +733,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                 physics: const BouncingScrollPhysics(),
                 child: Row(
                   children: [
-                    ...IslamicSpecialDaysService.presetGreetings(isTurkish: isTurkish).map((preset) {
+                    ...IslamicSpecialDaysService.presetGreetings(
+                            isTurkish: isTurkish)
+                        .map((preset) {
                       final isSelected = _selectedGreeting == preset.greeting;
                       return Padding(
                         padding: const EdgeInsets.only(right: 6),
@@ -642,14 +744,18 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                             preset.label,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
                             ),
                           ),
                           selected: isSelected,
-                          selectedColor: AppColors.gold500.withValues(alpha: 0.25),
+                          selectedColor:
+                              AppColors.gold500.withValues(alpha: 0.25),
                           onSelected: (_) {
                             HapticFeedback.selectionClick();
-                            setState(() => _selectedGreeting = preset.greeting);
+                            setState(
+                                () => _selectedGreeting = preset.greeting);
                           },
                           visualDensity: VisualDensity.compact,
                         ),
@@ -663,7 +769,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                             : '🤲 Dua Notu ($_selectedNoteIndex/${activeNoteList.length - 1})',
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: _selectedNoteIndex > 0 ? FontWeight.bold : FontWeight.w500,
+                          fontWeight: _selectedNoteIndex > 0
+                              ? FontWeight.bold
+                              : FontWeight.w500,
                         ),
                       ),
                       selected: _selectedNoteIndex > 0,
@@ -671,7 +779,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                       onSelected: (_) {
                         HapticFeedback.selectionClick();
                         setState(() {
-                          _selectedNoteIndex = (_selectedNoteIndex + 1) % activeNoteList.length;
+                          _selectedNoteIndex =
+                              (_selectedNoteIndex + 1) % activeNoteList.length;
                         });
                       },
                       visualDensity: VisualDensity.compact,
@@ -703,7 +812,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                     physics: const BouncingScrollPhysics(),
                     child: Row(
                       children: ZikirShareCardTheme.values.map((themeOption) {
-                        final themeData = ZikirShareThemeData.fromEnum(themeOption);
+                        final themeData =
+                            ZikirShareThemeData.fromEnum(themeOption);
                         final isSelected = _selectedTheme == themeOption;
 
                         return GestureDetector(
@@ -714,7 +824,8 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 7),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
@@ -726,13 +837,16 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                               ),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isSelected ? themeData.accentColor : Colors.white12,
+                                color: isSelected
+                                    ? themeData.accentColor
+                                    : Colors.white12,
                                 width: isSelected ? 2.5 : 1,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: themeData.accentColor.withValues(alpha: 0.35),
+                                        color: themeData.accentColor
+                                            .withValues(alpha: 0.35),
                                         blurRadius: 10,
                                         spreadRadius: 1,
                                       ),
@@ -743,14 +857,17 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (isSelected) ...[
-                                  Icon(Icons.check_circle_rounded, size: 14, color: themeData.accentColor),
+                                  Icon(Icons.check_circle_rounded,
+                                      size: 14, color: themeData.accentColor),
                                   const SizedBox(width: 5),
                                 ],
                                 Text(
                                   themeData.nameTr,
                                   style: TextStyle(
                                     fontSize: 11.5,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    fontWeight: isSelected
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
                                     color: Colors.white,
                                   ),
                                 ),
@@ -853,7 +970,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
           decoration: BoxDecoration(
             color: isSelected
                 ? AppColors.gold500.withValues(alpha: 0.2)
-                : (isDark ? const Color(0xFF1A232E) : const Color(0xFFF2F4F7)),
+                : (isDark
+                    ? const Color(0xFF1A232E)
+                    : const Color(0xFFF2F4F7)),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected ? AppColors.gold500 : Colors.transparent,
@@ -865,7 +984,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
               Icon(
                 icon,
                 size: 13,
-                color: isSelected ? AppColors.gold500 : (isDark ? Colors.white54 : Colors.black54),
+                color: isSelected
+                    ? AppColors.gold500
+                    : (isDark ? Colors.white54 : Colors.black54),
               ),
               const SizedBox(width: 4),
               Text(
@@ -903,7 +1024,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
               : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.gold500.withValues(alpha: 0.6) : Colors.transparent,
+            color: isSelected
+                ? AppColors.gold500.withValues(alpha: 0.6)
+                : Colors.transparent,
             width: 1,
           ),
           boxShadow: isSelected
@@ -921,7 +1044,9 @@ class _ZikirSharePreviewModalState extends ConsumerState<ZikirSharePreviewModal>
             Icon(
               icon,
               size: 14,
-              color: isSelected ? AppColors.gold500 : (isDark ? Colors.white54 : Colors.black54),
+              color: isSelected
+                  ? AppColors.gold500
+                  : (isDark ? Colors.white54 : Colors.black54),
             ),
             const SizedBox(width: 4),
             Text(

@@ -1,7 +1,7 @@
 import WidgetKit
 import SwiftUI
 
-// MARK: - Shared Timeline Providers for Spiritual, Kaza & Streak Widgets
+// MARK: - Shared Timeline Providers for Spiritual, Kaza, Streak & Kulliyat Widgets
 struct StreakTimelineProvider: TimelineProvider {
     func placeholder(in context: Context) -> StreakEntry {
         StreakDataHelper.loadEntry()
@@ -40,6 +40,22 @@ struct KazaTimelineProvider: TimelineProvider {
             matchingPolicy: .nextTime
         ) ?? Date().addingTimeInterval(3600)
         completion(Timeline(entries: [entry], policy: .after(nextMidnight)))
+    }
+}
+
+struct KulliyatTimelineProvider: TimelineProvider {
+    func placeholder(in context: Context) -> KulliyatEntry {
+        KulliyatDataHelper.loadEntry()
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (KulliyatEntry) -> Void) {
+        completion(KulliyatDataHelper.loadEntry())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<KulliyatEntry>) -> Void) {
+        let entry = KulliyatDataHelper.loadEntry()
+        let nextRefresh = Date().addingTimeInterval(1800)
+        completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
     }
 }
 
@@ -308,6 +324,55 @@ struct StreakAccessoryInlineView: View {
 
     var body: some View {
         Text("🔥 \(entry.streakCount) Gün Seri (\(entry.todayCount)/\(entry.dailyGoal))")
+    }
+}
+
+@available(iOS 16.0, *)
+struct KulliyatAccessoryCircularView: View {
+    var entry: KulliyatEntry
+
+    var body: some View {
+        Gauge(value: min(1.0, max(0.0, entry.progress)), in: 0...1) {
+            Image(systemName: "book.closed.fill")
+        } currentValueLabel: {
+            Text("%\(entry.lastBookPercent)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+        }
+        .gaugeStyle(.accessoryCircular)
+    }
+}
+
+@available(iOS 16.0, *)
+struct KulliyatAccessoryRectangularView: View {
+    var entry: KulliyatEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Text("📚 Külliyat")
+                    .font(.system(size: 10, weight: .bold))
+                Spacer()
+                Text("%\(entry.lastBookPercent)")
+                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+            }
+            Text(entry.lastBookTitle)
+                .font(.system(size: 11, weight: .bold, design: .serif))
+                .lineLimit(1)
+            ProgressView(value: min(1.0, max(0.0, entry.progress)))
+            Text("\(entry.lastBookReference) • %\(entry.lastBookPercent)")
+                .font(.system(size: 9, weight: .medium))
+                .opacity(0.85)
+                .lineLimit(1)
+        }
+    }
+}
+
+@available(iOS 16.0, *)
+struct KulliyatAccessoryInlineView: View {
+    var entry: KulliyatEntry
+
+    var body: some View {
+        Text("📚 \(entry.lastBookTitle) (%\(entry.lastBookPercent) • \(entry.lastBookReference))")
     }
 }
 #endif
@@ -839,6 +904,365 @@ struct StreakWidget: Widget {
         }
         .configurationDisplayName("Zikir Zinciri (Seri)")
         .description("Haftalık zikir zinciri ve kesintisiz seri takibi.")
+        .supportedFamilies(supportedFamiliesList)
+        .contentMarginsDisabledIfAvailable()
+    }
+}
+
+// MARK: - 14. KulliyatWidget (Tahrir Classical Bookshelf & Reading Progress + Lock Screen Support)
+struct KulliyatWidgetEntryView: View {
+    var entry: KulliyatEntry
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.widgetFamily) var family
+
+    private var deepLinkURL: URL? {
+        let encodedId = entry.lastBookId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? entry.lastBookId
+        return URL(string: "zikirce://kulliyat?bookId=\(encodedId)&page=\(entry.lastBookPage)")
+    }
+
+    var body: some View {
+        Group {
+            if #available(iOS 16.0, *) {
+                switch family {
+                case .accessoryCircular:
+                    KulliyatAccessoryCircularView(entry: entry)
+                        .widgetBackground(Color.clear)
+                case .accessoryRectangular:
+                    KulliyatAccessoryRectangularView(entry: entry)
+                        .widgetBackground(Color.clear)
+                case .accessoryInline:
+                    KulliyatAccessoryInlineView(entry: entry)
+                        .widgetBackground(Color.clear)
+                case .systemSmall:
+                    smallContent
+                default:
+                    mediumContent
+                }
+            } else {
+                switch family {
+                case .systemSmall:
+                    smallContent
+                default:
+                    mediumContent
+                }
+            }
+        }
+        .widgetURL(deepLinkURL)
+    }
+
+    @ViewBuilder
+    private var smallContent: some View {
+        let cover = BookCoverPalette.bookPalette(for: entry.lastBookPaletteIndex)
+        let creamText = Color(hex: 0xFDF8EE)
+
+        ZStack {
+            LinearGradient(
+                colors: [cover.primary, cover.secondary],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(cover.gold.opacity(0.38), lineWidth: 1)
+                .padding(6)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 4) {
+                    Image(systemName: "book.closed.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(cover.gold)
+                    Text(entry.lastBookCategory.uppercased(with: Locale(identifier: "tr_TR")))
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundColor(cover.gold)
+                        .lineLimit(1)
+                    Spacer()
+                }
+
+                Spacer(minLength: 2)
+
+                Text(entry.lastBookTitle)
+                    .font(.system(size: 14, weight: .bold, design: .serif))
+                    .foregroundColor(creamText)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+
+                Text(entry.lastBookAuthor)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundColor(creamText.opacity(0.76))
+                    .lineLimit(1)
+
+                Spacer(minLength: 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(entry.lastBookReference)
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(creamText.opacity(0.9))
+                            .lineLimit(1)
+                        Spacer()
+                        Text("%\(entry.lastBookPercent)")
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundColor(cover.gold)
+                    }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.black.opacity(0.35))
+                                .frame(height: 5)
+                            Capsule()
+                                .fill(cover.gold)
+                                .frame(
+                                    width: max(6, geo.size.width * CGFloat(min(1.0, max(0.03, entry.progress)))),
+                                    height: 5
+                                )
+                        }
+                    }
+                    .frame(height: 5)
+                }
+            }
+            .padding(12)
+        }
+        .widgetBackground(cover.secondary)
+    }
+
+    @ViewBuilder
+    private var mediumContent: some View {
+        let p = SpiritualPalette(colorScheme: colorScheme)
+        let activeCover = BookCoverPalette.bookPalette(for: entry.lastBookPaletteIndex)
+        let books = Array(entry.shelfBooks.prefix(6))
+
+        ZStack {
+            LinearGradient(colors: [p.bgStart, p.bgEnd], startPoint: .topLeading, endPoint: .bottomTrailing)
+
+            HStack(spacing: 10) {
+                // Left Half: Miniature Tahrir Vertical Spine Bookshelf
+                VStack(spacing: 0) {
+                    HStack {
+                        Text("KÜLLİYAT RAFI")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(p.gold)
+                        Spacer()
+                        Text("\(entry.startedCount)/\(entry.totalBooksCount)")
+                            .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(p.textSecondary)
+                    }
+                    .padding(.bottom, 6)
+
+                    Spacer(minLength: 0)
+
+                    HStack(alignment: .bottom, spacing: 3) {
+                        // Left brass bookend
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: 0xD4AF37), Color(hex: 0x8A6621)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(width: 3, height: 42)
+
+                        ForEach(books) { book in
+                            let bPal = BookCoverPalette.bookPalette(for: book.paletteIndex)
+                            let isCurrent = book.id == entry.lastBookId
+                            VStack(spacing: 0) {
+                                // Top gold band (Şiraze)
+                                Rectangle()
+                                    .fill(bPal.gold.opacity(0.85))
+                                    .frame(height: 2)
+                                    .padding(.top, 4)
+
+                                Spacer(minLength: 2)
+
+                                // Vertical spine dot/ornament
+                                Circle()
+                                    .fill(bPal.gold.opacity(isCurrent ? 0.95 : 0.45))
+                                    .frame(width: 4, height: 4)
+
+                                Spacer(minLength: 2)
+
+                                // Progress label at bottom of spine
+                                Text("%\(book.progressPercent)")
+                                    .font(.system(size: 6.5, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(hex: 0xFDF8EE).opacity(0.92))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.6)
+                                    .padding(.bottom, 2)
+
+                                // Bottom gold band (Şiraze)
+                                Rectangle()
+                                    .fill(bPal.gold.opacity(0.85))
+                                    .frame(height: 2)
+                                    .padding(.bottom, 4)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: isCurrent ? 82 : 76)
+                            .background(
+                                LinearGradient(
+                                    colors: [bPal.primary, bPal.spine],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .stroke(isCurrent ? bPal.gold : bPal.gold.opacity(0.25), lineWidth: isCurrent ? 1.2 : 0.5)
+                            )
+                        }
+
+                        // Right brass bookend
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: 0xD4AF37), Color(hex: 0x8A6621)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(width: 3, height: 42)
+                    }
+
+                    // Walnut wood shelf plank
+                    ZStack(alignment: .top) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: 0x5E3A1E), Color(hex: 0x3B2311)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(height: 8)
+                        Rectangle()
+                            .fill(Color(hex: 0xD4AF37).opacity(0.45))
+                            .frame(height: 1)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                // Right Half: Active Book Reading Card
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(activeCover.primary)
+                            .frame(width: 8, height: 8)
+                            .overlay(Circle().stroke(activeCover.gold, lineWidth: 1))
+                        Text(entry.lastBookCategory)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(p.gold)
+                            .lineLimit(1)
+                        Spacer()
+                        if entry.bookmarksCount > 0 {
+                            HStack(spacing: 2) {
+                                Image(systemName: "bookmark.fill")
+                                    .font(.system(size: 8))
+                                Text("\(entry.bookmarksCount)")
+                                    .font(.system(size: 8.5, weight: .bold))
+                            }
+                            .foregroundColor(p.gold)
+                        }
+                    }
+
+                    Text(entry.lastBookTitle)
+                        .font(.system(size: 13.5, weight: .bold, design: .serif))
+                        .foregroundColor(p.textPrimary)
+                        .lineLimit(1)
+
+                    Text(entry.lastBookAuthor)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundColor(p.textSecondary)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 2)
+
+                    HStack {
+                        Text(entry.lastBookReference)
+                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .foregroundColor(p.textPrimary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text("%\(entry.lastBookPercent)")
+                            .font(.system(size: 10.5, weight: .heavy, design: .rounded))
+                            .foregroundColor(p.emerald)
+                    }
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(p.cardSurface)
+                                .frame(height: 5)
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [activeCover.gold, p.emerald],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(
+                                    width: max(6, geo.size.width * CGFloat(min(1.0, max(0.03, entry.progress)))),
+                                    height: 5
+                                )
+                        }
+                    }
+                    .frame(height: 5)
+
+                    Spacer(minLength: 2)
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "book.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("Okumaya Devam Et")
+                            .font(.system(size: 9.5, weight: .bold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8.5, weight: .bold))
+                    }
+                    .foregroundColor(Color(hex: 0xFDF8EE))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(
+                                LinearGradient(
+                                    colors: [activeCover.primary, activeCover.secondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .stroke(activeCover.gold.opacity(0.5), lineWidth: 0.8)
+                            )
+                    )
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .padding(12)
+        }
+        .widgetBackground(p.bgStart)
+    }
+}
+
+struct KulliyatWidget: Widget {
+    let kind: String = "KulliyatWidget"
+
+    private var supportedFamiliesList: [WidgetFamily] {
+        if #available(iOS 16.0, *) {
+            return [.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline]
+        } else {
+            return [.systemSmall, .systemMedium]
+        }
+    }
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: KulliyatTimelineProvider()) { entry in
+            KulliyatWidgetEntryView(entry: entry)
+        }
+        .configurationDisplayName("Külliyat & Okuma Takibi")
+        .description("Klasik İslâmî eserler rafınız, son okunan kitap ve sayfa ilerlemeniz.")
         .supportedFamilies(supportedFamiliesList)
         .contentMarginsDisabledIfAvailable()
     }
