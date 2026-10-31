@@ -447,7 +447,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Bağlantı Tanılama Raporu'),
+        find.text('Bağlantı Tanılama Raporu').first,
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));

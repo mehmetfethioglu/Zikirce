@@ -3849,6 +3849,7 @@ class AdbTvService {
   Future<String> buildConnectionDiagnosticReport(
     TvDevice device, {
     String appVersion = '',
+    List<int>? scanPortsOverride,
   }) async {
     final ip = device.ip.trim();
     final b = StringBuffer()
@@ -3873,63 +3874,77 @@ class AdbTvService {
       return b.toString();
     }
 
-    // 1. Port scan with exact socket error per port
-    const ports = <int>[
-      5555, 6466, 6467, 8008, 8009, 8443, 80, 443, 8080, 8085, 56789, 56790,
-      7345, 9080, 9000, 1925, 1926, 3000, 3001, 8001, 8002, 8060, 55000, 7676,
-    ];
-    final portResults = await Future.wait<String>(
-      ports.map((p) async {
-        Socket? s;
-        try {
-          s = await _openLanSocket(
-            ip,
-            p,
-            timeout: const Duration(milliseconds: 900),
-          );
-          return '$p:AÇIK';
-        } on SocketException catch (e) {
-          final code = e.osError?.errorCode;
-          return '$p:kapalı(${code ?? e.message})';
-        } on TimeoutException {
-          return '$p:zamanaşımı';
-        } catch (e) {
-          return '$p:hata($e)';
-        } finally {
-          s?.destroy();
-        }
-      }),
+    // 1. Port scan. Android: full 1-65535 TCP range (RST answers are fast).
+    //    iOS: extended curated list, low concurrency & long timeout.
+    final scanStart = DateTime.now();
+    final List<int> scanPorts;
+    final int concurrency;
+    final Duration perPortTimeout;
+    if (scanPortsOverride != null) {
+      scanPorts = scanPortsOverride;
+      concurrency = 16;
+      perPortTimeout = const Duration(milliseconds: 1200);
+    } else if (Platform.isIOS) {
+      scanPorts = _kDiagCuratedPorts;
+      concurrency = 8;
+      perPortTimeout = const Duration(milliseconds: 1800);
+    } else {
+      scanPorts = List<int>.generate(65535, (i) => i + 1);
+      concurrency = 256;
+      perPortTimeout = const Duration(milliseconds: 450);
+    }
+    final scan = await _diagPortScan(
+      ip,
+      scanPorts,
+      concurrency: concurrency,
+      timeout: perPortTimeout,
     );
-    final openPorts = <int>[
-      for (var i = 0; i < ports.length; i++)
-        if (portResults[i].contains('AÇIK')) ports[i],
-    ];
+    final openPorts = scan.open;
     b
       ..writeln('')
-      ..writeln('--- Port Taraması ---')
+      ..writeln(
+        '--- Port Taraması (${scanPorts.length} port, '
+        '${DateTime.now().difference(scanStart).inSeconds} sn) ---',
+      )
       ..writeln('AÇIK: ${openPorts.isEmpty ? "(hiçbiri)" : openPorts.join(", ")}')
-      ..writeln(portResults.where((r) => !r.contains('AÇIK')).join('  '));
+      ..writeln(
+        'Reddedildi(RST): ${scan.refused}  Zaman aşımı: ${scan.timedOut}  '
+        'Diğer hata: ${scan.otherErrors}',
+      );
 
-    // 2. HTTP banners on open HTTP-like ports
+    // 2. Per open port: unsolicited banner, HTTP GET /, WebSocket upgrade
+    b
+      ..writeln('')
+      ..writeln('--- Açık Port Yanıtları ---');
+    for (final p in openPorts.take(24)) {
+      final banner = await _diagBannerProbe(ip, p);
+      final http = await _rawHttpProbe(ip, p, '/');
+      b.writeln(':$p banner=$banner');
+      b.writeln(':$p GET / -> $http');
+      if (http == '(yanıt yok)') {
+        b.writeln(':$p WebSocket -> ${await _diagWebSocketProbe(ip, p)}');
+      }
+    }
+
+    // 2b. Known HTTP paths on open ports
     const httpProbes = <int, List<String>>{
       8008: <String>['/setup/eureka_info?params=name,device_info', '/ssdp/device-desc.xml'],
-      56789: <String>['/dd.xml', '/apps/SmartCenter'],
-      56790: <String>['/'],
-      80: <String>['/'],
-      8080: <String>['/', '/sendrcpackage?keyid=-2490&keysymbol=13'],
-      8085: <String>['/', '/sendrcpackage?keyid=-2490&keysymbol=13'],
-      7345: <String>['/'],
-      9080: <String>['/'],
-      9000: <String>['/'],
+      56789: <String>[
+        '/dd.xml', '/apps/', '/apps/YouTube', '/apps/Netflix', '/apps/SmartCenter',
+        '/description.xml', '/rootDesc.xml', '/DeviceDescription.xml', '/info',
+      ],
+      56790: <String>[
+        '/dd.xml', '/apps/', '/apps/YouTube', '/description.xml', '/info',
+      ],
+      8080: <String>['/sendrcpackage?keyid=-2490&keysymbol=13', '/info', '/status'],
+      8085: <String>['/sendrcpackage?keyid=-2490&keysymbol=13'],
       1925: <String>['/6/system', '/1/system'],
       8060: <String>['/query/device-info'],
       8001: <String>['/api/v2/'],
-      55000: <String>['/'],
-      7676: <String>['/'],
     };
     b
       ..writeln('')
-      ..writeln('--- HTTP Yanıtları ---');
+      ..writeln('--- Bilinen HTTP Yolları ---');
     for (final p in openPorts) {
       final paths = httpProbes[p];
       if (paths == null) continue;
@@ -3937,6 +3952,12 @@ class AdbTvService {
         b.writeln('GET :$p$path -> ${await _rawHttpProbe(ip, p, path)}');
       }
     }
+
+    // 2c. mDNS service names announced by the TV
+    b
+      ..writeln('')
+      ..writeln('--- mDNS Servisleri ---')
+      ..writeln(await _diagMdnsProbe(ip));
 
     // 3. TLS certificate subjects on Android TV Remote ports
     for (final p in <int>[6466, 6467]) {
@@ -3954,6 +3975,230 @@ class AdbTvService {
       ..writeln(await _ssdpDiagnosticProbe(ip));
 
     _appendDiagTail(b);
+    return b.toString();
+  }
+
+  static const List<int> _kDiagCuratedPorts = <int>[
+    21, 22, 23, 53, 80, 81, 443, 554, 1080, 1400, 1900, 1925, 1926, 1986,
+    2869, 3000, 3001, 4352, 4660, 5000, 5555, 6466, 6467, 7000, 7001, 7345,
+    7547, 7676, 7681, 8000, 8001, 8002, 8008, 8009, 8060, 8080, 8081, 8082,
+    8085, 8088, 8090, 8180, 8200, 8443, 8888, 9000, 9080, 9090, 9197, 9999,
+    10000, 36669, 36866, 37777, 49152, 49153, 49154, 49155, 52235, 55000,
+    55001, 56789, 56790, 56791, 56792, 56793, 56794, 56795, 60000, 60001,
+  ];
+
+  Future<({List<int> open, int refused, int timedOut, int otherErrors})>
+  _diagPortScan(
+    String ip,
+    List<int> ports, {
+    required int concurrency,
+    required Duration timeout,
+  }) async {
+    final open = <int>[];
+    var refused = 0;
+    var timedOut = 0;
+    var other = 0;
+    var next = 0;
+    final useBoundSocket = Platform.isIOS;
+
+    Future<void> worker() async {
+      while (next < ports.length) {
+        final p = ports[next++];
+        Socket? s;
+        try {
+          s = useBoundSocket
+              ? await _openLanSocket(ip, p, timeout: timeout)
+              : await Socket.connect(ip, p, timeout: timeout);
+          open.add(p);
+        } on SocketException catch (e) {
+          final code = e.osError?.errorCode ?? 0;
+          final msg = e.message.toLowerCase();
+          if (code == 111 || code == 61 || msg.contains('refused')) {
+            refused++;
+          } else if (msg.contains('timed out') || code == 110 || code == 60) {
+            timedOut++;
+          } else {
+            other++;
+          }
+        } on TimeoutException {
+          timedOut++;
+        } catch (_) {
+          other++;
+        } finally {
+          try {
+            s?.destroy();
+          } catch (_) {}
+        }
+      }
+    }
+
+    await Future.wait<void>(List<Future<void>>.generate(concurrency, (_) => worker()));
+    open.sort();
+    return (open: open, refused: refused, timedOut: timedOut, otherErrors: other);
+  }
+
+  /// Connects without sending anything and reports any unsolicited greeting bytes.
+  Future<String> _diagBannerProbe(String ip, int port) async {
+    Socket? sock;
+    try {
+      sock = await _openLanSocket(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 1200),
+      );
+      final rx = <int>[];
+      final done = Completer<void>();
+      final sub = sock.listen(
+        (chunk) {
+          rx.addAll(chunk);
+          if (rx.length >= 256 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
+      await done.future.timeout(
+        const Duration(milliseconds: 900),
+        onTimeout: () {},
+      );
+      await sub.cancel();
+      if (rx.isEmpty) return '(sessiz)';
+      return _diagDescribeBytes(rx);
+    } catch (e) {
+      return 'HATA: $e';
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
+  }
+
+  /// Sends a WebSocket upgrade request (`/`) and reports the server's answer.
+  Future<String> _diagWebSocketProbe(String ip, int port) async {
+    Socket? sock;
+    try {
+      sock = await _openLanSocket(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 1200),
+      );
+      final rx = <int>[];
+      final done = Completer<void>();
+      final sub = sock.listen(
+        (chunk) {
+          rx.addAll(chunk);
+          if (rx.length >= 512 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
+      sock.add(
+        ascii.encode(
+          'GET / HTTP/1.1\r\nHost: $ip:$port\r\nUpgrade: websocket\r\n'
+          'Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n'
+          'Sec-WebSocket-Version: 13\r\n\r\n',
+        ),
+      );
+      await sock.flush();
+      await done.future.timeout(
+        const Duration(milliseconds: 1500),
+        onTimeout: () {},
+      );
+      await sub.cancel();
+      if (rx.isEmpty) return '(yanıt yok)';
+      return _diagDescribeBytes(rx);
+    } catch (e) {
+      return 'HATA: $e';
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
+  }
+
+  String _diagDescribeBytes(List<int> rx) {
+    final slice = rx.take(400).toList();
+    final printable = slice.where((b) => b == 9 || b == 10 || b == 13 || (b >= 32 && b < 127)).length;
+    if (printable >= slice.length * 0.8) {
+      final text = utf8
+          .decode(slice, allowMalformed: true)
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      return '"$text"';
+    }
+    final hex = slice
+        .take(64)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join(' ');
+    return 'ikili ${rx.length} bayt: $hex';
+  }
+
+  /// Asks for all DNS-SD service types and lists readable names answered by [ip].
+  Future<String> _diagMdnsProbe(String ip) async {
+    final names = <String>{};
+    final otherSenders = <String>{};
+    RawDatagramSocket? sock;
+    StreamSubscription<RawSocketEvent>? sub;
+    try {
+      sock = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        0,
+        reuseAddress: true,
+      );
+      sock.multicastHops = 255;
+      sub = sock.listen((event) {
+        if (event != RawSocketEvent.read) return;
+        final dg = sock?.receive();
+        if (dg == null) return;
+        if (dg.address.address != ip) {
+          otherSenders.add(dg.address.address);
+          return;
+        }
+        final buf = StringBuffer();
+        for (final byte in dg.data.skip(12)) {
+          if (byte >= 32 && byte < 127) {
+            buf.writeCharCode(byte);
+          } else {
+            final s = buf.toString().trim();
+            if (s.length >= 3 && names.length < 30) names.add(s);
+            buf.clear();
+          }
+        }
+        final s = buf.toString().trim();
+        if (s.length >= 3 && names.length < 30) names.add(s);
+      });
+      final target = InternetAddress('224.0.0.251');
+      for (final svc in <String>[
+        '_services._dns-sd._udp.local',
+        '_http._tcp.local',
+        '_androidtvremote2._tcp.local',
+        '_googlecast._tcp.local',
+        '_airplay._tcp.local',
+        '_dial._tcp.local',
+      ]) {
+        sock.send(_buildMdnsPtrQueryPacket(svc), target, 5353);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1800));
+    } catch (e) {
+      return 'mDNS HATA: $e';
+    } finally {
+      await sub?.cancel();
+      sock?.close();
+    }
+    final b = StringBuffer();
+    b.write(names.isEmpty ? '$ip: (yanıt yok)' : '$ip: ${names.join(' | ')}');
+    if (otherSenders.isNotEmpty) {
+      b.write('\nmDNS yanıtlayan diğer cihazlar: ${otherSenders.take(12).join(', ')}');
+    }
     return b.toString();
   }
 
@@ -4103,11 +4348,23 @@ class AdbTvService {
           others[sender] = header('SERVER');
         }
       });
-      const req =
-          'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n'
-          'MAN: "ssdp:discover"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n';
-      sock.send(ascii.encode(req), InternetAddress('239.255.255.250'), 1900);
-      await Future<void>.delayed(const Duration(milliseconds: 1600));
+      const searchTargets = <String>[
+        'ssdp:all',
+        'upnp:rootdevice',
+        'urn:dial-multiscreen-org:service:dial:1',
+        'urn:schemas-upnp-org:device:MediaRenderer:1',
+        'urn:schemas-upnp-org:device:Basic:1',
+      ];
+      for (var round = 0; round < 2; round++) {
+        for (final st in searchTargets) {
+          final req =
+              'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n'
+              'MAN: "ssdp:discover"\r\nMX: 2\r\nST: $st\r\n\r\n';
+          sock.send(ascii.encode(req), InternetAddress('239.255.255.250'), 1900);
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 2600));
     } catch (e) {
       lines.add('SSDP HATA: $e');
     } finally {

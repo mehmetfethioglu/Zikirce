@@ -148,13 +148,11 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.9 (Build 21) Yenilikleri:
-      • Bağlantı Tanılama Raporu: Ayarlar > TV Bağlantısı bölümünden TV'nizin bağlantı yollarını tek dokunuşla test edip raporu kopyalayarak bize gönderebilirsiniz.
-      • Daha Doğru Bağlantı Durumu: TV komutu kabul etmediğinde bağlantı artık yanlışlıkla «bağlı» görünmüyor.
+      CueDeck v1.9.10 (Build 22) Yenilikleri:
+      • Daha Ayrıntılı Bağlantı Tanılama Raporu: Rapor TV'nizi çok daha kapsamlı test ediyor; kopyalayıp bize göndererek TV modelinize özel destek eklememize yardımcı olabilirsiniz.
 
-      What's New in CueDeck v1.9.9 (Build 21):
-      • Connection Diagnostic Report: Test how your TV accepts connections with one tap and share the report with us.
-      • More Accurate Connection Status: The remote no longer shows "connected" when the TV rejects commands.
+      What's New in CueDeck v1.9.10 (Build 22):
+      • More Detailed Connection Diagnostic Report: The report now tests your TV far more thoroughly so we can add support for your model.
     CHANGELOG
 
     begin

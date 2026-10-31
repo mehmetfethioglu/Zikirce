@@ -40,11 +40,25 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.9+21';
-  static const String currentShortVersion = 'v1.9.9';
+  static const String currentVersion = '1.9.10+22';
+  static const String currentShortVersion = 'v1.9.10';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.10+22',
+      versionLabel: 'v1.9.10 (Build 22)',
+      releaseDate: '31 Ekim 2026',
+      headline: 'Daha Ayrıntılı Bağlantı Tanılama Raporu',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'TANILAMA',
+          title: 'Bağlantı Tanılama Raporu',
+          description:
+              'Tanılama raporu artık TV\'nizi çok daha ayrıntılı test ediyor. Raporu kopyalayıp bize göndererek TV modelinize özel destek eklememize yardımcı olabilirsiniz.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.9+21',
       versionLabel: 'v1.9.9 (Build 21)',

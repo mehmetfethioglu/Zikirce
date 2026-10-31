@@ -1,5 +1,12 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-024] 2026-10-31: Arçelik TV (192.168.1.106) İlk Saha Raporu & Derin Tanılama (`v1.9.10+22`)
+- **Saha verisi (Xiaomi 13, v1.9.9):** TV açık portlar yalnızca `8080`, `56789`, `56790`; diğer tüm denenen portlar RST (`errno 111`). `56789`/`56790` HTTP sunucusu tüm yollara `404 "Error 404: Not Found"` dönüyor (Vestel `/apps/SmartCenter` ve `/apps/vr/remote` dahil). `8080` TCP bağlantısını kabul ediyor ama HTTP isteğine hiç yanıt vermiyor. SSDP ve 5555/6466/6467/8008/8085 yok → TV Android/Google TV değil; Vestel SmartCenter ve Grundig 8085 protokolleri bu TV'de geçersiz.
+- **iPhone 11:** Yalnızca `8080` açık, diğer tüm portlar zaman aşımı (Android'de RST). Sebep belirsiz (TV bekleme modunda olabilir veya iOS bağlantı sorunu) → TV açıkken tekrar test gerekli.
+- **Karar:** Tahmini tuş protokolü eklenmedi. Tanılama raporu Android'de tam `1-65535` TCP taramasına, iOS'ta 70 portluk listeye, açık portlarda kendiliğinden gelen veri / HTTP / WebSocket denemesine, genişletilmiş `56789`/`56790` yollarına, mDNS ve çoklu-ST SSDP aramasına genişletildi.
+
+---
+
 ## [ADR-023] 2026-10-31: Kör Protokol Tahmini Yerine Sahada Tanılama Raporu (`v1.9.9+21`)
 - **Bağlam:** v1.9.7 ve v1.9.8'de Arçelik TV için eklenen protokoller (6466 mTLS, 8085/56789) gerçek cihazda hiç test edilmeden yazıldı; kullanıcı v1.9.8'de de aynı sorunun (Xiaomi 13: bağlanıyor → tuşta turuncu; iPhone 11: TV bulunamıyor) sürdüğünü bildirdi. TV'nin işletim sistemi/modeli bilinmiyor.
 - **Anti-Pattern (Ders):** Cihaz verisi olmadan üst üste protokol tahmini yapıp "çözüldü" demek. Ayrıca `_sendRawHttpGetOverTcp` soket açıldığı an `true` döndürüyordu (yanıt doğrulanmıyordu) → sahte "bağlı" durumu.
