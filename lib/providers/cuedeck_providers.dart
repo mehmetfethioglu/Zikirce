@@ -399,6 +399,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           if (decoded is Map<String, dynamic>) {
             final parsed = TvDevice.fromJson(decoded);
             if (parsed.hasValidIp) {
+              if (parsed.isPaired &&
+                  parsed.protocol == TvConnectionProtocol.remotePort6466) {
+                ref.read(adbTvServiceProvider).markPinPairedIp(parsed.ip);
+              }
               loadedDevice = parsed.copyWith(isOnline: false);
             }
           }
@@ -893,6 +897,26 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     final service = ref.read(adbTvServiceProvider);
     if (device.protocol == TvConnectionProtocol.remotePort6466 &&
         device.port == 6466) {
+      if (device.isPaired) {
+        final updatedDevice = device.copyWith(
+          isOnline: true,
+          isPaired: true,
+          boardInfo: 'Google TV • Port 6466 PIN Eşleşti ✓',
+        );
+        final updatedList = <TvDevice>[
+          updatedDevice,
+          ...state.discoveredDevices.where((d) => d.ip != updatedDevice.ip),
+        ];
+        state = state.copyWith(
+          isScanning: false,
+          selectedDevice: updatedDevice,
+          discoveredDevices: updatedList,
+          lastCommandStatus: '✓ Bağlandı: ${updatedDevice.name} (${updatedDevice.ip}:6466)',
+        );
+        await _persistState(triggerAutoBackup: false);
+        return true;
+      }
+
       // Check if ADB 5555 is also open on this TV for direct zero-PIN control,
       // otherwise select it ready for Port 6466/6467 PIN pairing.
       final session = await service.startPin6467PairingSession(device);
@@ -920,9 +944,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         return paired.isOnline;
       }
 
+      final pinShown =
+          session['pinDisplayed'] == true || session['pinTriggered'] == true;
+      final isAlreadyPaired = device.isPaired;
       final updatedDevice = device.copyWith(
-        isOnline: true,
-        boardInfo: session['pinDisplayed'] == true
+        isOnline: isAlreadyPaired,
+        boardInfo: pinShown
             ? 'TV ekranında 6 haneli PIN gösteriliyor • PIN girin'
             : device.boardInfo,
       );
@@ -934,7 +961,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         isScanning: false,
         selectedDevice: updatedDevice,
         discoveredDevices: updatedList,
-        lastCommandStatus: session['pinDisplayed'] == true
+        lastCommandStatus: pinShown
             ? '🔢 TV ekranındaki 6 haneli PIN kodunu girerek eşleştirmeyi tamamlayın'
             : 'Aktif TV: ${updatedDevice.name} (${updatedDevice.ip}:6466)',
       );
@@ -1028,7 +1055,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   /// Starts a TLS Port 6467 PIN pairing session so the TV displays a 6-character
   /// PIN code on screen immediately when the user opens the PIN Pairing sheet.
-  Future<Map<String, dynamic>> startPin6467Pairing({String? customIp}) async {
+  Future<Map<String, dynamic>> startPin6467Pairing({
+    String? customIp,
+    bool forceRestart = false,
+  }) async {
     final targetIp = _resolveTargetTvIp(customIp);
     if (targetIp.isEmpty) {
       return const <String, dynamic>{
@@ -1051,7 +1081,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           );
 
     final service = ref.read(adbTvServiceProvider);
-    final res = await service.startPin6467PairingSession(candidate);
+    final res = await service.startPin6467PairingSession(
+      candidate,
+      forceRestart: forceRestart,
+    );
     final msg = (res['message'] as String?) ?? '';
     if (msg.isNotEmpty) {
       state = state.copyWith(lastCommandStatus: msg);

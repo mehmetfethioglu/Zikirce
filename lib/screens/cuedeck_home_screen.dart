@@ -100,6 +100,18 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     void sendKey(TvKeyCommand cmd) {
       HapticFeedback.lightImpact();
+      final selected = ref.read(cueDeckProvider).selectedDevice;
+      if (selected.hasValidIp &&
+          selected.protocol == TvConnectionProtocol.remotePort6466 &&
+          !selected.isPaired) {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _Pin6466PairingSheet(targetIp: selected.ip),
+        );
+        return;
+      }
       ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
     }
 
@@ -708,6 +720,18 @@ class _TactileDpadDialWidgetState extends ConsumerState<TactileDpadDialWidget> {
 
   void _trigger(TvKeyCommand cmd) {
     HapticFeedback.lightImpact();
+    final selected = ref.read(cueDeckProvider).selectedDevice;
+    if (selected.hasValidIp &&
+        selected.protocol == TvConnectionProtocol.remotePort6466 &&
+        !selected.isPaired) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _Pin6466PairingSheet(targetIp: selected.ip),
+      );
+      return;
+    }
     ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
   }
 
@@ -3895,7 +3919,7 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
     super.dispose();
   }
 
-  Future<void> _triggerTvPinDisplay() async {
+  Future<void> _triggerTvPinDisplay({bool forceRestart = false}) async {
     final ip = _ipController.text.trim();
     if (!AdbTvService.isValidIp(ip)) {
       setState(() {
@@ -3912,7 +3936,7 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
 
     final res = await ref
         .read(cueDeckProvider.notifier)
-        .startPin6467Pairing(customIp: ip);
+        .startPin6467Pairing(customIp: ip, forceRestart: forceRestart);
     if (!mounted) return;
     setState(() {
       _isRequestingPin = false;
@@ -3998,7 +4022,9 @@ class _Pin6466PairingSheetState extends ConsumerState<_Pin6466PairingSheet> {
                   foregroundColor: goldText,
                   visualDensity: VisualDensity.compact,
                 ),
-                onPressed: _isRequestingPin ? null : _triggerTvPinDisplay,
+                onPressed: _isRequestingPin
+                    ? null
+                    : () => _triggerTvPinDisplay(forceRestart: true),
                 icon: const Icon(Icons.refresh_rounded, size: 15),
                 label: const Text(
                   'PIN İste',

@@ -615,37 +615,60 @@ import UserNotifications
     let smartTvPorts: [UInt16] = [8085, 56789, 8001, 3000, 1925, 8060]
     var permissionDeniedCount = 0
     var lastPermissionErrno: Int32 = 0
+    var anyLanTrafficAllowed = false
+
+    // 0. Probe gateway (prefix.1) on port 80/53 to verify Local Network permission accurately.
+    // On iOS, EHOSTUNREACH (65) on unused subnet IPs is normal ARP miss, NOT permission denial!
+    // If any host or gateway returns open, ECONNREFUSED (61), or ETIMEDOUT (60), Local Network is ON.
+    let gatewayIp = "\(prefix).1"
+    for gwPort: UInt16 in [80, 443, 53] {
+      let gw = probePortWithFallback(ip: gatewayIp, port: gwPort, en0Index: en0Index, timeoutMs: 180)
+      if gw.open || gw.errCode == ECONNREFUSED || gw.errCode == ETIMEDOUT {
+        anyLanTrafficAllowed = true
+        break
+      } else if gw.errCode == EPERM || gw.errCode == EACCES {
+        permissionDeniedCount += 1
+        lastPermissionErrno = gw.errCode
+      }
+    }
 
     // 1. Two-stage warmup + probe on preferredIp first (if valid)
     if !preferredIp.isEmpty {
-      let warm = probePortWithFallback(ip: preferredIp, port: 5555, en0Index: en0Index, timeoutMs: 420)
+      let warm = probePortWithFallback(ip: preferredIp, port: 5555, en0Index: en0Index, timeoutMs: 360)
       if warm.open {
         open5555.insert(preferredIp)
+        anyLanTrafficAllowed = true
       } else {
-        if warm.errCode == EHOSTUNREACH || warm.errCode == EPERM || warm.errCode == EACCES {
+        if warm.errCode == ECONNREFUSED || warm.errCode == ETIMEDOUT {
+          anyLanTrafficAllowed = true
+        } else if warm.errCode == EPERM || warm.errCode == EACCES {
           permissionDeniedCount += 1
           lastPermissionErrno = warm.errCode
         }
-        usleep(120_000)
-        let retry = probePortWithFallback(ip: preferredIp, port: 5555, en0Index: en0Index, timeoutMs: 1100)
+        usleep(80_000)
+        let retry = probePortWithFallback(ip: preferredIp, port: 5555, en0Index: en0Index, timeoutMs: 650)
         if retry.open {
           open5555.insert(preferredIp)
+          anyLanTrafficAllowed = true
         }
       }
-      let p6466 = probePortWithFallback(ip: preferredIp, port: 6466, en0Index: en0Index, timeoutMs: 500)
+      let p6466 = probePortWithFallback(ip: preferredIp, port: 6466, en0Index: en0Index, timeoutMs: 420)
       if p6466.open {
         open6466.insert(preferredIp)
+        anyLanTrafficAllowed = true
       }
       for sPort in smartTvPorts {
-        let pSmart = probePortWithFallback(ip: preferredIp, port: sPort, en0Index: en0Index, timeoutMs: 380)
+        let pSmart = probePortWithFallback(ip: preferredIp, port: sPort, en0Index: en0Index, timeoutMs: 280)
         if pSmart.open {
           openSmartTv.insert("\(preferredIp):\(sPort)")
+          anyLanTrafficAllowed = true
           break
         }
       }
-      let p8008 = probePortWithFallback(ip: preferredIp, port: 8008, en0Index: en0Index, timeoutMs: 450)
+      let p8008 = probePortWithFallback(ip: preferredIp, port: 8008, en0Index: en0Index, timeoutMs: 360)
       if p8008.open {
         open8008.insert(preferredIp)
+        anyLanTrafficAllowed = true
       }
     }
 
@@ -655,85 +678,90 @@ import UserNotifications
     orderedOctets.append(contentsOf: Array(61...94))
     orderedOctets.append(contentsOf: Array(161...254))
 
-    let warmupOctets = Array(2...60) + Array(95...160)
-    let chunkSize = 28
-    for start in stride(from: 0, to: warmupOctets.count, by: chunkSize) {
-      let end = min(start + chunkSize, warmupOctets.count)
-      let slice = Array(warmupOctets[start..<end])
-      DispatchQueue.concurrentPerform(iterations: slice.count) { idx in
-        let ip = "\(prefix).\(slice[idx])"
-        if ip == wifiIp { return }
-        let res = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: 220)
-        if res.open {
-          lock.lock()
-          open5555.insert(ip)
-          lock.unlock()
-        } else if res.errCode == EHOSTUNREACH || res.errCode == EPERM || res.errCode == EACCES {
-          lock.lock()
-          permissionDeniedCount += 1
-          lastPermissionErrno = res.errCode
-          lock.unlock()
-        }
-      }
-    }
-
-    usleep(120_000) // Allow Wi-Fi ARP replies from sleeping TVs to settle
-
-    // Full scan across all 253 octets for ports 5555, 6466, and 8008 in chunks of 28
-    let fullChunkSize = 28
+    // Full scan across all 253 octets in 4 high-concurrency chunks of 64 (~2.4s total)
+    let fullChunkSize = 64
     for start in stride(from: 0, to: orderedOctets.count, by: fullChunkSize) {
       let end = min(start + fullChunkSize, orderedOctets.count)
       let slice = Array(orderedOctets[start..<end])
-      let isPrioritySlice = start < 125
-      let timeout5555: Int32 = isPrioritySlice ? 650 : 380
-      let timeoutOther: Int32 = isPrioritySlice ? 340 : 240
 
       DispatchQueue.concurrentPerform(iterations: slice.count) { idx in
         let ip = "\(prefix).\(slice[idx])"
         if ip == wifiIp { return }
 
-        lock.lock()
-        let already5555 = open5555.contains(ip)
-        lock.unlock()
-        if !already5555 {
-          let r5555 = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: timeout5555)
-          if r5555.open {
-            lock.lock()
-            open5555.insert(ip)
-            lock.unlock()
-          }
+        var hostIsAlive = false
+        let r5555 = probePortWithFallback(ip: ip, port: 5555, en0Index: en0Index, timeoutMs: 220)
+        if r5555.open {
+          lock.lock()
+          open5555.insert(ip)
+          anyLanTrafficAllowed = true
+          lock.unlock()
+          hostIsAlive = true
+        } else if r5555.errCode == ECONNREFUSED {
+          hostIsAlive = true
+          lock.lock()
+          anyLanTrafficAllowed = true
+          lock.unlock()
+        } else if r5555.errCode == EPERM || r5555.errCode == EACCES {
+          lock.lock()
+          permissionDeniedCount += 1
+          lastPermissionErrno = r5555.errCode
+          lock.unlock()
         }
 
-        let r6466 = probePortWithFallback(ip: ip, port: 6466, en0Index: en0Index, timeoutMs: timeoutOther)
+        let probeTimeout: Int32 = hostIsAlive ? 240 : 140
+        let r6466 = probePortWithFallback(ip: ip, port: 6466, en0Index: en0Index, timeoutMs: probeTimeout)
         if r6466.open {
           lock.lock()
           open6466.insert(ip)
+          anyLanTrafficAllowed = true
           lock.unlock()
-        } else {
-          var matchedSmart = false
-          for sPort: UInt16 in [8085, 56789, 8001, 3000] {
-            let rSmart = probePortWithFallback(ip: ip, port: sPort, en0Index: en0Index, timeoutMs: 220)
-            if rSmart.open {
-              lock.lock()
-              openSmartTv.insert("\(ip):\(sPort)")
-              lock.unlock()
-              matchedSmart = true
-              break
+          hostIsAlive = true
+        } else if r6466.errCode == ECONNREFUSED {
+          hostIsAlive = true
+        }
+
+        var matchedSmart = false
+        let primarySmartPorts: [UInt16] = hostIsAlive ? smartTvPorts : [8085, 56789]
+        for sPort in primarySmartPorts {
+          let rSmart = probePortWithFallback(ip: ip, port: sPort, en0Index: en0Index, timeoutMs: hostIsAlive ? 200 : 130)
+          if rSmart.open {
+            lock.lock()
+            openSmartTv.insert("\(ip):\(sPort)")
+            anyLanTrafficAllowed = true
+            lock.unlock()
+            matchedSmart = true
+            hostIsAlive = true
+            break
+          } else if rSmart.errCode == ECONNREFUSED && !hostIsAlive {
+            hostIsAlive = true
+            for extraPort: UInt16 in [8001, 3000, 1925, 8060] {
+              let rExtra = probePortWithFallback(ip: ip, port: extraPort, en0Index: en0Index, timeoutMs: 180)
+              if rExtra.open {
+                lock.lock()
+                openSmartTv.insert("\(ip):\(extraPort)")
+                anyLanTrafficAllowed = true
+                lock.unlock()
+                matchedSmart = true
+                break
+              }
             }
+            if matchedSmart { break }
           }
-          if !matchedSmart {
-            let r8008 = probePortWithFallback(ip: ip, port: 8008, en0Index: en0Index, timeoutMs: timeoutOther)
-            if r8008.open {
-              lock.lock()
-              open8008.insert(ip)
-              lock.unlock()
-            }
+        }
+
+        if !matchedSmart {
+          let r8008 = probePortWithFallback(ip: ip, port: 8008, en0Index: en0Index, timeoutMs: hostIsAlive ? 220 : 130)
+          if r8008.open {
+            lock.lock()
+            open8008.insert(ip)
+            anyLanTrafficAllowed = true
+            lock.unlock()
           }
         }
       }
     }
 
-    let isPermissionDenied = open5555.isEmpty && open6466.isEmpty && openSmartTv.isEmpty && open8008.isEmpty && permissionDeniedCount >= 3
+    let isPermissionDenied = open5555.isEmpty && open6466.isEmpty && openSmartTv.isEmpty && open8008.isEmpty && !anyLanTrafficAllowed && permissionDeniedCount >= 3
     return [
       "open5555": Array(open5555),
       "open6466": Array(open6466),
@@ -823,7 +851,7 @@ import UserNotifications
       conn = tcpConnectBound(ip: ip, port: port, en0Index: 0, timeoutMs: 1200)
     }
     guard conn.fd >= 0 else {
-      let isPerm = (conn.errCode == EHOSTUNREACH || conn.errCode == EPERM || conn.errCode == EACCES)
+      let isPerm = (conn.errCode == EPERM || conn.errCode == EACCES)
       return [
         "ok": false,
         "permissionDenied": isPerm,

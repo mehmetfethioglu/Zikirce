@@ -40,11 +40,46 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.7+19';
-  static const String currentShortVersion = 'v1.9.7';
+  static const String currentVersion = '1.9.8+20';
+  static const String currentShortVersion = 'v1.9.8';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.8+20',
+      versionLabel: 'v1.9.8 (Build 20)',
+      releaseDate: '31 Ekim 2026',
+      headline:
+          'iPhone ve Android Cihazlarda Arçelik & Farklı Smart TV\'leri Otomatik Bulma ve Hızlı Eşleştirme',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'IPHONE & TV',
+          title:
+              'iPhone\'da Hatalı «Yerel Ağ Kapalı» Uyarısı Giderildi, TV Arama Hızlandırıldı',
+          description:
+              'iPhone\'da Yerel Ağ izni açık olmasına rağmen çıkan hatalı uyarı düzeltildi. Artık aynı Wi-Fi ağındaki Arçelik, Beko, Grundig, Vestel ve diğer televizyonlar iPhone\'da saniyeler içinde listelenir.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'ARÇELİK & SMART TV',
+          title:
+              'Arçelik ve Farklı Marka TV\'lerde Kesintisiz Kumanda ve Tuş Kontrolü',
+          description:
+              'Farklı evlerdeki Arçelik Smart TV ve Google TV\'lere bağlandığınızda kumanda tuşlarının tepki vermemesi veya bağlantının turuncuya dönmesi sorunu giderildi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'KOLAY EŞLEŞTİRME',
+          title: 'Tek Dokunuşla TV PIN Kodu Eşleştirme',
+          description:
+              'İlk kez bağlandığınız bir televizyonda herhangi bir kumanda tuşuna bastığınızda TV ekranında çıkan 6 haneli kodu girebileceğiniz pencere otomatik olarak açılır.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TOUCHPAD & SES',
+          title: 'Dokunmatik Fare (Touchpad), Sesli Komut ve Zamanında Bildirimler',
+          description:
+              'Yön tuşlarını dokunmatik fare gibi kullanabilir, mikrofon tuşuna basar basmaz konuşabilir ve izleme planı bildirimlerinizi uygulama kapalıyken bile tam vaktinde alabilirsiniz.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.7+19',
       versionLabel: 'v1.9.7 (Build 19)',

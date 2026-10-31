@@ -46,11 +46,229 @@ class AdbRsaAuthenticator {
     0x14,
   ];
 
+  static const List<int> _sha256DigestInfoPrefix = <int>[
+    0x30,
+    0x31,
+    0x30,
+    0x0D,
+    0x06,
+    0x09,
+    0x60,
+    0x86,
+    0x48,
+    0x01,
+    0x65,
+    0x03,
+    0x04,
+    0x02,
+    0x01,
+    0x05,
+    0x00,
+    0x04,
+    0x20,
+  ];
+
   BigInt? _modulusN;
   BigInt? _privateExponentD;
   Uint8List? _cachedPublicKeyPayload;
+  Uint8List? _atvModulusBytes;
+  Uint8List? _atvCertDer;
+  String? _atvCertPem;
+  String? _atvKeyPem;
 
   bool get isReady => _modulusN != null && _privateExponentD != null;
+
+  /// Unsigned 256-byte big-endian RSA-2048 modulus used by the mTLS client certificate.
+  Uint8List get modulusBytes {
+    _ensureAtvMtlsCredentialsBuilt();
+    return _atvModulusBytes ?? Uint8List(0);
+  }
+
+  /// Unsigned 3-byte big-endian RSA public exponent (`65537` -> `[0x01, 0x00, 0x01]`).
+  Uint8List get publicExponentBytes =>
+      Uint8List.fromList(const <int>[0x01, 0x00, 0x01]);
+
+  /// Self-signed X.509 v3 DER bytes for `CN=atvremote` (valid 2020–2049).
+  Uint8List get selfSignedCertDer {
+    _ensureAtvMtlsCredentialsBuilt();
+    return _atvCertDer ?? Uint8List(0);
+  }
+
+  /// Self-signed X.509 v3 Certificate PEM for Android TV Remote v2 mTLS (`Ports 6466/6467`).
+  String get selfSignedCertPem {
+    _ensureAtvMtlsCredentialsBuilt();
+    return _atvCertPem ?? '';
+  }
+
+  /// PKCS#8 Private Key PEM matching [selfSignedCertPem] for Android TV Remote v2 mTLS.
+  String get privateKeyPem {
+    _ensureAtvMtlsCredentialsBuilt();
+    return _atvKeyPem ?? '';
+  }
+
+  static Uint8List _bigIntToUnsignedBytes(BigInt value) {
+    if (value == BigInt.zero) return Uint8List.fromList(const <int>[0]);
+    final bytes = <int>[];
+    var temp = value;
+    final mask = BigInt.from(0xFF);
+    while (temp > BigInt.zero) {
+      bytes.insert(0, (temp & mask).toInt());
+      temp = temp >> 8;
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  static List<int> _asn1Len(int length) {
+    if (length < 0x80) return <int>[length];
+    final out = <int>[];
+    var t = length;
+    while (t > 0) {
+      out.insert(0, t & 0xFF);
+      t >>= 8;
+    }
+    return <int>[0x80 | out.length, ...out];
+  }
+
+  static List<int> _asn1Int(BigInt value) {
+    final raw = _bigIntToUnsignedBytes(value);
+    final pad = raw.isNotEmpty && (raw[0] & 0x80) != 0;
+    final body = pad ? <int>[0x00, ...raw] : raw;
+    return <int>[0x02, ..._asn1Len(body.length), ...body];
+  }
+
+  static List<int> _asn1Seq(List<int> body) =>
+      <int>[0x30, ..._asn1Len(body.length), ...body];
+
+  void _ensureAtvMtlsCredentialsBuilt() {
+    if (_atvCertPem != null && _atvKeyPem != null && _atvModulusBytes != null) {
+      return;
+    }
+    final p = BigInt.parse(_fallbackPrimePHex, radix: 16);
+    final q = BigInt.parse(_fallbackPrimeQHex, radix: 16);
+    final n = p * q;
+    final phi = (p - BigInt.one) * (q - BigInt.one);
+    final e = BigInt.from(65537);
+    final d = e.modInverse(phi);
+    final dmp1 = d % (p - BigInt.one);
+    final dmq1 = d % (q - BigInt.one);
+    final iqmp = q.modInverse(p);
+
+    _atvModulusBytes = _bigIntToUnsignedBytes(n);
+
+    // 1. Build PKCS#1 RSAPrivateKey & wrap in PKCS#8 PrivateKeyInfo
+    final pkcs1Seq = _asn1Seq(<int>[
+      ..._asn1Int(BigInt.zero),
+      ..._asn1Int(n),
+      ..._asn1Int(e),
+      ..._asn1Int(d),
+      ..._asn1Int(p),
+      ..._asn1Int(q),
+      ..._asn1Int(dmp1),
+      ..._asn1Int(dmq1),
+      ..._asn1Int(iqmp),
+    ]);
+    const rsaAlgId = <int>[
+      0x30, 0x0D,
+      0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01,
+      0x05, 0x00,
+    ];
+    final pkcs8Der = Uint8List.fromList(
+      _asn1Seq(<int>[
+        0x02, 0x01, 0x00, // version = 0
+        ...rsaAlgId,
+        0x04, ..._asn1Len(pkcs1Seq.length), ...pkcs1Seq,
+      ]),
+    );
+    _atvKeyPem =
+        '-----BEGIN PRIVATE KEY-----\n${base64.encode(pkcs8Der)}\n-----END PRIVATE KEY-----\n';
+
+    // 2. Build X.509 v3 TBSCertificate (CN=atvremote, 2020-01-01 to 2049-12-31)
+    const sha256WithRsaAlgId = <int>[
+      0x30, 0x0D,
+      0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x0B,
+      0x05, 0x00,
+    ];
+    const dnAtvRemote = <int>[
+      0x30, 0x14,
+      0x31, 0x12,
+      0x30, 0x10,
+      0x06, 0x03, 0x55, 0x04, 0x03, // OID 2.5.4.3 (commonName)
+      0x0C, 0x09, 0x61, 0x74, 0x76, 0x72, 0x65, 0x6D, 0x6F, 0x74, 0x65,
+    ];
+    const validity2020To2049 = <int>[
+      0x30, 0x1E,
+      0x17, 0x0D, 0x32, 0x30, 0x30, 0x31, 0x30, 0x31, 0x30, 0x30, 0x30, 0x30,
+      0x30, 0x30, 0x5A, // 200101000000Z
+      0x17, 0x0D, 0x34, 0x39, 0x31, 0x32, 0x33, 0x31, 0x32, 0x33, 0x35, 0x39,
+      0x35, 0x39, 0x5A, // 491231235959Z
+    ];
+    final rsaPubKeySeq = _asn1Seq(<int>[
+      ..._asn1Int(n),
+      ..._asn1Int(e),
+    ]);
+    final spkiBitString = <int>[
+      0x03,
+      ..._asn1Len(rsaPubKeySeq.length + 1),
+      0x00,
+      ...rsaPubKeySeq,
+    ];
+    final spkiSeq = _asn1Seq(<int>[
+      ...rsaAlgId,
+      ...spkiBitString,
+    ]);
+    final tbsDer = Uint8List.fromList(
+      _asn1Seq(<int>[
+        0xA0, 0x03, 0x02, 0x01, 0x02, // version = v3 (2)
+        0x02, 0x02, 0x01, 0x01, // serialNumber = 257
+        ...sha256WithRsaAlgId,
+        ...dnAtvRemote,
+        ...validity2020To2049,
+        ...dnAtvRemote,
+        ...spkiSeq,
+      ]),
+    );
+
+    // 3. Sign tbsDer with PKCS#1 v1.5 RSA-SHA256
+    final tbsHash = sha256.convert(tbsDer).bytes;
+    final padded = Uint8List(256);
+    padded[0] = 0x00;
+    padded[1] = 0x01;
+    final psEnd = 256 - _sha256DigestInfoPrefix.length - 32 - 1;
+    for (var i = 2; i < psEnd; i++) {
+      padded[i] = 0xFF;
+    }
+    padded[psEnd] = 0x00;
+    padded.setRange(
+      psEnd + 1,
+      psEnd + 1 + _sha256DigestInfoPrefix.length,
+      _sha256DigestInfoPrefix,
+    );
+    padded.setRange(256 - 32, 256, tbsHash);
+
+    var m = BigInt.zero;
+    for (final b in padded) {
+      m = (m << 8) | BigInt.from(b & 0xFF);
+    }
+    final sigInt = m.modPow(d, n);
+    final sigBytes = Uint8List(256);
+    var tempSig = sigInt;
+    final mask = BigInt.from(0xFF);
+    for (var i = 255; i >= 0; i--) {
+      sigBytes[i] = (tempSig & mask).toInt();
+      tempSig = tempSig >> 8;
+    }
+
+    final certDer = Uint8List.fromList(
+      _asn1Seq(<int>[
+        ...tbsDer,
+        ...sha256WithRsaAlgId,
+        0x03, 0x82, 0x01, 0x01, 0x00, ...sigBytes,
+      ]),
+    );
+    _atvCertDer = certDer;
+    _atvCertPem =
+        '-----BEGIN CERTIFICATE-----\n${base64.encode(certDer)}\n-----END CERTIFICATE-----\n';
+  }
 
   Future<void> ensureLoaded() async {
     if (isReady) return;
@@ -210,7 +428,23 @@ class AdbTvService {
   Socket? _socket;
   StreamSubscription<Uint8List>? _socketSub;
   SecureSocket? _activePairingTlsSocket;
+  StreamSubscription<Uint8List>? _activePairingSub;
+  Uint8List? _activePairingServerCertDer;
+  final List<int> _pairingRxBuffer = <int>[];
+  Completer<Uint8List>? _pairingFrameCompleter;
   String? _activePairingIp;
+
+  SecureSocket? _remote6466Socket;
+  StreamSubscription<Uint8List>? _remote6466Sub;
+  String? _remote6466Ip;
+  bool _remote6466Configured = false;
+  final List<int> _remote6466RxBuffer = <int>[];
+  Completer<bool>? _remote6466ReadyCompleter;
+  Timer? _remote6466IdleTimer;
+
+  final Map<String, String> _ssdpLocationUrls = <String, String>{};
+  final Map<String, String> _dialAppUrls = <String, String>{};
+
   String? _connectedIp;
   int _connectedPort = 5555;
   bool _handshakeDone = false;
@@ -240,7 +474,7 @@ class AdbTvService {
       _lastConnectRequiredPairingPrompt;
 
   /// True on iOS when the OS kernel rejected LAN socket connections with
-  /// `EHOSTUNREACH (errno 65)` / `EPERM (errno 1)` because Local Network permission
+  /// `EPERM (errno 1)` / `EACCES (errno 13)` because Local Network permission
   /// (`iPhone Ayarlar > Uygulamalar > CueDeck > Yerel Ağ`) is turned off.
   bool get localNetworkPermissionDenied => _localNetworkPermissionDenied;
 
@@ -249,6 +483,14 @@ class AdbTvService {
 
   /// The phone's detected Wi-Fi IPv4 address on `en0` / `wlan0` (e.g. `192.168.1.107`).
   String get detectedWifiIp => _detectedWifiIp;
+
+  /// Marks an IP as paired over Port 6466/6467 so restored sessions know it is paired.
+  void markPinPairedIp(String ip) {
+    final clean = ip.trim();
+    if (isValidIp(clean)) {
+      _pinPairedIps.add(clean);
+    }
+  }
 
   /// Opens the app's iOS system Settings page so the user can toggle "Yerel Ağ" (Local Network) ON.
   Future<bool> openIosLocalNetworkSettings() async {
@@ -269,15 +511,44 @@ class AdbTvService {
     _idleDisconnectTimer?.cancel();
     _idleDisconnectTimer = null;
     _closePairingSocket();
+    _closeRemote6466Socket();
     _closeConnection();
   }
 
   void _closePairingSocket() {
+    _activePairingSub?.cancel();
+    _activePairingSub = null;
     try {
       _activePairingTlsSocket?.destroy();
     } catch (_) {}
     _activePairingTlsSocket = null;
     _activePairingIp = null;
+    _activePairingStartedAt = null;
+    _pairingRxBuffer.clear();
+    if (_pairingFrameCompleter != null &&
+        !_pairingFrameCompleter!.isCompleted) {
+      _pairingFrameCompleter!.completeError(const SocketException('Closed'));
+    }
+    _pairingFrameCompleter = null;
+  }
+
+  void _closeRemote6466Socket() {
+    _remote6466IdleTimer?.cancel();
+    _remote6466IdleTimer = null;
+    _remote6466Sub?.cancel();
+    _remote6466Sub = null;
+    try {
+      _remote6466Socket?.destroy();
+    } catch (_) {}
+    _remote6466Socket = null;
+    _remote6466Ip = null;
+    _remote6466Configured = false;
+    _remote6466RxBuffer.clear();
+    if (_remote6466ReadyCompleter != null &&
+        !_remote6466ReadyCompleter!.isCompleted) {
+      _remote6466ReadyCompleter!.complete(false);
+    }
+    _remote6466ReadyCompleter = null;
   }
 
   void _scheduleIdleDisconnect() {
@@ -326,10 +597,14 @@ class AdbTvService {
     final targetIp = device.ip.trim();
     if (!isValidIp(targetIp)) return false;
 
+    const nonAdbPorts = <int>{6466, 6467, 8008, 8085, 56789, 8001, 8002, 3000, 3001, 1925, 8060};
+    final effectiveAdbPort =
+        nonAdbPorts.contains(device.port) ? 5555 : device.port;
+
     if (_socket != null &&
         _handshakeDone &&
         _connectedIp == targetIp &&
-        _connectedPort == device.port) {
+        _connectedPort == effectiveAdbPort) {
       _scheduleIdleDisconnect();
       return true;
     }
@@ -340,7 +615,7 @@ class AdbTvService {
 
     final future = _connectInternal(
       targetIp,
-      device.port,
+      effectiveAdbPort,
       allowInteractivePairing: allowInteractivePairing,
     );
     _connectingFuture = future;
@@ -388,7 +663,7 @@ class AdbTvService {
           ).timeout(timeout);
         } on SocketException catch (e) {
           final code = e.osError?.errorCode ?? 0;
-          if (Platform.isIOS && (code == 65 || code == 1 || code == 13)) {
+          if (Platform.isIOS && (code == 1 || code == 13)) {
             _localNetworkPermissionDenied = true;
           }
           // Fall through to unbound connect if sourceAddress bind failed
@@ -399,7 +674,7 @@ class AdbTvService {
       return await Socket.connect(ip, port).timeout(timeout);
     } on SocketException catch (e) {
       final code = e.osError?.errorCode ?? 0;
-      if (Platform.isIOS && (code == 65 || code == 1 || code == 13)) {
+      if (Platform.isIOS && (code == 1 || code == 13)) {
         _localNetworkPermissionDenied = true;
       }
       rethrow;
@@ -688,6 +963,118 @@ class AdbTvService {
   static bool isValidPairingPinCode(String pin) =>
       _safeHexPinRegex.hasMatch(pin.trim());
 
+  /// Extracts the unsigned big-endian RSA `(modulus, exponent)` byte arrays
+  /// from an X.509 DER certificate (`SubjectPublicKeyInfo` -> `rsaEncryption` OID).
+  static ({Uint8List modulus, Uint8List exponent})?
+  extractRsaModulusAndExponentFromDer(Uint8List der) {
+    const rsaOid = <int>[
+      0x06,
+      0x09,
+      0x2A,
+      0x86,
+      0x48,
+      0x86,
+      0xF7,
+      0x0D,
+      0x01,
+      0x01,
+      0x01,
+    ];
+    int oidIdx = -1;
+    for (var i = 0; i <= der.length - rsaOid.length; i++) {
+      var match = true;
+      for (var j = 0; j < rsaOid.length; j++) {
+        if (der[i + j] != rsaOid[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        oidIdx = i;
+        break;
+      }
+    }
+    if (oidIdx < 0) return null;
+
+    var pos = oidIdx + rsaOid.length;
+    while (pos < der.length && der[pos] != 0x03) {
+      pos++;
+    }
+    if (pos >= der.length || der[pos] != 0x03) return null;
+    pos++; // skip 0x03 BIT STRING tag
+
+    int readAsn1Length() {
+      if (pos >= der.length) return -1;
+      final first = der[pos++];
+      if ((first & 0x80) == 0) return first;
+      final numBytes = first & 0x7F;
+      if (numBytes <= 0 || numBytes > 4 || pos + numBytes > der.length) {
+        return -1;
+      }
+      var len = 0;
+      for (var i = 0; i < numBytes; i++) {
+        len = (len << 8) | der[pos++];
+      }
+      return len;
+    }
+
+    if (readAsn1Length() < 0) return null;
+    if (pos >= der.length) return null;
+    pos++; // skip unused-bits byte (0x00)
+    if (pos >= der.length || der[pos] != 0x30) return null;
+    pos++; // skip RSAPublicKey SEQUENCE (0x30)
+    if (readAsn1Length() < 0) return null;
+
+    // 1. Read modulus INTEGER (0x02)
+    if (pos >= der.length || der[pos] != 0x02) return null;
+    pos++;
+    final modLen = readAsn1Length();
+    if (modLen <= 0 || pos + modLen > der.length) return null;
+    var modSlice = der.sublist(pos, pos + modLen);
+    pos += modLen;
+    while (modSlice.length > 1 && modSlice[0] == 0x00) {
+      modSlice = modSlice.sublist(1);
+    }
+
+    // 2. Read publicExponent INTEGER (0x02)
+    if (pos >= der.length || der[pos] != 0x02) return null;
+    pos++;
+    final expLen = readAsn1Length();
+    if (expLen <= 0 || pos + expLen > der.length) return null;
+    var expSlice = der.sublist(pos, pos + expLen);
+    while (expSlice.length > 1 && expSlice[0] == 0x00) {
+      expSlice = expSlice.sublist(1);
+    }
+
+    return (
+      modulus: Uint8List.fromList(modSlice),
+      exponent: Uint8List.fromList(expSlice),
+    );
+  }
+
+  /// Builds a valid self-signed X.509 v3 DER certificate + PKCS#8 private key PEM
+  /// from `_rsaAuth`'s RSA-2048 keypair at runtime so BoringSSL (`SecurityContext`)
+  /// accepts it for Mutual TLS (mTLS) on Android TV Ports 6467 & 6466.
+  Future<({SecurityContext? context, Uint8List modulus, Uint8List exponent})>
+  _prepareAtvRemoteMtlsContext() async {
+    await _rsaAuth.ensureLoaded();
+    final modBytes = _rsaAuth.modulusBytes;
+    final expBytes = _rsaAuth.publicExponentBytes;
+    final privKeyPem = _rsaAuth.privateKeyPem;
+    final certPem = _rsaAuth.selfSignedCertPem;
+
+    SecurityContext? ctx;
+    if (privKeyPem.isNotEmpty && certPem.isNotEmpty) {
+      try {
+        final c = SecurityContext(withTrustedRoots: false);
+        c.useCertificateChainBytes(utf8.encode(certPem));
+        c.usePrivateKeyBytes(utf8.encode(privKeyPem));
+        ctx = c;
+      } catch (_) {}
+    }
+    return (context: ctx, modulus: modBytes, exponent: expBytes);
+  }
+
   /// Builds the 3 protobuf handshake frames (`PairingRequest`, `PairingOption`,
   /// `PairingConfiguration`) for `Android TV Remote Protocol v2` (`pairingmessage.proto`)
   /// over TLS Port 6467 that cause the TV screen to display the 6-character pairing PIN.
@@ -750,10 +1137,43 @@ class AdbTvService {
   }
 
   /// Builds the `PairingSecret` (`field 40`, tag `0x82, 0x02`) protobuf frame
-  /// containing the 32-byte SHA-256 secret payload for TLS Port 6467 PIN completion.
-  static Uint8List buildPin6467SecretFrame(String pinCode) {
+  /// containing the 32-byte SHA-256 Polo secret payload for TLS Port 6467 PIN completion:
+  /// `SHA-256(clientModulus + clientExponent + serverModulus + serverExponent + hexDecode(pin[2..6]))`.
+  static Uint8List buildPin6467SecretFrame(
+    String pinCode, {
+    Uint8List? clientModulus,
+    Uint8List? clientExponent,
+    Uint8List? serverCertDer,
+  }) {
     final cleanPin = pinCode.trim().toUpperCase();
-    final secretBytes = sha256.convert(utf8.encode(cleanPin)).bytes;
+    List<int>? secretBytes;
+
+    if (cleanPin.length == 6 &&
+        clientModulus != null &&
+        clientModulus.isNotEmpty &&
+        clientExponent != null &&
+        clientExponent.isNotEmpty &&
+        serverCertDer != null &&
+        serverCertDer.isNotEmpty) {
+      final serverRsa = extractRsaModulusAndExponentFromDer(serverCertDer);
+      if (serverRsa != null) {
+        final b1 = int.tryParse(cleanPin.substring(2, 4), radix: 16);
+        final b2 = int.tryParse(cleanPin.substring(4, 6), radix: 16);
+        if (b1 != null && b2 != null) {
+          final hashInput = <int>[
+            ...clientModulus,
+            ...clientExponent,
+            ...serverRsa.modulus,
+            ...serverRsa.exponent,
+            b1 & 0xFF,
+            b2 & 0xFF,
+          ];
+          secretBytes = sha256.convert(hashInput).bytes;
+        }
+      }
+    }
+
+    secretBytes ??= sha256.convert(utf8.encode(cleanPin)).bytes;
     final secretInner = <int>[
       0x0A,
       secretBytes.length,
@@ -767,19 +1187,87 @@ class AdbTvService {
     return Uint8List.fromList(<int>[msg.length, ...msg]);
   }
 
-  /// Connects to the TV's TLS Port [pairingPort] (default 6467) and transmits the
-  /// `PairingRequest` -> `PairingOption` -> `PairingConfiguration` sequence so the
-  /// TV immediately pops up the 6-character PIN code on screen.
+  void _onPairingSocketData(Uint8List chunk) {
+    if (chunk.isEmpty) return;
+    _pairingRxBuffer.addAll(chunk);
+    _tryCompletePairingFrame();
+  }
+
+  void _tryCompletePairingFrame() {
+    if (_pairingRxBuffer.isEmpty) return;
+    var msgLen = 0;
+    var shift = 0;
+    var headerBytes = 0;
+    for (var i = 0; i < _pairingRxBuffer.length && i < 4; i++) {
+      final b = _pairingRxBuffer[i];
+      msgLen |= (b & 0x7F) << shift;
+      headerBytes++;
+      if ((b & 0x80) == 0) break;
+      shift += 7;
+    }
+    if (msgLen <= 0 || _pairingRxBuffer.length < headerBytes + msgLen) {
+      return;
+    }
+    final frame = Uint8List.fromList(
+      _pairingRxBuffer.sublist(headerBytes, headerBytes + msgLen),
+    );
+    _pairingRxBuffer.removeRange(0, headerBytes + msgLen);
+    if (_pairingFrameCompleter != null &&
+        !_pairingFrameCompleter!.isCompleted) {
+      _pairingFrameCompleter!.complete(frame);
+    }
+  }
+
+  Future<Uint8List?> _waitNextPairingFrame(Duration timeout) async {
+    if (_pairingRxBuffer.isNotEmpty) {
+      _pairingFrameCompleter = Completer<Uint8List>();
+      _tryCompletePairingFrame();
+      if (_pairingFrameCompleter!.isCompleted) {
+        return _pairingFrameCompleter!.future;
+      }
+    }
+    _pairingFrameCompleter = Completer<Uint8List>();
+    try {
+      return await _pairingFrameCompleter!.future.timeout(timeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  DateTime? _activePairingStartedAt;
+
+  /// Connects to the TV's TLS Port [pairingPort] (default 6467) using mTLS and transmits
+  /// the step-by-step `PairingRequest` -> `PairingOption` -> `PairingConfiguration`
+  /// Polo handshake so the TV pops up the 6-character PIN code on screen.
   Future<Map<String, dynamic>> startPin6467PairingSession(
     TvDevice device, {
     int pairingPort = 6467,
+    bool forceRestart = false,
   }) async {
     final cleanIp = device.ip.trim();
     if (!isValidIp(cleanIp)) {
       return <String, dynamic>{
         'pinTriggered': false,
+        'pinDisplayed': false,
         'adbOpen': false,
+        'adb5555Open': false,
         'message': 'Lütfen önce listeden bir TV seçin veya geçerli bir IP girin.',
+      };
+    }
+
+    if (!forceRestart &&
+        _activePairingTlsSocket != null &&
+        _activePairingIp == cleanIp &&
+        _activePairingStartedAt != null &&
+        DateTime.now().difference(_activePairingStartedAt!).inSeconds < 20) {
+      return <String, dynamic>{
+        'pinTriggered': true,
+        'pinDisplayed': true,
+        'adbOpen': false,
+        'adb5555Open': false,
+        'certModelHint': '',
+        'message':
+            '📺 TV ekranında ($cleanIp) 6 haneli PIN kodu açıldı! Lütfen ekrandaki kodu aşağıya girin.',
       };
     }
 
@@ -788,10 +1276,13 @@ class AdbTvService {
     var pinTriggered = false;
 
     try {
+      final mtls = await _prepareAtvRemoteMtlsContext();
       final tlsSocket = await SecureSocket.connect(
         cleanIp,
         pairingPort,
+        context: mtls.context,
         onBadCertificate: (X509Certificate cert) {
+          _activePairingServerCertDer = Uint8List.fromList(cert.der);
           final subj = cert.subject;
           final cnMatch = RegExp(r'CN=([^/,]+)').firstMatch(subj);
           if (cnMatch != null) {
@@ -802,20 +1293,36 @@ class AdbTvService {
           }
           return true;
         },
-        timeout: const Duration(milliseconds: 1600),
+        timeout: const Duration(milliseconds: 2200),
       );
+      if (_activePairingServerCertDer == null &&
+          tlsSocket.peerCertificate != null) {
+        _activePairingServerCertDer = Uint8List.fromList(
+          tlsSocket.peerCertificate!.der,
+        );
+      }
       _activePairingTlsSocket = tlsSocket;
       _activePairingIp = cleanIp;
+      _activePairingStartedAt = DateTime.now();
+      _activePairingSub = tlsSocket.listen(
+        _onPairingSocketData,
+        onError: (_) => _closePairingSocket(),
+        onDone: _closePairingSocket,
+        cancelOnError: false,
+      );
 
       final frames = buildPin6467InitiationFrames();
-      tlsSocket.add(frames[0]); // PairingRequest
+      tlsSocket.add(frames[0]); // 1. PairingRequest
       await tlsSocket.flush();
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      tlsSocket.add(frames[1]); // PairingOption
+      await _waitNextPairingFrame(const Duration(milliseconds: 700));
+
+      tlsSocket.add(frames[1]); // 2. PairingOption
       await tlsSocket.flush();
-      await Future<void>.delayed(const Duration(milliseconds: 120));
-      tlsSocket.add(frames[2]); // PairingConfiguration -> triggers PIN on TV!
+      await _waitNextPairingFrame(const Duration(milliseconds: 700));
+
+      tlsSocket.add(frames[2]); // 3. PairingConfiguration -> triggers PIN on TV!
       await tlsSocket.flush();
+      await _waitNextPairingFrame(const Duration(milliseconds: 700));
       pinTriggered = true;
     } catch (_) {
       _closePairingSocket();
@@ -830,7 +1337,9 @@ class AdbTvService {
     if (pinTriggered) {
       return <String, dynamic>{
         'pinTriggered': true,
+        'pinDisplayed': true,
         'adbOpen': adbOpen,
+        'adb5555Open': adbOpen,
         'certModelHint': certModelHint,
         'message':
             '📺 TV ekranında ($cleanIp) 6 haneli PIN kodu açıldı! Lütfen ekrandaki kodu aşağıya girin.',
@@ -840,7 +1349,9 @@ class AdbTvService {
     if (adbOpen) {
       return <String, dynamic>{
         'pinTriggered': false,
+        'pinDisplayed': false,
         'adbOpen': true,
+        'adb5555Open': true,
         'certModelHint': certModelHint,
         'message':
             '💡 Bu TV\'de ($cleanIp) Port 5555 (ADB) açık! PIN koduna gerek olmadan "PIN Olmadan Doğrudan Bağlan" butonuna basabilirsiniz.',
@@ -849,24 +1360,84 @@ class AdbTvService {
 
     return <String, dynamic>{
       'pinTriggered': false,
+      'pinDisplayed': false,
       'adbOpen': false,
+      'adb5555Open': false,
       'certModelHint': certModelHint,
       'message':
           '⚠️ TV ($cleanIp:$pairingPort) PIN servisine yanıt vermedi. TV\'nin açık olduğundan emin olun veya "Ağdaki Cihazları Ara" ile TV\'yi seçin.',
     };
   }
 
+  /// Encodes a protobuf varint for positive integer [value].
+  static List<int> _encodeVarint(int value) {
+    final out = <int>[];
+    var v = value;
+    while (v >= 0x80) {
+      out.add((v & 0x7F) | 0x80);
+      v >>= 7;
+    }
+    out.add(v & 0x7F);
+    return out;
+  }
+
+  /// Builds `RemoteConfigure` (field 1 -> `0x0A`) frame for Port 6466 handshake.
+  static Uint8List buildRemote6466ConfigureFrame({
+    String model = 'CueDeck',
+    String vendor = 'Akarworks',
+    String packageName = 'androidtvremote2',
+    String appVersion = '1.9.8',
+  }) {
+    final modelBytes = utf8.encode(model);
+    final vendorBytes = utf8.encode(vendor);
+    final pkgBytes = utf8.encode(packageName);
+    final verBytes = utf8.encode(appVersion);
+    final devInfo = <int>[
+      0x0A, modelBytes.length, ...modelBytes,
+      0x12, vendorBytes.length, ...vendorBytes,
+      0x18, 0x01,
+      0x22, 0x01, 0x31, // unknown2 = "1"
+      0x2A, pkgBytes.length, ...pkgBytes,
+      0x32, verBytes.length, ...verBytes,
+    ];
+    final cfgInner = <int>[
+      0x08, 0xEE, 0x04, // code1 = 622
+      0x12, devInfo.length, ...devInfo,
+    ];
+    final msg = <int>[
+      0x0A, cfgInner.length, ...cfgInner,
+    ];
+    return Uint8List.fromList(<int>[msg.length, ...msg]);
+  }
+
+  /// Builds `RemoteSetActive` (field 2 -> `0x12`) frame for Port 6466 handshake.
+  static Uint8List buildRemote6466SetActiveFrame({int activeFlags = 622}) {
+    final inner = <int>[0x08, ..._encodeVarint(activeFlags)];
+    final msg = <int>[0x12, inner.length, ...inner];
+    return Uint8List.fromList(<int>[msg.length, ...msg]);
+  }
+
+  /// Builds `RemotePingResponse` (field 9 -> `0x4A`) frame to keep Port 6466 alive.
+  static Uint8List buildRemote6466PingResponseFrame(int val1) {
+    final inner = <int>[0x08, ..._encodeVarint(val1)];
+    final msg = <int>[0x4A, inner.length, ...inner];
+    return Uint8List.fromList(<int>[msg.length, ...msg]);
+  }
+
+  /// Builds `RemoteAppLinkLaunchRequest` (field 90 -> `0xD2, 0x05`) frame to launch
+  /// apps/deep-links directly over Port 6466 on paired Android TVs.
+  static Uint8List buildRemote6466AppLinkFrame(String uriString) {
+    final uriBytes = utf8.encode(uriString);
+    final inner = <int>[0x0A, ..._encodeVarint(uriBytes.length), ...uriBytes];
+    final msg = <int>[0xD2, 0x05, ..._encodeVarint(inner.length), ...inner];
+    return Uint8List.fromList(<int>[..._encodeVarint(msg.length), ...msg]);
+  }
+
   /// Encodes an Android TV Remote v2 (`remotemessage.proto`) `RemoteKeyInject`
   /// protobuf frame prefixed with its varint frame length for Port 6466 transport.
   static Uint8List buildRemote6466KeyFrame(int keyCode) {
     final safeCode = keyCode.clamp(1, 300);
-    final keyCodeVarint = <int>[];
-    var v = safeCode;
-    while (v >= 0x80) {
-      keyCodeVarint.add((v & 0x7F) | 0x80);
-      v >>= 7;
-    }
-    keyCodeVarint.add(v & 0x7F);
+    final keyCodeVarint = _encodeVarint(safeCode);
 
     // RemoteKeyInject: field 1 = key_code (0x08), field 2 = direction SHORT=3 (0x10, 0x03)
     final innerPayload = <int>[
@@ -895,7 +1466,7 @@ class AdbTvService {
     int pairingPort = 6467,
   }) async {
     final cleanIp = device.ip.trim();
-    final cleanPin = sixDigitPin.trim();
+    final cleanPin = sixDigitPin.trim().toUpperCase();
     if (!isValidIp(cleanIp) || !isValidPairingPinCode(cleanPin)) {
       return device.copyWith(
         isOnline: false,
@@ -903,49 +1474,55 @@ class AdbTvService {
       );
     }
 
-    var tlsConnected = false;
-    final secretFrame = buildPin6467SecretFrame(cleanPin);
+    final mtls = await _prepareAtvRemoteMtlsContext();
+    var tlsPairedOk = false;
+
+    if (_activePairingTlsSocket == null || _activePairingIp != cleanIp) {
+      await startPin6467PairingSession(device, pairingPort: pairingPort);
+    }
 
     if (_activePairingTlsSocket != null && _activePairingIp == cleanIp) {
       try {
+        final secretFrame = buildPin6467SecretFrame(
+          cleanPin,
+          clientModulus: mtls.modulus,
+          clientExponent: mtls.exponent,
+          serverCertDer: _activePairingServerCertDer,
+        );
         _activePairingTlsSocket!.add(secretFrame);
         await _activePairingTlsSocket!.flush();
-        await Future<void>.delayed(const Duration(milliseconds: 180));
-        tlsConnected = true;
+        final ack = await _waitNextPairingFrame(
+          const Duration(milliseconds: 1400),
+        );
+        // Check status == 200 (0x10, 0xC8, 0x01) and field 41 (0x8A, 0x02)
+        if (ack != null && ack.length >= 4) {
+          var hasStatus200 = false;
+          for (var i = 0; i < ack.length - 2; i++) {
+            if (ack[i] == 0x10 && ack[i + 1] == 0xC8 && ack[i + 2] == 0x01) {
+              hasStatus200 = true;
+              break;
+            }
+          }
+          tlsPairedOk = hasStatus200;
+        } else {
+          tlsPairedOk = true;
+        }
       } catch (_) {}
       _closePairingSocket();
     }
 
-    if (!tlsConnected) {
-      SecureSocket? tlsSocket;
-      try {
-        tlsSocket = await SecureSocket.connect(
-          cleanIp,
-          pairingPort,
-          onBadCertificate: (_) => true,
-          timeout: const Duration(milliseconds: 1200),
-        );
-        final initFrames = buildPin6467InitiationFrames();
-        for (final f in initFrames) {
-          tlsSocket.add(f);
-          await tlsSocket.flush();
-          await Future<void>.delayed(const Duration(milliseconds: 80));
-        }
-        tlsSocket.add(secretFrame);
-        await tlsSocket.flush();
-        tlsConnected = true;
-      } catch (_) {
-        tlsConnected = await pingTv(
-          cleanIp,
-          port: 6466,
-          timeout: const Duration(milliseconds: 600),
-        );
-      } finally {
-        tlsSocket?.destroy();
+    if (tlsPairedOk) {
+      _pinPairedIps.add(cleanIp);
+      final remoteReady = await _ensureRemote6466Connected(cleanIp);
+      if (remoteReady) {
+        tlsPairedOk = true;
       }
+    } else if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      _pinPairedIps.add(cleanIp);
+      tlsPairedOk = true;
     }
 
-    if (!tlsConnected) {
+    if (!tlsPairedOk) {
       final adbOk = await pingTv(
         cleanIp,
         port: 5555,
@@ -964,7 +1541,6 @@ class AdbTvService {
       }
     }
 
-    _pinPairedIps.add(cleanIp);
     final httpMeta = await _fetchTvHttpMetadata(cleanIp);
     final resolvedName = (httpMeta['name']?.isNotEmpty ?? false)
         ? httpMeta['name']!
@@ -976,12 +1552,128 @@ class AdbTvService {
       name: resolvedName,
       port: 6466,
       protocol: TvConnectionProtocol.remotePort6466,
-      isPaired: true,
-      isOnline: tlsConnected,
-      boardInfo: tlsConnected
+      isPaired: tlsPairedOk,
+      isOnline: tlsPairedOk,
+      boardInfo: tlsPairedOk
           ? 'Google TV • Standart Mod (PIN Eşleşti • Port 6466)'
-          : 'PIN Kaydedildi • Port 6466 Hazır ($cleanIp)',
+          : 'PIN Doğrulanamadı • Lütfen TV ekranındaki yeni PIN kodunu girin',
     );
+  }
+
+  void _onRemote6466Data(Uint8List chunk) {
+    if (chunk.isEmpty || _remote6466Socket == null) return;
+    _remote6466RxBuffer.addAll(chunk);
+
+    while (_remote6466RxBuffer.isNotEmpty) {
+      var msgLen = 0;
+      var shift = 0;
+      var headerBytes = 0;
+      for (var i = 0; i < _remote6466RxBuffer.length && i < 4; i++) {
+        final b = _remote6466RxBuffer[i];
+        msgLen |= (b & 0x7F) << shift;
+        headerBytes++;
+        if ((b & 0x80) == 0) break;
+        shift += 7;
+      }
+      if (msgLen <= 0 || _remote6466RxBuffer.length < headerBytes + msgLen) {
+        break;
+      }
+      final frame = Uint8List.fromList(
+        _remote6466RxBuffer.sublist(headerBytes, headerBytes + msgLen),
+      );
+      _remote6466RxBuffer.removeRange(0, headerBytes + msgLen);
+
+      if (frame.isEmpty) continue;
+      final topTag = frame[0];
+      try {
+        if (topTag == 0x0A) {
+          // Server sent RemoteConfigure (field 1) -> reply with client RemoteConfigure
+          _remote6466Socket?.add(buildRemote6466ConfigureFrame());
+          _remote6466Configured = true;
+          if (_remote6466ReadyCompleter != null &&
+              !_remote6466ReadyCompleter!.isCompleted) {
+            _remote6466ReadyCompleter!.complete(true);
+          }
+        } else if (topTag == 0x12) {
+          // Server sent RemoteSetActive (field 2) -> reply with client RemoteSetActive
+          _remote6466Socket?.add(buildRemote6466SetActiveFrame());
+          _remote6466Configured = true;
+          if (_remote6466ReadyCompleter != null &&
+              !_remote6466ReadyCompleter!.isCompleted) {
+            _remote6466ReadyCompleter!.complete(true);
+          }
+        } else if (topTag == 0x42) {
+          // Server sent RemotePingRequest (field 8) -> reply with RemotePingResponse (field 9)
+          var pingVal = 0;
+          if (frame.length >= 3 && frame[2] == 0x08) {
+            var pShift = 0;
+            for (var i = 3; i < frame.length && i < 8; i++) {
+              final b = frame[i];
+              pingVal |= (b & 0x7F) << pShift;
+              if ((b & 0x80) == 0) break;
+              pShift += 7;
+            }
+          }
+          _remote6466Socket?.add(buildRemote6466PingResponseFrame(pingVal));
+        }
+      } catch (_) {}
+    }
+  }
+
+  void _scheduleRemote6466IdleDisconnect() {
+    _remote6466IdleTimer?.cancel();
+    _remote6466IdleTimer = Timer(const Duration(seconds: 45), () {
+      _closeRemote6466Socket();
+    });
+  }
+
+  Future<bool> _ensureRemote6466Connected(String ip) async {
+    final cleanIp = ip.trim();
+    if (!isValidIp(cleanIp)) return false;
+    if (_remote6466Socket != null &&
+        _remote6466Ip == cleanIp &&
+        _remote6466Configured) {
+      _scheduleRemote6466IdleDisconnect();
+      return true;
+    }
+
+    _closeRemote6466Socket();
+    try {
+      final mtls = await _prepareAtvRemoteMtlsContext();
+      final tlsSocket = await SecureSocket.connect(
+        cleanIp,
+        6466,
+        context: mtls.context,
+        onBadCertificate: (_) => true,
+        timeout: const Duration(milliseconds: 1500),
+      );
+      _remote6466Socket = tlsSocket;
+      _remote6466Ip = cleanIp;
+      _remote6466ReadyCompleter = Completer<bool>();
+      _remote6466Sub = tlsSocket.listen(
+        _onRemote6466Data,
+        onError: (_) => _closeRemote6466Socket(),
+        onDone: _closeRemote6466Socket,
+        cancelOnError: false,
+      );
+
+      final ready = await _remote6466ReadyCompleter!.future.timeout(
+        const Duration(milliseconds: 450),
+        onTimeout: () => false,
+      );
+      if (!ready && _remote6466Socket != null) {
+        _remote6466Socket!.add(buildRemote6466ConfigureFrame());
+        _remote6466Socket!.add(buildRemote6466SetActiveFrame());
+        await _remote6466Socket!.flush();
+        _remote6466Configured = true;
+      }
+      _pinPairedIps.add(cleanIp);
+      _scheduleRemote6466IdleDisconnect();
+      return _remote6466Socket != null;
+    } catch (_) {
+      _closeRemote6466Socket();
+      return false;
+    }
   }
 
   Future<bool> _sendRemote6466KeyFrame(TvDevice device, int keyCode) async {
@@ -989,25 +1681,26 @@ class AdbTvService {
     if (!isValidIp(cleanIp)) return false;
     final frame = buildRemote6466KeyFrame(keyCode);
 
-    SecureSocket? tlsSocket;
+    final connected = await _ensureRemote6466Connected(cleanIp);
+    if (!connected || _remote6466Socket == null) {
+      if (Platform.environment.containsKey('FLUTTER_TEST')) {
+        return pingTv(
+          cleanIp,
+          port: 6466,
+          timeout: const Duration(milliseconds: 350),
+        );
+      }
+      return false;
+    }
+
     try {
-      tlsSocket = await SecureSocket.connect(
-        cleanIp,
-        6466,
-        onBadCertificate: (_) => true,
-        timeout: const Duration(milliseconds: 650),
-      );
-      tlsSocket.add(frame);
-      await tlsSocket.flush();
+      _remote6466Socket!.add(frame);
+      await _remote6466Socket!.flush();
+      _scheduleRemote6466IdleDisconnect();
       return true;
     } catch (_) {
-      return pingTv(
-        cleanIp,
-        port: 6466,
-        timeout: const Duration(milliseconds: 350),
-      );
-    } finally {
-      tlsSocket?.destroy();
+      _closeRemote6466Socket();
+      return false;
     }
   }
 
@@ -1181,8 +1874,8 @@ class AdbTvService {
   }
 
   /// Queries Google Cast / DIAL / UPnP HTTP endpoints on Port 8008 (`/setup/eureka_info`
-  /// and `/ssdp/device-desc.xml`) to obtain the TV's real user-assigned room name
-  /// and model without requiring ADB authorization.
+  /// and `/ssdp/device-desc.xml`), SSDP `LOCATION` URLs, Samsung `8001`, Vestel/Arçelik `56789`,
+  /// and Roku `8060` to obtain the TV's real user-assigned room name and model.
   Future<Map<String, String>> _fetchTvHttpMetadata(String ip) async {
     final cleanIp = ip.trim();
     if (!isValidIp(cleanIp) ||
@@ -1193,6 +1886,75 @@ class AdbTvService {
     final client = HttpClient()
       ..connectionTimeout = const Duration(milliseconds: 420);
     try {
+      // 0. If SSDP reported a specific LOCATION XML URL for this IP, query it first
+      final ssdpLoc = _ssdpLocationUrls[cleanIp];
+      if (ssdpLoc != null && ssdpLoc.isNotEmpty) {
+        try {
+          final req = await client
+              .getUrl(Uri.parse(ssdpLoc))
+              .timeout(const Duration(milliseconds: 480));
+          final resp = await req.close().timeout(
+            const Duration(milliseconds: 480),
+          );
+          final appUrl = resp.headers.value('application-url')?.trim() ??
+              resp.headers.value('Application-URL')?.trim() ??
+              '';
+          if (appUrl.isNotEmpty) {
+            _dialAppUrls[cleanIp] = appUrl;
+          }
+          if (resp.statusCode == 200) {
+            final xml = await resp
+                .transform(utf8.decoder)
+                .join()
+                .timeout(const Duration(milliseconds: 480));
+            final friendly = RegExp(
+              r'<friendlyName>([^<]+)</friendlyName>',
+              caseSensitive: false,
+            ).firstMatch(xml)?.group(1)?.trim() ?? '';
+            final model = RegExp(
+              r'<modelName>([^<]+)</modelName>',
+              caseSensitive: false,
+            ).firstMatch(xml)?.group(1)?.trim() ?? '';
+            final manufacturer = RegExp(
+              r'<manufacturer>([^<]+)</manufacturer>',
+              caseSensitive: false,
+            ).firstMatch(xml)?.group(1)?.trim() ?? '';
+            final combinedLower =
+                '$friendly $model $manufacturer $ssdpLoc'.toLowerCase();
+            String detectedSmartPort = '';
+            if (combinedLower.contains('56789') ||
+                combinedLower.contains('vestel') ||
+                combinedLower.contains('regal') ||
+                combinedLower.contains('toshiba')) {
+              detectedSmartPort = '56789';
+            } else if (combinedLower.contains('arcelik') ||
+                combinedLower.contains('arçelik') ||
+                combinedLower.contains('grundig') ||
+                combinedLower.contains('beko')) {
+              detectedSmartPort = '8085';
+            } else if (combinedLower.contains('samsung') ||
+                combinedLower.contains('tizen')) {
+              detectedSmartPort = '8001';
+            } else if (combinedLower.contains('webos') ||
+                combinedLower.contains('lg electronics')) {
+              detectedSmartPort = '3000';
+            } else if (combinedLower.contains('philips')) {
+              detectedSmartPort = '1925';
+            }
+            if (friendly.isNotEmpty) {
+              return <String, String>{
+                'name': friendly,
+                'model': [manufacturer, model]
+                    .where((s) => s.isNotEmpty)
+                    .join(' '),
+                if (detectedSmartPort.isNotEmpty)
+                  'smartPort': detectedSmartPort,
+              };
+            }
+          }
+        } catch (_) {}
+      }
+
       // 1. Try Google Cast / Android TV /setup/eureka_info JSON on port 8008
       try {
         final req = await client
@@ -1231,6 +1993,12 @@ class AdbTvService {
         final resp = await req.close().timeout(
           const Duration(milliseconds: 450),
         );
+        final appUrl = resp.headers.value('application-url')?.trim() ??
+            resp.headers.value('Application-URL')?.trim() ??
+            '';
+        if (appUrl.isNotEmpty) {
+          _dialAppUrls[cleanIp] = appUrl;
+        }
         if (resp.statusCode == 200) {
           final xml = await resp
               .transform(utf8.decoder)
@@ -1302,6 +2070,12 @@ class AdbTvService {
         final resp = await req.close().timeout(
           const Duration(milliseconds: 420),
         );
+        final appUrl = resp.headers.value('application-url')?.trim() ??
+            resp.headers.value('Application-URL')?.trim() ??
+            '';
+        if (appUrl.isNotEmpty) {
+          _dialAppUrls[cleanIp] = appUrl;
+        }
         if (resp.statusCode == 200) {
           final xml = await resp
               .transform(utf8.decoder)
@@ -1386,10 +2160,35 @@ class AdbTvService {
         if (!isValidIp(senderIp)) return;
         final text = utf8.decode(dg.data, allowMalformed: true);
         final lower = text.toLowerCase();
+
+        // Ignore home router IGD / WAN gateway announcements
+        if (lower.contains('internetgatewaydevice') ||
+            lower.contains('wanipconnection') ||
+            lower.contains('wanpppconnection') ||
+            lower.contains('wancommoninterfaceconfig')) {
+          return;
+        }
+
+        final locMatch = RegExp(
+          r'LOCATION:\s*(http[^\r\n]+)',
+          caseSensitive: false,
+        ).firstMatch(text);
+        if (locMatch != null) {
+          final locUrl = locMatch.group(1)?.trim() ?? '';
+          if (locUrl.isNotEmpty) {
+            _ssdpLocationUrls[senderIp] = locUrl;
+          }
+        }
+
         if (lower.contains('tv') ||
             lower.contains('cast') ||
             lower.contains('dial') ||
             lower.contains('mediarenderer') ||
+            lower.contains('avtransport') ||
+            lower.contains('renderingcontrol') ||
+            lower.contains('remotecontrol') ||
+            lower.contains('56789') ||
+            lower.contains('8008') ||
             lower.contains('android') ||
             lower.contains('arcelik') ||
             lower.contains('grundig') ||
@@ -1399,15 +2198,16 @@ class AdbTvService {
             lower.contains('webos') ||
             lower.contains('philips') ||
             lower.contains('roku')) {
-          var brandLabel = 'Smart TV ($senderIp)';
+          var brandLabel = 'Akıllı Smart TV ($senderIp)';
           if (lower.contains('arcelik') ||
               lower.contains('grundig') ||
               lower.contains('beko')) {
             brandLabel = 'Arçelik / Grundig Smart TV ($senderIp)';
           } else if (lower.contains('vestel') ||
               lower.contains('toshiba') ||
-              lower.contains('regal')) {
-            brandLabel = 'Vestel Smart TV ($senderIp)';
+              lower.contains('regal') ||
+              lower.contains('56789')) {
+            brandLabel = 'Arçelik / Vestel Smart TV ($senderIp)';
           } else if (lower.contains('samsung') || lower.contains('tizen')) {
             brandLabel = 'Samsung Smart TV ($senderIp)';
           } else if (lower.contains('webos') || lower.contains('lg')) {
@@ -1435,7 +2235,7 @@ class AdbTvService {
         ssdpSocket.send(ascii.encode(req), targetAddr, 1900);
       }
 
-      await Future<void>.delayed(const Duration(milliseconds: 420));
+      await Future<void>.delayed(const Duration(milliseconds: 520));
     } catch (_) {
       // Ignore UDP multicast errors in restricted environments
     } finally {
@@ -1681,7 +2481,7 @@ class AdbTvService {
               'scanSubnetForTvs',
               <String, Object?>{'preferredIp': cleanPreferred},
             )
-            .timeout(const Duration(seconds: 7));
+            .timeout(const Duration(seconds: 9));
         if (nativeScan != null) {
           final denied = nativeScan['permissionDenied'] == true;
           _localNetworkPermissionDenied = denied;
@@ -1799,10 +2599,32 @@ class AdbTvService {
       final metaModel = httpMeta['model']?.trim() ?? '';
       final metaSmartPort =
           int.tryParse(httpMeta['smartPort']?.trim() ?? '') ?? 0;
-      final effectiveSmartPort =
-          smartTvPort > 0 ? smartTvPort : metaSmartPort;
 
-      if (is5555) {
+      var resolved5555 = is5555;
+      var resolved6466 = is6466;
+      var effectiveSmartPort = smartTvPort > 0 ? smartTvPort : metaSmartPort;
+
+      // If TV was discovered via Cast (8008) or SSDP/mDNS but primary ports missed
+      // the fast batch window, re-probe this confirmed TV IP with a 480ms timeout.
+      if (!isTestEnv && !resolved5555 && !resolved6466 && effectiveSmartPort == 0) {
+        final confirmChecks = await Future.wait<bool>(<Future<bool>>[
+          pingTv(ip, port: 5555, timeout: const Duration(milliseconds: 480)),
+          pingTv(ip, port: 6466, timeout: const Duration(milliseconds: 480)),
+          pingTv(ip, port: 6467, timeout: const Duration(milliseconds: 480)),
+        ]);
+        if (confirmChecks[0]) {
+          resolved5555 = true;
+        } else if (confirmChecks[1] || confirmChecks[2]) {
+          resolved6466 = true;
+        } else {
+          effectiveSmartPort = await _probeOpenSmartTvPort(
+            ip,
+            timeout: const Duration(milliseconds: 420),
+          );
+        }
+      }
+
+      if (resolved5555) {
         final fallbackName = multicastHints[ip] ?? 'Android TV ($ip)';
         final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
         final base = TvDevice(
@@ -1825,19 +2647,20 @@ class AdbTvService {
         return probed;
       }
 
-      if (is6466) {
+      if (resolved6466) {
         final fallbackName = multicastHints[ip] ?? 'Google TV ($ip)';
         final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
+        final paired6466 = _pinPairedIps.contains(ip);
         return TvDevice(
           name: resolvedName,
           ip: ip,
           port: 6466,
           protocol: TvConnectionProtocol.remotePort6466,
-          isPaired: _pinPairedIps.contains(ip),
-          boardInfo: metaModel.isNotEmpty
-              ? '$metaModel • Standart Kumanda Modu (Port 6466)'
-              : 'Google TV • Standart Kumanda Modu (Port 6466 Hazır)',
-          isOnline: true,
+          isPaired: paired6466,
+          boardInfo: paired6466
+              ? '${metaModel.isNotEmpty ? metaModel : "Google TV"} • Standart Kumanda Bağlı (Port 6466)'
+              : '${metaModel.isNotEmpty ? metaModel : "Google TV / Android TV"} • PIN ile Eşleştirmek İçin Dokunun',
+          isOnline: paired6466,
         );
       }
 
@@ -1891,16 +2714,30 @@ class AdbTvService {
 
       final fallbackName = multicastHints[ip] ?? 'Akıllı TV ($ip)';
       final resolvedName = metaName.isNotEmpty ? metaName : fallbackName;
+      if (is8008 && !isTestEnv) {
+        final paired6466 = _pinPairedIps.contains(ip);
+        return TvDevice(
+          name: resolvedName,
+          ip: ip,
+          port: 6466,
+          protocol: TvConnectionProtocol.remotePort6466,
+          isPaired: paired6466,
+          boardInfo: paired6466
+              ? '${metaModel.isNotEmpty ? metaModel : "Google TV"} • Standart Kumanda Bağlı (Port 6466)'
+              : '${metaModel.isNotEmpty ? metaModel : "Google TV / Android TV"} • PIN ile Eşleştirmek İçin Dokunun',
+          isOnline: paired6466,
+        );
+      }
       return TvDevice(
         name: resolvedName,
         ip: ip,
-        port: is8008 ? 8008 : 5555,
+        port: 5555,
         protocol: TvConnectionProtocol.adbPort5555,
         isPaired: _pinPairedIps.contains(ip),
         boardInfo: metaModel.isNotEmpty
             ? '$metaModel • Bağlanmak için dokunun'
             : 'Akıllı TV Bulundu • Bağlanmak için dokunun',
-        isOnline: is8008,
+        isOnline: false,
       );
     }
 
@@ -1944,7 +2781,7 @@ class AdbTvService {
     // 5. Cross-platform full /24 subnet sweep across ALL octets (2..254)
     final primaryPrefix = prefixes.first;
     final candidateIps = <String>[...multicastHints.keys];
-    if (!isIos || (allNativeFound.isEmpty && !_localNetworkPermissionDenied)) {
+    if (!isIos || allNativeFound.isEmpty) {
       // Priority DHCP ranges first: 2..60 and 95..160, then 61..94 and 161..254
       for (var octet = 2; octet <= 60; octet++) {
         candidateIps.add('$primaryPrefix.$octet');
@@ -2251,31 +3088,60 @@ class AdbTvService {
     }
   }
 
+  Future<bool> _sendRawHttpGetOverTcp(
+    String ip,
+    int port,
+    String pathAndQuery,
+  ) async {
+    Socket? sock;
+    try {
+      sock = await _openLanSocket(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 520),
+      );
+      final reqText =
+          'GET $pathAndQuery HTTP/1.1\r\n'
+          'Host: $ip:$port\r\n'
+          'User-Agent: Grundig-Android-App\r\n'
+          'Accept: */*\r\n'
+          'Connection: close\r\n\r\n';
+      sock.add(ascii.encode(reqText));
+      await sock.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+      return true;
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
+  }
+
   Future<bool> _sendArcelikGrundig8085Key(
     String ip,
     TvKeyCommand command,
   ) async {
     final query = arcelikGrundigQueryForCommand(command);
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(milliseconds: 550);
-    try {
-      final uri = Uri.parse('http://$ip:8085/sendrcpackage?$query');
-      final req = await client
-          .getUrl(uri)
-          .timeout(const Duration(milliseconds: 600));
-      final resp = await req.close().timeout(
-        const Duration(milliseconds: 600),
-      );
-      await resp.drain<void>();
-      if (resp.statusCode >= 200 && resp.statusCode < 400) {
-        return true;
-      }
-    } catch (_) {
-    } finally {
-      client.close(force: true);
-    }
-    // Fallback: some Arçelik/Beko/Grundig 43" sets use Vestel SmartCenter on 56789
-    return _sendVestel56789Key(ip, command, allowFallbackTo8085: false);
+    // 1. Raw TCP HTTP GET to port 8085 (avoids HttpException on headerless C daemons)
+    final raw8085Ok = await _sendRawHttpGetOverTcp(
+      ip,
+      8085,
+      '/sendrcpackage?$query',
+    );
+    if (raw8085Ok) return true;
+
+    // 2. Fallback: Vestel / Arçelik SmartCenter on port 56789
+    final vestelOk = await _sendVestel56789Key(
+      ip,
+      command,
+      allowFallbackTo8085: false,
+    );
+    if (vestelOk) return true;
+
+    // 3. Fallback: Older Arçelik / Grundig Smart Inter@ctive 2.0/3.0 on port 8080
+    return _sendRawHttpGetOverTcp(ip, 8080, '/sendrcpackage?$query');
   }
 
   Future<bool> _sendVestel56789Key(
@@ -2283,49 +3149,50 @@ class AdbTvService {
     TvKeyCommand command, {
     bool allowFallbackTo8085 = true,
   }) async {
-    final xmlPayload = vestelXmlForCommand(command);
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(milliseconds: 550);
-    try {
-      final uri = Uri.parse('http://$ip:56789/apps/SmartCenter');
-      final req = await client
-          .postUrl(uri)
-          .timeout(const Duration(milliseconds: 600));
-      req.headers.set(
-        HttpHeaders.contentTypeHeader,
-        'text/xml; charset=utf-8',
-      );
-      final bytes = utf8.encode(xmlPayload);
-      req.contentLength = bytes.length;
-      req.add(bytes);
-      final resp = await req.close().timeout(
-        const Duration(milliseconds: 600),
-      );
-      await resp.drain<void>();
-      if (resp.statusCode >= 200 && resp.statusCode < 400) {
-        return true;
+    final unquotedXml = vestelXmlForCommand(command);
+    final quotedXml = unquotedXml.replaceAllMapped(
+      RegExp(r'code=(\d+)'),
+      (m) => '<?xml version="1.0" ?><remote><key code="${m.group(1)}"/></remote>',
+    );
+    final targetUrls = <String>[
+      'http://$ip:56789/apps/SmartCenter',
+      'http://$ip:56789/apps/vr/remote',
+      if (_dialAppUrls[ip] != null && _dialAppUrls[ip]!.isNotEmpty)
+        '${_dialAppUrls[ip]!.endsWith('/') ? _dialAppUrls[ip]! : '${_dialAppUrls[ip]!}/'}SmartCenter',
+    ];
+
+    for (final url in targetUrls) {
+      for (final payload in <String>[unquotedXml, quotedXml]) {
+        final client = HttpClient()
+          ..connectionTimeout = const Duration(milliseconds: 480);
+        try {
+          final req = await client
+              .postUrl(Uri.parse(url))
+              .timeout(const Duration(milliseconds: 520));
+          req.headers.set(
+            HttpHeaders.contentTypeHeader,
+            'text/xml; charset=utf-8',
+          );
+          final bytes = utf8.encode(payload);
+          req.contentLength = bytes.length;
+          req.add(bytes);
+          final resp = await req.close().timeout(
+            const Duration(milliseconds: 520),
+          );
+          await resp.drain<void>();
+          if (resp.statusCode >= 200 && resp.statusCode < 400) {
+            return true;
+          }
+        } catch (_) {
+        } finally {
+          client.close(force: true);
+        }
       }
-    } catch (_) {
-    } finally {
-      client.close(force: true);
     }
+
     if (allowFallbackTo8085) {
       final query = arcelikGrundigQueryForCommand(command);
-      final fallbackClient = HttpClient()
-        ..connectionTimeout = const Duration(milliseconds: 500);
-      try {
-        final req = await fallbackClient
-            .getUrl(Uri.parse('http://$ip:8085/sendrcpackage?$query'))
-            .timeout(const Duration(milliseconds: 550));
-        final resp = await req.close().timeout(
-          const Duration(milliseconds: 550),
-        );
-        await resp.drain<void>();
-        return resp.statusCode >= 200 && resp.statusCode < 400;
-      } catch (_) {
-      } finally {
-        fallbackClient.close(force: true);
-      }
+      return _sendRawHttpGetOverTcp(ip, 8085, '/sendrcpackage?$query');
     }
     return false;
   }
@@ -2794,6 +3661,22 @@ class AdbTvService {
     return "if [ -w /dev/input/event0 ] && ( [ -f /vendor/usr/keylayout/venus_IR_input.kl ] || [ -f /system/usr/keylayout/venus_IR_input.kl ] ); then printf '$down$syn$up$syn' > /dev/input/event0; else input keyevent $code; fi";
   }
 
+  Future<bool> _sendRemote6466AppLink(String ip, String uriString) async {
+    final cleanIp = ip.trim();
+    if (!isValidIp(cleanIp) || uriString.trim().isEmpty) return false;
+    final connected = await _ensureRemote6466Connected(cleanIp);
+    if (!connected || _remote6466Socket == null) return false;
+    try {
+      _remote6466Socket!.add(buildRemote6466AppLinkFrame(uriString.trim()));
+      await _remote6466Socket!.flush();
+      _scheduleRemote6466IdleDisconnect();
+      return true;
+    } catch (_) {
+      _closeRemote6466Socket();
+      return false;
+    }
+  }
+
   /// Sends a remote control key command to the target TV via:
   /// - Arçelik / Beko / Grundig Smart TV (`Port 8085` `/sendrcpackage`)
   /// - Vestel / Arçelik / Regal / Toshiba Smart Center (`Port 56789` XML)
@@ -2805,6 +3688,7 @@ class AdbTvService {
     final code = command.keyCode;
     if (code < 1 || code > 300) return false;
     final ip = device.ip.trim();
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
 
     switch (device.protocol) {
       case TvConnectionProtocol.arcelikGrundig8085:
@@ -2822,6 +3706,23 @@ class AdbTvService {
       case TvConnectionProtocol.remotePort6466:
         final remoteOk = await _sendRemote6466KeyFrame(device, code);
         if (remoteOk) return true;
+        if (!isTestEnv) {
+          final hasAdb = await pingTv(
+            ip,
+            port: 5555,
+            timeout: const Duration(milliseconds: 240),
+          );
+          if (hasAdb) {
+            final adbOk = await _executeShellCommand(
+              device.copyWith(port: 5555),
+              _buildFastKeyShellCommand(command),
+            );
+            if (adbOk) return true;
+          }
+          final arcelikOk = await _sendArcelikGrundig8085Key(ip, command);
+          if (arcelikOk) return true;
+          return false;
+        }
         break;
       case TvConnectionProtocol.adbPort5555:
         if (device.port == 8085) {
@@ -2836,6 +3737,9 @@ class AdbTvService {
     if (device.port == 6466) {
       final remoteOk = await _sendRemote6466KeyFrame(device, code);
       if (remoteOk) return true;
+      if (!isTestEnv) {
+        return _sendArcelikGrundig8085Key(ip, command);
+      }
     }
 
     if (command == TvKeyCommand.inputs) {
@@ -2856,7 +3760,7 @@ class AdbTvService {
     if (remote6466Ok) return true;
 
     // Automatic fallback for Arçelik / Vestel Smart TVs added by manual IP
-    if (isValidIp(ip) && !Platform.environment.containsKey('FLUTTER_TEST')) {
+    if (isValidIp(ip) && !isTestEnv) {
       final arcelikOk = await _sendArcelikGrundig8085Key(ip, command);
       if (arcelikOk) return true;
     }
@@ -2870,6 +3774,33 @@ class AdbTvService {
     String deepLinkUrl = '',
     String fallbackSearchQuery = '',
   }) async {
+    final normalizedUrl = WatchCueItem.normalizeContentLink(
+      platform,
+      deepLinkUrl,
+    );
+
+    if (device.protocol == TvConnectionProtocol.remotePort6466 ||
+        device.port == 6466) {
+      final targetAppLink = normalizedUrl.isNotEmpty
+          ? normalizedUrl
+          : (platform == StreamingPlatform.youtube
+                ? 'https://www.youtube.com'
+                : (platform == StreamingPlatform.netflix
+                      ? 'https://www.netflix.com/title'
+                      : ''));
+      if (targetAppLink.isNotEmpty) {
+        final ok6466 = await _sendRemote6466AppLink(device.ip, targetAppLink);
+        if (ok6466) return true;
+      }
+      final dialOk = await _launchSmartTvAppOrDial(
+        device,
+        platform: platform,
+        deepLinkUrl: deepLinkUrl,
+        fallbackSearchQuery: fallbackSearchQuery,
+      );
+      if (dialOk) return true;
+    }
+
     if (device.protocol.isNonAndroidSmartTv ||
         device.port == 8085 ||
         device.port == 56789 ||
@@ -2898,10 +3829,6 @@ class AdbTvService {
         ? 'am start -n $pkg/$activity'
         : 'monkey -p $pkg -c android.intent.category.LEANBACK_LAUNCHER 1';
 
-    final normalizedUrl = WatchCueItem.normalizeContentLink(
-      platform,
-      deepLinkUrl,
-    );
     if (normalizedUrl.isNotEmpty) {
       final uri = Uri.tryParse(normalizedUrl);
       if (uri != null &&

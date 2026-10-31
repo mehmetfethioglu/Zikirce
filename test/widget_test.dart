@@ -91,6 +91,7 @@ class _FakeAdbTvService extends AdbTvService {
   Future<Map<String, dynamic>> startPin6467PairingSession(
     TvDevice device, {
     int pairingPort = 6467,
+    bool forceRestart = false,
   }) async {
     return <String, dynamic>{
       'pinDisplayed': true,
@@ -434,15 +435,20 @@ void main() {
       expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
       expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
       expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(find.text('📋 Sürüm Notları (v1.9.7)'), findsOneWidget);
+      expect(
+        find.text('📋 Sürüm Notları (${CueReleaseNotesCatalog.currentShortVersion})'),
+        findsOneWidget,
+      );
 
       // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(find.text('📋 Sürüm Notları (v1.9.7)'));
+      await tester.tap(
+        find.text('📋 Sürüm Notları (${CueReleaseNotesCatalog.currentShortVersion})'),
+      );
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
         find.text(
-          'Arçelik, Beko, Grundig, Vestel, Samsung, LG ve Philips Smart TV Desteği',
+          'iPhone\'da Hatalı «Yerel Ağ Kapalı» Uyarısı Giderildi, TV Arama Hızlandırıldı',
         ),
         findsOneWidget,
       );
@@ -725,6 +731,52 @@ void main() {
       expect(
         AdbTvService.samsungKeyForCommand(TvKeyCommand.volUp),
         'KEY_VOLUP',
+      );
+    },
+  );
+
+  test(
+    'mTLS X.509 certificate DER extraction, Polo PIN secret frame, and Port 6466 session frames work for Arçelik / Google TV',
+    () async {
+      final auth = AdbRsaAuthenticator();
+      await auth.ensureLoaded();
+      expect(auth.privateKeyPem, contains('BEGIN PRIVATE KEY'));
+      expect(auth.selfSignedCertPem, contains('BEGIN CERTIFICATE'));
+      expect(auth.selfSignedCertDer.isNotEmpty, isTrue);
+
+      final extracted = AdbTvService.extractRsaModulusAndExponentFromDer(
+        auth.selfSignedCertDer,
+      );
+      expect(extracted, isNotNull);
+      expect(extracted!.modulus, equals(auth.modulusBytes));
+      expect(extracted.exponent, equals(auth.publicExponentBytes));
+
+      final poloSecretFrame = AdbTvService.buildPin6467SecretFrame(
+        'A1B2C3',
+        clientModulus: auth.modulusBytes,
+        clientExponent: auth.publicExponentBytes,
+        serverCertDer: auth.selfSignedCertDer,
+      );
+      expect(poloSecretFrame.isNotEmpty, isTrue);
+      expect(poloSecretFrame[0], poloSecretFrame.length - 1);
+
+      final cfgFrame = AdbTvService.buildRemote6466ConfigureFrame();
+      expect(cfgFrame.isNotEmpty, isTrue);
+      expect(cfgFrame[0], cfgFrame.length - 1);
+
+      final activeFrame = AdbTvService.buildRemote6466SetActiveFrame();
+      expect(activeFrame.isNotEmpty, isTrue);
+      expect(activeFrame[0], activeFrame.length - 1);
+
+      final svc = AdbTvService();
+      svc.markPinPairedIp('192.168.1.44');
+      expect(
+        AdbTvService.buildRemote6466PingResponseFrame(7)[0],
+        greaterThan(0),
+      );
+      expect(
+        AdbTvService.buildRemote6466AppLinkFrame('https://www.youtube.com')[0],
+        greaterThan(0),
       );
     },
   );

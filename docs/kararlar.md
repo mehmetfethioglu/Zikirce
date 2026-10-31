@@ -1,5 +1,21 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-022] 2026-10-31: iPhone 11 Hatalı «Yerel Ağ Kapalı» (`EHOSTUNREACH`) Uyarısının Çözümü, Hızlı `/24` iOS Taraması, Android TV Remote v2 (`Port 6466/6467`) Tam mTLS X.509 + Polo SHA-256 PIN Eşleştirme ve Arçelik Smart TV (`Port 8085/8080/56789`) Kesintisiz Kontrol (`v1.9.8+20`)
+- **Tarih & Ajanlar:** `2026-10-31` — Kanuni, El-Cezeri & Piri Reis, Mimar Sinan, Barbaros Hayreddin Paşa, Kâtip Çelebi (Denetçiler: Ebussuud — `KARAR: GEÇTİ`, `10/10` test başarılı)
+- **Bağlam (Kullanıcı Ekran Görüntüleri):**
+  1. **iPhone 11 (`192.168.1.184`):** iOS Ayarlar > CueDeck > **Yerel Ağ** anahtarı açık (yeşil) olmasına rağmen uygulama *"⚠️ iPhone 'Yerel Ağ' İzni Kapalı!"* uyarısı veriyor ve Arçelik Smart TV'yi listede bulamıyordu.
+  2. **Xiaomi 13 (Arçelik Smart TV):** TV'ye bağlandıktan sonra kumandada bir tuşa basıldığında üst durum göstergesi yeşilden turuncuya dönüyor ve TV tepki vermiyordu.
+- **Kök Neden & Çözüm:**
+  1. **iOS `errno 65 (EHOSTUNREACH)` Yanlış Pozitif İzin Hatası & `/24` Tarama Zaman Aşımı ([`ios/Runner/AppDelegate.swift`](file:///c:/Users/theak/source/repos/cuedeck/ios/Runner/AppDelegate.swift#L420-L560), [`AdbTvService._openLanSocket`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L660-L682)):**
+     - Darwin/XNU çekirdeğinde yerel ağdaki boş IP adreslerine yapılan bağlantılar `errno 65 (EHOSTUNREACH)` döndürür. Bunun `permissionDenied` sayılması, Port `5555` açık bir TV olmadığında her taramada yanlışlıkla *"Yerel Ağ İzni Kapalı"* uyarısını tetikliyor ve Dart yedek taramasını atlıyordu.
+     - Yalnızca `EPERM (1)` ve `EACCES (13)` izin reddi olarak bırakıldı; `prefix.1` ağ geçidi erişilebilirlik kontrolü ve `ECONNREFUSED (61)` canlı cihaz tespiti eklenerek `/24` tarama süresi `~2.4 sn` seviyesine indirildi.
+  2. **Port `6466`/`6467` Tam mTLS X.509 Sertifikası, Polo SHA-256 PIN Doğrulaması & Sahte Yeşil Durum Engeli ([`AdbRsaAuthenticator`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L14-L265), [`AdbTvService`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L960-L1680), [`cuedeck_home_screen.dart`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart#L101-L118)):**
+     - Perakende Android/Google TV şasili Arçelik TV'lerde Port `5555` kapalı, Port `8008` ve `6466`/`6467` açıktır. Eşleşmemiş Port `6466`/`8008` TV'lerin yanıltıcı biçimde yeşil (`isOnline: true`) başlaması düzeltildi; kumandada herhangi bir tuşa basıldığında otomatik olarak 6 haneli PIN eşleştirme penceresi (`_Pin6466PairingSheet`) açılır.
+     - `Port 6467` ve `Port 6466` için saf Dart X.509 v3 DER/PEM öz-imzalı istemci sertifikası + PKCS#8 özel anahtarı (`_prepareAtvRemoteMtlsContext`), sunucu sertifikasından RSA `(modulus, exponent)` çıkarımı (`extractRsaModulusAndExponentFromDer`), tam Polo `SHA-256` PIN özeti ve kalıcı `Port 6466` oturumu (`RemoteConfigure` + `RemoteSetActive` + `RemotePingResponse`) devreye alındı.
+  3. **Android Olmayan Arçelik / Beko / Grundig / Vestel Smart TV Ham Soket & SSDP Güçlendirmesi ([`AdbTvService._sendArcelikGrundig8085Key`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L2510-L2575), [`_sendVestel56789Key`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart#L2595-L2640)):** Port `8085`/`8080` için tek paketlik ham TCP HTTP `GET /sendrcpackage` ve Port `56789` için tırnaklı/tırnaksız XML + çoklu DIAL yolları eklendi.
+
+---
+
 ## [ADR-021] 2026-10-30: Android Olmayan Smart TV Protokolleri (`v1.9.7+19`) — Arçelik / Beko / Grundig (`Port 8085`), Vestel / Arçelik Smart Center (`Port 56789`), Samsung Tizen (`Port 8001`), LG webOS (`Port 3000`), Philips JointSpace (`Port 1925`), DIAL / ECP (`Port 8060`) & Sadeleştirilmiş Sürüm Notları
 - **Tarih & Ajanlar:** `2026-10-30` — Kanuni, El-Cezeri & Piri Reis, Barbaros Hayreddin Paşa, Kâtip Çelebi (Denetçiler: Ebussuud — `KARAR: GEÇTİ`, `9/9` test başarılı)
 - **Bağlam:**
