@@ -144,3 +144,7 @@
 - **Teknik Çıktı:**
   1. **iOS (GitHub Actions CI/CD):** `main` dalına gönderilerek `ios-build.yml` (`build-ios` TestFlight IPA yüklemesi + `submit-appstore` App Store Connect v2.2.0 oluşturma, TR/EN `whatsNew` yazımı, Build 66 bağlama ve otomatik App Store Review gönderimi) tetiklendi.
   2. **Android (Google Play Console AAB):** İmzalı `build/app/outputs/bundle/release/app-release.aab` üretilerek Google Drive `Releases/` dizinine (`zikirce_-v2.2.0+66-release.aab`, `zikirce_v2.2.0_b66.aab` ve `RELEASE_NOTES_v2.2.0_b66.md`) arşivlendi.
+
+## [2026-10-31] ADR-029: Google Play Console Otomatik Üretim & Güncelleme Gönderim Mimarisi (`play_console_publish.py` & `playstore-release.yml`)
+- **Karar:** Google Play Console'a yeni sürümlerin (`app-release.aab`) ve `<tr-TR>` / `<en-US>` sürüm notlarının hem yerel Windows ortamından tek komutla (15 saniyede) hem de GitHub Actions bulut hattından otomatik olarak `production`, `beta` veya `internal` kanalına gönderilmesi için çift modlu otomasyon altyapısı kuruldu.
+- **Teknik Mimari:** `scripts/play_console_publish.py` (Google Play Android Developer API v3 `edits -> bundles.upload -> tracks.update -> edits.commit` + `docs/RELEASE_NOTES_*.md` otomatik `<tr-TR>`/`<en-US>` ayrıştırıcısı), `.github/workflows/playstore-release.yml`, `android/Gemfile`, `android/fastlane/Appfile`, `android/fastlane/Fastfile`, `android/fastlane/metadata/android/{tr-TR,en-US}/changelogs/66.txt` ve `docs/PLAY_CONSOLE_OTOMASYON_REHBERI.md` oluşturuldu.

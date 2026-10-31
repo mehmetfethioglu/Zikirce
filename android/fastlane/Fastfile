@@ -1,0 +1,45 @@
+default_platform(:android)
+
+platform :android do
+  desc "Upload Zikirce signed AAB to Google Play Console Internal Testing track"
+  lane :internal do
+    upload_to_play_store(
+      track: "internal",
+      release_status: ENV["PLAY_RELEASE_STATUS"] || "completed",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      json_key_data: ENV["PLAY_STORE_JSON_KEY"],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false
+    )
+  end
+
+  desc "Upload Zikirce signed AAB to Google Play Console Closed Testing (Beta) track"
+  lane :beta do
+    upload_to_play_store(
+      track: "beta",
+      release_status: ENV["PLAY_RELEASE_STATUS"] || "completed",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      json_key_data: ENV["PLAY_STORE_JSON_KEY"],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false
+    )
+  end
+
+  desc "Upload Zikirce signed AAB & TR/EN release notes to Google Play Console Production track"
+  lane :production do
+    upload_to_play_store(
+      track: "production",
+      release_status: ENV["PLAY_RELEASE_STATUS"] || "completed",
+      aab: "../build/app/outputs/bundle/release/app-release.aab",
+      json_key_data: ENV["PLAY_STORE_JSON_KEY"],
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false
+    )
+  end
+end

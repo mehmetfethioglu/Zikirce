@@ -46,6 +46,7 @@ app.*.map.json
 
 # Keystore & Signing Secrets
 android/key.properties
+android/fastlane/play-store-credentials.json
 *.keystore
 *.jks
 *.p12

@@ -1,0 +1,3 @@
+• 40 Eserlik Külliyat & 84.141 Maddelik Risale-i Nur Lügati: 16 Cep Risalesi, tıklanabilir kalıp tamlama/kök sözlüğü ve Kur’ân hattıyla kırmızı Lafzatullah vurgulu Arapça görünüm eklendi.
+• Diyanet Birebir Ses-Kelime Senkronu & Kayan Ok Takibi: Mukabele ve Talim’de Besmele ile başlangıç, sağdan sola kayan kırmızı Ok Takibi ve 6.236 âyet hassas ses senkronu sağlandı.
+• Külliyat Widget’ı, Dinamik Âyet/Hadis Paylaşım Seçici, Sayfa İçi Secde Rozetleri ve Vakit Koruması eklendi.

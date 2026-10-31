@@ -1,0 +1,3 @@
+• 40-Volume Islamic Library & 84,141-Entry Risale-i Nur Dictionary: Added 16 Pocket Risales, tap-to-define Ottoman compound root coloring, and Quranic script with red Divine Name highlights.
+• Exact Diyanet Audio-Word Sync & Sliding Arrow Pointer: Start Mukabele/Talim with Basmala, smooth right-to-left red Arrow Tracking, and zero-drift sync across 6,236 verses.
+• Added Library Home/Lock Screen Widgets, Dynamic Verse/Hadith Picker, In-Page Sajdah Badges & Prayer Time Guard.
