@@ -21,11 +21,12 @@ on:
       - 'pubspec.yaml'
       - 'docs/RELEASE_NOTES_*.md'
       - 'android/fastlane/metadata/**'
+      - '.github/workflows/playstore-release.yml'
 
 jobs:
   build-android:
     name: 1. Build Signed AAB
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.reuse_latest_aab != 'true' }}
+    if: ${{ github.event.inputs.reuse_latest_aab == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
