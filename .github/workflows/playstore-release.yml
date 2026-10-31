@@ -11,26 +11,26 @@ on:
         description: "Release Status (completed, draft)"
         required: false
         default: "completed"
+      reuse_latest_aab:
+        description: "Skip build and reuse latest built AAB artifact (true/false)"
+        required: false
+        default: "true"
   push:
     branches: [ main ]
     paths:
       - 'pubspec.yaml'
       - 'docs/RELEASE_NOTES_*.md'
       - 'android/fastlane/metadata/**'
-      - '.github/workflows/playstore-release.yml'
-      - 'scripts/play_console_publish.py'
 
 jobs:
-  build-and-publish-android:
-    name: Build Signed AAB & Publish to Google Play Console
+  build-android:
+    name: 1. Build Signed AAB
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.reuse_latest_aab != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
-      PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
-      PLAY_TRACK: ${{ github.event.inputs.track || 'production' }}
-      PLAY_RELEASE_STATUS: ${{ github.event.inputs.release_status || 'completed' }}
 
     steps:
       - name: 1. Checkout repository
@@ -68,8 +68,55 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 14
 
-      - name: 7. Publish AAB & TR/EN Release Notes to Google Play Console
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' && env.PLAY_STORE_JSON_KEY != '' }}
+  publish-playstore:
+    name: 2. Publish AAB & Release Notes to Google Play Console
+    needs: [ build-android ]
+    if: ${{ always() && (needs.build-android.result == 'success' || needs.build-android.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+      PLAY_TRACK: ${{ github.event.inputs.track || 'production' }}
+      PLAY_RELEASE_STATUS: ${{ github.event.inputs.release_status || 'completed' }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Download AAB from current run
+        if: ${{ needs.build-android.result == 'success' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: zikirce-android-release-aab
+          path: build/app/outputs/bundle/release
+
+      - name: 3. Download latest AAB artifact from repository (Fast Path — 5s)
+        if: ${{ needs.build-android.result == 'skipped' }}
+        run: |
+          mkdir -p build/app/outputs/bundle/release
+          python3 - << 'EOF'
+          import io, os, sys, zipfile, requests
+          token = os.environ["GITHUB_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+          r = requests.get(f"https://api.github.com/repos/{repo}/actions/artifacts?name=zikirce-android-release-aab&per_page=5", headers=headers)
+          r.raise_for_status()
+          artifacts = [a for a in r.json().get("artifacts", []) if not a.get("expired")]
+          if not artifacts:
+              print("❌ Henüz derlenmiş zikirce-android-release-aab artifact'i bulunamadı!")
+              sys.exit(1)
+          latest = artifacts[0]
+          print(f"⬇️ Hazır derlenmiş AAB indiriliyor (Artifact ID: {latest['id']}, Boyut: {latest['size_in_bytes'] / (1024*1024):.2f} MB)...")
+          dl = requests.get(latest["archive_download_url"], headers=headers)
+          dl.raise_for_status()
+          with zipfile.ZipFile(io.BytesIO(dl.content)) as zf:
+              zf.extractall("build/app/outputs/bundle/release")
+          print("✅ app-release.aab başarıyla indirildi (15 dk derleme beklentisi atlandı)!")
+          EOF
+
+      - name: 4. Publish AAB & TR/EN Release Notes to Google Play Console
+        if: ${{ env.PLAY_STORE_JSON_KEY != '' }}
         run: |
           pip install pyjwt cryptography requests
           python3 scripts/play_console_publish.py --track "$PLAY_TRACK" --status "$PLAY_RELEASE_STATUS"

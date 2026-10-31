@@ -144,6 +144,10 @@ def main() -> int:
     print(f"   TR Sürüm Notu ({len(tr_notes)} krk) / EN Sürüm Notu ({len(en_notes)} krk)")
 
     sa_info = load_service_account_info(args.key_file)
+    client_email = sa_info.get("client_email", "bilinmiyor")
+    project_id = sa_info.get("project_id", "bilinmiyor")
+    print(f"🔑 Kullanılan Servis Hesabı: {client_email} (Google Cloud Proje: {project_id})")
+
     token = get_access_token(sa_info)
     headers = {
         "Authorization": f"Bearer {token}",
@@ -154,6 +158,14 @@ def main() -> int:
     edit_res = requests.post(f"{BASE_URL}/edits", headers=headers, json={}, timeout=30)
     if edit_res.status_code not in (200, 201):
         print(f"❌ Edit oluşturulamadı ({edit_res.status_code}): {edit_res.text}")
+        if edit_res.status_code == 403:
+            print(
+                "\n💡 ÇÖZÜM (Google Play Console 403 PERMISSION_DENIED):\n"
+                f"   1. https://play.google.com/console/users-and-permissions adresine gidin.\n"
+                f"   2. '{client_email}' kullanıcısına tıklayın (yoksa 'Yeni kullanıcıları davet et' ile ekleyin).\n"
+                f"   3. 'Hesap izinleri (Account permissions)' sekmesinde 'Yönetici (tüm izinler) / Admin (all permissions)' kutusunu işaretleyin.\n"
+                f"   4. 'Uygulama izinleri (App permissions)' sekmesinde 'Uygulama ekle' -> 'Zikirce (com.akarworks.zikirce)' seçip 'Uygula' ve 'Değişiklikleri kaydet' butonuna basın."
+            )
         return 1
     edit_id = edit_res.json()["id"]
     print(f"✅ Play Console Edit oturumu açıldı: {edit_id}")
