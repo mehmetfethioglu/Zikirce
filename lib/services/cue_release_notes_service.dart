@@ -40,11 +40,31 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.8+20';
-  static const String currentShortVersion = 'v1.9.8';
+  static const String currentVersion = '1.9.9+21';
+  static const String currentShortVersion = 'v1.9.9';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.9+21',
+      versionLabel: 'v1.9.9 (Build 21)',
+      releaseDate: '31 Ekim 2026',
+      headline: 'Farklı TV Modellerinde Bağlantı Sorunlarını Bulmak İçin Tanılama Raporu',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'TANILAMA',
+          title: 'Bağlantı Tanılama Raporu',
+          description:
+              'Ayarlar > TV Bağlantısı bölümündeki «Bağlantı Tanılama Raporu» ile TV\'nizin hangi bağlantı yollarına açık olduğunu tek dokunuşla test edip raporu kopyalayarak bize gönderebilirsiniz. Böylece sizin TV modelinize özel destek ekleyebiliriz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'DÜZELTME',
+          title: 'Daha Doğru Bağlantı Durumu',
+          description:
+              'TV komutu gerçekten kabul etmediğinde bağlantı artık yanlışlıkla «bağlı» görünmüyor.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.8+20',
       versionLabel: 'v1.9.8 (Build 20)',

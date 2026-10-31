@@ -447,9 +447,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text(
-          'iPhone\'da Hatalı «Yerel Ağ Kapalı» Uyarısı Giderildi, TV Arama Hızlandırıldı',
-        ),
+        find.text('Bağlantı Tanılama Raporu'),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));

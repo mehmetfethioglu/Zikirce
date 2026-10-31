@@ -1,28 +1,28 @@
-name: App Store Connect — Create v1.9.8, Attach Build 20 & Submit for Review
+name: App Store Connect — Create v1.9.9, Attach Build 21 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 1.9.8)"
+        description: "App Store Version String (e.g. 1.9.9)"
         required: false
-        default: "1.9.8"
+        default: "1.9.9"
       build_number:
-        description: "TestFlight Build Number (e.g. 20)"
+        description: "TestFlight Build Number (e.g. 21)"
         required: false
-        default: "20"
+        default: "21"
 
 jobs:
   submit-appstore:
-    name: Submit v1.9.8 (Build 20) to App Store Connect
+    name: Submit v1.9.9 (Build 21) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.8' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '20' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '1.9.9' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '21' }}
 
     steps:
       - name: Install PyJWT and Cryptography

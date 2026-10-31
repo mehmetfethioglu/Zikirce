@@ -2236,6 +2236,38 @@ class _CueDeckSettingsScreenState
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 6),
+                            SizedBox(
+                              width: double.infinity,
+                              child: TextButton.icon(
+                                key: const Key('tv_diagnostic_report_button'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: secondaryText,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () {
+                                  HapticFeedback.selectionClick();
+                                  showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (_) =>
+                                        const _ConnectionDiagnosticSheet(),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.medical_information_outlined,
+                                  size: 15,
+                                ),
+                                label: const Text(
+                                  '🩺 Bağlantı Tanılama Raporu',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -6512,6 +6544,183 @@ class _AddWatchCueSheetState extends ConsumerState<AddWatchCueSheet> {
       ref.read(cueDeckProvider.notifier).addWatchCue(item);
     }
     Navigator.of(context).pop();
+  }
+}
+
+/// Runs [AdbTvService.buildConnectionDiagnosticReport] for the selected TV and
+/// shows a copyable plain-text report (open ports, HTTP/TLS/SSDP answers and
+/// the latest key attempts) for remote troubleshooting of unknown TV models.
+class _ConnectionDiagnosticSheet extends ConsumerStatefulWidget {
+  const _ConnectionDiagnosticSheet();
+
+  @override
+  ConsumerState<_ConnectionDiagnosticSheet> createState() =>
+      _ConnectionDiagnosticSheetState();
+}
+
+class _ConnectionDiagnosticSheetState
+    extends ConsumerState<_ConnectionDiagnosticSheet> {
+  String _report = '';
+  bool _running = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(_run);
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _running = true;
+      _report = '';
+    });
+    final device = ref.read(cueDeckProvider).selectedDevice;
+    final text = await ref
+        .read(adbTvServiceProvider)
+        .buildConnectionDiagnosticReport(
+          device,
+          appVersion: CueReleaseNotesCatalog.currentVersion,
+        );
+    if (!mounted) return;
+    setState(() {
+      _running = false;
+      _report = text;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final sheetBg =
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
+    final cardBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
+    final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
+    final secondaryText =
+        isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
+    final goldText =
+        isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
+
+    return FractionallySizedBox(
+      heightFactor: 0.85,
+      child: Container(
+        key: const Key('connection_diagnostic_sheet'),
+        decoration: BoxDecoration(
+          color: sheetBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      '🩺 Bağlantı Tanılama Raporu',
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: secondaryText),
+                  ),
+                ],
+              ),
+              Text(
+                'Önce kumandada 1-2 tuşa basın, sonra bu raporu kopyalayıp geliştiriciye gönderin.',
+                style: TextStyle(color: secondaryText, fontSize: 11.5),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _running
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              CircularProgressIndicator(color: goldText),
+                              const SizedBox(height: 10),
+                              Text(
+                                'TV portları ve yanıtları test ediliyor (~10 sn)...',
+                                style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 11.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: SelectableText(
+                            _report,
+                            style: TextStyle(
+                              color: primaryText,
+                              fontSize: 10.5,
+                              fontFamily: 'monospace',
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _running ? null : _run,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('Yeniden Test Et'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: goldText,
+                        foregroundColor: const Color(0xFF090A0F),
+                      ),
+                      onPressed: _running || _report.isEmpty
+                          ? null
+                          : () async {
+                              await Clipboard.setData(
+                                ClipboardData(text: _report),
+                              );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context)
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      '✓ Rapor kopyalandı — WhatsApp\'a yapıştırabilirsiniz',
+                                    ),
+                                  ),
+                                );
+                            },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Raporu Kopyala'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

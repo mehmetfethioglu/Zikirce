@@ -1,5 +1,12 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-023] 2026-10-31: Kör Protokol Tahmini Yerine Sahada Tanılama Raporu (`v1.9.9+21`)
+- **Bağlam:** v1.9.7 ve v1.9.8'de Arçelik TV için eklenen protokoller (6466 mTLS, 8085/56789) gerçek cihazda hiç test edilmeden yazıldı; kullanıcı v1.9.8'de de aynı sorunun (Xiaomi 13: bağlanıyor → tuşta turuncu; iPhone 11: TV bulunamıyor) sürdüğünü bildirdi. TV'nin işletim sistemi/modeli bilinmiyor.
+- **Anti-Pattern (Ders):** Cihaz verisi olmadan üst üste protokol tahmini yapıp "çözüldü" demek. Ayrıca `_sendRawHttpGetOverTcp` soket açıldığı an `true` döndürüyordu (yanıt doğrulanmıyordu) → sahte "bağlı" durumu.
+- **Karar:** [`AdbTvService.buildConnectionDiagnosticReport`](file:///c:/Users/theak/source/repos/cuedeck/lib/services/adb_tv_service.dart) (24 port taraması + errno, HTTP banner, 6466/6467 TLS sertifika/mTLS sonucu, SSDP SERVER/LOCATION, son 60 tuş denemesi `_diag` kaydı) ve Ayarlar'da kopyalanabilir `🩺 Bağlantı Tanılama Raporu` ([`_ConnectionDiagnosticSheet`](file:///c:/Users/theak/source/repos/cuedeck/lib/screens/cuedeck_home_screen.dart)) eklendi. HTTP tuş gönderimi artık 4xx/5xx yanıtında başarısız sayılıyor. Sonraki protokol düzeltmesi yalnızca gerçek rapora dayanarak yapılacak.
+
+---
+
 ## [ADR-022] 2026-10-31: iPhone 11 Hatalı «Yerel Ağ Kapalı» (`EHOSTUNREACH`) Uyarısının Çözümü, Hızlı `/24` iOS Taraması, Android TV Remote v2 (`Port 6466/6467`) Tam mTLS X.509 + Polo SHA-256 PIN Eşleştirme ve Arçelik Smart TV (`Port 8085/8080/56789`) Kesintisiz Kontrol (`v1.9.8+20`)
 - **Tarih & Ajanlar:** `2026-10-31` — Kanuni, El-Cezeri & Piri Reis, Mimar Sinan, Barbaros Hayreddin Paşa, Kâtip Çelebi (Denetçiler: Ebussuud — `KARAR: GEÇTİ`, `10/10` test başarılı)
 - **Bağlam (Kullanıcı Ekran Görüntüleri):**

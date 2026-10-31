@@ -484,6 +484,23 @@ class AdbTvService {
   /// The phone's detected Wi-Fi IPv4 address on `en0` / `wlan0` (e.g. `192.168.1.107`).
   String get detectedWifiIp => _detectedWifiIp;
 
+  final List<String> _diagLog = <String>[];
+
+  /// Rolling log (last 150 entries) of connection / key-send attempts used by
+  /// the in-app "Bağlantı Tanılama Raporu" so real-world TV failures can be diagnosed.
+  List<String> get diagnosticLog => List<String>.unmodifiable(_diagLog);
+
+  void _diag(String message) {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    _diagLog.add(
+      '${two(now.hour)}:${two(now.minute)}:${two(now.second)} $message',
+    );
+    if (_diagLog.length > 150) {
+      _diagLog.removeRange(0, _diagLog.length - 150);
+    }
+  }
+
   /// Marks an IP as paired over Port 6466/6467 so restored sessions know it is paired.
   void markPinPairedIp(String ip) {
     final clean = ip.trim();
@@ -760,12 +777,18 @@ class AdbTvService {
       }
 
       if (!ok) {
+        _diag(
+          'ADB $ip:$port el sıkışma BAŞARISIZ '
+          '(RSA onayı istendi=$_sentAuthPublicKey)',
+        );
         _closeConnection();
         return false;
       }
+      _diag('ADB $ip:$port bağlandı');
       _scheduleIdleDisconnect();
       return true;
-    } catch (_) {
+    } catch (e) {
+      _diag('ADB $ip:$port bağlantı HATASI: $e');
       _closeConnection();
       return false;
     }
@@ -1669,8 +1692,10 @@ class AdbTvService {
       }
       _pinPairedIps.add(cleanIp);
       _scheduleRemote6466IdleDisconnect();
+      _diag('6466 TLS bağlantısı kuruldu ($cleanIp), configured=$_remote6466Configured');
       return _remote6466Socket != null;
-    } catch (_) {
+    } catch (e) {
+      _diag('6466 TLS bağlantı HATASI ($cleanIp): $e');
       _closeRemote6466Socket();
       return false;
     }
@@ -3106,11 +3131,44 @@ class AdbTvService {
           'User-Agent: Grundig-Android-App\r\n'
           'Accept: */*\r\n'
           'Connection: close\r\n\r\n';
+      final rx = <int>[];
+      final done = Completer<void>();
+      final sub = sock.listen(
+        (chunk) {
+          rx.addAll(chunk);
+          if (rx.length >= 16 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
       sock.add(ascii.encode(reqText));
       await sock.flush();
-      await Future<void>.delayed(const Duration(milliseconds: 45));
-      return true;
-    } catch (_) {
+      await done.future.timeout(
+        const Duration(milliseconds: 700),
+        onTimeout: () {},
+      );
+      await sub.cancel();
+
+      if (rx.isEmpty) {
+        _diag('HTTP $ip:$port$pathAndQuery -> bağlandı, yanıt yok');
+        return true;
+      }
+      final head = utf8.decode(
+        rx.take(64).toList(),
+        allowMalformed: true,
+      ).split('\r\n').first;
+      final statusMatch = RegExp(r'^HTTP/\d\.\d\s+(\d{3})').firstMatch(head);
+      _diag('HTTP $ip:$port$pathAndQuery -> "$head"');
+      if (statusMatch == null) return true;
+      final status = int.tryParse(statusMatch.group(1) ?? '') ?? 0;
+      return status >= 200 && status < 400;
+    } catch (e) {
+      _diag('HTTP $ip:$port$pathAndQuery -> HATA: $e');
       return false;
     } finally {
       try {
@@ -3180,10 +3238,12 @@ class AdbTvService {
             const Duration(milliseconds: 520),
           );
           await resp.drain<void>();
+          _diag('POST $url -> HTTP ${resp.statusCode}');
           if (resp.statusCode >= 200 && resp.statusCode < 400) {
             return true;
           }
-        } catch (_) {
+        } catch (e) {
+          _diag('POST $url -> HATA: $e');
         } finally {
           client.close(force: true);
         }
@@ -3689,7 +3749,23 @@ class AdbTvService {
     if (code < 1 || code > 300) return false;
     final ip = device.ip.trim();
     final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+    _diag(
+      'TUŞ ${command.name} -> ip=$ip port=${device.port} '
+      'protokol=${device.protocol.name} eşleşti=${device.isPaired} '
+      'çevrimiçi=${device.isOnline}',
+    );
+    final ok = await _sendKeyCommandInternal(device, command, code, ip, isTestEnv);
+    _diag('TUŞ ${command.name} SONUÇ: ${ok ? "BAŞARILI" : "BAŞARISIZ"}');
+    return ok;
+  }
 
+  Future<bool> _sendKeyCommandInternal(
+    TvDevice device,
+    TvKeyCommand command,
+    int code,
+    String ip,
+    bool isTestEnv,
+  ) async {
     switch (device.protocol) {
       case TvConnectionProtocol.arcelikGrundig8085:
         return _sendArcelikGrundig8085Key(ip, command);
@@ -3765,6 +3841,286 @@ class AdbTvService {
       if (arcelikOk) return true;
     }
     return false;
+  }
+
+  /// Builds a plain-text connection diagnostic report for [device] (open ports,
+  /// HTTP banners, TLS certificate subjects, SSDP announcements, and the latest
+  /// key-send attempts) so failures on unknown TV models can be analysed remotely.
+  Future<String> buildConnectionDiagnosticReport(
+    TvDevice device, {
+    String appVersion = '',
+  }) async {
+    final ip = device.ip.trim();
+    final b = StringBuffer()
+      ..writeln('=== CueDeck Bağlantı Tanılama Raporu ===')
+      ..writeln('Tarih: ${DateTime.now().toIso8601String()}')
+      ..writeln('Uygulama: $appVersion')
+      ..writeln(
+        'Telefon: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+      )
+      ..writeln('Telefon Wi-Fi IP: $_detectedWifiIp')
+      ..writeln('Yerel ağ izni reddi (iOS): $_localNetworkPermissionDenied')
+      ..writeln(
+        'Seçili TV: "${device.name}" ip=$ip port=${device.port} '
+        'protokol=${device.protocol.name} eşleşti=${device.isPaired} '
+        'çevrimiçi=${device.isOnline}',
+      )
+      ..writeln('Kart bilgisi: ${device.boardInfo}');
+
+    if (!isValidIp(ip)) {
+      b.writeln('!! Geçerli TV IP adresi yok; önce TV seçin veya IP girin.');
+      _appendDiagTail(b);
+      return b.toString();
+    }
+
+    // 1. Port scan with exact socket error per port
+    const ports = <int>[
+      5555, 6466, 6467, 8008, 8009, 8443, 80, 443, 8080, 8085, 56789, 56790,
+      7345, 9080, 9000, 1925, 1926, 3000, 3001, 8001, 8002, 8060, 55000, 7676,
+    ];
+    final portResults = await Future.wait<String>(
+      ports.map((p) async {
+        Socket? s;
+        try {
+          s = await _openLanSocket(
+            ip,
+            p,
+            timeout: const Duration(milliseconds: 900),
+          );
+          return '$p:AÇIK';
+        } on SocketException catch (e) {
+          final code = e.osError?.errorCode;
+          return '$p:kapalı(${code ?? e.message})';
+        } on TimeoutException {
+          return '$p:zamanaşımı';
+        } catch (e) {
+          return '$p:hata($e)';
+        } finally {
+          s?.destroy();
+        }
+      }),
+    );
+    final openPorts = <int>[
+      for (var i = 0; i < ports.length; i++)
+        if (portResults[i].contains('AÇIK')) ports[i],
+    ];
+    b
+      ..writeln('')
+      ..writeln('--- Port Taraması ---')
+      ..writeln('AÇIK: ${openPorts.isEmpty ? "(hiçbiri)" : openPorts.join(", ")}')
+      ..writeln(portResults.where((r) => !r.contains('AÇIK')).join('  '));
+
+    // 2. HTTP banners on open HTTP-like ports
+    const httpProbes = <int, List<String>>{
+      8008: <String>['/setup/eureka_info?params=name,device_info', '/ssdp/device-desc.xml'],
+      56789: <String>['/dd.xml', '/apps/SmartCenter'],
+      56790: <String>['/'],
+      80: <String>['/'],
+      8080: <String>['/', '/sendrcpackage?keyid=-2490&keysymbol=13'],
+      8085: <String>['/', '/sendrcpackage?keyid=-2490&keysymbol=13'],
+      7345: <String>['/'],
+      9080: <String>['/'],
+      9000: <String>['/'],
+      1925: <String>['/6/system', '/1/system'],
+      8060: <String>['/query/device-info'],
+      8001: <String>['/api/v2/'],
+      55000: <String>['/'],
+      7676: <String>['/'],
+    };
+    b
+      ..writeln('')
+      ..writeln('--- HTTP Yanıtları ---');
+    for (final p in openPorts) {
+      final paths = httpProbes[p];
+      if (paths == null) continue;
+      for (final path in paths) {
+        b.writeln('GET :$p$path -> ${await _rawHttpProbe(ip, p, path)}');
+      }
+    }
+
+    // 3. TLS certificate subjects on Android TV Remote ports
+    for (final p in <int>[6466, 6467]) {
+      if (!openPorts.contains(p)) continue;
+      b.writeln('');
+      b.writeln('--- TLS :$p ---');
+      b.writeln('Sertifikasız: ${await _tlsProbe(ip, p, useClientCert: false)}');
+      b.writeln('mTLS ile: ${await _tlsProbe(ip, p, useClientCert: true)}');
+    }
+
+    // 4. SSDP announcements
+    b
+      ..writeln('')
+      ..writeln('--- SSDP (UPnP) Yanıtları ---')
+      ..writeln(await _ssdpDiagnosticProbe(ip));
+
+    _appendDiagTail(b);
+    return b.toString();
+  }
+
+  void _appendDiagTail(StringBuffer b) {
+    b
+      ..writeln('')
+      ..writeln('--- Son Bağlantı / Tuş Denemeleri ---');
+    final tail = _diagLog.length > 60
+        ? _diagLog.sublist(_diagLog.length - 60)
+        : _diagLog;
+    if (tail.isEmpty) {
+      b.writeln('(Henüz tuş denemesi yok — rapordan önce kumandada 1-2 tuşa basın)');
+    }
+    for (final line in tail) {
+      b.writeln(line);
+    }
+  }
+
+  Future<String> _rawHttpProbe(String ip, int port, String path) async {
+    Socket? sock;
+    try {
+      sock = await _openLanSocket(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 900),
+      );
+      final rx = <int>[];
+      final done = Completer<void>();
+      final sub = sock.listen(
+        (chunk) {
+          rx.addAll(chunk);
+          if (rx.length >= 1500 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
+      sock.add(
+        ascii.encode(
+          'GET $path HTTP/1.1\r\nHost: $ip:$port\r\n'
+          'User-Agent: CueDeck-Diag\r\nAccept: */*\r\nConnection: close\r\n\r\n',
+        ),
+      );
+      await sock.flush();
+      await done.future.timeout(
+        const Duration(milliseconds: 1500),
+        onTimeout: () {},
+      );
+      await sub.cancel();
+      if (rx.isEmpty) return '(yanıt yok)';
+      final text = utf8
+          .decode(rx.take(1500).toList(), allowMalformed: true)
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      return text.length > 420 ? '${text.substring(0, 420)}…' : text;
+    } catch (e) {
+      return 'HATA: $e';
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
+  }
+
+  Future<String> _tlsProbe(
+    String ip,
+    int port, {
+    required bool useClientCert,
+  }) async {
+    String subject = '';
+    SecureSocket? s;
+    try {
+      SecurityContext? ctx;
+      if (useClientCert) {
+        ctx = (await _prepareAtvRemoteMtlsContext()).context;
+        if (ctx == null) return 'istemci sertifikası oluşturulamadı';
+      }
+      s = await SecureSocket.connect(
+        ip,
+        port,
+        context: ctx,
+        onBadCertificate: (X509Certificate c) {
+          subject = c.subject;
+          return true;
+        },
+        timeout: const Duration(milliseconds: 1500),
+      );
+      subject = subject.isNotEmpty
+          ? subject
+          : (s.peerCertificate?.subject ?? '');
+      // Detect a server that closes immediately after handshake (client cert rejected)
+      final closed = Completer<String>();
+      final sub = s.listen(
+        (d) {
+          if (!closed.isCompleted) closed.complete('veri alındı (${d.length} bayt)');
+        },
+        onError: (Object e) {
+          if (!closed.isCompleted) closed.complete('hata: $e');
+        },
+        onDone: () {
+          if (!closed.isCompleted) closed.complete('sunucu bağlantıyı kapattı');
+        },
+      );
+      final after = await closed.future.timeout(
+        const Duration(milliseconds: 900),
+        onTimeout: () => 'açık kaldı',
+      );
+      await sub.cancel();
+      return 'el sıkışma OK, sertifika="$subject", sonrası: $after';
+    } catch (e) {
+      return 'HATA: $e${subject.isNotEmpty ? ' (sertifika="$subject")' : ''}';
+    } finally {
+      try {
+        s?.destroy();
+      } catch (_) {}
+    }
+  }
+
+  Future<String> _ssdpDiagnosticProbe(String targetIp) async {
+    final lines = <String>[];
+    final others = <String, String>{};
+    RawDatagramSocket? sock;
+    StreamSubscription<RawSocketEvent>? sub;
+    try {
+      sock = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      sub = sock.listen((event) {
+        if (event != RawSocketEvent.read) return;
+        final dg = sock?.receive();
+        if (dg == null) return;
+        final sender = dg.address.address;
+        final text = utf8.decode(dg.data, allowMalformed: true);
+        String header(String name) =>
+            RegExp('^$name:\\s*(.+)\$', caseSensitive: false, multiLine: true)
+                .firstMatch(text)
+                ?.group(1)
+                ?.trim() ??
+            '';
+        if (sender == targetIp) {
+          final entry =
+              'SERVER=${header('SERVER')} | ST=${header('ST')} | LOCATION=${header('LOCATION')}';
+          if (!lines.contains(entry) && lines.length < 12) lines.add(entry);
+        } else if (others.length < 12) {
+          others[sender] = header('SERVER');
+        }
+      });
+      const req =
+          'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\n'
+          'MAN: "ssdp:discover"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n';
+      sock.send(ascii.encode(req), InternetAddress('239.255.255.250'), 1900);
+      await Future<void>.delayed(const Duration(milliseconds: 1600));
+    } catch (e) {
+      lines.add('SSDP HATA: $e');
+    } finally {
+      await sub?.cancel();
+      sock?.close();
+    }
+    final b = StringBuffer();
+    b.writeln(lines.isEmpty ? '$targetIp: (yanıt yok)' : lines.join('\n'));
+    if (others.isNotEmpty) {
+      b.writeln('Ağdaki diğer UPnP cihazlar:');
+      others.forEach((k, v) => b.writeln('  $k  $v'));
+    }
+    return b.toString().trimRight();
   }
 
   /// Launches a streaming platform app or beams a specific deep-link / playlist URL to the TV.

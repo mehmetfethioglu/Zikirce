@@ -148,17 +148,13 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.8 (Build 20) Yenilikleri:
-      • iPhone'da Hatalı «Yerel Ağ Kapalı» Uyarısı Giderildi: iPhone'da Yerel Ağ izni açık olmasına rağmen çıkan uyarı düzeltildi ve aynı Wi-Fi ağındaki televizyonları bulma hızı artırıldı.
-      • Arçelik ve Farklı Smart TV'lerde Kesintisiz Kontrol: Farklı televizyonlara bağlandığınızda kumanda tuşlarının tepki vermemesi veya bağlantının kopması sorunu giderildi.
-      • Tek Dokunuşla Kolay TV Eşleştirme: İlk kez bağlandığınız televizyonlarda kumanda tuşuna bastığınızda TV ekranındaki 6 haneli kodu girebileceğiniz pencere otomatik açılır.
-      • Dokunmatik Fare (Touchpad) ve Sesli Komut: Yön tuşlarını dokunmatik yüzey gibi kullanabilir, mikrofon tuşuna basar basmaz konuşabilirsiniz.
+      CueDeck v1.9.9 (Build 21) Yenilikleri:
+      • Bağlantı Tanılama Raporu: Ayarlar > TV Bağlantısı bölümünden TV'nizin bağlantı yollarını tek dokunuşla test edip raporu kopyalayarak bize gönderebilirsiniz.
+      • Daha Doğru Bağlantı Durumu: TV komutu kabul etmediğinde bağlantı artık yanlışlıkla «bağlı» görünmüyor.
 
-      What's New in CueDeck v1.9.8 (Build 20):
-      • Fixed iPhone Local Network Detection & Faster TV Discovery: Resolved the false "Local Network Disabled" warning on iPhone and sped up Wi-Fi TV scanning.
-      • Reliable Control on Arçelik & Other Smart TVs: Fixed remote button responsiveness and connection stability across Arçelik, Beko, Grundig, Vestel, and Google TVs.
-      • Automatic 6-Digit PIN Pairing Popup: Pressing any remote button on a new TV automatically opens the 6-digit PIN pairing window.
-      • Touchpad Mode & 1-Tap Voice Command: Use the D-Pad as a touchpad and speak immediately after tapping the microphone button.
+      What's New in CueDeck v1.9.9 (Build 21):
+      • Connection Diagnostic Report: Test how your TV accepts connections with one tap and share the report with us.
+      • More Accurate Connection Status: The remote no longer shows "connected" when the TV rejects commands.
     CHANGELOG
 
     begin
