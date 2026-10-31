@@ -17,6 +17,8 @@ on:
       - 'pubspec.yaml'
       - 'docs/RELEASE_NOTES_*.md'
       - 'android/fastlane/metadata/**'
+      - '.github/workflows/playstore-release.yml'
+      - 'scripts/play_console_publish.py'
 
 jobs:
   build-and-publish-android:
@@ -49,8 +51,8 @@ jobs:
       - name: 4. Restore Upload Keystore & key.properties
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/zikirapp.keystore
-          printf "%s\n" "$ANDROID_KEY_PROPERTIES" > android/key.properties
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zikirapp.keystore
+          printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
 
       - name: 5. Build Signed Release AAB
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
