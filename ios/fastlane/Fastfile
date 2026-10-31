@@ -148,11 +148,11 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.10 (Build 22) Yenilikleri:
-      • Daha Ayrıntılı Bağlantı Tanılama Raporu: Rapor TV'nizi çok daha kapsamlı test ediyor; kopyalayıp bize göndererek TV modelinize özel destek eklememize yardımcı olabilirsiniz.
+      CueDeck v1.9.11 (Build 23) Yenilikleri:
+      • Arçelik TV'ler İçin Ek Tanılama: Tanılama raporu artık Arçelik televizyonların kendi kumanda servisini de test ediyor; raporu bize göndererek Arçelik TV desteğinin eklenmesine yardımcı olabilirsiniz.
 
-      What's New in CueDeck v1.9.10 (Build 22):
-      • More Detailed Connection Diagnostic Report: The report now tests your TV far more thoroughly so we can add support for your model.
+      What's New in CueDeck v1.9.11 (Build 23):
+      • Extra Diagnostics for Arçelik TVs: The diagnostic report now also tests Arçelik's own remote-control service so we can add support for these TVs.
     CHANGELOG
 
     begin

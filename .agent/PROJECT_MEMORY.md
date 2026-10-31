@@ -3,8 +3,8 @@
 ## 📌 Proje Özeti
 - **Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner
 - **Paket Kimliği:** `com.akarworks.cuedeck`
-- **Mevcut Sürüm:** `v1.9.10+22`
-- **⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. İlk rapor (`ADR-024`): Android değil; açık portlar yalnızca `8080` (sessiz TCP), `56789`/`56790` (HTTP, her yola 404). Vestel/Grundig protokolleri geçersiz. v1.9.10 derin tanılama raporu bekleniyor; rapor gelmeden yeni protokol tahmini yapılmayacak.
+- **Mevcut Sürüm:** `v1.9.11+23`
+- **⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmiyor; v1.9.11 tanılama raporu + resmi uygulama PCAPdroid trafiği bekleniyor. Veri gelmeden protokol tahmini yapılmayacak.
 - **Platform:** Android, Windows, iOS (Birincil: Android Mobile ↔ Tüm Android TV & Google TV Cihazları: Sony, TCL, Philips, Xiaomi Mi Box, Chromecast with Google TV, Nvidia Shield, Redline RTD2851P vb.)
 - **Resmi Gizlilik Politikası, Destek & Akıllı Mağaza Yönlendirme (GitHub Pages):**
   - **Depo:** `https://github.com/mehmetfethioglu/cuedeck-indir`

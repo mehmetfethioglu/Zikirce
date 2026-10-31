@@ -3959,6 +3959,21 @@ class AdbTvService {
       ..writeln('--- mDNS Servisleri ---')
       ..writeln(await _diagMdnsProbe(ip));
 
+    // 2d. Arçelik proprietary remote service (`_arceliktvremote._tcp`) details
+    b
+      ..writeln('')
+      ..writeln('--- Arçelik Kumanda Servisi (_arceliktvremote._tcp) ---')
+      ..writeln(await _diagArcelikServiceRecords(ip));
+    for (final p in <int>[3697, 8080]) {
+      if (openPorts.contains(p)) {
+        b.writeln(':$p yavaş TCP denemesi -> ${await _diagSlowRawProbe(ip, p)}');
+      }
+    }
+    if (openPorts.contains(7681)) {
+      b.writeln(':7681 WebSocket varyantları:');
+      b.writeln(await _diagWebSocketVariants(ip, 7681));
+    }
+
     // 3. TLS certificate subjects on Android TV Remote ports
     for (final p in <int>[6466, 6467]) {
       if (!openPorts.contains(p)) continue;
@@ -4200,6 +4215,272 @@ class AdbTvService {
       b.write('\nmDNS yanıtlayan diğer cihazlar: ${otherSenders.take(12).join(', ')}');
     }
     return b.toString();
+  }
+
+  /// Reads a (possibly compressed) DNS name starting at [off].
+  static ({String name, int next}) _dnsReadName(Uint8List d, int off) {
+    final labels = <String>[];
+    var pos = off;
+    var next = -1;
+    var jumps = 0;
+    while (pos < d.length) {
+      final len = d[pos];
+      if (len == 0) {
+        pos++;
+        break;
+      }
+      if ((len & 0xC0) == 0xC0) {
+        if (pos + 1 >= d.length) break;
+        if (next < 0) next = pos + 2;
+        pos = ((len & 0x3F) << 8) | d[pos + 1];
+        if (++jumps > 20) break;
+        continue;
+      }
+      pos++;
+      if (pos + len > d.length) break;
+      labels.add(utf8.decode(d.sublist(pos, pos + len), allowMalformed: true));
+      pos += len;
+    }
+    return (name: labels.join('.'), next: next >= 0 ? next : pos);
+  }
+
+  /// Decodes PTR / SRV / TXT / A records of an mDNS response packet into text lines.
+  static List<String> describeDnsRecords(Uint8List d) {
+    final out = <String>[];
+    if (d.length < 12) return out;
+    final bd = ByteData.sublistView(d);
+    final qd = bd.getUint16(4);
+    final total = bd.getUint16(6) + bd.getUint16(8) + bd.getUint16(10);
+    var pos = 12;
+    for (var i = 0; i < qd && pos < d.length; i++) {
+      pos = _dnsReadName(d, pos).next + 4;
+    }
+    for (var i = 0; i < total && pos + 10 <= d.length; i++) {
+      final n = _dnsReadName(d, pos);
+      pos = n.next;
+      if (pos + 10 > d.length) break;
+      final type = bd.getUint16(pos);
+      final rdLen = bd.getUint16(pos + 8);
+      pos += 10;
+      if (pos + rdLen > d.length) break;
+      switch (type) {
+        case 12:
+          out.add('PTR ${n.name} -> ${_dnsReadName(d, pos).name}');
+        case 33:
+          if (rdLen >= 6) {
+            out.add(
+              'SRV ${n.name} port=${bd.getUint16(pos + 4)} '
+              'hedef=${_dnsReadName(d, pos + 6).name}',
+            );
+          }
+        case 16:
+          final parts = <String>[];
+          var t = pos;
+          while (t < pos + rdLen) {
+            final l = d[t];
+            t++;
+            if (t + l > pos + rdLen) break;
+            parts.add(utf8.decode(d.sublist(t, t + l), allowMalformed: true));
+            t += l;
+          }
+          out.add('TXT ${n.name} -> ${parts.join(' ; ')}');
+        case 1:
+          if (rdLen == 4) {
+            out.add('A ${n.name} -> ${d[pos]}.${d[pos + 1]}.${d[pos + 2]}.${d[pos + 3]}');
+          }
+        default:
+          out.add('TYPE$type ${n.name}');
+      }
+      pos += rdLen;
+    }
+    return out;
+  }
+
+  /// Queries `_arceliktvremote._tcp.local` and lists PTR/SRV/TXT/A records from [ip].
+  Future<String> _diagArcelikServiceRecords(String ip) async {
+    final records = <String>{};
+    RawDatagramSocket? sock;
+    StreamSubscription<RawSocketEvent>? sub;
+    try {
+      sock = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4,
+        0,
+        reuseAddress: true,
+      );
+      sock.multicastHops = 255;
+      sub = sock.listen((event) {
+        if (event != RawSocketEvent.read) return;
+        final dg = sock?.receive();
+        if (dg == null || dg.address.address != ip) return;
+        for (final r in describeDnsRecords(dg.data)) {
+          if (records.length < 40) records.add(r);
+        }
+      });
+      final target = InternetAddress('224.0.0.251');
+      for (var i = 0; i < 2; i++) {
+        sock.send(
+          _buildMdnsPtrQueryPacket('_arceliktvremote._tcp.local'),
+          target,
+          5353,
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+    } catch (e) {
+      return 'HATA: $e';
+    } finally {
+      await sub?.cancel();
+      sock?.close();
+    }
+    return records.isEmpty ? '(kayıt alınamadı)' : records.join('\n');
+  }
+
+  /// Connects with a long timeout, waits for a greeting, then sends a newline.
+  Future<String> _diagSlowRawProbe(String ip, int port) async {
+    Socket? sock;
+    try {
+      sock = await Socket.connect(
+        ip,
+        port,
+        timeout: const Duration(seconds: 3),
+      );
+      final rx = <int>[];
+      var closedByServer = false;
+      final sub = sock.listen(
+        rx.addAll,
+        onError: (_) {},
+        onDone: () => closedByServer = true,
+        cancelOnError: true,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      final greeting = rx.isEmpty ? '(sessiz)' : _diagDescribeBytes(rx);
+      final before = rx.length;
+      if (!closedByServer) {
+        sock.add(ascii.encode('\r\n'));
+        await sock.flush();
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+      }
+      final afterNewline = rx.length > before
+          ? _diagDescribeBytes(rx.sublist(before))
+          : '(yanıt yok)';
+      await sub.cancel();
+      return 'karşılama=$greeting, satırsonu sonrası=$afterNewline, '
+          'sunucu kapattı=$closedByServer';
+    } catch (e) {
+      return 'HATA: $e';
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
+  }
+
+  /// Tries WebSocket upgrades on several paths / sub-protocols and reports the
+  /// distinct answers (status line + first frame bytes on `101`).
+  Future<String> _diagWebSocketVariants(String ip, int port) async {
+    const paths = <String>[
+      '/', '/ws', '/remote', '/tvremote', '/arceliktvremote', '/websocket',
+      '/api', '/control', '/rc', '/key',
+    ];
+    const protocols = <String?>[
+      null, 'arceliktvremote', 'tvremote', 'remote', 'rc', 'json',
+      'lws-minimal', 'dumb-increment-protocol', 'lws-mirror-protocol',
+    ];
+    final results = <String, List<String>>{};
+    for (final path in paths) {
+      for (final proto in protocols) {
+        for (final withOrigin in <bool>[false, true]) {
+          if (withOrigin && (path != '/' || proto != null)) continue;
+          final r = await _diagWsHandshake(
+            ip,
+            port,
+            path,
+            protocol: proto,
+            origin: withOrigin ? 'http://$ip' : null,
+          );
+          final label =
+              '$path${proto != null ? ' [$proto]' : ''}${withOrigin ? ' +Origin' : ''}';
+          results.putIfAbsent(r, () => <String>[]).add(label);
+        }
+      }
+    }
+    final b = StringBuffer();
+    results.forEach((answer, labels) {
+      final shown = labels.length > 6
+          ? '${labels.take(6).join(', ')} … (+${labels.length - 6})'
+          : labels.join(', ');
+      b.writeln('  $answer  <=  $shown');
+    });
+    return b.toString().trimRight();
+  }
+
+  Future<String> _diagWsHandshake(
+    String ip,
+    int port,
+    String path, {
+    String? protocol,
+    String? origin,
+  }) async {
+    Socket? sock;
+    try {
+      sock = await Socket.connect(
+        ip,
+        port,
+        timeout: const Duration(milliseconds: 1500),
+      );
+      final rx = <int>[];
+      final done = Completer<void>();
+      final sub = sock.listen(
+        (chunk) {
+          rx.addAll(chunk);
+          if (rx.length >= 600 && !done.isCompleted) done.complete();
+        },
+        onError: (_) {
+          if (!done.isCompleted) done.complete();
+        },
+        onDone: () {
+          if (!done.isCompleted) done.complete();
+        },
+        cancelOnError: true,
+      );
+      final req = StringBuffer()
+        ..write('GET $path HTTP/1.1\r\n')
+        ..write('Host: $ip:$port\r\n')
+        ..write('Upgrade: websocket\r\nConnection: Upgrade\r\n')
+        ..write('Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n')
+        ..write('Sec-WebSocket-Version: 13\r\n');
+      if (protocol != null) req.write('Sec-WebSocket-Protocol: $protocol\r\n');
+      if (origin != null) req.write('Origin: $origin\r\n');
+      req.write('\r\n');
+      sock.add(ascii.encode(req.toString()));
+      await sock.flush();
+      await done.future.timeout(
+        const Duration(milliseconds: 1500),
+        onTimeout: () {},
+      );
+      await sub.cancel();
+      if (rx.isEmpty) return '(yanıt yok)';
+      final text = utf8.decode(rx, allowMalformed: true);
+      final status = text.split('\r\n').first.trim();
+      if (status.contains(' 101')) {
+        final headerEnd = text.indexOf('\r\n\r\n');
+        final proto = RegExp(
+          r'Sec-WebSocket-Protocol:\s*([^\r\n]+)',
+          caseSensitive: false,
+        ).firstMatch(text)?.group(1);
+        final extra = headerEnd >= 0 && rx.length > headerEnd + 4
+            ? _diagDescribeBytes(rx.sublist(headerEnd + 4))
+            : '(ilk çerçeve yok)';
+        return '$status protokol=${proto ?? '-'} ilkVeri=$extra';
+      }
+      return status;
+    } catch (e) {
+      return 'HATA: ${e.runtimeType}';
+    } finally {
+      try {
+        sock?.destroy();
+      } catch (_) {}
+    }
   }
 
   void _appendDiagTail(StringBuffer b) {

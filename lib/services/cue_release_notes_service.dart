@@ -40,11 +40,25 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.10+22';
-  static const String currentShortVersion = 'v1.9.10';
+  static const String currentVersion = '1.9.11+23';
+  static const String currentShortVersion = 'v1.9.11';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '1.9.11+23',
+      versionLabel: 'v1.9.11 (Build 23)',
+      releaseDate: '31 Ekim 2026',
+      headline: 'Arçelik TV\'ler İçin Ek Tanılama',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'TANILAMA',
+          title: 'Arçelik Kumanda Servisi Testi',
+          description:
+              'Tanılama raporu artık Arçelik televizyonların kendi kumanda servisini de test ediyor. Raporu bize göndererek Arçelik TV desteğinin eklenmesine yardımcı olabilirsiniz.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.10+22',
       versionLabel: 'v1.9.10 (Build 22)',

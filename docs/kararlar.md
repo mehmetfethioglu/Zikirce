@@ -1,5 +1,12 @@
 # CueDeck — Mimari Karar & Anti-Pattern Defteri (ADR & Karpathy Lessons Learned)
 
+## [ADR-025] 2026-10-31: Arçelik TV'nin Özel Kumanda Protokolü Tespit Edildi (`_arceliktvremote._tcp`) (`v1.9.11+23`)
+- **Saha verisi (v1.9.10, tam 1-65535 tarama):** Açık portlar `3697` (TCP, ikinci bağlantıda zaman aşımı), `7681` (`libwebsockets`, `/` WebSocket isteğine `403 Forbidden`), `8080` (sessiz TCP). mDNS'te TV kendini **`_arceliktvremote._tcp`** servisiyle duyuruyor. `56789`/`56790` önceki raporda açıktı, bu raporda kapalı (bir uygulamaya bağlı geçici servis olmalı).
+- **Sonuç:** TV, Arçelik'in kendi (belgelenmemiş) kumanda protokolünü kullanıyor; internette herkese açık bir tanımı bulunamadı. Mevcut hiçbir CueDeck protokolü bu TV'de çalışmaz.
+- **Karar:** Tahmin yerine (1) mDNS SRV/TXT kayıtlarının çözümlenmesi (`describeDnsRecords`), (2) `7681` WebSocket yol/alt protokol varyantları, (3) `3697`/`8080` yavaş TCP denemesi tanılamaya eklendi. Kesin çözüm yolu: resmi Arçelik kumanda uygulamasının trafiğinin PCAPdroid ile yakalanması.
+
+---
+
 ## [ADR-024] 2026-10-31: Arçelik TV (192.168.1.106) İlk Saha Raporu & Derin Tanılama (`v1.9.10+22`)
 - **Saha verisi (Xiaomi 13, v1.9.9):** TV açık portlar yalnızca `8080`, `56789`, `56790`; diğer tüm denenen portlar RST (`errno 111`). `56789`/`56790` HTTP sunucusu tüm yollara `404 "Error 404: Not Found"` dönüyor (Vestel `/apps/SmartCenter` ve `/apps/vr/remote` dahil). `8080` TCP bağlantısını kabul ediyor ama HTTP isteğine hiç yanıt vermiyor. SSDP ve 5555/6466/6467/8008/8085 yok → TV Android/Google TV değil; Vestel SmartCenter ve Grundig 8085 protokolleri bu TV'de geçersiz.
 - **iPhone 11:** Yalnızca `8080` açık, diğer tüm portlar zaman aşımı (Android'de RST). Sebep belirsiz (TV bekleme modunda olabilir veya iOS bağlantı sorunu) → TV açıkken tekrar test gerekli.

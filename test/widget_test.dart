@@ -447,7 +447,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Bağlantı Tanılama Raporu').first,
+        find.text('Arçelik Kumanda Servisi Testi'),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));
@@ -778,4 +778,32 @@ void main() {
       );
     },
   );
+
+  test('describeDnsRecords decodes PTR / SRV / TXT / A of an Arçelik mDNS answer', () {
+    List<int> name(String n) => <int>[
+          for (final label in n.split('.')) ...<int>[
+            label.length,
+            ...utf8.encode(label),
+          ],
+          0,
+        ];
+    List<int> rr(String n, int type, List<int> rdata) => <int>[
+          ...name(n),
+          0, type, 0, 1, 0, 0, 0, 120,
+          rdata.length >> 8, rdata.length & 0xFF,
+          ...rdata,
+        ];
+    final packet = Uint8List.fromList(<int>[
+      0, 0, 0x84, 0x00, 0, 0, 0, 1, 0, 0, 0, 3,
+      ...rr('_arceliktvremote._tcp.local', 12, name('TV._arceliktvremote._tcp.local')),
+      ...rr('TV._arceliktvremote._tcp.local', 33, <int>[0, 0, 0, 0, 0x0E, 0x71, ...name('tv.local')]),
+      ...rr('TV._arceliktvremote._tcp.local', 16, <int>[7, ...utf8.encode('ver=1.0')]),
+      ...rr('tv.local', 1, <int>[192, 168, 1, 106]),
+    ]);
+    final lines = AdbTvService.describeDnsRecords(packet);
+    expect(lines, contains('PTR _arceliktvremote._tcp.local -> TV._arceliktvremote._tcp.local'));
+    expect(lines, contains('SRV TV._arceliktvremote._tcp.local port=3697 hedef=tv.local'));
+    expect(lines, contains('TXT TV._arceliktvremote._tcp.local -> ver=1.0'));
+    expect(lines, contains('A tv.local -> 192.168.1.106'));
+  });
 }
