@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../utils/secure_storage_helper.dart';
+import '../widgets/tv_focusable.dart';
 
 class GoogleOAuthConstants {
   static const String clientId = '497197680323-k954rqrvtjfk5qv83heimbs8k1fe8t5m.apps.googleusercontent.com';
@@ -338,6 +339,7 @@ class _GoogleOAuthSheetState extends State<GoogleOAuthSheet> {
             },
             onPageFinished: (_) {
               if (mounted) setState(() => _isLoading = false);
+              _enhanceWebViewForTvRemote();
             },
             onWebResourceError: (error) {
               if (mounted) {
@@ -411,6 +413,302 @@ class _GoogleOAuthSheetState extends State<GoogleOAuthSheet> {
     if (mounted) Navigator.of(context).pop(success);
   }
 
+  Future<void> _enhanceWebViewForTvRemote() async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      await ctrl.runJavaScript('''
+        (function() {
+          if (!document.getElementById('zikirce-tv-focus-style')) {
+            var st = document.createElement('style');
+            st.id = 'zikirce-tv-focus-style';
+            st.innerHTML = '*:focus { outline: 3px solid #D4AF37 !important; outline-offset: 2px !important; }';
+            document.head.appendChild(st);
+          }
+        })();
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _injectInputAndSubmit(String text) async {
+    final ctrl = _controller;
+    if (ctrl == null || text.trim().isEmpty) return;
+    final encoded = jsonEncode(text.trim());
+    try {
+      await ctrl.runJavaScript('''
+        (function() {
+          var val = $encoded;
+          var selectors = [
+            'input[type="email"]:not([type="hidden"])',
+            'input[type="password"]:not([type="hidden"])',
+            'input[name="identifier"]',
+            'input[name="Passwd"]',
+            'input[type="tel"]:not([type="hidden"])',
+            'input[type="text"]:not([type="hidden"])',
+            'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])'
+          ];
+          var target = null;
+          for (var i = 0; i < selectors.length; i++) {
+            var list = document.querySelectorAll(selectors[i]);
+            for (var j = 0; j < list.length; j++) {
+              var el = list[j];
+              var rect = el.getBoundingClientRect();
+              if (rect.width > 10 && rect.height > 10 && !el.disabled) {
+                target = el;
+                break;
+              }
+            }
+            if (target) break;
+          }
+          if (target) {
+            target.focus();
+            var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            if (nativeSetter) {
+              nativeSetter.call(target, val);
+            } else {
+              target.value = val;
+            }
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            target.dispatchEvent(new Event('change', { bubbles: true }));
+            setTimeout(function() {
+              var nextBtn = document.querySelector('#identifierNext button, #identifierNext, #passwordNext button, #passwordNext, button[type="submit"]');
+              if (nextBtn) {
+                nextBtn.click();
+              } else {
+                var buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                for (var k = 0; k < buttons.length; k++) {
+                  var txt = (buttons[k].innerText || '').toLowerCase();
+                  if (txt.includes('ileri') || txt.includes('next') || txt.includes('devam') || txt.includes('giriş') || txt.includes('sign in')) {
+                    buttons[k].click();
+                    break;
+                  }
+                }
+              }
+            }, 220);
+          }
+        })();
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _clickNextOrApproveInWebView() async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      await ctrl.runJavaScript('''
+        (function() {
+          var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+          for (var c = 0; c < checkboxes.length; c++) {
+            if (!checkboxes[c].checked) {
+              checkboxes[c].click();
+            }
+          }
+          var prioritySelectors = [
+            '#identifierNext button',
+            '#passwordNext button',
+            '#submit_approve_access button',
+            '#submit_approve_access',
+            '[data-identifier]',
+            'button[type="submit"]'
+          ];
+          for (var i = 0; i < prioritySelectors.length; i++) {
+            var el = document.querySelector(prioritySelectors[i]);
+            if (el) {
+              var r = el.getBoundingClientRect();
+              if (r.width > 10 && r.height > 10) {
+                el.click();
+                return;
+              }
+            }
+          }
+          var buttons = Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"]'));
+          var keywords = ['ileri', 'next', 'devam', 'continue', 'izin ver', 'allow', 'onayla', 'kabul', 'seç'];
+          for (var k = 0; k < keywords.length; k++) {
+            for (var b = 0; b < buttons.length; b++) {
+              var txt = (buttons[b].innerText || buttons[b].value || '').toLowerCase().trim();
+              var rect = buttons[b].getBoundingClientRect();
+              if (rect.width > 10 && rect.height > 10 && txt.includes(keywords[k])) {
+                buttons[b].click();
+                return;
+              }
+            }
+          }
+        })();
+      ''');
+    } catch (_) {}
+  }
+
+  Future<void> _scrollWebViewDown() async {
+    final ctrl = _controller;
+    if (ctrl == null) return;
+    try {
+      await ctrl.runJavaScript('window.scrollBy({ top: 280, behavior: "smooth" });');
+    } catch (_) {}
+  }
+
+  Future<void> _showTvRemoteInputModal() async {
+    final textController = TextEditingController();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF231E1A) : const Color(0xFFFDFBF7);
+    final textColor = isDark ? const Color(0xFFE8DDD0) : const Color(0xFF1E2B27);
+    const accentColor = Color(0xFF236B56);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: bgColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: Color(0xFFD4AF37), width: 1.4),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.keyboard_alt_rounded, color: Color(0xFFD4AF37)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'TV Kumanda Klavyesi (E-posta veya Şifre)',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: textColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 520,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Ekrandaki kutuya Google e-posta adresinizi veya şifrenizi yazıp "Yaz ve İleri\'ye Bas" butonuna tıklayın:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: textColor.withValues(alpha: 0.78),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  autofocus: true,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'ornek@gmail.com veya şifreniz...',
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF161310) : const Color(0xFFECF3F0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: accentColor),
+                    ),
+                  ),
+                  onSubmitted: (val) => Navigator.of(ctx).pop(val),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final suffix in ['@gmail.com', '@hotmail.com', '@outlook.com'])
+                      TvFocusable(
+                        borderRadius: 10,
+                        onPressed: () {
+                          final current = textController.text.trim();
+                          if (!current.contains('@')) {
+                            textController.text = '$current$suffix';
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: accentColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: accentColor.withValues(alpha: 0.45)),
+                          ),
+                          child: Text(
+                            '+ $suffix',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                    TvFocusable(
+                      borderRadius: 10,
+                      onPressed: () => textController.clear(),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text(
+                          'Temizle',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.redAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TvFocusable(
+              borderRadius: 12,
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Text(
+                  'İptal',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: textColor.withValues(alpha: 0.75),
+                  ),
+                ),
+              ),
+            ),
+            TvFocusable(
+              borderRadius: 12,
+              onPressed: () => Navigator.of(ctx).pop(textController.text),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  '✅ Yaz ve İleri\'ye Bas (OK)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.trim().isNotEmpty) {
+      await _injectInputAndSubmit(result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -422,7 +720,7 @@ class _GoogleOAuthSheetState extends State<GoogleOAuthSheet> {
     const accentColor = Color(0xFF2D7D76);
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.90,
+      height: MediaQuery.of(context).size.height * 0.92,
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -456,9 +754,8 @@ class _GoogleOAuthSheetState extends State<GoogleOAuthSheet> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.refresh_rounded),
-                        tooltip: 'Yenile',
+                      TvFocusable(
+                        borderRadius: 10,
                         onPressed: () {
                           if (_controller == null) {
                             _initOAuth();
@@ -470,12 +767,107 @@ class _GoogleOAuthSheetState extends State<GoogleOAuthSheet> {
                           });
                           _controller!.loadRequest(Uri.parse(_authUrl));
                         },
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Icon(Icons.refresh_rounded),
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
+                      const SizedBox(width: 6),
+                      TvFocusable(
+                        borderRadius: 10,
                         onPressed: () => Navigator.of(context).pop(false),
+                        child: const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Icon(Icons.close_rounded),
+                        ),
                       ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+            // TV Kumanda ile %100 Kontrol Çubuğu (Mouse Gerektirmez)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF2A241E) : const Color(0xFFECF3F0),
+                border: Border(
+                  bottom: BorderSide(
+                    color: accentColor.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  TvFocusable(
+                    autofocus: true,
+                    borderRadius: 12,
+                    onPressed: _showTvRemoteInputModal,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: accentColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.keyboard_rounded, size: 17, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text(
+                            '✍️ E-posta / Şifre Yaz (Kumanda OK)',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  TvFocusable(
+                    borderRadius: 12,
+                    onPressed: _clickNextOrApproveInWebView,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFB57D15).withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFB57D15)),
+                      ),
+                      child: Text(
+                        '👆 Hesap Seç / İleri / İzin Ver (OK)',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  TvFocusable(
+                    borderRadius: 12,
+                    onPressed: _scrollWebViewDown,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '🔽 Aşağı Kaydır',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: primaryTextColor,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

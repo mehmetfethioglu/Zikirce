@@ -472,8 +472,11 @@ class DataReconciliationService {
       await ZikirSeedData.ensureAllDefaultZikirsExist(db);
       final localZikirs = await db.select(db.zikirs).get();
       final zikirMap = {for (final z in localZikirs) z.id: z};
+      final zikirByCanonicalName = {
+        for (final z in localZikirs) ZikirSeedData.canonicalZikirKey(z.name): z
+      };
 
-      // A. Uzak Zikirleri Eşle / Ekle
+      // A. Uzak Zikirleri Eşle / Ekle (Mükerrer İsim Korumalı)
       if (remoteZikirs is List) {
         for (final item in remoteZikirs) {
           if (item is! Map<String, dynamic>) continue;
@@ -492,8 +495,12 @@ class DataReconciliationService {
           final lastPracticedUnix = _tryParseInt(item['SonPratikUnix'] ?? item['lastPracticedUnix']);
           final remoteLastPracticed = lastPracticedUnix != null ? DateTime.fromMillisecondsSinceEpoch(lastPracticedUnix * 1000) : null;
 
-          if (zId != null && zikirMap.containsKey(zId)) {
-            final local = zikirMap[zId]!;
+          final canonicalKey = ZikirSeedData.canonicalZikirKey(zName);
+          final matchedLocal = zikirByCanonicalName[canonicalKey] ??
+              (zId != null ? zikirMap[zId] : null);
+
+          if (matchedLocal != null) {
+            final local = matchedLocal;
             final updatedTarget = max(local.target, zTarget);
             final updatedFav = local.isFavorite || zFav;
 
@@ -517,7 +524,7 @@ class DataReconciliationService {
                 ? local.lastPracticed
                 : (remoteLastPracticed ?? local.lastPracticed);
 
-            await (db.update(db.zikirs)..where((t) => t.id.equals(zId))).write(
+            await (db.update(db.zikirs)..where((t) => t.id.equals(local.id))).write(
               ZikirsCompanion(
                 target: Value(updatedTarget),
                 currentCount: Value(effectiveCount),
@@ -737,7 +744,35 @@ class DataReconciliationService {
           }
         }
 
-        // Mukabele / Hatim son okunan sayfa
+        // Mukabele / Hatim son okunan sayfa (Genel ve Hatim bazlı)
+        final remoteMukPage = _parseInt(appSettings['MukabeleLastPage'], 0);
+        final remoteMukMs = _parseInt(appSettings['MukabeleLastUpdatedMs'], 0);
+        final localMukPage = prefs.getInt('MukabeleLastPage') ?? 1;
+        final localMukMs = prefs.getInt('MukabeleLastUpdatedMs') ?? 0;
+        if (remoteMukPage > 0) {
+          final shouldTakeRemoteMuk = (remoteMukMs > localMukMs) ||
+              (remoteMukMs == localMukMs && remoteMukPage > localMukPage);
+          if (shouldTakeRemoteMuk) {
+            final clampedMuk = remoteMukPage.clamp(1, 605);
+            await prefs.setInt('MukabeleLastPage', clampedMuk);
+            await prefs.setInt('MukabeleLastJuz', ((clampedMuk - 1) ~/ 20) + 1);
+            await prefs.setInt('MukabeleLastUpdatedMs', max(remoteMukMs, localMukMs));
+          }
+        }
+
+        final remoteLastPage = _parseInt(appSettings['LastReadPage'], 0);
+        final remoteLastMs = _parseInt(appSettings['LastReadPage_UpdatedMs'], 0);
+        final localLastPage = prefs.getInt('LastReadPage') ?? 1;
+        final localLastMs = prefs.getInt('LastReadPage_UpdatedMs') ?? 0;
+        if (remoteLastPage > 0) {
+          final shouldTakeRemotePage = (remoteLastMs > localLastMs) ||
+              (remoteLastMs == localLastMs && remoteLastPage > localLastPage);
+          if (shouldTakeRemotePage) {
+            await prefs.setInt('LastReadPage', remoteLastPage.clamp(1, 605));
+            await prefs.setInt('LastReadPage_UpdatedMs', max(remoteLastMs, localLastMs));
+          }
+        }
+
         for (final entry in appSettings.entries) {
           if (entry.key.startsWith('MukabeleLastPage_') || entry.key.startsWith('HatimLastPage_')) {
             final remoteP = _parseInt(entry.value, 1);
@@ -746,6 +781,40 @@ class DataReconciliationService {
               await prefs.setInt(entry.key, remoteP);
             }
           }
+        }
+
+        // Külliyat Kitap Rafı İlerlemeleri (TV, Telefon ve Tablet Arası Çift Yönlü Uzlaştırma)
+        final remoteKulliyatRaw = appSettings['KulliyatBookshelfJson']?.toString() ?? '';
+        if (remoteKulliyatRaw.isNotEmpty) {
+          await _mergeKulliyatBookshelfJson(prefs, remoteKulliyatRaw);
+        }
+
+        final remoteLastBookId = appSettings['KulliyatLastBookId']?.toString() ?? '';
+        final remoteLastBookMs = _parseInt(appSettings['KulliyatLastReadMs'], 0);
+        final localLastBookId = prefs.getString('zikirce_kulliyat_last_book_id') ?? '';
+        final localLastBookMs = prefs.getInt('zikirce_kulliyat_last_read_ms') ?? 0;
+        if (remoteLastBookId.isNotEmpty &&
+            (localLastBookId.isEmpty || remoteLastBookMs >= localLastBookMs)) {
+          await prefs.setString('zikirce_kulliyat_last_book_id', remoteLastBookId);
+          await prefs.setInt('zikirce_kulliyat_last_read_ms', max(remoteLastBookMs, localLastBookMs));
+        }
+
+        final remoteBookmarksJson = appSettings['KulliyatBookmarksJson']?.toString() ?? '';
+        if (remoteBookmarksJson.isNotEmpty) {
+          await _mergeJsonListById(
+            prefs,
+            prefsKey: 'zikirce_book_bookmarks_v1',
+            remoteRaw: remoteBookmarksJson,
+          );
+        }
+
+        final remoteHighlightsJson = appSettings['KulliyatHighlightsJson']?.toString() ?? '';
+        if (remoteHighlightsJson.isNotEmpty) {
+          await _mergeJsonListById(
+            prefs,
+            prefsKey: 'zikirce_book_highlights_v1',
+            remoteRaw: remoteHighlightsJson,
+          );
         }
 
         // Hatim bugün okunan sayfa uzlaştırması (HatimTodayPages)
@@ -949,6 +1018,110 @@ class DataReconciliationService {
     } catch (e, st) {
       debugPrint('[DataReconciliationService] ❌ smartMergeCloudPayload hatası: $e\n$st');
       return false;
+    }
+  }
+
+  /// Külliyat kitap ilerlemelerini (sayfa, başlama durumu, son okuma zamanı) çakışmasız birleştirir
+  static Future<void> _mergeKulliyatBookshelfJson(
+    SharedPreferences prefs,
+    String remoteRaw,
+  ) async {
+    try {
+      const prefsKey = 'zikirce_tahrir_bookshelf_v2';
+      final localRaw = prefs.getString(prefsKey) ?? '';
+      final remoteList = jsonDecode(remoteRaw);
+      if (remoteList is! List) return;
+
+      if (localRaw.isEmpty) {
+        await prefs.setString(prefsKey, remoteRaw);
+        return;
+      }
+
+      final localList = jsonDecode(localRaw);
+      if (localList is! List) {
+        await prefs.setString(prefsKey, remoteRaw);
+        return;
+      }
+
+      final mergedById = <String, Map<String, dynamic>>{};
+      for (final item in localList) {
+        if (item is Map<String, dynamic> && item['id'] is String) {
+          mergedById[item['id'] as String] = Map<String, dynamic>.from(item);
+        }
+      }
+
+      for (final rItem in remoteList) {
+        if (rItem is! Map<String, dynamic> || rItem['id'] is! String) continue;
+        final id = rItem['id'] as String;
+        final lItem = mergedById[id];
+        if (lItem == null) {
+          mergedById[id] = Map<String, dynamic>.from(rItem);
+          continue;
+        }
+
+        final lStarted = lItem['hasStartedReading'] == true;
+        final rStarted = rItem['hasStartedReading'] == true;
+        final lPage = _parseInt(lItem['currentPage'], 1);
+        final rPage = _parseInt(rItem['currentPage'], 1);
+        final lMs = _parseInt(lItem['lastReadAtMs'], 0);
+        final rMs = _parseInt(rItem['lastReadAtMs'], 0);
+
+        int chosenPage = max(lPage, rPage);
+        if (lMs > 0 || rMs > 0) {
+          chosenPage = (rMs > lMs)
+              ? rPage
+              : (lMs > rMs ? lPage : max(lPage, rPage));
+        }
+
+        final next = Map<String, dynamic>.from(lItem);
+        next['hasStartedReading'] = lStarted || rStarted || chosenPage > 1;
+        next['currentPage'] = chosenPage;
+        next['lastReadAtMs'] = max(lMs, rMs);
+        mergedById[id] = next;
+      }
+
+      await prefs.setString(prefsKey, jsonEncode(mergedById.values.toList()));
+    } catch (e) {
+      debugPrint('[DataReconciliationService] _mergeKulliyatBookshelfJson notice: $e');
+    }
+  }
+
+  /// Ayraç ve vurgulama JSON dizilerini ID bazlı mükerrersiz birleştirir
+  static Future<void> _mergeJsonListById(
+    SharedPreferences prefs, {
+    required String prefsKey,
+    required String remoteRaw,
+  }) async {
+    try {
+      final remoteList = jsonDecode(remoteRaw);
+      if (remoteList is! List) return;
+      final localRaw = prefs.getString(prefsKey) ?? '';
+      if (localRaw.isEmpty) {
+        await prefs.setString(prefsKey, remoteRaw);
+        return;
+      }
+      final localList = jsonDecode(localRaw);
+      if (localList is! List) {
+        await prefs.setString(prefsKey, remoteRaw);
+        return;
+      }
+
+      final mapById = <String, Map<String, dynamic>>{};
+      for (final item in localList) {
+        if (item is Map<String, dynamic>) {
+          final key = (item['id'] ?? '${item['bookId']}_${item['pageNumber']}').toString();
+          mapById[key] = item;
+        }
+      }
+      for (final item in remoteList) {
+        if (item is Map<String, dynamic>) {
+          final key = (item['id'] ?? '${item['bookId']}_${item['pageNumber']}').toString();
+          mapById.putIfAbsent(key, () => item);
+        }
+      }
+      await prefs.setString(prefsKey, jsonEncode(mapById.values.toList()));
+    } catch (e) {
+      debugPrint('[DataReconciliationService] _mergeJsonListById notice: $e');
     }
   }
 }

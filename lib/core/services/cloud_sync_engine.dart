@@ -19,6 +19,9 @@ import '../../features/hatim/providers/hatim_providers.dart';
 import '../../features/namaz_vakitleri/providers/prayer_providers.dart';
 import '../../features/gamification/providers/gamification_providers.dart';
 import '../../features/settings/providers/settings_provider.dart';
+import '../../features/kuran/data/islamic_bookshelf_models.dart';
+import '../../features/kuran/providers/kuran_providers.dart';
+import '../providers/tv_mode_provider.dart';
 
 /// Senkronizasyon Durumu
 enum CloudSyncStatus {
@@ -235,6 +238,28 @@ class CloudSyncEngine {
         _safeRead(effectiveRef, userSettingsProvider.notifier)?.reloadSettings();
       } catch (_) {}
 
+      try {
+        _safeRead(effectiveRef, islamicBookshelfProvider.notifier)?.reloadFromPrefs();
+      } catch (_) {}
+
+      try {
+        _safeRead(effectiveRef, islamicBookAnnotationsProvider.notifier)?.reloadFromPrefs();
+      } catch (_) {}
+
+      try {
+        _safeRead(effectiveRef, mukabeleSyncProvider.notifier)?.reloadFromPrefs();
+      } catch (_) {}
+
+      try {
+        SharedPreferences.getInstance().then((prefs) {
+          final syncedMushafPage = prefs.getInt('LastReadPage');
+          if (syncedMushafPage != null && syncedMushafPage > 0) {
+            _safeRead(effectiveRef, currentMushafPageProvider.notifier)?.state =
+                syncedMushafPage.clamp(1, 605);
+          }
+        });
+      } catch (_) {}
+
       debugPrint('[CloudSyncEngine] 🔄 Senkronizasyon sonrası tüm Riverpod UI sağlayıcıları yenilendi.');
     } catch (e) {
       debugPrint('[CloudSyncEngine] invalidateAllUiProviders error: $e');
@@ -254,9 +279,11 @@ class CloudSyncEngine {
     return id;
   }
 
-  /// Kullanıcı dostu cihaz adı (Telefon / Tablet / PC)
+  /// Kullanıcı dostu cihaz adı (Android TV / Telefon / Tablet / PC)
   String getDeviceName() {
-    if (Platform.isAndroid) return 'Android Cihaz';
+    if (Platform.isAndroid) {
+      return TvModeService.isHardwareTv ? 'Android TV' : 'Android Cihaz';
+    }
     if (Platform.isIOS) return 'Apple Cihaz';
     if (Platform.isWindows) return 'Windows Masaüstü';
     if (Platform.isMacOS) return 'macOS Bilgisayar';

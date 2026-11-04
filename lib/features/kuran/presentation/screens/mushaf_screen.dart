@@ -37,6 +37,9 @@ import '../widgets/tafseer_bottom_sheet.dart';
 import '../../data/islamic_bookshelf_models.dart';
 import '../../../../core/services/meal_service.dart';
 import '../../../dashboard/providers/share_reminder_provider.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
+import '../../../../core/widgets/tv_focusable.dart';
+import '../widgets/rahle_open_book_spread_widget.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
   final int initialPage;
@@ -73,6 +76,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   bool _showDebtReminderBanner = false;
   bool _hideReadBanner = false;
   bool _hasCompletedActiveHatimInSession = false;
+  bool _isRahleSpreadMode = false;
   Timer? _hideReadBannerTimer;
 
   @override
@@ -83,6 +87,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             ? MushafReadingMode.mealOnly
             : MushafReadingMode.mushaf);
     _focusNode = FocusNode();
+    final isTv = ref.read(isTvModeProvider);
+    _isRahleSpreadMode = isTv;
     final startPage = ref.read(currentMushafPageProvider);
     final targetPage = widget.initialPage > 0 ? widget.initialPage : startPage;
     _startPage = targetPage.clamp(1, 605);
@@ -94,9 +100,10 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
     // Synchronize initial page to current provider and verify screen awake
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(CloudSyncEngine.instance.pullAndMerge(ref, isBackground: true));
       ref.read(currentMushafPageProvider.notifier).state =
           targetPage.clamp(1, 605);
-      if (ref.read(settingsProvider).isKeepScreenAwakeEnabled) {
+      if (ref.read(settingsProvider).isKeepScreenAwakeEnabled || isTv) {
         ScreenAwakeService.setKeepAwake(true);
       }
 
@@ -131,11 +138,28 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     super.dispose();
   }
 
+  void _jumpToMushafPage(int targetPage) {
+    final target = targetPage.clamp(1, 605);
+    ref.read(currentMushafPageProvider.notifier).state = target;
+    unawaited(
+      ref.read(islamicBookshelfProvider.notifier).syncMushafPage(target),
+    );
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(target - 1);
+    }
+  }
+
   void _goToNextPage() {
     final currentPage = ref.read(currentMushafPageProvider);
+    final isWideRahle = _isRahleSpreadMode &&
+        MediaQuery.of(context).size.width >= 760;
+    final step = isWideRahle ? 2 : 1;
     if (currentPage < 605) {
-      final next = currentPage + 1;
+      final next = (currentPage + step).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = next;
+      unawaited(
+        ref.read(islamicBookshelfProvider.notifier).syncMushafPage(next),
+      );
       if (_pageController.hasClients) {
         _pageController.animateToPage(
           next - 1,
@@ -148,9 +172,15 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   void _goToPreviousPage() {
     final currentPage = ref.read(currentMushafPageProvider);
+    final isWideRahle = _isRahleSpreadMode &&
+        MediaQuery.of(context).size.width >= 760;
+    final step = isWideRahle ? 2 : 1;
     if (currentPage > 1) {
-      final prev = currentPage - 1;
+      final prev = (currentPage - step).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = prev;
+      unawaited(
+        ref.read(islamicBookshelfProvider.notifier).syncMushafPage(prev),
+      );
       if (_pageController.hasClients) {
         _pageController.animateToPage(
           prev - 1,
@@ -919,6 +949,23 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 Text('Kur’ân-ı Kerîm', style: TextStyle(color: titleColor)),
           ),
           actions: [
+            if (MediaQuery.of(context).size.width >= 760 ||
+                ref.watch(isTvModeProvider))
+              IconButton(
+                icon: Icon(
+                  _isRahleSpreadMode
+                      ? Icons.import_contacts_rounded
+                      : Icons.crop_portrait_rounded,
+                  color: _isRahleSpreadMode ? goldColor : iconColor,
+                ),
+                tooltip: _isRahleSpreadMode
+                    ? 'Tek Sayfa Görünümüne Geç'
+                    : 'Rahlede Açık Çift Sayfa Görünümü (TV)',
+                onPressed: () {
+                  HapticService.selectionClick();
+                  setState(() => _isRahleSpreadMode = !_isRahleSpreadMode);
+                },
+              ),
             IconButton(
               icon: Icon(Icons.text_fields_rounded, color: goldColor),
               tooltip: 'Yazı Boyutu, Meâl & Tefsir Ayarları',
@@ -1016,29 +1063,40 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             ),
           ),
         ),
-        body: Focus(
-          focusNode: _focusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              // Arapça Mushaf RTL olduğu için Sol Ok -> Sonraki Sayfa (İleri), Sağ Ok -> Önceki Sayfa (Geri)
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                  event.logicalKey == LogicalKeyboardKey.pageDown ||
-                  event.logicalKey == LogicalKeyboardKey.space) {
-                _goToNextPage();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                  event.logicalKey == LogicalKeyboardKey.pageUp) {
-                _goToPreviousPage();
-                return KeyEventResult.handled;
+        body: TvRemoteNumberJumpWrapper(
+          maxPage: 605,
+          onJumpToPage: _jumpToMushafPage,
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent) {
+                // Arapça Mushaf RTL olduğu için Sol Ok -> Sonraki Sayfa (İleri), Sağ Ok -> Önceki Sayfa (Geri)
+                if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                    event.logicalKey == LogicalKeyboardKey.pageDown ||
+                    event.logicalKey == LogicalKeyboardKey.space) {
+                  _goToNextPage();
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                    event.logicalKey == LogicalKeyboardKey.pageUp) {
+                  _goToPreviousPage();
+                  return KeyEventResult.handled;
+                }
               }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Stack(
-            children: [
-              // 605 PageView (RTL Swiping for Quran reading)
-              PageView.builder(
+              return KeyEventResult.ignored;
+            },
+            child: Stack(
+              children: [
+                if (_isRahleSpreadMode &&
+                    MediaQuery.of(context).size.width >= 760)
+                  _buildTwoPageMushafRahleSpread(
+                    currentPage: currentPage,
+                    isDark: isDark,
+                    goldColor: goldColor,
+                  )
+                else
+                  // 605 PageView (RTL Swiping for Quran reading)
+                  PageView.builder(
                 controller: _pageController,
                 reverse: true, // Right-to-Left standard for Arabic Mushaf
                 itemCount: 605,
@@ -1367,8 +1425,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 child: AudioSyncPlayerBar(),
               ),
 
-              // Masaüstü İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if (isDesktopMushafPlatform && currentPage < 605)
+              // Masaüstü & TV İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
+              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
@@ -1382,7 +1440,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     ),
                   ),
                 ),
-              if (isDesktopMushafPlatform && currentPage > 1)
+              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && currentPage > 1)
                 Positioned(
                   right: 14,
                   top: 0,
@@ -1398,6 +1456,120 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
             ],
           ),
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTwoPageMushafRahleSpread({
+    required int currentPage,
+    required bool isDark,
+    required Color goldColor,
+  }) {
+    final rightPage =
+        currentPage.isOdd ? currentPage : (currentPage - 1).clamp(1, 605);
+    final leftPage = (rightPage + 1).clamp(1, 605);
+    final hasSecondLeaf = leftPage > rightPage && leftPage <= 605;
+
+    final rightAsync = ref.watch(quranPageDataProvider(rightPage));
+    final leftAsync =
+        hasSecondLeaf ? ref.watch(quranPageDataProvider(leftPage)) : null;
+
+    final leftWidget = hasSecondLeaf && leftAsync != null
+        ? leftAsync.when(
+            data: (data) => MushafPageWidget(
+              pageData: data,
+              isMealOnlyMode: _readingMode == MushafReadingMode.mealOnly,
+              readingMode: _readingMode,
+            ),
+            loading: () => Center(
+              child: CircularProgressIndicator(color: goldColor),
+            ),
+            error: (err, _) => Center(
+              child: Text(
+                'Sayfa yüklenemedi: $err',
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+
+    final rightWidget = rightAsync.when(
+      data: (data) => MushafPageWidget(
+        pageData: data,
+        isMealOnlyMode: _readingMode == MushafReadingMode.mealOnly,
+        readingMode: _readingMode,
+      ),
+      loading: () => Center(
+        child: CircularProgressIndicator(color: goldColor),
+      ),
+      error: (err, _) => Center(
+        child: Text(
+          'Sayfa yüklenemedi: $err',
+          style: const TextStyle(color: Colors.red),
+        ),
+      ),
+    );
+
+    final paperColor = isDark ? const Color(0xFF151920) : const Color(0xFFFDF8EE);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(24, 6, 24, 14),
+      decoration: BoxDecoration(
+        color: paperColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: goldColor.withValues(alpha: 0.45),
+          width: 2.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.55 : 0.16),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            PhysicalBookSpreadTurnTransition(
+              spreadKey: 'mushaf_spread_${rightPage}_$leftPage',
+              leftLeaf: leftWidget,
+              rightLeaf: rightWidget,
+              paperColor: paperColor,
+              accentColor: goldColor,
+              isRtl: true,
+              turnDirection: 1,
+              spineGap: 18.0,
+            ),
+            // Rahle Orta Cilt / Sırt Gölgesi
+            Center(
+              child: IgnorePointer(
+                child: Container(
+                  width: 18,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isDark
+                          ? [
+                              Colors.black.withValues(alpha: 0.35),
+                              goldColor.withValues(alpha: 0.35),
+                              Colors.black.withValues(alpha: 0.35),
+                            ]
+                          : [
+                              const Color(0xFFD6C5A9).withValues(alpha: 0.45),
+                              const Color(0xFF8C6B3F).withValues(alpha: 0.55),
+                              const Color(0xFFD6C5A9).withValues(alpha: 0.45),
+                            ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

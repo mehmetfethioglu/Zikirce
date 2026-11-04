@@ -1,19 +1,25 @@
+import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/surah_data_provider.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
+import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/services/meal_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
+import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/services/tafseer_service.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
+import '../../../../core/widgets/tv_focusable.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../../data/islamic_book_corpus_service.dart';
 import '../../data/islamic_bookshelf_models.dart';
 import '../../data/risale_lugat_service.dart';
 import '../../providers/kuran_providers.dart';
+import '../widgets/rahle_open_book_spread_widget.dart';
 import '../widgets/tahrir_bookshelf_section.dart';
 
 /// Külliyat Kitap Okuyucu (Meâller, 6.236 Âyetlik Tefsirler, Kütüb-i Sitte ve Risale-i Nur Külliyatı)
@@ -38,6 +44,7 @@ class _IslamicBookReaderScreenState
     extends ConsumerState<IslamicBookReaderScreen> {
   late PageController _pageController;
   int _currentPage = 1;
+  int _rahleSubLeafIndex = 0;
   bool _isReady = false;
   bool _isDownloadingCorpus = false;
   double _downloadProgress = 0.0;
@@ -46,6 +53,7 @@ class _IslamicBookReaderScreenState
 
   final Map<int, QuranPageData> _quranPagesCache = {};
   final Map<int, IslamicBookPageData> _corpusPagesCache = {};
+  final Map<int, List<RahleSpreadLeafData>> _rahleLeavesCache = {};
   final List<TapGestureRecognizer> _lugatTapRecognizers =
       <TapGestureRecognizer>[];
 
@@ -81,6 +89,35 @@ class _IslamicBookReaderScreenState
         ? book.currentPage.clamp(1, book.totalPages)
         : 1;
     _pageController = PageController(initialPage: _currentPage - 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final isTv = ref.read(isTvModeProvider);
+      if (isTv) {
+        ScreenAwakeService.setKeepAwake(true);
+        final curSettings = ref.read(islamicBookReaderSettingsProvider);
+        if (!curSettings.isRahleSpreadMode) {
+          ref
+              .read(islamicBookReaderSettingsProvider.notifier)
+              .toggleRahleSpreadMode();
+        }
+      }
+      unawaited(
+        CloudSyncEngine.instance
+            .pullAndMerge(ref, isBackground: true)
+            .then((merged) {
+          if (merged && mounted) {
+            final updatedBooks = ref.read(islamicBookshelfProvider);
+            final syncedBook = updatedBooks.firstWhere(
+              (b) => b.id == widget.bookId,
+              orElse: () => book,
+            );
+            if (syncedBook.currentPage > _currentPage) {
+              _jumpToPage(syncedBook.currentPage, syncedBook.totalPages);
+            }
+          }
+        }),
+      );
+    });
     _initializeBook(book);
   }
 
@@ -220,6 +257,7 @@ class _IslamicBookReaderScreenState
     final pageNo = (pageIndex + 1).clamp(1, book.totalPages);
     setState(() {
       _currentPage = pageNo;
+      _rahleSubLeafIndex = 0;
       _selectedText = '';
     });
     ref.read(islamicBookshelfProvider.notifier).updateBookProgress(
@@ -228,12 +266,22 @@ class _IslamicBookReaderScreenState
         );
   }
 
-  void _jumpToPage(int pageNumber, int totalPages) {
+  void _jumpToPage(int pageNumber, int totalPages, {int subLeafIndex = 0}) {
     final target = pageNumber.clamp(1, totalPages);
     setState(() {
       _currentPage = target;
+      _rahleSubLeafIndex = subLeafIndex;
       _selectedText = '';
     });
+    final books = ref.read(islamicBookshelfProvider);
+    final book = books.firstWhere(
+      (b) => b.id == widget.bookId,
+      orElse: () => books.first,
+    );
+    ref.read(islamicBookshelfProvider.notifier).updateBookProgress(
+          book.id,
+          target,
+        );
     if (_pageController.hasClients) {
       _pageController.jumpToPage(target - 1);
     }
@@ -443,7 +491,22 @@ class _IslamicBookReaderScreenState
           'Sayfa $_currentPage / ${book.totalPages} • %$progressPct Okundu';
     }
 
-    return Scaffold(
+    final isTvMode = ref.watch(isTvModeProvider);
+    final isRahleActive = isTvMode || settings.isRahleSpreadMode;
+
+    return TvRemoteNumberJumpWrapper(
+      maxPage: book.totalPages,
+      onJumpToPage: (targetPage) => _jumpToPage(targetPage, book.totalPages),
+      child: isRahleActive && !_isDownloadingCorpus && _downloadError == null && _isReady
+          ? Scaffold(
+              backgroundColor: bgColor,
+              body: _buildRahleOpenBookView(
+                book: book,
+                settings: settings,
+                isBookmarked: isBookmarked,
+              ),
+            )
+          : Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: bgColor,
@@ -485,6 +548,23 @@ class _IslamicBookReaderScreenState
           ],
         ),
         actions: [
+          // Rahlede Açık Çift Sayfa (TV / Geniş Ekran) Modu Butonu
+          IconButton(
+            tooltip: settings.isRahleSpreadMode
+                ? 'Normal Sayfa Görünümüne Dön'
+                : 'Rahlede Açık Kitap (Çift Sayfa Görünümü)',
+            onPressed: () {
+              HapticFeedback.selectionClick();
+              ref
+                  .read(islamicBookReaderSettingsProvider.notifier)
+                  .toggleRahleSpreadMode();
+            },
+            icon: Icon(
+              Icons.import_contacts_rounded,
+              color: settings.isRahleSpreadMode ? accentColor : textColor,
+              size: 21,
+            ),
+          ),
           // Risale-i Nur Lügati Arama & Kelime Vurgusu
           IconButton(
             tooltip: 'Risale-i Nur Lügati Sözlüğü',
@@ -770,7 +850,266 @@ class _IslamicBookReaderScreenState
           ),
         ],
       ),
+    ),
     );
+  }
+
+  /// Külliyat Eserlerini "Rahlede Açık Kitap (Tam Ekran Çift Yaprak & Sıfır Dikey Kaydırma)" Olarak Gösterir
+  Widget _buildRahleOpenBookView({
+    required IslamicShelfBook book,
+    required IslamicBookReaderSettings settings,
+    required bool isBookmarked,
+  }) {
+    final arabicFont = ref.watch(arabicFontFamilyProvider);
+
+    return FutureBuilder<(List<RahleSpreadLeafData>, List<RahleSpreadLeafData>)>(
+      future: _loadCurrentAndNextPageLeaves(book, _currentPage),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(
+            child: CircularProgressIndicator(color: settings.accentColor),
+          );
+        }
+
+        final leavesCurr = snapshot.data!.$1;
+        final leavesNext = snapshot.data!.$2;
+
+        final safeSubIdx = _rahleSubLeafIndex.clamp(
+          0,
+          leavesCurr.isNotEmpty ? leavesCurr.length - 1 : 0,
+        );
+
+        final leftLeafData = leavesCurr.isNotEmpty
+            ? leavesCurr[safeSubIdx]
+            : RahleSpreadLeafData(
+                pageNumber: _currentPage,
+                headerTitle: book.shortTitle,
+                subtitle: 'Sayfa $_currentPage',
+                bodyText: '',
+              );
+
+        RahleSpreadLeafData rightLeafData;
+        if (safeSubIdx + 1 < leavesCurr.length) {
+          rightLeafData = leavesCurr[safeSubIdx + 1];
+        } else if (leavesNext.isNotEmpty) {
+          rightLeafData = leavesNext.first;
+        } else {
+          rightLeafData = RahleSpreadLeafData(
+            pageNumber: _currentPage,
+            leafIndex: 1,
+            totalLeavesForPage: 1,
+            headerTitle: book.shortTitle,
+            subtitle: 'Eserin Son Yaprağı',
+            bodyText:
+                'Elhamdülillâh, "${book.title}" eserinin son yaprağına ulaştınız.\n\nKumandadan Sol Ok (◄) ile önceki yapraklara dönebilir, Yukarı Ok (▲) ile İçindekiler fihristini açabilirsiniz.',
+            footerReference: book.author,
+          );
+        }
+
+        final progressPct =
+            ((_currentPage / book.totalPages) * 100).round().clamp(1, 100);
+        final spreadSubtitle = rightLeafData.pageNumber != leftLeafData.pageNumber
+            ? 'Sayfa ${leftLeafData.pageNumber} – ${rightLeafData.pageNumber} / ${book.totalPages} • %$progressPct Okundu'
+            : '${leftLeafData.leafBadgeLabel} / ${book.totalPages} • %$progressPct Okundu';
+
+        void handleNextSpread() {
+          if (safeSubIdx + 2 < leavesCurr.length) {
+            setState(() {
+              _rahleSubLeafIndex = safeSubIdx + 2;
+            });
+          } else if (safeSubIdx + 1 < leavesCurr.length) {
+            if (_currentPage < book.totalPages) {
+              _jumpToPage(_currentPage + 1, book.totalPages, subLeafIndex: 0);
+            }
+          } else {
+            // Right leaf was already showing leavesNext.first
+            if (leavesNext.length > 1 && _currentPage < book.totalPages) {
+              _jumpToPage(_currentPage + 1, book.totalPages, subLeafIndex: 1);
+            } else if (_currentPage + 2 <= book.totalPages) {
+              _jumpToPage(_currentPage + 2, book.totalPages, subLeafIndex: 0);
+            } else if (_currentPage < book.totalPages) {
+              _jumpToPage(_currentPage + 1, book.totalPages, subLeafIndex: 0);
+            }
+          }
+        }
+
+        void handlePreviousSpread() {
+          if (safeSubIdx >= 2) {
+            setState(() {
+              _rahleSubLeafIndex = safeSubIdx - 2;
+            });
+          } else if (safeSubIdx == 1) {
+            setState(() {
+              _rahleSubLeafIndex = 0;
+            });
+          } else if (_currentPage > 1) {
+            final prevPage = (_currentPage - 1).clamp(1, book.totalPages);
+            final cachedPrev = _rahleLeavesCache[prevPage];
+            if (cachedPrev != null && cachedPrev.length >= 2) {
+              final targetSub = (cachedPrev.length - 2).clamp(0, cachedPrev.length - 1);
+              _jumpToPage(prevPage, book.totalPages, subLeafIndex: targetSub);
+            } else if (_currentPage >= 3 && (cachedPrev == null || cachedPrev.length == 1)) {
+              _jumpToPage(_currentPage - 2, book.totalPages, subLeafIndex: 0);
+            } else {
+              _jumpToPage(prevPage, book.totalPages, subLeafIndex: 0);
+            }
+          }
+        }
+
+        return RahleOpenBookSpreadWidget(
+          bookTitle: book.title,
+          spreadSubtitle: spreadSubtitle,
+          paperColor: settings.backgroundColor,
+          inkColor: settings.textColor,
+          accentColor: settings.accentColor,
+          leatherColor: book.palette.spineColor,
+          isDark: settings.isDarkTheme,
+          isRtl: false,
+          isBookmarked: isBookmarked,
+          onNextSpread: (_currentPage < book.totalPages ||
+                  safeSubIdx + 1 < leavesCurr.length)
+              ? handleNextSpread
+              : null,
+          onPreviousSpread:
+              (_currentPage > 1 || safeSubIdx > 0) ? handlePreviousSpread : null,
+          onOpenTableOfContents: () =>
+              _openTableOfContentsSheet(book, settings),
+          onToggleBookmark: () => _toggleCurrentPageBookmark(book),
+          onOpenSettings: () => _openSettingsSheet(settings),
+          onExit: () => Navigator.of(context).pop(),
+          leftLeaf: RahleAutoFitLeafContent(
+            leaf: leftLeafData,
+            paperColor: settings.backgroundColor,
+            inkColor: settings.textColor,
+            accentColor: settings.accentColor,
+            isDark: settings.isDarkTheme,
+            baseFontSize: settings.turkishFontSize,
+            arabicFontFamily: arabicFont,
+          ),
+          rightLeaf: RahleAutoFitLeafContent(
+            leaf: rightLeafData,
+            paperColor: settings.backgroundColor,
+            inkColor: settings.textColor,
+            accentColor: settings.accentColor,
+            isDark: settings.isDarkTheme,
+            baseFontSize: settings.turkishFontSize,
+            arabicFontFamily: arabicFont,
+          ),
+        );
+      },
+    );
+  }
+
+  Future<(List<RahleSpreadLeafData>, List<RahleSpreadLeafData>)>
+      _loadCurrentAndNextPageLeaves(
+    IslamicShelfBook book,
+    int pageNo,
+  ) async {
+    final currFuture = _loadLeavesForSinglePage(book, pageNo);
+    final nextFuture = pageNo < book.totalPages
+        ? _loadLeavesForSinglePage(book, pageNo + 1)
+        : Future.value(<RahleSpreadLeafData>[]);
+    final results = await Future.wait([currFuture, nextFuture]);
+    return (results[0], results[1]);
+  }
+
+  Future<List<RahleSpreadLeafData>> _loadLeavesForSinglePage(
+    IslamicShelfBook book,
+    int pageNo,
+  ) async {
+    if (_rahleLeavesCache.containsKey(pageNo)) {
+      return _rahleLeavesCache[pageNo]!;
+    }
+
+    List<RahleSpreadLeafData> leaves;
+    switch (book.category) {
+      case IslamicBookCategory.tafseer:
+        final loc = QuranAyahPageMapper.fromGlobalPage(pageNo);
+        final res = await _loadSingleAyahAndTafseer(book.sourceKey, loc);
+        final ayat = res.$1;
+        final fallbackMeal = res.$2;
+        final tafseer = res.$3;
+        final rawArabic = ayat?.ayetText ?? '';
+        final mealText = tafseer?.mealText.isNotEmpty == true
+            ? tafseer!.mealText
+            : fallbackMeal;
+        final tefsirBody = tafseer?.tefsirText ?? '';
+        final combinedTr = [
+          if (mealText.trim().isNotEmpty) 'Meâl: ${mealText.trim()}',
+          if (tefsirBody.trim().isNotEmpty) tefsirBody.trim(),
+        ].join('\n\n');
+        leaves = RahlePageTextChunker.chunkPage(
+          turkishText: combinedTr.isNotEmpty
+              ? combinedTr
+              : 'Bu âyet-i kerîmenin tefsiri bir önceki âyet grubu bütünlüğü içinde beyan edilmiştir.',
+          arabicText: rawArabic,
+          pageNumber: pageNo,
+          headerTitle: '${loc.surahName} Sûresi • ${loc.ayahId}. Âyet',
+          subtitle: '${book.shortTitle} • Âyet #$pageNo / 6236',
+          reference: book.author,
+          maxCharsPerLeaf: 860,
+        );
+        break;
+
+      case IslamicBookCategory.hadith:
+      case IslamicBookCategory.risale:
+        final page = await _loadCorpusPage(book.sourceKey, pageNo);
+        if (page == null) {
+          leaves = <RahleSpreadLeafData>[
+            RahleSpreadLeafData(
+              pageNumber: pageNo,
+              headerTitle: book.shortTitle,
+              subtitle: 'Sayfa $pageNo',
+              bodyText: 'Sayfa içeriği yüklenemedi.',
+            ),
+          ];
+        } else {
+          leaves = RahlePageTextChunker.chunkPage(
+            turkishText: page.turkishText,
+            arabicText: page.arabicText,
+            pageNumber: pageNo,
+            headerTitle: page.chapterTitle.isNotEmpty
+                ? page.chapterTitle
+                : book.shortTitle,
+            subtitle:
+                page.subtitle.isNotEmpty ? page.subtitle : book.shortTitle,
+            reference:
+                page.reference.isNotEmpty ? page.reference : book.author,
+            maxCharsPerLeaf: 880,
+          );
+        }
+        break;
+
+      case IslamicBookCategory.meal:
+      case IslamicBookCategory.quran:
+        final res = await _loadQuranMealPageData(pageNo, book.sourceKey);
+        final pageContent = res.$1;
+        final resolvedMeals = res.$2;
+        final ayats = pageContent.quranAyats;
+        final firstSurahName = ayats.isNotEmpty
+            ? (ayats.first.sure?.sureNameTurkish ?? 'Sûre ${ayats.first.sureId}')
+            : 'Kur’ân-ı Kerîm';
+        final lines = <String>[];
+        for (final a in ayats) {
+          final m = resolvedMeals['${a.sureId}:${a.ayetId}'] ?? '';
+          if (m.trim().isNotEmpty) {
+            lines.add('[${a.sureId}:${a.ayetId}] ${m.trim()}');
+          }
+        }
+        leaves = RahlePageTextChunker.chunkPage(
+          turkishText: lines.join('\n\n'),
+          arabicText: '',
+          pageNumber: pageNo,
+          headerTitle: '$firstSurahName Sûresi',
+          subtitle: '${pageContent.cuzNo}. Cüz • Sayfa $pageNo',
+          reference: book.title,
+          maxCharsPerLeaf: 900,
+        );
+        break;
+    }
+
+    _rahleLeavesCache[pageNo] = leaves;
+    return leaves;
   }
 
   /// Metin seçildiğinde beliren 4 renkli Vurgulama + Paylaşım Kartı + Kopyala çubuğu

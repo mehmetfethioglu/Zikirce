@@ -185,7 +185,7 @@ class _ZikirListScreenState extends ConsumerState<ZikirListScreen> {
           Expanded(
             child: zikirsAsync.when(
               data: (zikirs) {
-                final filtered = zikirs.where((z) {
+                final filtered = ZikirSeedData.sortBySeedOrder(zikirs.where((z) {
                   final matchesCat = _selectedCategoryIndex == 0 ||
                       (_selectedCategoryIndex == 1 && z.isFavorite) ||
                       (_selectedCategoryIndex == 2 && (z.category.toLowerCase().contains('hadis') || z.category.toLowerCase().contains('hadith'))) ||
@@ -196,7 +196,7 @@ class _ZikirListScreenState extends ConsumerState<ZikirListScreen> {
                       z.name.toLowerCase().contains(_searchQuery) ||
                       (z.arabic != null && z.arabic!.contains(_searchQuery));
                   return matchesCat && matchesQuery;
-                }).toList();
+                }).toList());
 
                 if (filtered.isEmpty) {
                   return Center(

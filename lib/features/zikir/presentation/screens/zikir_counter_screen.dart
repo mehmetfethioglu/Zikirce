@@ -21,6 +21,7 @@ import '../widgets/add_edit_zikir_sheet.dart';
 import '../widgets/zikir_share_card_widget.dart';
 import '../widgets/zikir_share_preview_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
 
 class ZikirCounterScreen extends ConsumerStatefulWidget {
   const ZikirCounterScreen({super.key});
@@ -61,10 +62,11 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (ref.read(settingsProvider).isKeepScreenAwakeEnabled) {
+      final isTv = ref.read(isTvModeProvider);
+      if (ref.read(settingsProvider).isKeepScreenAwakeEnabled || isTv) {
         ScreenAwakeService.setKeepAwake(true);
       }
-      if (mounted && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      if (mounted && (Platform.isWindows || Platform.isMacOS || Platform.isLinux || isTv)) {
         _desktopFocusNode.requestFocus();
       }
     });
@@ -371,7 +373,9 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                 const SizedBox(height: 10),
                 Expanded(
                   child: zikirListAsync.when(
-                    data: (zikirs) => ListView.separated(
+                    data: (rawZikirs) {
+                      final zikirs = ZikirSeedData.sortBySeedOrder(rawZikirs);
+                      return ListView.separated(
                       physics: const BouncingScrollPhysics(),
                       itemCount: zikirs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -465,7 +469,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
                           ),
                         );
                       },
-                    ),
+                    );
+                    },
                     loading: () => const Center(child: CircularProgressIndicator()),
                     error: (_, __) => const Text('Yüklenemedi'),
                   ),
@@ -1011,16 +1016,37 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
         autofocus: true,
         onKeyEvent: (KeyEvent event) {
           if (event is KeyDownEvent) {
+            final isTv = ref.read(isTvModeProvider);
+            final isSelect = event.logicalKey == LogicalKeyboardKey.select ||
+                event.logicalKey == LogicalKeyboardKey.gameButtonA;
             final isSpace = event.logicalKey == LogicalKeyboardKey.space;
             final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.numpadEnter;
             final isArrow = event.logicalKey == LogicalKeyboardKey.arrowDown ||
                 event.logicalKey == LogicalKeyboardKey.arrowUp;
 
-            if ((isSpace && settings.desktopSpaceKeyEnabled) ||
+            if (isSelect ||
+                (isTv && (isSpace || isEnter || isArrow)) ||
+                (isSpace && settings.desktopSpaceKeyEnabled) ||
                 (isEnter && settings.desktopEnterKeyEnabled) ||
                 (isArrow && settings.desktopArrowKeysEnabled)) {
               _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
+              return;
+            }
+
+            if (isTv &&
+                (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                    event.logicalKey == LogicalKeyboardKey.arrowRight)) {
+              final zikirs = ref.read(zikirListStreamProvider).valueOrNull;
+              if (zikirs != null && zikirs.length > 1) {
+                final curIdx = zikirs.indexWhere((z) => z.id == currentZikir.id);
+                if (curIdx != -1) {
+                  final delta = event.logicalKey == LogicalKeyboardKey.arrowRight ? 1 : -1;
+                  final nextIdx = (curIdx + delta + zikirs.length) % zikirs.length;
+                  _flushCurrentZikir();
+                  ref.read(selectedZikirIdProvider.notifier).select(zikirs[nextIdx].id);
+                }
+              }
             }
           }
         },

@@ -31,6 +31,9 @@ import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../../providers/hatim_providers.dart';
 import '../widgets/hatim_duasi_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
+import '../../../../core/widgets/tv_focusable.dart';
+import '../../../kuran/data/islamic_bookshelf_models.dart';
 
 class _MukabeleQueueItemMeta {
   final int verseIndex;
@@ -174,8 +177,27 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
   Future<void> _initScreenAndAudio() async {
     await AudioSyncService.initialize();
-    if (ref.read(settingsProvider).isKeepScreenAwakeEnabled) {
+    if (ref.read(settingsProvider).isKeepScreenAwakeEnabled ||
+        ref.read(isTvModeProvider)) {
       ScreenAwakeService.setKeepAwake(true);
+    }
+
+    // Trigger silent cloud check & reconciliation so TV / mobile Mukabele starts at latest synced page
+    unawaited(CloudSyncEngine.instance.pullAndMerge(ref, isBackground: true));
+
+    if (widget.initialPage <= 1 &&
+        widget.initialJuz == null &&
+        widget.activeHatim == null) {
+      final syncedPage = ref.read(mukabeleSyncProvider).lastPage;
+      if (syncedPage > 1 && syncedPage != _currentPage) {
+        _currentPage = syncedPage.clamp(1, 605);
+        if (_pageController.hasClients) {
+          _pageController.jumpToPage(_currentPage - 1);
+        } else {
+          _pageController.dispose();
+          _pageController = PageController(initialPage: _currentPage - 1);
+        }
+      }
     }
 
     _initAudioListeners();
@@ -422,6 +444,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         _activeWordOrder = 0;
       });
       ref.read(currentMushafPageProvider.notifier).state = page;
+      unawaited(ref.read(mukabeleSyncProvider.notifier).saveProgress(page));
+      unawaited(ref.read(islamicBookshelfProvider.notifier).syncMushafPage(page));
       if (TilavetSecdesiData.isSecdePage(page)) {
         _encounteredSecdePages.add(page);
         if (_lastBannerPage != page) {
@@ -1434,25 +1458,46 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             ),
           ],
         ),
-        body: Focus(
-          focusNode: _focusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              // Arapça Mushaf RTL: Sol Ok -> Sonraki Sayfa, Sağ Ok -> Önceki Sayfa
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
-                  event.logicalKey == LogicalKeyboardKey.pageDown) {
-                if (_currentPage < 605) _goToPage(_currentPage + 1);
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
-                  event.logicalKey == LogicalKeyboardKey.pageUp) {
-                if (_currentPage > 1) _goToPage(_currentPage - 1);
-                return KeyEventResult.handled;
+        body: TvRemoteNumberJumpWrapper(
+          maxPage: 605,
+          onJumpToPage: _goToPage,
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent) {
+                // Arapça Mushaf RTL: Sol Ok -> Sonraki Sayfa, Sağ Ok -> Önceki Sayfa
+                if (event.logicalKey == LogicalKeyboardKey.arrowLeft ||
+                    event.logicalKey == LogicalKeyboardKey.pageDown) {
+                  if (_currentPage < 605) _goToPage(_currentPage + 1);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowRight ||
+                    event.logicalKey == LogicalKeyboardKey.pageUp) {
+                  if (_currentPage > 1) _goToPage(_currentPage - 1);
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.select ||
+                    event.logicalKey == LogicalKeyboardKey.gameButtonA ||
+                    event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.numpadEnter ||
+                    event.logicalKey == LogicalKeyboardKey.space ||
+                    event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+                  _togglePlayPause();
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowUp ||
+                    event.logicalKey == LogicalKeyboardKey.mediaTrackPrevious ||
+                    event.logicalKey == LogicalKeyboardKey.mediaRewind) {
+                  _previousAyah();
+                  return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
+                    event.logicalKey == LogicalKeyboardKey.mediaTrackNext ||
+                    event.logicalKey == LogicalKeyboardKey.mediaFastForward) {
+                  _nextAyah();
+                  return KeyEventResult.handled;
+                }
               }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Stack(
+              return KeyEventResult.ignored;
+            },
+            child: Stack(
             fit: StackFit.expand,
             children: [
               // MAIN CONTENT: Besmele Bar (üstte, ayetlerin üstünü kapatmaz) + Mushaf / Ayah List View
@@ -1520,8 +1565,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   ),
                 ),
 
-              // Masaüstü İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if (isDesktopMushafPlatform && _currentPage < 605)
+              // Masaüstü & TV İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
+              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && _currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
@@ -1535,7 +1580,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                     ),
                   ),
                 ),
-              if (isDesktopMushafPlatform && _currentPage > 1)
+              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && _currentPage > 1)
                 Positioned(
                   right: 14,
                   top: 0,
@@ -1578,6 +1623,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 ),
             ],
           ),
+        ),
         ),
       ),
     );

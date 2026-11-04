@@ -538,6 +538,16 @@ class GoogleDriveBackupService {
       'CustomQuranBadgesJson': PrefUtils.getString(prefs, _sKey('CustomQuranBadges_List_v1'), ''),
       'DiamondCount': PrefUtils.getIntFromKeys(prefs, ['DiamondCount$sfx', 'DiamondCount'], 0),
       'GoldCount': PrefUtils.getIntFromKeys(prefs, ['GoldCount$sfx', 'GoldCount'], firstStreak?.xp ?? 0),
+      'KulliyatBookshelfJson': prefs.getString('zikirce_tahrir_bookshelf_v2') ?? '',
+      'KulliyatLastBookId': prefs.getString('zikirce_kulliyat_last_book_id') ?? '',
+      'KulliyatLastReadMs': prefs.getInt('zikirce_kulliyat_last_read_ms') ?? 0,
+      'KulliyatBookmarksJson': prefs.getString('zikirce_book_bookmarks_v1') ?? '',
+      'KulliyatHighlightsJson': prefs.getString('zikirce_book_highlights_v1') ?? '',
+      'LastReadPage': prefs.getInt('LastReadPage') ?? 1,
+      'LastReadPage_UpdatedMs': prefs.getInt('LastReadPage_UpdatedMs') ?? 0,
+      'MukabeleLastPage': prefs.getInt('MukabeleLastPage') ?? 1,
+      'MukabeleLastJuz': prefs.getInt('MukabeleLastJuz') ?? 1,
+      'MukabeleLastUpdatedMs': prefs.getInt('MukabeleLastUpdatedMs') ?? 0,
     };
 
     // Direct key exports for nested HatimTodayPages
@@ -603,13 +613,22 @@ class GoogleDriveBackupService {
       'Type': km.prayerType,
     }).toList();
 
-    // 11. MemorizationPlans
+    // 11. MemorizationPlans & JuzBookmarks
     final memorizationPlansList = plans.map((p) => {
       'PageId': p.pageId,
       'SurahId': p.surahId ?? 0,
       'ScheduledReviewDateUnix': p.scheduledReviewDate.millisecondsSinceEpoch ~/ 1000,
       'State': p.state,
       'TimesReviewed': p.timesReviewed,
+    }).toList();
+
+    final bookmarks = await db.select(db.juzBookmarks).get();
+    final juzBookmarksList = bookmarks.map((b) => {
+      'JuzNo': b.juzNo,
+      'JuzNumber': b.juzNo,
+      'LastPage': b.lastPage,
+      'Page': b.lastPage,
+      'CreatedAtUnix': b.updatedAt.millisecondsSinceEpoch ~/ 1000,
     }).toList();
 
     final fullBackup = {
@@ -634,7 +653,7 @@ class GoogleDriveBackupService {
       'CompletedTasks': <Map<String, dynamic>>[],
       'StreakGapDays': <Map<String, dynamic>>[],
       'UserStreakHistories': <Map<String, dynamic>>[],
-      'JuzBookmarks': <Map<String, dynamic>>[],
+      'JuzBookmarks': juzBookmarksList,
       'MemorizationPlans': memorizationPlansList,
     };
 

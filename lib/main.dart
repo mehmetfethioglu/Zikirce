@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/config/sentry_config.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/services/cloud_sync_engine.dart';
+import 'core/providers/tv_mode_provider.dart';
 import 'app/app.dart';
 
 void main(List<String> args) async {
@@ -33,7 +34,18 @@ void main(List<String> args) async {
     return;
   }
 
-  // Set preferred orientations & system overlay on mobile
+  // Detect Android TV / Leanback or user-enabled TV Mode
+  final isTvMode = await TvModeService.detectTvModeAtStartup();
+  if (isTvMode) {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('IsOnboardingCompleted') ?? false)) {
+        await prefs.setBool('IsOnboardingCompleted', true);
+      }
+    } catch (_) {}
+  }
+
+  // Set preferred orientations & system overlay on mobile / Android TV
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
     final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
     final shortestSide = view != null
@@ -41,19 +53,10 @@ void main(List<String> args) async {
         : 0.0;
     final isTablet = shortestSide >= 600;
 
-    if (!isTablet) {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
-    } else {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    }
+    await TvModeService.applyOrientationForMode(
+      isTvMode: isTvMode,
+      isTablet: isTablet,
+    );
 
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
@@ -142,7 +145,10 @@ void main(List<String> args) async {
           try {
             final prefs = await SharedPreferences.getInstance();
             final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
-            await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+            await LocalNotificationService.scheduleAllPrayerNotifications(
+              timings,
+              cityOverride: savedCity,
+            );
 
             final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
             final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
@@ -168,6 +174,7 @@ void main(List<String> args) async {
           initialCityProvider.overrideWithValue(savedCity),
           initialThemeKeyProvider.overrideWithValue(savedThemeKey),
           initialLightSubThemeProvider.overrideWithValue(savedLightSubTheme),
+          initialIsTvModeProvider.overrideWithValue(isTvMode),
         ],
       );
       CloudSyncEngine.instance.setContainer(container);

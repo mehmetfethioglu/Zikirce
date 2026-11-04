@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
@@ -237,24 +238,198 @@ class PrayerTimesService {
     'Zonguldak': (41.4564, 31.7987)
   };
 
-  /// Fetches prayer times from Aladhan API (Diyanet Method 13) with cache and offline calculator fallback
+  /// Fetches and caches the entire month's Diyanet (Method 13) prayer calendar for [city]
+  static Future<Map<String, PrayerTimings>> getMonthlyCalendar({
+    required String city,
+    required int year,
+    required int month,
+    SharedPreferences? prefsOverride,
+  }) async {
+    final prefs = prefsOverride ?? await SharedPreferences.getInstance();
+    final monthStr = month.toString().padLeft(2, '0');
+    final calCacheKey = 'prayer_monthly_cal_v1_${city}_${year}_$monthStr';
+
+    final cachedCalStr = prefs.getString(calCacheKey);
+    if (cachedCalStr != null && cachedCalStr.isNotEmpty) {
+      try {
+        final rawMap = jsonDecode(cachedCalStr) as Map<String, dynamic>;
+        final parsedMap = <String, PrayerTimings>{};
+        for (final entry in rawMap.entries) {
+          if (entry.value is Map<String, dynamic>) {
+            final pt = PrayerTimings.fromJson(
+              entry.value as Map<String, dynamic>,
+              entry.key,
+            );
+            if (_areTimingsChronologicallyValid(pt)) {
+              parsedMap[entry.key] = pt;
+            }
+          }
+        }
+        if (parsedMap.length >= 28) {
+          return parsedMap;
+        }
+      } catch (_) {}
+    }
+
+    try {
+      final apiCity = cityMappings[city] ?? city;
+      final url =
+          'https://api.aladhan.com/v1/calendarByCity/$year/$month?city=${Uri.encodeComponent(apiCity)}&country=Turkey&method=13';
+      final response = await _dio.get(url);
+
+      if (response.statusCode == 200 && response.data['data'] is List) {
+        final dayList = response.data['data'] as List<dynamic>;
+        final parsedMap = <String, PrayerTimings>{};
+        final toCacheJson = <String, Map<String, dynamic>>{};
+
+        for (int i = 0; i < dayList.length; i++) {
+          final item = dayList[i];
+          if (item is! Map<String, dynamic>) continue;
+          final timingsMap = item['timings'] as Map<String, dynamic>?;
+          if (timingsMap == null) continue;
+
+          final dateObj = item['date'] as Map<String, dynamic>?;
+          final gregObj = dateObj?['gregorian'] as Map<String, dynamic>?;
+          final hijriMap = dateObj?['hijri'] as Map<String, dynamic>?;
+
+          int dayNum = i + 1;
+          final rawDayStr = gregObj?['day']?.toString();
+          if (rawDayStr != null) {
+            dayNum = int.tryParse(rawDayStr) ?? (i + 1);
+          }
+          final dateStr =
+              '$year-$monthStr-${dayNum.toString().padLeft(2, '0')}';
+
+          final pt = PrayerTimings.fromJson(timingsMap, dateStr, hijriMap);
+          if (_areTimingsChronologicallyValid(pt)) {
+            parsedMap[dateStr] = pt;
+            toCacheJson[dateStr] = pt.toJson();
+          }
+        }
+
+        if (parsedMap.isNotEmpty) {
+          await prefs.setString(calCacheKey, jsonEncode(toCacheJson));
+          return parsedMap;
+        }
+      }
+    } catch (_) {
+      // Monthly API fetch failed, caller will use single-day cache or calibrated fallback
+    }
+
+    return const {};
+  }
+
+  /// Returns exact Diyanet API timings for a [days]-day window starting at [startDate].
+  /// Automatically uses (and caches) the Monthly Diyanet Calendar API across month boundaries,
+  /// falling back to calibrated calculation only when completely offline without cache.
+  static Future<List<PrayerTimings>> getPrayerTimesRange({
+    required String city,
+    required DateTime startDate,
+    int days = 5,
+    PrayerTimings? referenceTodayTimings,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final startDay = DateTime(startDate.year, startDate.month, startDate.day);
+    final endDay = startDay.add(Duration(days: days - 1));
+
+    final currentMonthCal = await getMonthlyCalendar(
+      city: city,
+      year: startDay.year,
+      month: startDay.month,
+      prefsOverride: prefs,
+    );
+
+    Map<String, PrayerTimings> nextMonthCal = const {};
+    if (endDay.month != startDay.month || startDay.day >= 24) {
+      final nextMonthDate = DateTime(startDay.year, startDay.month + 1, 1);
+      nextMonthCal = await getMonthlyCalendar(
+        city: city,
+        year: nextMonthDate.year,
+        month: nextMonthDate.month,
+        prefsOverride: prefs,
+      );
+    }
+
+    final results = <PrayerTimings>[];
+    for (int offset = 0; offset < days; offset++) {
+      final target = startDay.add(Duration(days: offset));
+      final dateStr =
+          '${target.year}-${target.month.toString().padLeft(2, '0')}-${target.day.toString().padLeft(2, '0')}';
+
+      final fromMonthly = currentMonthCal[dateStr] ?? nextMonthCal[dateStr];
+      if (fromMonthly != null && _areTimingsChronologicallyValid(fromMonthly)) {
+        results.add(fromMonthly);
+        continue;
+      }
+
+      if (offset == 0 &&
+          referenceTodayTimings != null &&
+          _areTimingsChronologicallyValid(referenceTodayTimings)) {
+        results.add(referenceTodayTimings);
+        continue;
+      }
+
+      final refTimings = results.isNotEmpty ? results.first : referenceTodayTimings;
+      results.add(
+        calculateCalibratedPrayerTimesForDate(
+          city: city,
+          targetDate: target,
+          referenceTodayTimings: refTimings,
+          referenceDate: startDay,
+        ),
+      );
+    }
+
+    return results;
+  }
+
+  /// Fetches prayer times from Monthly Diyanet Calendar cache/API (Method 13) with single-day and offline fallback
   static Future<PrayerTimings> getPrayerTimes({String city = 'İstanbul'}) async {
     final now = DateTime.now();
     final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final cacheKey = 'prayer_times_${city}_$todayStr';
 
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(cacheKey);
 
+    // 1. Check Monthly Diyanet Calendar Cache / API first (1 request per month!)
+    final monthlyCal = await getMonthlyCalendar(
+      city: city,
+      year: now.year,
+      month: now.month,
+      prefsOverride: prefs,
+    );
+    final fromMonthly = monthlyCal[todayStr];
+    if (fromMonthly != null && _areTimingsChronologicallyValid(fromMonthly)) {
+      await prefs.setString(cacheKey, jsonEncode(fromMonthly.toJson()));
+      // Prefetch next month silently if in the last week of the month
+      if (now.day >= 24) {
+        final nextMonth = DateTime(now.year, now.month + 1, 1);
+        unawaited(
+          getMonthlyCalendar(
+            city: city,
+            year: nextMonth.year,
+            month: nextMonth.month,
+            prefsOverride: prefs,
+          ),
+        );
+      }
+      return fromMonthly;
+    }
+
+    // 2. Check single-day cache
+    final cached = prefs.getString(cacheKey);
     PrayerTimings result;
     if (cached != null) {
       try {
         final map = jsonDecode(cached) as Map<String, dynamic>;
         result = PrayerTimings.fromJson(map, todayStr);
-        return result;
+        if (_areTimingsChronologicallyValid(result)) {
+          return result;
+        }
       } catch (_) {}
     }
 
+    // 3. Single-day API fallback
     try {
       final apiCity = cityMappings[city] ?? city;
       final url = 'https://api.aladhan.com/v1/timingsByCity?city=${Uri.encodeComponent(apiCity)}&country=Turkey&method=13';
@@ -264,32 +439,66 @@ class PrayerTimesService {
         final timingsMap = response.data['data']['timings'] as Map<String, dynamic>;
         final hijriMap = response.data['data']['date']?['hijri'] as Map<String, dynamic>?;
         result = PrayerTimings.fromJson(timingsMap, todayStr, hijriMap);
-        await prefs.setString(cacheKey, jsonEncode(result.toJson()));
-        return result;
+        if (_areTimingsChronologicallyValid(result)) {
+          await prefs.setString(cacheKey, jsonEncode(result.toJson()));
+          return result;
+        }
       }
     } catch (e) {
       // API fetch failed, fallback to offline calculation
     }
 
-    // Offline astronomical calculation for Turkey
+    // 4. Last-resort offline astronomical calculation for Turkey
     result = calculateOfflinePrayerTimes(city, now);
     return result;
   }
 
-  /// Calculates astronomical prayer times using solar declination & equation of time
+  /// Validates that all 6 prayer times are strictly ordered and Asr is at least 90 minutes after Dhuhr
+  static bool _areTimingsChronologicallyValid(PrayerTimings t) {
+    int? toMin(String hhmm) {
+      final clean = hhmm.trim().split(' ').first;
+      final parts = clean.split(':');
+      if (parts.length < 2) return null;
+      final h = int.tryParse(parts[0].trim());
+      final m = int.tryParse(parts[1].trim());
+      if (h == null || m == null) return null;
+      return h * 60 + m;
+    }
+
+    final fajr = toMin(t.fajr);
+    final sunrise = toMin(t.sunrise);
+    final dhuhr = toMin(t.dhuhr);
+    final asr = toMin(t.asr);
+    final maghrib = toMin(t.maghrib);
+    final isha = toMin(t.isha);
+    if (fajr == null ||
+        sunrise == null ||
+        dhuhr == null ||
+        asr == null ||
+        maghrib == null ||
+        isha == null) {
+      return false;
+    }
+    return sunrise > fajr + 30 &&
+        dhuhr > sunrise + 120 &&
+        asr >= dhuhr + 90 &&
+        maghrib >= asr + 60 &&
+        isha >= maghrib + 30;
+  }
+
+  /// Calculates astronomical prayer times using solar declination, equation of time & Diyanet (Method 13) temkin offsets
   static PrayerTimings calculateOfflinePrayerTimes(String city, DateTime date) {
     final coords = cityCoordinates[city] ?? const (39.9334, 32.8597); // Ankara fallback
     final lat = coords.$1;
     final lng = coords.$2;
 
-    final dayOfYear = int.parse(
-      DateTime(date.year, date.month, date.day)
-          .difference(DateTime(date.year, 1, 1))
-          .inDays
-          .toString(),
-    ) + 1;
+    final dayOfYear = DateTime(date.year, date.month, date.day)
+            .difference(DateTime(date.year, 1, 1))
+            .inDays +
+        1;
 
-    final fractionalYear = (2 * math.pi / 365.0) * (dayOfYear - 1 + (date.hour - 12) / 24.0);
+    // Deterministic solar noon reference (hour = 12) so offline times never drift by call time
+    final fractionalYear = (2 * math.pi / 365.0) * (dayOfYear - 1);
 
     // Equation of Time (minutes)
     final eqt = 229.18 * (0.000075 + 0.001868 * math.cos(fractionalYear) 
@@ -308,7 +517,7 @@ class PrayerTimesService {
     final latRad = lat * math.pi / 180.0;
     const zoneOffset = 3.0; // Turkey UTC+3
 
-    // Solar Noon (Öğle) in hours
+    // Solar Noon in hours
     final solarNoon = 12.0 + zoneOffset - (lng / 15.0) - (eqt / 60.0);
 
     // Sunrise & Sunset (90.833° zenith)
@@ -317,8 +526,11 @@ class PrayerTimesService {
     cosH = cosH.clamp(-1.0, 1.0);
     final hSunrise = math.acos(cosH) * 180.0 / math.pi;
 
-    final sunrise = solarNoon - (hSunrise / 15.0);
-    final sunset = solarNoon + (hSunrise / 15.0);
+    // Diyanet İşleri Başkanlığı (Method 13) temkin adjustments:
+    // Sunrise: -7 min, Dhuhr: +5 min, Asr: +4 min, Maghrib: +7 min, Isha: +2 min
+    final sunrise = solarNoon - (hSunrise / 15.0) - (7.0 / 60.0);
+    final dhuhr = solarNoon + (5.0 / 60.0);
+    final sunset = solarNoon + (hSunrise / 15.0) + (7.0 / 60.0);
 
     // Fajr / İmsak (18° below horizon -> 108°)
     const zenithFajr = 108.0 * math.pi / 180.0;
@@ -327,19 +539,19 @@ class PrayerTimesService {
     final hFajr = math.acos(cosHFajr) * 180.0 / math.pi;
     final fajr = solarNoon - (hFajr / 15.0);
 
-    // Isha / Yatsı (17° below horizon -> 107°)
+    // Isha / Yatsı (17° below horizon -> 107°) + 2 min Diyanet temkin
     const zenithIsha = 107.0 * math.pi / 180.0;
     var cosHIsha = (math.cos(zenithIsha) - math.sin(latRad) * math.sin(declination)) / (math.cos(latRad) * math.cos(declination));
     cosHIsha = cosHIsha.clamp(-1.0, 1.0);
     final hIsha = math.acos(cosHIsha) * 180.0 / math.pi;
-    final isha = solarNoon + (hIsha / 15.0);
+    final isha = solarNoon + (hIsha / 15.0) + (2.0 / 60.0);
 
-    // Asr / İkindi (Shafi'i shadow length = 1)
-    final asrAngle = math.atan(1.0 + math.tan((latRad - declination).abs()));
+    // Asr / İkindi (Asr-ı Evvel shadow ratio = 1 + tan(|lat - decl|) -> altitude = atan(1 / (1 + tan(|lat - decl|))))
+    final asrAngle = math.atan(1.0 / (1.0 + math.tan((latRad - declination).abs())));
     var cosHAsr = (math.sin(asrAngle) - math.sin(latRad) * math.sin(declination)) / (math.cos(latRad) * math.cos(declination));
     cosHAsr = cosHAsr.clamp(-1.0, 1.0);
     final hAsr = math.acos(cosHAsr) * 180.0 / math.pi;
-    final asr = solarNoon + (hAsr / 15.0);
+    final asr = solarNoon + (hAsr / 15.0) + (4.0 / 60.0);
 
     String formatHour(double decimalHour) {
       var h = decimalHour.floor();
@@ -348,7 +560,7 @@ class PrayerTimesService {
         h += 1;
         m -= 60;
       }
-      h = h % 24;
+      h = ((h % 24) + 24) % 24;
       return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
     }
 
@@ -358,7 +570,7 @@ class PrayerTimesService {
     return PrayerTimings(
       fajr: formatHour(fajr),
       sunrise: formatHour(sunrise),
-      dhuhr: formatHour(solarNoon),
+      dhuhr: formatHour(dhuhr),
       asr: formatHour(asr),
       maghrib: formatHour(sunset),
       isha: formatHour(isha),
@@ -366,6 +578,60 @@ class PrayerTimesService {
       hijriDay: hijri.day.toString(),
       hijriMonth: hijri.monthName,
       hijriYear: hijri.year.toString(),
+    );
+  }
+
+  /// Calculates calibrated prayer times for a future [targetDate] by applying Day-0's API-to-offline
+  /// delta onto the astronomical calculation for [targetDate], eliminating multi-day notification drift.
+  static PrayerTimings calculateCalibratedPrayerTimesForDate({
+    required String city,
+    required DateTime targetDate,
+    PrayerTimings? referenceTodayTimings,
+    DateTime? referenceDate,
+  }) {
+    final baseTarget = calculateOfflinePrayerTimes(city, targetDate);
+    if (referenceTodayTimings == null) {
+      return baseTarget;
+    }
+
+    final refDate = referenceDate ?? DateTime.now();
+    final baseRef = calculateOfflinePrayerTimes(city, refDate);
+
+    int? toMinutes(String hhmm) {
+      final clean = hhmm.trim().split(' ').first;
+      final parts = clean.split(':');
+      if (parts.length < 2) return null;
+      final h = int.tryParse(parts[0].trim());
+      final m = int.tryParse(parts[1].trim());
+      if (h == null || m == null) return null;
+      return h * 60 + m;
+    }
+
+    String applyDelta(String targetHhmm, String apiRefHhmm, String offlineRefHhmm) {
+      final tMin = toMinutes(targetHhmm);
+      final apiMin = toMinutes(apiRefHhmm);
+      final offMin = toMinutes(offlineRefHhmm);
+      if (tMin == null || apiMin == null || offMin == null) return targetHhmm;
+      final delta = apiMin - offMin;
+      // Only apply calibration delta if reference timings are from the same city/timezone (within ±20 min)
+      if (delta.abs() > 20) return targetHhmm;
+      final adjusted = ((tMin + delta) % 1440 + 1440) % 1440;
+      final h = (adjusted ~/ 60).toString().padLeft(2, '0');
+      final m = (adjusted % 60).toString().padLeft(2, '0');
+      return '$h:$m';
+    }
+
+    return PrayerTimings(
+      fajr: applyDelta(baseTarget.fajr, referenceTodayTimings.fajr, baseRef.fajr),
+      sunrise: applyDelta(baseTarget.sunrise, referenceTodayTimings.sunrise, baseRef.sunrise),
+      dhuhr: applyDelta(baseTarget.dhuhr, referenceTodayTimings.dhuhr, baseRef.dhuhr),
+      asr: applyDelta(baseTarget.asr, referenceTodayTimings.asr, baseRef.asr),
+      maghrib: applyDelta(baseTarget.maghrib, referenceTodayTimings.maghrib, baseRef.maghrib),
+      isha: applyDelta(baseTarget.isha, referenceTodayTimings.isha, baseRef.isha),
+      date: baseTarget.date,
+      hijriDay: baseTarget.hijriDay,
+      hijriMonth: baseTarget.hijriMonth,
+      hijriYear: baseTarget.hijriYear,
     );
   }
 

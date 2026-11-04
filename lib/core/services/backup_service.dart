@@ -245,6 +245,16 @@ class BackupService {
       'CustomQuranBadgesJson': PrefUtils.getString(prefs, 'CustomQuranBadges_List_v1', ''),
       'DiamondCount': PrefUtils.getInt(prefs, 'DiamondCount', 0),
       'GoldCount': PrefUtils.getInt(prefs, 'GoldCount', firstStreak?.xp ?? 0),
+      'KulliyatBookshelfJson': prefs.getString('zikirce_tahrir_bookshelf_v2') ?? '',
+      'KulliyatLastBookId': prefs.getString('zikirce_kulliyat_last_book_id') ?? '',
+      'KulliyatLastReadMs': prefs.getInt('zikirce_kulliyat_last_read_ms') ?? 0,
+      'KulliyatBookmarksJson': prefs.getString('zikirce_book_bookmarks_v1') ?? '',
+      'KulliyatHighlightsJson': prefs.getString('zikirce_book_highlights_v1') ?? '',
+      'LastReadPage': prefs.getInt('LastReadPage') ?? 1,
+      'LastReadPage_UpdatedMs': prefs.getInt('LastReadPage_UpdatedMs') ?? 0,
+      'MukabeleLastPage': prefs.getInt('MukabeleLastPage') ?? 1,
+      'MukabeleLastJuz': prefs.getInt('MukabeleLastJuz') ?? 1,
+      'MukabeleLastUpdatedMs': prefs.getInt('MukabeleLastUpdatedMs') ?? 0,
     };
 
     // 8. UserStreak (UserStreakBackup)
@@ -1065,6 +1075,29 @@ class BackupService {
         }
         if (settings.containsKey('CustomQuranBadgesJson')) {
           await prefs.setString('CustomQuranBadges_List_v1', settings['CustomQuranBadgesJson'].toString());
+        }
+        if (settings['KulliyatBookshelfJson'] is String && (settings['KulliyatBookshelfJson'] as String).isNotEmpty) {
+          await prefs.setString('zikirce_tahrir_bookshelf_v2', settings['KulliyatBookshelfJson'] as String);
+        }
+        if (settings['KulliyatLastBookId'] is String && (settings['KulliyatLastBookId'] as String).isNotEmpty) {
+          await prefs.setString('zikirce_kulliyat_last_book_id', settings['KulliyatLastBookId'] as String);
+        }
+        if (settings.containsKey('KulliyatLastReadMs')) {
+          await prefs.setInt('zikirce_kulliyat_last_read_ms', _parseInt(settings['KulliyatLastReadMs'], 0));
+        }
+        if (settings['KulliyatBookmarksJson'] is String && (settings['KulliyatBookmarksJson'] as String).isNotEmpty) {
+          await prefs.setString('zikirce_book_bookmarks_v1', settings['KulliyatBookmarksJson'] as String);
+        }
+        if (settings['KulliyatHighlightsJson'] is String && (settings['KulliyatHighlightsJson'] as String).isNotEmpty) {
+          await prefs.setString('zikirce_book_highlights_v1', settings['KulliyatHighlightsJson'] as String);
+        }
+        if (settings.containsKey('LastReadPage')) {
+          await prefs.setInt('LastReadPage', _parseInt(settings['LastReadPage'], 1).clamp(1, 605));
+        }
+        if (settings.containsKey('MukabeleLastPage')) {
+          final mukP = _parseInt(settings['MukabeleLastPage'], 1).clamp(1, 605);
+          await prefs.setInt('MukabeleLastPage', mukP);
+          await prefs.setInt('MukabeleLastJuz', _parseInt(settings['MukabeleLastJuz'], ((mukP - 1) ~/ 20) + 1));
         }
       }
     });

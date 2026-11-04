@@ -46,11 +46,13 @@ object WidgetAlarmScheduler {
 
             val prayerIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
                 action = "com.akarworks.zikirce.WIDGET_PRAYER_ALARM"
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
             val prayerPendingIntent = PendingIntent.getBroadcast(context, 1001, prayerIntent, flags)
 
             val backupIntent = Intent(context, WidgetPrayerAlarmReceiver::class.java).apply {
                 action = "com.akarworks.zikirce.WIDGET_BACKUP_ALARM"
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
             val backupPendingIntent = PendingIntent.getBroadcast(context, 1002, backupIntent, flags)
 
@@ -79,13 +81,13 @@ object WidgetAlarmScheduler {
             var nextPrayerCal: Calendar? = null
 
             for (pSec in prayerSeconds) {
-                // Schedule alarm 1 second after prayer time enters so now is strictly in the new prayer period
+                // Schedule alarm at exact HH:mm:00 so Chronometer transitions to next prayer at 00:00 without negative ticks
                 if (pSec > nowSeconds) {
                     val target = Calendar.getInstance().apply {
                         set(Calendar.HOUR_OF_DAY, pSec / 3600)
                         set(Calendar.MINUTE, (pSec % 3600) / 60)
-                        set(Calendar.SECOND, 1)
-                        set(Calendar.MILLISECOND, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 100)
                     }
                     nextPrayerCal = target
                     break
@@ -94,33 +96,33 @@ object WidgetAlarmScheduler {
 
             if (nextPrayerCal == null) {
                 val tomorrowCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }
-                val tomorrowTimes = WidgetDataHelper.calculateOfflinePrayerTimes(city, tomorrowCal)
+                val tomorrowTimes = WidgetDataHelper.getCachedPrayerTimes(context, city, tomorrowCal)
                 val firstSec = WidgetDataHelper.parseTimeMinutes(tomorrowTimes.imsak) * 60
                 nextPrayerCal = Calendar.getInstance().apply {
                     add(Calendar.DAY_OF_YEAR, 1)
                     set(Calendar.HOUR_OF_DAY, firstSec / 3600)
                     set(Calendar.MINUTE, (firstSec % 3600) / 60)
-                    set(Calendar.SECOND, 1)
-                    set(Calendar.MILLISECOND, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 100)
                 }
             }
 
-            // Next midnight rollover (00:00:02) so Hijri calendar, streak & new day's prayer times update cleanly
+            // Next midnight rollover (00:00:00) so Hijri calendar, streak & new day's prayer times update cleanly
             val nextMidnightCal = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_YEAR, 1)
                 set(Calendar.HOUR_OF_DAY, 0)
                 set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 2)
-                set(Calendar.MILLISECOND, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 200)
             }
 
             val triggerMillis = min(nextPrayerCal.timeInMillis, nextMidnightCal.timeInMillis)
 
-            // 1. Primary transition alarm (at exact HH:mm:01 or 00:00:02)
+            // 1. Primary transition alarm (at exact HH:mm:00.100 or 00:00:00.200)
             setAlarmSafe(alarmManager, triggerMillis, prayerPendingIntent)
 
-            // 2. Backup transition alarm (1 minute later to guarantee rollover under Doze)
-            setAlarmSafe(alarmManager, triggerMillis + 60_000L, backupPendingIntent)
+            // 2. Backup transition alarm (2 seconds later to guarantee immediate rollover)
+            setAlarmSafe(alarmManager, triggerMillis + 2_000L, backupPendingIntent)
         } catch (_: Exception) {}
     }
 

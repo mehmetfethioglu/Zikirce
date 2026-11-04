@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import '../core/services/cloud_sync_engine.dart';
+import '../core/services/local_notification_service.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
 import '../core/services/screen_awake_service.dart';
@@ -101,6 +103,22 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      final todayStr =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      if (ref.read(currentDateProvider) != todayStr) {
+        ref.invalidate(currentDateProvider);
+        ref.invalidate(prayerTimingsProvider);
+      } else {
+        final timings = ref.read(prayerTimingsProvider).valueOrNull;
+        if (timings != null) {
+          final city = ref.read(selectedCityProvider);
+          LocalNotificationService.scheduleAllPrayerNotifications(
+            timings,
+            cityOverride: city,
+          );
+        }
+      }
       // Invalidate database streams when resuming so external widget modifications reflect immediately
       ref.invalidate(kazaPrayersStreamProvider);
       ref.invalidate(kazaSummaryProvider);
@@ -141,6 +159,13 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
       themeMode: themeNotifier.getThemeMode(activeThemeKey),
       locale: activeLocale,
       routerConfig: appRouter,
+      shortcuts: <ShortcutActivator, Intent>{
+        ...WidgetsApp.defaultShortcuts,
+        const SingleActivator(LogicalKeyboardKey.select): const ActivateIntent(),
+        const SingleActivator(LogicalKeyboardKey.gameButtonA): const ActivateIntent(),
+        const SingleActivator(LogicalKeyboardKey.enter): const ActivateIntent(),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter): const ActivateIntent(),
+      },
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

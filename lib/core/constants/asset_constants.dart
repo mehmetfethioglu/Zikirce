@@ -28,6 +28,9 @@ class AppAssets {
   // Audio
   static const String audioBulbul = 'assets/audio/bulbul.wav';
   static const String audioKumru = 'assets/audio/kumru.wav';
+  static const String audioEzan = 'assets/audio/ezan.wav';
+  static const String audioSela = 'assets/audio/sela.wav';
+  static const String audioFeraciye = 'assets/audio/feraciye.wav';
 
   // Images & Icons
   static const String logo = 'assets/images/zikirce_logo.png';

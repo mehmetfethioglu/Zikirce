@@ -72,7 +72,16 @@ class _BismillahDashboardScreenState extends ConsumerState<BismillahDashboardScr
   }
 
   void _initPrayerTrackingAndNotifications() {
-    _notifSub = LocalNotificationService.pendingPrayerNotificationTapped.stream.listen((event) {
+    _notifSub = LocalNotificationService.pendingPrayerNotificationTapped.stream.listen((event) async {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      if (event.dateStr == todayStr) {
+        final timings = ref.read(prayerTimingsProvider).valueOrNull;
+        if (!PrayerTrackingService.isPrayerTimeEntered(event.prayerName, timings, now)) {
+          return;
+        }
+      }
       if (mounted) {
         PendingPrayerDialog.show(
           context,

@@ -240,8 +240,7 @@ object WidgetDataHelper {
         val lng = coords.second
 
         val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
-        val hour = cal.get(Calendar.HOUR_OF_DAY)
-        val fractionalYear = (2.0 * Math.PI / 365.0) * (dayOfYear - 1 + (hour - 12.0) / 24.0)
+        val fractionalYear = (2.0 * Math.PI / 365.0) * (dayOfYear - 1.0)
 
         val eqt = 229.18 * (0.000075 + 0.001868 * cos(fractionalYear)
                 - 0.032077 * sin(fractionalYear)
@@ -266,15 +265,16 @@ object WidgetDataHelper {
         }
 
         val hSunrise = hourAngle(90.833)
-        val sunrise = solarNoon - (hSunrise / 15.0)
-        val sunset = solarNoon + (hSunrise / 15.0)
+        val sunrise = solarNoon - (hSunrise / 15.0) - (7.0 / 60.0)
+        val dhuhr = solarNoon + (5.0 / 60.0)
+        val sunset = solarNoon + (hSunrise / 15.0) + (7.0 / 60.0)
         val fajr = solarNoon - (hourAngle(108.0) / 15.0)
-        val isha = solarNoon + (hourAngle(107.0) / 15.0)
+        val isha = solarNoon + (hourAngle(107.0) / 15.0) + (2.0 / 60.0)
 
-        val asrAngle = atan(1.0 + tan(abs(latRad - declination)))
+        val asrAngle = atan(1.0 / (1.0 + tan(abs(latRad - declination))))
         val cosHAsr = ((sin(asrAngle) - sin(latRad) * sin(declination)) / (cos(latRad) * cos(declination))).coerceIn(-1.0, 1.0)
         val hAsr = acos(cosHAsr) * 180.0 / Math.PI
-        val asr = solarNoon + (hAsr / 15.0)
+        val asr = solarNoon + (hAsr / 15.0) + (4.0 / 60.0)
 
         fun fmt(dec: Double): String {
             var h = floor(dec).toInt()
@@ -291,7 +291,7 @@ object WidgetDataHelper {
         return WidgetPrayerTimes(
             imsak = fmt(fajr),
             gunes = fmt(sunrise),
-            ogle = fmt(solarNoon),
+            ogle = fmt(dhuhr),
             ikindi = fmt(asr),
             aksam = fmt(sunset),
             yatsi = fmt(isha),
@@ -301,10 +301,21 @@ object WidgetDataHelper {
         )
     }
 
-    fun getCachedPrayerTimes(context: Context, city: String): WidgetPrayerTimes {
-        val nowCal = Calendar.getInstance()
+    private fun applyDelta(targetRaw: String, apiRefStr: String, offRefStr: String): String {
+        if (apiRefStr.isEmpty()) return targetRaw
+        val tMin = parseTimeMinutes(targetRaw)
+        val aMin = parseTimeMinutes(apiRefStr)
+        val oMin = parseTimeMinutes(offRefStr)
+        val delta = (aMin - oMin).coerceIn(-45, 45)
+        val total = ((tMin + delta) % 1440 + 1440) % 1440
+        return String.format(Locale.US, "%02d:%02d", total / 60, total % 60)
+    }
+
+    fun getCachedPrayerTimes(context: Context, city: String, targetCal: Calendar = Calendar.getInstance()): WidgetPrayerTimes {
+        val nowCal = targetCal
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(nowCal.time)
         val (defDay, defMonth, defYear) = calculateHijri(nowCal)
+        val fallback = calculateOfflinePrayerTimes(city, nowCal)
 
         // 1. Try today's dated cache from Flutter PrayerTimesService first
         val datedJson = getStringPref(context, "prayer_times_${city}_$todayStr", "")
@@ -314,26 +325,24 @@ object WidgetDataHelper {
             try {
                 val obj = JSONObject(candidateJson)
                 val cachedDate = obj.optString("Date", obj.optString("date", ""))
-                // Use cached JSON only if it has no date tag or matches today's date
+                var rawMonth = obj.optString("HijriMonth", obj.optString("hijriMonth", defMonth))
+                if (rawMonth.isEmpty() || rawMonth.equals("null", ignoreCase = true)) {
+                    rawMonth = defMonth
+                } else {
+                    rawMonth = translateHijriMonth(rawMonth)
+                }
+
+                var rawDay = obj.optString("HijriDay", obj.optString("hijriDay", defDay))
+                if (rawDay.isEmpty() || rawDay.equals("null", ignoreCase = true)) {
+                    rawDay = defDay
+                }
+
+                var rawYear = obj.optString("HijriYear", obj.optString("hijriYear", defYear))
+                if (rawYear.isEmpty() || rawYear.equals("null", ignoreCase = true)) {
+                    rawYear = defYear
+                }
+
                 if (cachedDate.isEmpty() || cachedDate == todayStr) {
-                    var rawMonth = obj.optString("HijriMonth", obj.optString("hijriMonth", defMonth))
-                    if (rawMonth.isEmpty() || rawMonth.equals("null", ignoreCase = true)) {
-                        rawMonth = defMonth
-                    } else {
-                        rawMonth = translateHijriMonth(rawMonth)
-                    }
-
-                    var rawDay = obj.optString("HijriDay", obj.optString("hijriDay", defDay))
-                    if (rawDay.isEmpty() || rawDay.equals("null", ignoreCase = true)) {
-                        rawDay = defDay
-                    }
-
-                    var rawYear = obj.optString("HijriYear", obj.optString("hijriYear", defYear))
-                    if (rawYear.isEmpty() || rawYear.equals("null", ignoreCase = true)) {
-                        rawYear = defYear
-                    }
-
-                    val fallback = calculateOfflinePrayerTimes(city, nowCal)
                     return WidgetPrayerTimes(
                         imsak = obj.optString("Imsak", obj.optString("fajr", fallback.imsak)),
                         gunes = obj.optString("Gunes", obj.optString("sunrise", fallback.gunes)),
@@ -346,11 +355,46 @@ object WidgetDataHelper {
                         hijriYear = rawYear
                     )
                 }
+
+                // 2. Check pre-calibrated 7-day Schedule inside CachedPrayerTimes
+                val scheduleObj = obj.optJSONObject("Schedule")
+                val dayObj = scheduleObj?.optJSONObject(todayStr)
+                if (dayObj != null) {
+                    return WidgetPrayerTimes(
+                        imsak = dayObj.optString("Imsak", fallback.imsak),
+                        gunes = dayObj.optString("Gunes", fallback.gunes),
+                        ogle = dayObj.optString("Ogle", fallback.ogle),
+                        ikindi = dayObj.optString("Ikindi", fallback.ikindi),
+                        aksam = dayObj.optString("Aksam", fallback.aksam),
+                        yatsi = dayObj.optString("Yatsi", fallback.yatsi),
+                        hijriDay = defDay,
+                        hijriMonth = defMonth,
+                        hijriYear = defYear
+                    )
+                }
+
+                // 3. Apply Day-0 API-to-Offline Delta Calibration from cached reference date
+                val refDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(cachedDate)
+                if (refDate != null) {
+                    val refCal = Calendar.getInstance().apply { time = refDate }
+                    val offRef = calculateOfflinePrayerTimes(city, refCal)
+                    return WidgetPrayerTimes(
+                        imsak = applyDelta(fallback.imsak, obj.optString("Imsak", obj.optString("fajr", "")), offRef.imsak),
+                        gunes = applyDelta(fallback.gunes, obj.optString("Gunes", obj.optString("sunrise", "")), offRef.gunes),
+                        ogle = applyDelta(fallback.ogle, obj.optString("Ogle", obj.optString("dhuhr", "")), offRef.ogle),
+                        ikindi = applyDelta(fallback.ikindi, obj.optString("Ikindi", obj.optString("asr", "")), offRef.ikindi),
+                        aksam = applyDelta(fallback.aksam, obj.optString("Aksam", obj.optString("maghrib", "")), offRef.aksam),
+                        yatsi = applyDelta(fallback.yatsi, obj.optString("Yatsi", obj.optString("isha", "")), offRef.yatsi),
+                        hijriDay = defDay,
+                        hijriMonth = defMonth,
+                        hijriYear = defYear
+                    )
+                }
             } catch (_: Exception) {}
         }
 
-        // 2. Automatic offline astronomical calculation when cache is from a previous day or missing
-        return calculateOfflinePrayerTimes(city, nowCal)
+        // 4. Automatic offline astronomical calculation when no cache exists at all
+        return fallback
     }
 
     fun parseTimeMinutes(timeStr: String): Int {

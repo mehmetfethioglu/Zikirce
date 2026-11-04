@@ -83,6 +83,27 @@ class WidgetSyncService {
           ? timings.hijriYear!
           : hijri.year.toString();
 
+      // Pre-compute 7-day schedule directly from cached Monthly Diyanet API Calendar
+      // so iOS/Android widgets use exact official times at midnight rollover without opening the app.
+      final rangeTimings = await PrayerTimesService.getPrayerTimesRange(
+        city: city,
+        startDate: now,
+        days: 8,
+        referenceTodayTimings: timings,
+      );
+
+      final Map<String, Map<String, String>> scheduleMap = {};
+      for (final dayPt in rangeTimings) {
+        scheduleMap[dayPt.date] = {
+          'Imsak': dayPt.fajr,
+          'Gunes': dayPt.sunrise,
+          'Ogle': dayPt.dhuhr,
+          'Ikindi': dayPt.asr,
+          'Aksam': dayPt.maghrib,
+          'Yatsi': dayPt.isha,
+        };
+      }
+
       final jsonMap = {
         'Imsak': timings.fajr,
         'Gunes': timings.sunrise,
@@ -94,6 +115,7 @@ class WidgetSyncService {
         'HijriMonth': hMonth,
         'HijriYear': hYear,
         'Date': timings.date,
+        'Schedule': scheduleMap,
       };
 
       final jsonStr = jsonEncode(jsonMap);
@@ -204,6 +226,10 @@ class WidgetSyncService {
     try {
       await _ensureInitialized();
       final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      await HomeWidget.saveWidgetData<String>('TodayFardDate', todayStr);
+      await prefs.setString('TodayFardDate', todayStr);
       for (final entry in fardTicks.entries) {
         final key = 'TodayFard_${entry.key}';
         await HomeWidget.saveWidgetData<bool>(key, entry.value);

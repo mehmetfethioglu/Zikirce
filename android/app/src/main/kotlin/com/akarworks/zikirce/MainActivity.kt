@@ -63,6 +63,9 @@ class MainActivity : FlutterFragmentActivity() {
                 "getManufacturer" -> {
                     result.success(Build.MANUFACTURER ?: "")
                 }
+                "isTelevision" -> {
+                    result.success(isRunningOnTelevision())
+                }
                 "getAppVersion" -> {
                     try {
                         val pInfo = packageManager.getPackageInfo(packageName, 0)
@@ -92,6 +95,18 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         com.akarworks.zikirce.widgets.WidgetTimeTickReceiver.updateAllWidgets(this)
+    }
+
+    private fun isRunningOnTelevision(): Boolean {
+        return try {
+            val uiModeManager = getSystemService(UI_MODE_SERVICE) as? android.app.UiModeManager
+            val isTvUiMode = uiModeManager?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
+            val hasLeanback = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+            val hasTelevisionFeature = packageManager.hasSystemFeature("android.hardware.type.television")
+            isTvUiMode || hasLeanback || hasTelevisionFeature
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun canScheduleExactAlarms(): Boolean {

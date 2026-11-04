@@ -58,10 +58,11 @@ struct LivePrayerCountdownText: View {
     var alignment: TextAlignment = .center
 
     var body: some View {
-        let safeEnd = max(startDate, targetDate)
+        let safeStart = min(startDate, targetDate.addingTimeInterval(-1))
+        let safeEnd = max(targetDate, safeStart.addingTimeInterval(1))
         Group {
             if #available(iOS 16.0, *) {
-                Text(timerInterval: startDate...safeEnd, countsDown: true)
+                Text(timerInterval: safeStart...safeEnd, countsDown: true, showsHours: true)
             } else {
                 Text(safeEnd, style: .timer)
             }
@@ -250,15 +251,16 @@ enum PrayerDataHelper {
         }
 
         let hSunrise = hourAngle(90.833)
-        let sunrise = solarNoon - (hSunrise / 15.0)
-        let sunset = solarNoon + (hSunrise / 15.0)
+        let sunrise = solarNoon - (hSunrise / 15.0) - (7.0 / 60.0)
+        let dhuhr = solarNoon + (5.0 / 60.0)
+        let sunset = solarNoon + (hSunrise / 15.0) + (7.0 / 60.0)
         let fajr = solarNoon - (hourAngle(108.0) / 15.0)
-        let isha = solarNoon + (hourAngle(107.0) / 15.0)
+        let isha = solarNoon + (hourAngle(107.0) / 15.0) + (2.0 / 60.0)
 
-        let asrAngle = atan(1.0 + tan(abs(latRad - declination)))
+        let asrAngle = atan(1.0 / (1.0 + tan(abs(latRad - declination))))
         let cosHAsr = min(1.0, max(-1.0, (sin(asrAngle) - sin(latRad) * sin(declination)) / (cos(latRad) * cos(declination))))
         let hAsr = acos(cosHAsr) * 180.0 / Double.pi
-        let asr = solarNoon + (hAsr / 15.0)
+        let asr = solarNoon + (hAsr / 15.0) + (4.0 / 60.0)
 
         func fmt(_ dec: Double) -> String {
             var h = Int(floor(dec))
@@ -271,7 +273,7 @@ enum PrayerDataHelper {
             return String(format: "%02d:%02d", h, m)
         }
 
-        return (fmt(fajr), fmt(sunrise), fmt(solarNoon), fmt(asr), fmt(sunset), fmt(isha))
+        return (fmt(fajr), fmt(sunrise), fmt(dhuhr), fmt(asr), fmt(sunset), fmt(isha))
     }
 
     static func directionalName(_ prayerName: String) -> String {
@@ -314,10 +316,32 @@ enum PrayerDataHelper {
         }
     }
 
-    static func fetchPrayerTimes(for date: Date = Date()) -> PrayerTimesEntry {
-        let prefs = WidgetConstants.userDefaults
-        let city = prefs?.string(forKey: "SelectedCity") ?? "İstanbul"
+    private static func hhmmToMinutes(_ hhmm: String) -> Int? {
+        let clean = hhmm.split(separator: " ").first.map(String.init) ?? hhmm
+        let parts = clean.split(separator: ":")
+        guard parts.count >= 2,
+              let h = Int(parts[0]),
+              let m = Int(parts[1]) else { return nil }
+        return h * 60 + m
+    }
 
+    private static func applyDelta(_ targetRaw: String, apiRef: String?, offlineRef: String) -> String {
+        guard let apiRef = apiRef,
+              let tMin = hhmmToMinutes(targetRaw),
+              let aMin = hhmmToMinutes(apiRef),
+              let oMin = hhmmToMinutes(offlineRef) else {
+            return targetRaw
+        }
+        let delta = min(45, max(-45, aMin - oMin))
+        let total = ((tMin + delta) % 1440 + 1440) % 1440
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private static func resolveDayTimings(
+        city: String,
+        for date: Date,
+        prefs: UserDefaults?
+    ) -> (imsak: String, gunes: String, ogle: String, ikindi: String, aksam: String, yatsi: String, hDay: String, hMonth: String, hYear: String) {
         let dateFmt = DateFormatter()
         dateFmt.locale = Locale(identifier: "en_US_POSIX")
         dateFmt.dateFormat = "yyyy-MM-dd"
@@ -351,8 +375,43 @@ enum PrayerDataHelper {
                 if let d = dict["HijriDay"] as? String, !d.isEmpty { hDay = d }
                 if let m = dict["HijriMonth"] as? String, !m.isEmpty { hMonth = m }
                 if let y = dict["HijriYear"] as? String, !y.isEmpty { hYear = y }
+            } else if let schedule = dict["Schedule"] as? [String: Any],
+                      let dayDict = schedule[targetDayStr] as? [String: Any] {
+                imsak = (dayDict["Imsak"] as? String) ?? imsak
+                gunes = (dayDict["Gunes"] as? String) ?? gunes
+                ogle = (dayDict["Ogle"] as? String) ?? ogle
+                ikindi = (dayDict["Ikindi"] as? String) ?? ikindi
+                aksam = (dayDict["Aksam"] as? String) ?? aksam
+                yatsi = (dayDict["Yatsi"] as? String) ?? yatsi
+            } else if let refDate = dateFmt.date(from: cachedDate) {
+                // Day-0 API-to-Offline Delta Calibration for any rolled-over day
+                let offRef = calculateOfflineTimes(city: city, for: refDate)
+                imsak = applyDelta(offline.imsak, apiRef: dict["Imsak"] as? String, offlineRef: offRef.imsak)
+                gunes = applyDelta(offline.gunes, apiRef: dict["Gunes"] as? String, offlineRef: offRef.gunes)
+                ogle = applyDelta(offline.ogle, apiRef: dict["Ogle"] as? String, offlineRef: offRef.ogle)
+                ikindi = applyDelta(offline.ikindi, apiRef: dict["Ikindi"] as? String, offlineRef: offRef.ikindi)
+                aksam = applyDelta(offline.aksam, apiRef: dict["Aksam"] as? String, offlineRef: offRef.aksam)
+                yatsi = applyDelta(offline.yatsi, apiRef: dict["Yatsi"] as? String, offlineRef: offRef.yatsi)
             }
         }
+
+        return (imsak, gunes, ogle, ikindi, aksam, yatsi, hDay, hMonth, hYear)
+    }
+
+    static func fetchPrayerTimes(for date: Date = Date()) -> PrayerTimesEntry {
+        let prefs = WidgetConstants.userDefaults
+        let city = prefs?.string(forKey: "SelectedCity") ?? "İstanbul"
+
+        let resolved = resolveDayTimings(city: city, for: date, prefs: prefs)
+        let imsak = resolved.imsak
+        let gunes = resolved.gunes
+        let ogle = resolved.ogle
+        let ikindi = resolved.ikindi
+        let aksam = resolved.aksam
+        let yatsi = resolved.yatsi
+        let hDay = resolved.hDay
+        let hMonth = resolved.hMonth
+        let hYear = resolved.hYear
 
         let hijriStr = "\(hDay) \(hMonth) \(hYear)"
 
@@ -407,10 +466,10 @@ enum PrayerDataHelper {
 
         if nextIdx == 0 {
             if date >= (prayerDates.last?.date ?? date) {
-                // Past today's Yatsı -> Next prayer is tomorrow's İmsak
+                // Past today's Yatsı -> Next prayer is tomorrow's calibrated İmsak
                 let tomorrow = calendar.date(byAdding: .day, value: 1, to: date) ?? date
-                let tomorrowOffline = calculateOfflineTimes(city: city, for: tomorrow)
-                let tomorrowImsak = tomorrowOffline.imsak
+                let tomorrowResolved = resolveDayTimings(city: city, for: tomorrow, prefs: prefs)
+                let tomorrowImsak = tomorrowResolved.imsak
                 nextDate = parseTimeToday(tomorrowImsak, calendar: calendar, referenceDate: tomorrow) ?? calendar.date(byAdding: .day, value: 1, to: nextDate) ?? nextDate
                 next = CalculatedPrayerTime(key: "imsak", name: "İmsak", time: tomorrowImsak, date: nextDate)
             } else {
@@ -477,26 +536,31 @@ enum PrayerDataHelper {
             }
         }
 
-        // Pre-populate exact transition entries for today + midnight + tomorrow (24h deterministic schedule)
+        // Pre-populate exact transition entries at 00s (and +1s safety) for 48 hours so WidgetKit
+        // transitions immediately at exact prayer time without waiting for background reloads.
+        var candidateSet = Set<Int>()
         var candidateDates: [Date] = []
-        for dayOffset in 0...1 {
+        func addCandidate(_ d: Date) {
+            guard d > now else { return }
+            let sec = Int(d.timeIntervalSince1970)
+            if candidateSet.insert(sec).inserted {
+                candidateDates.append(d)
+            }
+        }
+
+        for dayOffset in 0...2 {
             guard let refDay = calendar.date(byAdding: .day, value: dayOffset, to: now) else { continue }
             let dayEntry = fetchPrayerTimes(for: refDay)
             for p in dayEntry.allPrayers {
                 if let pDate = parseTimeToday(p.time, calendar: calendar, referenceDate: refDay) {
-                    let triggerDate = pDate.addingTimeInterval(1) // 1s after adhan time
-                    if triggerDate > now {
-                        candidateDates.append(triggerDate)
-                    }
+                    addCandidate(pDate)
+                    addCandidate(pDate.addingTimeInterval(1))
                 }
             }
-        }
-
-        // Also add midnight rollover
-        if let tomorrowStart = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) {
-            let midnightTrigger = tomorrowStart.addingTimeInterval(2)
-            if midnightTrigger > now {
-                candidateDates.append(midnightTrigger)
+            if dayOffset > 0 {
+                let dayStart = calendar.startOfDay(for: refDay)
+                addCandidate(dayStart)
+                addCandidate(dayStart.addingTimeInterval(1))
             }
         }
 
@@ -505,7 +569,8 @@ enum PrayerDataHelper {
             entries.append(fetchPrayerTimes(for: tDate))
         }
 
-        let reloadDate = currentEntry.nextPrayerDate.addingTimeInterval(2)
+        // Schedule next WidgetKit timeline refresh well after the immediate transition (which is already in entries)
+        let reloadDate = max(currentEntry.nextPrayerDate.addingTimeInterval(60), now.addingTimeInterval(3600))
         return Timeline(entries: entries, policy: .after(reloadDate))
     }
 

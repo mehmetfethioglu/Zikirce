@@ -53,8 +53,16 @@ class CityNotifier extends StateNotifier<String> {
   Future<void> reloadForSession(String sessionId) async {
     final opId = ++_latestOperationId;
     final saved = await loadSavedCity(sessionId);
-    if (opId == _latestOperationId && saved.isNotEmpty && saved != state) {
-      state = saved;
+    if (opId == _latestOperationId && saved.isNotEmpty) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('SelectedCity', saved);
+        await prefs.setString('AppCity', saved);
+        await prefs.setString('selected_city', saved);
+      } catch (_) {}
+      if (saved != state) {
+        state = saved;
+      }
     }
   }
 
@@ -72,17 +80,20 @@ class CityNotifier extends StateNotifier<String> {
     await prefs.setString('AppCity$sfx', city);
     await prefs.setString('selected_city$sfx', city);
 
-    if (isDefault) {
-      await prefs.setString('SelectedCity', city);
-      await prefs.setString('AppCity', city);
-      await prefs.setString('selected_city', city);
-    }
+    // Always mirror active session city to global keys used by notifications & native widgets
+    await prefs.setString('SelectedCity', city);
+    await prefs.setString('AppCity', city);
+    await prefs.setString('selected_city', city);
 
     // Sync widgets and local notifications for the newly selected city
     try {
       final timings = await PrayerTimesService.getPrayerTimes(city: city);
       await WidgetSyncService.syncPrayerTimes(city: city, timings: timings, sessionId: sessionId);
-      await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+      await LocalNotificationService.scheduleAllPrayerNotifications(
+        timings,
+        force: true,
+        cityOverride: city,
+      );
     } catch (e) {
       debugPrint('[CityNotifier] Sync notice: $e');
     }
@@ -117,7 +128,10 @@ final prayerTimingsProvider = FutureProvider<PrayerTimings>((ref) async {
       timings: timings,
       sessionId: activeSession.id,
     );
-    await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+    await LocalNotificationService.scheduleAllPrayerNotifications(
+      timings,
+      cityOverride: city,
+    );
   } catch (_) {}
 
   return timings;

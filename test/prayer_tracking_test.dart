@@ -92,9 +92,17 @@ void main() {
     expect(streak.longestStreak, greaterThanOrEqualTo(3));
   });
 
-  test('PrayerTrackingService: toggleTodayPrayer awards 1 Diamond on 5/5 completion', () async {
+  test('PrayerTrackingService: toggleTodayPrayer blocks future prayers and awards 1 Diamond on 5/5 completion once entered', () async {
+    final now = DateTime.now();
+    final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('DiamondCount', 0);
+
+    // 1. Seed early timings so all 5 prayers have entered regardless of current wall-clock time
+    await prefs.setString(
+      'prayer_times_İstanbul_$todayStr',
+      '{"Fajr":"00:01","Sunrise":"00:02","Dhuhr":"00:03","Asr":"00:04","Maghrib":"00:05","Isha":"00:06"}',
+    );
 
     for (final prayer in ['Sabah', 'Öğle', 'İkindi', 'Akşam']) {
       final earned = await PrayerTrackingService.toggleTodayPrayer(db, prayer);

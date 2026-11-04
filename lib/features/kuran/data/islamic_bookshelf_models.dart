@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/services/cloud_sync_engine.dart';
 import '../../../core/services/widget_sync_service.dart';
 
 /// Kütüphane rafındaki kitap kategorileri
@@ -138,6 +139,7 @@ class IslamicShelfBook {
   final int currentPage;
   final int totalPages;
   final bool hasStartedReading;
+  final int lastReadAtMs;
 
   /// Cilt/Sırt özelleştirme alanları (İkonsuz klasik cilt)
   final int paletteIndex;
@@ -160,6 +162,7 @@ class IslamicShelfBook {
     this.currentPage = 1,
     required this.totalPages,
     this.hasStartedReading = false,
+    this.lastReadAtMs = 0,
     required this.paletteIndex,
     this.coverStyle = 0,
     this.emblem = '',
@@ -191,6 +194,7 @@ class IslamicShelfBook {
     int? currentPage,
     int? totalPages,
     bool? hasStartedReading,
+    int? lastReadAtMs,
     int? paletteIndex,
     int? coverStyle,
     String? emblem,
@@ -209,6 +213,7 @@ class IslamicShelfBook {
       currentPage: currentPage ?? this.currentPage,
       totalPages: totalPages ?? this.totalPages,
       hasStartedReading: hasStartedReading ?? this.hasStartedReading,
+      lastReadAtMs: lastReadAtMs ?? this.lastReadAtMs,
       paletteIndex: paletteIndex ?? this.paletteIndex,
       coverStyle: coverStyle ?? this.coverStyle,
       emblem: emblem ?? this.emblem,
@@ -224,6 +229,7 @@ class IslamicShelfBook {
         'currentPage': currentPage,
         'totalPages': totalPages,
         'hasStartedReading': hasStartedReading,
+        'lastReadAtMs': lastReadAtMs,
         'paletteIndex': paletteIndex,
         'coverStyle': coverStyle,
       };
@@ -424,7 +430,9 @@ class IslamicBookAnnotationsNotifier
     } catch (_) {}
   }
 
-  Future<void> _save() async {
+  Future<void> reloadFromPrefs() => _load();
+
+  Future<void> _save({bool triggerCloudSync = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
@@ -436,6 +444,12 @@ class IslamicBookAnnotationsNotifier
         jsonEncode(state.highlights.map((e) => e.toJson()).toList()),
       );
       await WidgetSyncService.syncKulliyatFromPrefs();
+      if (triggerCloudSync) {
+        CloudSyncEngine.instance.triggerDebouncedSync(
+          null,
+          delay: const Duration(seconds: 2),
+        );
+      }
     } catch (_) {}
   }
 
@@ -534,6 +548,7 @@ class IslamicBookReaderSettings {
   final bool showArabicText;
   final bool isFlowingBookLayout; // true: Akıcı Kitap Sayfası, false: Kart Düzeni
   final bool showLugatWords; // true: Risale-i Nur Lügati kelimelerini belirt ve dokununca mânâ popup'ı aç
+  final bool isRahleSpreadMode; // true: Rahlede Açık Kitap (Çift Sayfa Yan Yana - TV ve Geniş Ekran)
 
   const IslamicBookReaderSettings({
     this.themeIndex = 0,
@@ -546,6 +561,7 @@ class IslamicBookReaderSettings {
     this.showArabicText = true,
     this.isFlowingBookLayout = true,
     this.showLugatWords = true,
+    this.isRahleSpreadMode = false,
   });
 
   Color get backgroundColor {
@@ -629,6 +645,7 @@ class IslamicBookReaderSettings {
     bool? showArabicText,
     bool? isFlowingBookLayout,
     bool? showLugatWords,
+    bool? isRahleSpreadMode,
   }) {
     return IslamicBookReaderSettings(
       themeIndex: themeIndex ?? this.themeIndex,
@@ -641,6 +658,7 @@ class IslamicBookReaderSettings {
       showArabicText: showArabicText ?? this.showArabicText,
       isFlowingBookLayout: isFlowingBookLayout ?? this.isFlowingBookLayout,
       showLugatWords: showLugatWords ?? this.showLugatWords,
+      isRahleSpreadMode: isRahleSpreadMode ?? this.isRahleSpreadMode,
     );
   }
 
@@ -655,6 +673,7 @@ class IslamicBookReaderSettings {
         'showArabicText': showArabicText,
         'isFlowingBookLayout': isFlowingBookLayout,
         'showLugatWords': showLugatWords,
+        'isRahleSpreadMode': isRahleSpreadMode,
       };
 
   factory IslamicBookReaderSettings.fromJson(Map<String, dynamic> json) {
@@ -669,6 +688,7 @@ class IslamicBookReaderSettings {
       showArabicText: (json['showArabicText'] as bool?) ?? true,
       isFlowingBookLayout: (json['isFlowingBookLayout'] as bool?) ?? true,
       showLugatWords: (json['showLugatWords'] as bool?) ?? true,
+      isRahleSpreadMode: (json['isRahleSpreadMode'] as bool?) ?? false,
     );
   }
 }
@@ -1266,6 +1286,7 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
           currentPage: curPage.clamp(1, def.totalPages),
           totalPages: def.totalPages,
           hasStartedReading: started,
+          lastReadAtMs: (s['lastReadAtMs'] as num?)?.toInt() ?? def.lastReadAtMs,
           paletteIndex:
               (s['paletteIndex'] as num?)?.toInt() ?? def.paletteIndex,
           coverStyle: (s['coverStyle'] as num?)?.toInt() ?? def.coverStyle,
@@ -1276,12 +1297,19 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
 
       state = merged;
       if (savedMap.length < defaults.length) {
-        await _saveToPrefs();
+        await _saveToPrefs(triggerCloudSync: false);
       }
     } catch (_) {}
   }
 
-  Future<void> _saveToPrefs({String? lastReadBookId}) async {
+  /// Bulut senkronizasyonu sonrası bellekteki Külliyat rafını yeniden yükler
+  Future<void> reloadFromPrefs() => _loadFromPrefs();
+
+  Future<void> _saveToPrefs({
+    String? lastReadBookId,
+    int? lastReadAtMs,
+    bool triggerCloudSync = true,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final encoded = jsonEncode(state.map((b) => b.toJson()).toList());
@@ -1289,16 +1317,26 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
       if (lastReadBookId != null && lastReadBookId.isNotEmpty) {
         await prefs.setString('zikirce_kulliyat_last_book_id', lastReadBookId);
       }
+      if (lastReadAtMs != null && lastReadAtMs > 0) {
+        await prefs.setInt('zikirce_kulliyat_last_read_ms', lastReadAtMs);
+      }
       await WidgetSyncService.syncKulliyatFromPrefs(state);
+      if (triggerCloudSync) {
+        CloudSyncEngine.instance.triggerDebouncedSync(
+          null,
+          delay: const Duration(seconds: 2),
+        );
+      }
     } catch (_) {}
   }
 
-  /// Kitabın okunan sayfasını ve yüzdesini kaydeder
+  /// Kitabın okunan sayfasını ve yüzdesini kaydeder ve tüm cihazlarla senkronize eder
   Future<void> updateBookProgress(
     String bookId,
     int pageNumber, {
     int? totalPages,
   }) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     state = [
       for (final b in state)
         if (b.id == bookId)
@@ -1306,11 +1344,23 @@ class IslamicBookshelfNotifier extends StateNotifier<List<IslamicShelfBook>> {
             currentPage: pageNumber.clamp(1, totalPages ?? b.totalPages),
             totalPages: totalPages ?? b.totalPages,
             hasStartedReading: true,
+            lastReadAtMs: nowMs,
           )
         else
           b,
     ];
-    await _saveToPrefs(lastReadBookId: bookId);
+    if (bookId == 'book_mushaf') {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('LastReadPage', pageNumber.clamp(1, 604));
+        await prefs.setInt('LastReadPage_UpdatedMs', nowMs);
+      } catch (_) {}
+    }
+    await _saveToPrefs(
+      lastReadBookId: bookId,
+      lastReadAtMs: nowMs,
+      triggerCloudSync: true,
+    );
   }
 
   /// Mushaf sayfası değiştiğinde Kur'ân-ı Kerîm kitabının yüzdesini senkronize eder
@@ -1420,6 +1470,12 @@ class IslamicBookReaderSettingsNotifier
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsKey, jsonEncode(next.toJson()));
     } catch (_) {}
+  }
+
+  Future<void> toggleRahleSpreadMode() async {
+    await updateSettings(
+      state.copyWith(isRahleSpreadMode: !state.isRahleSpreadMode),
+    );
   }
 }
 

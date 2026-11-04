@@ -955,6 +955,7 @@ class ZikirSeedData {
     ZikirSeedItem(name: 'Mûsâ (a.s.) Duası 4', arabic: 'وَاكْتُبْ لَنَا ف۪ي هٰذِهِ الدُّنْيَا حَسَنَةً وَفِي الْاٰخِرَةِ', target: 25, category: 'Dualar', virtue: '"Bize bu dünyada da iyilik yaz, âhirette de." (A\'râf, 156)'),
     ZikirSeedItem(name: 'Mûsâ (a.s.) Duası 5', arabic: 'رَبِّ اشْرَحْ ل۪ي صَدْر۪ي وَيَسِّرْ ل۪ٓي اَمْر۪ي وَاحْلُلْ عُقْدَةً مِنْ لِسَان۪ي', target: 25, category: 'Dualar', virtue: '"Rabbim! Gönlüme ferahlık ver. İşimi bana kolaylaştır. Dilimdeki tutukluğu çöz." (Tâhâ, 25-28)'),
     ZikirSeedItem(name: 'Mûsâ (a.s.) Duası 6', arabic: 'وَاُفَوِّضُ اَمْر۪ٓي اِلَى اللّٰهِ اِنَّ اللّٰهَ بَص۪يرٌ بِالْعِبَادِ', target: 25, category: 'Dualar', virtue: '"Ben işimi Allah\'a havale ediyorum. Şüphesiz Allah kullarını görür, gözetir." (Mü\'min, 44)'),
+    ZikirSeedItem(name: 'Mûsâ (a.s.) Duası 7', arabic: 'رَبِّ اِنّ۪ي لِمَٓا اَنْزَلْتَ اِلَيَّ مِنْ خَيْرٍ فَق۪يرٌ', target: 25, category: 'Dualar', virtue: '"Rabbim! Bana indireceğin her hayra muhtacım." (Kasas, 24)'),
     ZikirSeedItem(name: 'Süleyman (a.s.) Duası 1', arabic: 'رَبِّ اَوْزِعْن۪ٓي اَنْ اَشْكُرَ نِعْمَتَكَ الَّت۪ٓي اَنْعَمْتَ عَلَيَّ وَعَلٰى وَالِدَيَّ', target: 25, category: 'Dualar', virtue: '"Ey Rabbim! Beni; bana ve ana-babama verdiğin nimetlere şükretmeye sevk et." (Neml, 19)'),
     ZikirSeedItem(name: 'Süleyman (a.s.) Duası 2', arabic: 'رَبِّ اغْفِرْ ل۪ي وَهَبْ ل۪ي مُلْكاً لَا يَنْبَغ۪ي لِاَحَدٍ مِنْ بَعْد۪ي', target: 25, category: 'Dualar', virtue: '"Ey Rabbim! Beni bağışla; benden sonra kimsenin ulaşamayacağı bir hükümranlık ver." (Sâd, 35)'),
     ZikirSeedItem(name: 'Yûnus (a.s.) Duası', arabic: 'لَٓا اِلٰهَ اِلَّٓا اَنْتَ سُبْحَانَكَ اِنّ۪ي كُنْتُ مِنَ الظَّالِم۪ينَ', target: 25, category: 'Dualar', virtue: '"Senden başka ilâh yoktur. Seni her türlü noksandan tenzih ederim. Şüphesiz ben kendine yazık edenlerden oldum." (Enbiyâ, 87)'),
@@ -1081,13 +1082,163 @@ class ZikirSeedData {
     });
   }
 
+  static final Map<String, int> _seedOrderByName = {
+    for (var i = 0; i < defaultZikirs.length; i++) defaultZikirs[i].name: i,
+  };
+
+  static final Map<String, int> _seedOrderByCanonicalKey = {
+    for (var i = 0; i < defaultZikirs.length; i++)
+      canonicalZikirKey(defaultZikirs[i].name): i,
+  };
+
+  static final Map<String, ZikirSeedItem> _seedItemByCanonicalKey = {
+    for (final item in defaultZikirs) canonicalZikirKey(item.name): item,
+  };
+
+  /// Normalizes zikir names across legacy migrations (removes circumflexes, apostrophes, extra spaces)
+  /// so duplicates like "Musa (a.s.) Duası 1" and "Mûsâ (a.s.) Duası 1" or "Er-Rahman" and "Er-Rahmân"
+  /// are recognized as the exact same canonical zikir.
+  static String canonicalZikirKey(String rawName) {
+    return rawName
+        .trim()
+        .toLowerCase()
+        .replaceAll('â', 'a')
+        .replaceAll('î', 'i')
+        .replaceAll('û', 'u')
+        .replaceAll('ô', 'o')
+        .replaceAll('ê', 'e')
+        .replaceAll('İ', 'i')
+        .replaceAll('ı', 'i')
+        .replaceAll('’', '')
+        .replaceAll("'", '')
+        .replaceAll('`', '')
+        .replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  /// Keeps newly added default zikirs grouped in their canonical seed order
+  /// and filters out any in-memory duplicate zikirs sharing the same canonical key.
+  static List<Zikir> sortBySeedOrder(List<Zikir> items) {
+    final dedupedByKey = <String, Zikir>{};
+    for (final z in items) {
+      final key = canonicalZikirKey(z.name);
+      final existing = dedupedByKey[key];
+      if (existing == null) {
+        dedupedByKey[key] = z;
+      } else {
+        // Keep the record with higher totalCount (or canonical seed name / lower id on tie)
+        if (z.totalCount > existing.totalCount ||
+            (z.totalCount == existing.totalCount &&
+                _seedOrderByName.containsKey(z.name) &&
+                !_seedOrderByName.containsKey(existing.name))) {
+          dedupedByKey[key] = z;
+        }
+      }
+    }
+
+    final sorted = dedupedByKey.values.toList();
+    sorted.sort((a, b) {
+      if (a.isFavorite != b.isFavorite) {
+        return a.isFavorite ? -1 : 1;
+      }
+      final keyA = canonicalZikirKey(a.name);
+      final keyB = canonicalZikirKey(b.name);
+      final orderA = _seedOrderByName[a.name] ??
+          _seedOrderByCanonicalKey[keyA] ??
+          (100000 + a.id);
+      final orderB = _seedOrderByName[b.name] ??
+          _seedOrderByCanonicalKey[keyB] ??
+          (100000 + b.id);
+      if (orderA != orderB) return orderA.compareTo(orderB);
+      return a.id.compareTo(b.id);
+    });
+    return sorted;
+  }
+
   static Future<void> ensureAllDefaultZikirsExist(AppDatabase db) async {
     final existingZikirs = await db.select(db.zikirs).get();
-    final existingNames = existingZikirs.map((z) => z.name).toSet();
+    final groupedByCanonical = <String, List<Zikir>>{};
+    for (final z in existingZikirs) {
+      final key = canonicalZikirKey(z.name);
+      groupedByCanonical.putIfAbsent(key, () => []).add(z);
+    }
 
     await db.transaction(() async {
+      // 1. Deduplicate any existing duplicate zikirs in SQLite without losing counts or logs
+      for (final entry in groupedByCanonical.entries) {
+        final key = entry.key;
+        final group = entry.value;
+        final seedItem = _seedItemByCanonicalKey[key];
+
+        if (group.length > 1) {
+          group.sort((a, b) {
+            if (a.totalCount != b.totalCount) {
+              return b.totalCount.compareTo(a.totalCount);
+            }
+            return a.id.compareTo(b.id);
+          });
+          final primary = group.first;
+          int maxTotal = primary.totalCount;
+          int maxCurrent = primary.currentCount;
+          int maxLap = primary.lap;
+          bool anyFav = primary.isFavorite;
+          DateTime? latestPracticed = primary.lastPracticed;
+
+          for (int i = 1; i < group.length; i++) {
+            final dup = group[i];
+            if (dup.totalCount > maxTotal) maxTotal = dup.totalCount;
+            if (dup.currentCount > maxCurrent) maxCurrent = dup.currentCount;
+            if (dup.lap > maxLap) maxLap = dup.lap;
+            if (dup.isFavorite) anyFav = true;
+            if (dup.lastPracticed != null &&
+                (latestPracticed == null ||
+                    dup.lastPracticed!.isAfter(latestPracticed))) {
+              latestPracticed = dup.lastPracticed;
+            }
+            // Reassign logs pointing to duplicate ID over to primary ID
+            await (db.update(db.zikirLogs)
+                  ..where((t) => t.zikirId.equals(dup.id)))
+                .write(ZikirLogsCompanion(zikirId: Value(primary.id)));
+            // Delete duplicate zikir row
+            await (db.delete(db.zikirs)..where((t) => t.id.equals(dup.id))).go();
+          }
+
+          await (db.update(db.zikirs)..where((t) => t.id.equals(primary.id)))
+              .write(
+            ZikirsCompanion(
+              name: Value(seedItem?.name ?? primary.name),
+              arabic: Value(seedItem != null && seedItem.arabic.isNotEmpty
+                  ? seedItem.arabic
+                  : primary.arabic),
+              totalCount: Value(maxTotal),
+              currentCount: Value(maxCurrent),
+              lap: Value(maxLap),
+              isFavorite: Value(anyFav),
+              lastPracticed: latestPracticed != null
+                  ? Value(latestPracticed)
+                  : const Value.absent(),
+            ),
+          );
+        } else if (group.length == 1 && seedItem != null) {
+          final single = group.first;
+          if (single.name != seedItem.name ||
+              ((single.arabic == null || single.arabic!.isEmpty) &&
+                  seedItem.arabic.isNotEmpty)) {
+            await (db.update(db.zikirs)..where((t) => t.id.equals(single.id)))
+                .write(
+              ZikirsCompanion(
+                name: Value(seedItem.name),
+                arabic: Value(
+                    seedItem.arabic.isNotEmpty ? seedItem.arabic : single.arabic),
+              ),
+            );
+          }
+        }
+      }
+
+      // 2. Insert any missing default seed zikirs
       for (final item in defaultZikirs) {
-        if (!existingNames.contains(item.name)) {
+        final key = canonicalZikirKey(item.name);
+        if (!groupedByCanonical.containsKey(key)) {
           await db.into(db.zikirs).insert(
             ZikirsCompanion.insert(
               name: item.name,
@@ -1097,6 +1248,7 @@ class ZikirSeedData {
               isFavorite: Value(item.isFavorite),
             ),
           );
+          groupedByCanonical[key] = const [];
         }
       }
     });

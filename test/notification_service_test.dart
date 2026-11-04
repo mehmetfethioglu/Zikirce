@@ -82,5 +82,70 @@ void main() {
       expect(ikindiQuestionTime.hour, equals(18));
       expect(ikindiQuestionTime.minute, equals(30));
     });
+
+    test('Regression (2 Nov 2026): Offline Asr is ~3h after Dhuhr and Öğle question is never before Dhuhr', () {
+      int toMinutes(String hhmm) {
+        final parts = hhmm.split(':');
+        return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      }
+
+      for (final city in ['İstanbul', 'Ankara', 'Şanlıurfa', 'İzmir', 'Erzurum']) {
+        final nov2 = DateTime(2026, 11, 2, 11, 36);
+        final timings = PrayerTimesService.calculateOfflinePrayerTimes(city, nov2);
+
+        final fajrMin = toMinutes(timings.fajr);
+        final sunriseMin = toMinutes(timings.sunrise);
+        final dhuhrMin = toMinutes(timings.dhuhr);
+        final asrMin = toMinutes(timings.asr);
+        final maghribMin = toMinutes(timings.maghrib);
+        final ishaMin = toMinutes(timings.isha);
+
+        // Strict chronological ordering with realistic astronomical intervals
+        expect(sunriseMin - fajrMin, greaterThan(60), reason: '$city sunrise - fajr');
+        expect(dhuhrMin - sunriseMin, greaterThan(240), reason: '$city dhuhr - sunrise');
+        expect(asrMin - dhuhrMin, greaterThan(140), reason: '$city asr must be >2h20m after dhuhr');
+        expect(maghribMin - asrMin, greaterThan(110), reason: '$city maghrib - asr');
+        expect(ishaMin - maghribMin, greaterThan(60), reason: '$city isha - maghrib');
+
+        // "Öğle namazınızı kıldınız mı?" (asr - 45 min) must be at least 95 minutes AFTER Öğle entry
+        final ogleQuestionMin = asrMin - 45;
+        expect(ogleQuestionMin, greaterThan(dhuhrMin + 95),
+            reason: '$city Öğle question ($ogleQuestionMin) must be well after Öğle ($dhuhrMin)');
+      }
+    });
+
+    test('Calibrated multi-day rolling prayer times preserve Day-0 API offset without drift', () {
+      final refDate = DateTime(2026, 11, 2);
+      final apiToday = PrayerTimings(
+        fajr: '05:21',
+        sunrise: '06:46',
+        dhuhr: '12:13',
+        asr: '15:10',
+        maghrib: '17:34',
+        isha: '18:50',
+        date: '2026-11-02',
+      );
+
+      final day1 = PrayerTimesService.calculateCalibratedPrayerTimesForDate(
+        city: 'Şanlıurfa',
+        targetDate: DateTime(2026, 11, 3),
+        referenceTodayTimings: apiToday,
+        referenceDate: refDate,
+      );
+
+      int toMinutes(String hhmm) {
+        final parts = hhmm.split(':');
+        return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+      }
+
+      final dhuhrMin = toMinutes(day1.dhuhr);
+      final asrMin = toMinutes(day1.asr);
+      final ogleQuestionMin = asrMin - 45;
+
+      // On Nov 3 in Şanlıurfa, Öğle is ~12:13, İkindi is ~15:09, so Öğle question is ~14:24 (never 11:36!)
+      expect(dhuhrMin, inInclusiveRange(12 * 60 + 10, 12 * 60 + 16));
+      expect(asrMin, inInclusiveRange(15 * 60 + 6, 15 * 60 + 13));
+      expect(ogleQuestionMin, inInclusiveRange(14 * 60 + 21, 14 * 60 + 28));
+    });
   });
 }

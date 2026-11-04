@@ -64,6 +64,17 @@ class PrayerTrackingService {
   static Future<String> _getSavedCity() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final activeSessionId = prefs.getString('ActiveSessionId');
+      if (activeSessionId != null &&
+          activeSessionId.isNotEmpty &&
+          activeSessionId != 'default_user') {
+        final sessionCity = prefs.getString('SelectedCity_$activeSessionId') ??
+            prefs.getString('AppCity_$activeSessionId') ??
+            prefs.getString('selected_city_$activeSessionId');
+        if (sessionCity != null && sessionCity.isNotEmpty) {
+          return sessionCity;
+        }
+      }
       return prefs.getString('SelectedCity') ??
           prefs.getString('AppCity') ??
           prefs.getString('selected_city') ??
@@ -241,9 +252,10 @@ class PrayerTrackingService {
     try {
       final now = DateTime.now();
       final todayStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      if (dateStr == todayStr && answeredYes) {
+      if (dateStr == todayStr) {
         final city = await _getSavedCity();
         final timings = await PrayerTimesService.getPrayerTimes(city: city);
+        // Poka-Yoke: Never record Yes or No (or increment kaza) for a prayer whose time has not entered today
         if (!isPrayerTimeEntered(prayerName, timings, now)) {
           return;
         }
@@ -264,6 +276,14 @@ class PrayerTrackingService {
           // Increment kaza debt
           await adjustKazaCount(db, prayerName, 1);
         }
+        try { await LocalNotificationService.cancelTodayQuestionNotification(prayerName); } catch (_) {}
+      }
+
+      if (dateStr == todayStr) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('TodayPrayerAnswered_${todayStr}_$prayerName', true);
+        } catch (_) {}
       }
 
       await _syncHomeWidgets(db);
@@ -298,16 +318,19 @@ class PrayerTrackingService {
         return false;
       }
 
+      final prefs = await SharedPreferences.getInstance();
       if (previousAnswer == true) {
         // Unmarking today's completed prayer -> Mark as Hayır and increment debt
         await logPrayerAnswer(db, todayStr, prayerName, false);
         await adjustKazaCount(db, prayerName, 1);
+        await prefs.setBool('TodayPrayerAnswered_${todayStr}_$prayerName', false);
       } else {
         // Marking as completed -> Mark as Evet
         await logPrayerAnswer(db, todayStr, prayerName, true);
         if (previousAnswer == false) {
           await adjustKazaCount(db, prayerName, -1);
         }
+        await prefs.setBool('TodayPrayerAnswered_${todayStr}_$prayerName', true);
         try { await LocalNotificationService.cancelTodayQuestionNotification(prayerName); } catch (_) {}
       }
 
@@ -633,24 +656,54 @@ class PrayerTrackingService {
         return DateTime(now.year, now.month, now.day, h, m);
       }
 
+      final tFajr = parseTime(timings.fajr);
       final tSunrise = parseTime(timings.sunrise);
+      final tDhuhr = parseTime(timings.dhuhr);
       final tAsr = parseTime(timings.asr);
       final tMaghrib = parseTime(timings.maghrib);
       final tIsha = parseTime(timings.isha);
 
       final prayerChecks = [
-        (prayerName: 'Sabah', checkTime: tSunrise.subtract(const Duration(minutes: 45))),
-        (prayerName: 'Öğle', checkTime: tAsr.subtract(const Duration(minutes: 45))),
-        (prayerName: 'İkindi', checkTime: tMaghrib.subtract(const Duration(minutes: 45))),
-        (prayerName: 'Akşam', checkTime: tIsha.subtract(const Duration(minutes: 45))),
-        (prayerName: 'Yatsı', checkTime: tIsha.add(const Duration(hours: 1))),
+        (
+          prayerName: 'Sabah',
+          entryTime: tFajr,
+          checkTime: tSunrise.subtract(const Duration(minutes: 45)),
+          minOffsetMinutes: 20,
+        ),
+        (
+          prayerName: 'Öğle',
+          entryTime: tDhuhr,
+          checkTime: tAsr.subtract(const Duration(minutes: 45)),
+          minOffsetMinutes: 30,
+        ),
+        (
+          prayerName: 'İkindi',
+          entryTime: tAsr,
+          checkTime: tMaghrib.subtract(const Duration(minutes: 45)),
+          minOffsetMinutes: 30,
+        ),
+        (
+          prayerName: 'Akşam',
+          entryTime: tMaghrib,
+          checkTime: tIsha.subtract(const Duration(minutes: 45)),
+          minOffsetMinutes: 20,
+        ),
+        (
+          prayerName: 'Yatsı',
+          entryTime: tIsha,
+          checkTime: tIsha.add(const Duration(hours: 1)),
+          minOffsetMinutes: 30,
+        ),
       ];
 
       final prefs = await SharedPreferences.getInstance();
 
       for (final pc in prayerChecks) {
-        // Skip if threshold has not passed yet
-        if (now.isBefore(pc.checkTime)) continue;
+        // Poka-Yoke: Never prompt if the prayer's own entry time + minimum buffer has not passed yet
+        final minCheckTime = pc.entryTime.add(Duration(minutes: pc.minOffsetMinutes));
+        final effectiveCheckTime = pc.checkTime.isBefore(minCheckTime) ? minCheckTime : pc.checkTime;
+        if (now.isBefore(effectiveCheckTime)) continue;
+        if (!isPrayerTimeEntered(pc.prayerName, timings, now)) continue;
 
         // Check if notification is enabled for this prayer
         final isEnabled = prefs.getBool('${pc.prayerName}NotificationEnabled') ?? true;

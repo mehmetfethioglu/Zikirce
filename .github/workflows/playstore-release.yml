@@ -19,6 +19,9 @@ on:
     branches: [ main ]
     paths:
       - 'pubspec.yaml'
+      - 'lib/**'
+      - 'assets/**'
+      - 'android/**'
       - 'docs/RELEASE_NOTES_*.md'
       - 'android/fastlane/metadata/**'
 
