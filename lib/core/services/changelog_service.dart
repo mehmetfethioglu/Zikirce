@@ -51,11 +51,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 66;
-  static const String currentVersionName = '2.2.0';
+  static const int currentVersionCode = 67;
+  static const String currentVersionName = '2.2.1';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 67,
+      versionName: '2.2.1',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Bildirim Ayarları Sadeleştirmesi & Feraciye / Salâ Tercih Kaydı',
+          titleEn: 'Streamlined Notification Settings & Feraciye / Sala Preference Persistence',
+          descTr: 'Ayarlar ve Namaz Vakti Bildirimleri ekranları daha sade ve dengeli bir tasarıma kavuşturuldu. Feraciye Duası ve Perşembe/Cuma Salâsı bildirimleri varsayılan olarak kapalı hale getirildi; açma/kapama ve saat tercihleriniz kalıcı olarak kaydedilir.',
+          descEn: 'Redesigned Settings and Prayer Notification screens for a cleaner, balanced layout. Feraciye Prayer and Thursday/Friday Sala notifications now default to off, and your custom toggle and timing preferences are reliably persisted.',
+          icon: Icons.notifications_active_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Feraciye, Salâ ve Ayar Önizlemelerinde Mushaf Hattı & Lafzatullah Vurgusu',
+          titleEn: 'Mushaf Calligraphy & Divine Name Highlighting in Feraciye, Sala & Previews',
+          descTr: 'Feraciye Duası, Perşembe/Cuma Salâsı ve Ayarlar önizleme kartlarındaki Arapça metinler; seçili Kur’ân hattı, kırmızı Lafzatullah/Rab lafzı vurgusu ve Selçuklu durak gülleriyle Mushaf okuma sayfası kalitesinde gösterilir.',
+          descEn: 'Arabic texts in the Feraciye Prayer, Thursday/Friday Sala, and Settings preview cards now render with your active Quranic calligraphy font, ruby-red Divine Name highlights, and Seljuk rosette stop markers.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '40 Eserlik Külliyat, 16 Cep Risalesi & 84.141 Maddelik Risale-i Nur Lügati',
+          titleEn: '40-Volume Library, 16 Pocket Risales & 84,141-Entry Risale-i Nur Dictionary',
+          descTr: 'Külliyat rafına 16 müstakil Risale-i Nur Küçük Eseri ve 84.141 maddelik Risale-i Nur Büyük Lügati eklendi. Osmanlıca kelime ve kalıp tamlamalar tema uyumlu kök renklendirmesiyle vurgulanır; dokunulduğunda anında lügat mânâsı açılır.',
+          descEn: 'Added 16 standalone Pocket Risale works and the 84,141-entry Risale-i Nur Dictionary with theme-adaptive root coloring and instant tap-to-view definitions.',
+          icon: Icons.menu_book_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 66,
       versionName: '2.2.0',
@@ -72,10 +104,10 @@ class ChangelogService {
         ),
         ChangelogItem(
           type: ChangelogType.improvement,
-          titleTr: 'Diyanet Birebir Ses-Kelime Senkronizasyonu, Kayan Kırmızı Ok Takibi & Besmele',
-          titleEn: 'Exact Diyanet Audio-Word Sync, Sliding Red Arrow Tracking & Basmala Start',
-          descTr: 'Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve güncellenen Diyanet zaman damgası veritabanı ile 6.236 âyette sıfır gecikmeli ses-kelime uyumu, kelimenin altında sağdan sola akıcı kayan kırmızı "Ok ile Takip" işaretçisi ve Besmele-i Şerîf ile başlama özelliği sunuldu.',
-          descEn: 'Achieved zero-drift audio-to-word synchronization across all 6,236 verses with single-track per-verse playback, smooth right-to-left sliding red Arrow Pointer tracking matching the Diyanet Quran Platform, and Basmala recitation at session start.',
+          titleTr: 'Hassas Ses-Kelime Senkronizasyonu, Kayan Kırmızı Ok Takibi & Besmele',
+          titleEn: 'Precision Audio-Word Sync, Sliding Red Arrow Tracking & Basmala Start',
+          descTr: 'Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve güncellenen zaman damgası veritabanı ile 6.236 âyette sıfır gecikmeli ses-kelime uyumu, kelimenin altında sağdan sola akıcı kayan kırmızı "Ok ile Takip" işaretçisi ve Besmele-i Şerîf ile başlama özelliği sunuldu.',
+          descEn: 'Achieved zero-drift audio-to-word synchronization across all 6,236 verses with single-track per-verse playback, smooth right-to-left sliding red Arrow Pointer tracking, and Basmala recitation at session start.',
           icon: Icons.graphic_eq_rounded,
         ),
         ChangelogItem(
@@ -122,8 +154,8 @@ class ChangelogService {
           type: ChangelogType.newFeature,
           titleTr: 'Matbû Kur’ân-ı Kerîm Hatim Duası & Mushaf Sahife Görünümü',
           titleEn: 'Printed Mushaf Khatm Prayer & Illuminated Page Layout',
-          descTr: 'Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi’l-Kur’âni’l-Azîm), varsayılan Matbû Arapça sahife görünümü, Kur’ân okuma sayfasıyla birebir aynı Diyanet hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.',
-          descEn: 'Added the complete traditional Khatm al-Quran Prayer with default Printed Mushaf Arabic layout, authentic Diyanet calligraphy, Divine Name highlighting, and Seljuk rosette verse markers.',
+          descTr: 'Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi’l-Kur’âni’l-Azîm), varsayılan Matbû Arapça sahife görünümü, Kur’ân okuma hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.',
+          descEn: 'Added the complete traditional Khatm al-Quran Prayer with default Printed Mushaf Arabic layout, authentic Quranic calligraphy, Divine Name highlighting, and Seljuk rosette verse markers.',
           icon: Icons.menu_book_rounded,
         ),
         ChangelogItem(

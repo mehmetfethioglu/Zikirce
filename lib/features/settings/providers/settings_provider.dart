@@ -35,11 +35,27 @@ class SettingsState {
   final String quranReminderTime;
   final bool isNamazReminderEnabled;
   final bool isKazaQuestionEnabled;
+  final int kazaQuestionMinutesBefore;
+  final String kazaQuestionCustomTime;
   final Map<String, bool> prayerNotifications;
+  final Map<String, int> prayerOffsets;
+  final Map<String, String> prayerCustomTimes;
   final String selectedDhikrSound;
   final String selectedPrayerSound;
   final String selectedReminderSound;
   final String selectedCongratulationSound;
+  final bool isFeraciyeEnabled;
+  final int feraciyeMinutesBefore;
+  final String feraciyeCustomTime;
+  final String feraciyeSound;
+  final bool isThursdaySelaEnabled;
+  final int thursdaySelaMinutesBefore;
+  final String thursdaySelaCustomTime;
+  final String thursdaySelaSound;
+  final bool isFridaySelaEnabled;
+  final int fridaySelaMinutesBefore;
+  final String fridaySelaCustomTime;
+  final String fridaySelaSound;
   final String selectedQuranTheme;
   final String selectedEzberTheme;
   final bool isBoldArabic;
@@ -82,6 +98,8 @@ class SettingsState {
     this.quranReminderTime = '21:00',
     this.isNamazReminderEnabled = true,
     this.isKazaQuestionEnabled = true,
+    this.kazaQuestionMinutesBefore = 45,
+    this.kazaQuestionCustomTime = '',
     this.prayerNotifications = const {
       'İmsak': true,
       'Güneş': true,
@@ -90,10 +108,38 @@ class SettingsState {
       'Akşam': true,
       'Yatsı': true,
     },
+    this.prayerOffsets = const {
+      'İmsak': 0,
+      'Güneş': 0,
+      'Öğle': 0,
+      'İkindi': 0,
+      'Akşam': 0,
+      'Yatsı': 0,
+    },
+    this.prayerCustomTimes = const {
+      'İmsak': '',
+      'Güneş': '',
+      'Öğle': '',
+      'İkindi': '',
+      'Akşam': '',
+      'Yatsı': '',
+    },
     this.selectedDhikrSound = 'Bülbül Sesi',
     this.selectedPrayerSound = 'Kumru Sesi',
     this.selectedReminderSound = 'Bülbül Sesi',
     this.selectedCongratulationSound = 'Bülbül Sesi',
+    this.isFeraciyeEnabled = false,
+    this.feraciyeMinutesBefore = 15,
+    this.feraciyeCustomTime = '',
+    this.feraciyeSound = 'Feraciye Duası',
+    this.isThursdaySelaEnabled = false,
+    this.thursdaySelaMinutesBefore = 30,
+    this.thursdaySelaCustomTime = '',
+    this.thursdaySelaSound = 'Salâ Sesi',
+    this.isFridaySelaEnabled = false,
+    this.fridaySelaMinutesBefore = 45,
+    this.fridaySelaCustomTime = '',
+    this.fridaySelaSound = 'Salâ Sesi',
     this.selectedQuranTheme = 'Klasik Sarı / Amasya',
     this.selectedEzberTheme = 'Açık / Beyaz',
     this.isBoldArabic = false,
@@ -137,11 +183,27 @@ class SettingsState {
     String? quranReminderTime,
     bool? isNamazReminderEnabled,
     bool? isKazaQuestionEnabled,
+    int? kazaQuestionMinutesBefore,
+    String? kazaQuestionCustomTime,
     Map<String, bool>? prayerNotifications,
+    Map<String, int>? prayerOffsets,
+    Map<String, String>? prayerCustomTimes,
     String? selectedDhikrSound,
     String? selectedPrayerSound,
     String? selectedReminderSound,
     String? selectedCongratulationSound,
+    bool? isFeraciyeEnabled,
+    int? feraciyeMinutesBefore,
+    String? feraciyeCustomTime,
+    String? feraciyeSound,
+    bool? isThursdaySelaEnabled,
+    int? thursdaySelaMinutesBefore,
+    String? thursdaySelaCustomTime,
+    String? thursdaySelaSound,
+    bool? isFridaySelaEnabled,
+    int? fridaySelaMinutesBefore,
+    String? fridaySelaCustomTime,
+    String? fridaySelaSound,
     String? selectedQuranTheme,
     String? selectedEzberTheme,
     bool? isBoldArabic,
@@ -184,11 +246,27 @@ class SettingsState {
       quranReminderTime: quranReminderTime ?? this.quranReminderTime,
       isNamazReminderEnabled: isNamazReminderEnabled ?? this.isNamazReminderEnabled,
       isKazaQuestionEnabled: isKazaQuestionEnabled ?? this.isKazaQuestionEnabled,
+      kazaQuestionMinutesBefore: kazaQuestionMinutesBefore ?? this.kazaQuestionMinutesBefore,
+      kazaQuestionCustomTime: kazaQuestionCustomTime ?? this.kazaQuestionCustomTime,
       prayerNotifications: prayerNotifications ?? this.prayerNotifications,
+      prayerOffsets: prayerOffsets ?? this.prayerOffsets,
+      prayerCustomTimes: prayerCustomTimes ?? this.prayerCustomTimes,
       selectedDhikrSound: selectedDhikrSound ?? this.selectedDhikrSound,
       selectedPrayerSound: selectedPrayerSound ?? this.selectedPrayerSound,
       selectedReminderSound: selectedReminderSound ?? this.selectedReminderSound,
       selectedCongratulationSound: selectedCongratulationSound ?? this.selectedCongratulationSound,
+      isFeraciyeEnabled: isFeraciyeEnabled ?? this.isFeraciyeEnabled,
+      feraciyeMinutesBefore: feraciyeMinutesBefore ?? this.feraciyeMinutesBefore,
+      feraciyeCustomTime: feraciyeCustomTime ?? this.feraciyeCustomTime,
+      feraciyeSound: feraciyeSound ?? this.feraciyeSound,
+      isThursdaySelaEnabled: isThursdaySelaEnabled ?? this.isThursdaySelaEnabled,
+      thursdaySelaMinutesBefore: thursdaySelaMinutesBefore ?? this.thursdaySelaMinutesBefore,
+      thursdaySelaCustomTime: thursdaySelaCustomTime ?? this.thursdaySelaCustomTime,
+      thursdaySelaSound: thursdaySelaSound ?? this.thursdaySelaSound,
+      isFridaySelaEnabled: isFridaySelaEnabled ?? this.isFridaySelaEnabled,
+      fridaySelaMinutesBefore: fridaySelaMinutesBefore ?? this.fridaySelaMinutesBefore,
+      fridaySelaCustomTime: fridaySelaCustomTime ?? this.fridaySelaCustomTime,
+      fridaySelaSound: fridaySelaSound ?? this.fridaySelaSound,
       selectedQuranTheme: selectedQuranTheme ?? this.selectedQuranTheme,
       selectedEzberTheme: selectedEzberTheme ?? this.selectedEzberTheme,
       isBoldArabic: isBoldArabic ?? this.isBoldArabic,
@@ -290,6 +368,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final quranTime = PrefUtils.getString(prefs, _sKey('QuranReminderTime', sid), '21:00');
     final isNamazReminder = PrefUtils.getBool(prefs, _sKey('IsNamazReminderEnabled', sid), prefs.getBool('IsNamazReminderEnabled') ?? true);
     final isKazaQuestion = PrefUtils.getBool(prefs, _sKey('KazaQuestionNotificationEnabled', sid), prefs.getBool('KazaQuestionNotificationEnabled') ?? true);
+    final kazaQuestionMins = prefs.getInt('KazaQuestionMinutesBeforeEnd') ?? 45;
+    final kazaQuestionCustom = prefs.getString('KazaQuestionCustomTime') ?? '';
 
     final prayerMap = <String, bool>{
       'İmsak': PrefUtils.getBool(prefs, _sKey('PrayerNotif_İmsak', sid), prefs.getBool('ImsakNotificationEnabled') ?? true),
@@ -300,10 +380,82 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       'Yatsı': PrefUtils.getBool(prefs, _sKey('PrayerNotif_Yatsı', sid), prefs.getBool('YatsiNotificationEnabled') ?? true),
     };
 
+    final offsetsMap = <String, int>{
+      for (final k in const ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'])
+        k: prefs.getInt('PrayerOffset_$k') ?? 0,
+    };
+    final customTimesMap = <String, String>{
+      for (final k in const ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'])
+        k: prefs.getString('PrayerCustomTime_$k') ?? '',
+    };
+
     final dhikrSound = PrefUtils.getString(prefs, _sKey('SelectedDhikrSound', sid), 'Bülbül Sesi');
     final prayerSound = PrefUtils.getString(prefs, _sKey('SelectedPrayerSound', sid), prefs.getString('SelectedPrayerSound') ?? 'Kumru Sesi');
     final reminderSound = PrefUtils.getString(prefs, _sKey('SelectedReminderSound', sid), 'Bülbül Sesi');
     final congratSound = PrefUtils.getString(prefs, _sKey('SelectedCongratulationSound', sid), 'Bülbül Sesi');
+
+    final isFeraciye = PrefUtils.getBool(
+      prefs,
+      _sKey('IsFeraciyeEnabled_v2', sid),
+      prefs.getBool('IsFeraciyeEnabled_v2') ?? false,
+    );
+    final feraciyeMins = PrefUtils.getInt(
+      prefs,
+      _sKey('FeraciyeMinutesBeforeMaghrib', sid),
+      prefs.getInt('FeraciyeMinutesBeforeMaghrib') ?? 15,
+    );
+    final feraciyeCustom = PrefUtils.getString(
+      prefs,
+      _sKey('FeraciyeCustomTime', sid),
+      prefs.getString('FeraciyeCustomTime') ?? '',
+    );
+    final feraciyeSnd = PrefUtils.getString(
+      prefs,
+      _sKey('FeraciyeSound', sid),
+      prefs.getString('FeraciyeSound') ?? 'Feraciye Duası',
+    );
+
+    final isThuSela = PrefUtils.getBool(
+      prefs,
+      _sKey('IsThursdaySelaEnabled_v2', sid),
+      prefs.getBool('IsThursdaySelaEnabled_v2') ?? false,
+    );
+    final thuSelaMins = PrefUtils.getInt(
+      prefs,
+      _sKey('ThursdaySelaMinutesBeforeIsha', sid),
+      prefs.getInt('ThursdaySelaMinutesBeforeIsha') ?? 30,
+    );
+    final thuSelaCustom = PrefUtils.getString(
+      prefs,
+      _sKey('ThursdaySelaCustomTime', sid),
+      prefs.getString('ThursdaySelaCustomTime') ?? '',
+    );
+    final thuSelaSnd = PrefUtils.getString(
+      prefs,
+      _sKey('ThursdaySelaSound', sid),
+      prefs.getString('ThursdaySelaSound') ?? 'Salâ Sesi',
+    );
+
+    final isFriSela = PrefUtils.getBool(
+      prefs,
+      _sKey('IsFridaySelaEnabled_v2', sid),
+      prefs.getBool('IsFridaySelaEnabled_v2') ?? false,
+    );
+    final friSelaMins = PrefUtils.getInt(
+      prefs,
+      _sKey('FridaySelaMinutesBeforeDhuhr', sid),
+      prefs.getInt('FridaySelaMinutesBeforeDhuhr') ?? 45,
+    );
+    final friSelaCustom = PrefUtils.getString(
+      prefs,
+      _sKey('FridaySelaCustomTime', sid),
+      prefs.getString('FridaySelaCustomTime') ?? '',
+    );
+    final friSelaSnd = PrefUtils.getString(
+      prefs,
+      _sKey('FridaySelaSound', sid),
+      prefs.getString('FridaySelaSound') ?? 'Salâ Sesi',
+    );
 
     final quranTheme = PrefUtils.getString(prefs, _sKey('SelectedQuranTheme', sid), 'Klasik Sarı / Amasya');
     final ezberTheme = PrefUtils.getString(prefs, _sKey('SelectedEzberTheme', sid), 'Açık / Beyaz');
@@ -337,11 +489,27 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       quranReminderTime: quranTime,
       isNamazReminderEnabled: isNamazReminder,
       isKazaQuestionEnabled: isKazaQuestion,
+      kazaQuestionMinutesBefore: kazaQuestionMins,
+      kazaQuestionCustomTime: kazaQuestionCustom,
       prayerNotifications: prayerMap,
+      prayerOffsets: offsetsMap,
+      prayerCustomTimes: customTimesMap,
       selectedDhikrSound: dhikrSound,
       selectedPrayerSound: prayerSound,
       selectedReminderSound: reminderSound,
       selectedCongratulationSound: congratSound,
+      isFeraciyeEnabled: isFeraciye,
+      feraciyeMinutesBefore: feraciyeMins,
+      feraciyeCustomTime: feraciyeCustom,
+      feraciyeSound: feraciyeSnd,
+      isThursdaySelaEnabled: isThuSela,
+      thursdaySelaMinutesBefore: thuSelaMins,
+      thursdaySelaCustomTime: thuSelaCustom,
+      thursdaySelaSound: thuSelaSnd,
+      isFridaySelaEnabled: isFriSela,
+      fridaySelaMinutesBefore: friSelaMins,
+      fridaySelaCustomTime: friSelaCustom,
+      fridaySelaSound: friSelaSnd,
       selectedQuranTheme: quranTheme,
       selectedEzberTheme: ezberTheme,
       isBoldArabic: isBold,
@@ -633,6 +801,38 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     }
   }
 
+  Future<void> setKazaQuestionTiming({int? minutesBefore, String? customTime}) async {
+    final nextMins = minutesBefore ?? state.kazaQuestionMinutesBefore;
+    final nextCustom = customTime ?? state.kazaQuestionCustomTime;
+    state = state.copyWith(
+      kazaQuestionMinutesBefore: nextMins,
+      kazaQuestionCustomTime: nextCustom,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('KazaQuestionMinutesBeforeEnd', nextMins);
+    await prefs.setString('KazaQuestionCustomTime', nextCustom);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> setPrayerTiming(String prayerKey, {int? offsetMinutes, String? customTime}) async {
+    final nextOffsets = Map<String, int>.from(state.prayerOffsets);
+    final nextCustoms = Map<String, String>.from(state.prayerCustomTimes);
+    if (offsetMinutes != null) {
+      nextOffsets[prayerKey] = offsetMinutes;
+    }
+    if (customTime != null) {
+      nextCustoms[prayerKey] = customTime;
+    }
+    state = state.copyWith(
+      prayerOffsets: nextOffsets,
+      prayerCustomTimes: nextCustoms,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('PrayerOffset_$prayerKey', nextOffsets[prayerKey] ?? 0);
+    await prefs.setString('PrayerCustomTime_$prayerKey', nextCustoms[prayerKey] ?? '');
+    await _reschedulePrayersIfActive();
+  }
+
   Future<void> setSelectedDhikrSound(String sound) async {
     state = state.copyWith(selectedDhikrSound: sound);
     final prefs = await SharedPreferences.getInstance();
@@ -664,6 +864,100 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(selectedCongratulationSound: sound);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefString(prefs, 'SelectedCongratulationSound', sound);
+  }
+
+  Future<void> _reschedulePrayersIfActive() async {
+    final timings = ref.read(prayerTimingsProvider).valueOrNull;
+    if (timings != null && state.isNamazReminderEnabled) {
+      await LocalNotificationService.scheduleAllPrayerNotifications(timings, force: true);
+    }
+  }
+
+  Future<void> toggleFeraciyeNotification(bool enabled) async {
+    state = state.copyWith(isFeraciyeEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('IsFeraciyeEnabled_v2', enabled);
+    await _setSessionPrefBool(prefs, 'IsFeraciyeEnabled_v2', enabled);
+    await prefs.setBool('IsFeraciyeNotificationEnabled', enabled);
+    await _setSessionPrefBool(prefs, 'IsFeraciyeNotificationEnabled', enabled);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> setFeraciyeTiming({int? minutesBefore, String? customTime, String? sound}) async {
+    final nextMins = minutesBefore ?? state.feraciyeMinutesBefore;
+    final nextCustom = customTime ?? state.feraciyeCustomTime;
+    final nextSound = sound ?? state.feraciyeSound;
+    state = state.copyWith(
+      feraciyeMinutesBefore: nextMins,
+      feraciyeCustomTime: nextCustom,
+      feraciyeSound: nextSound,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('FeraciyeMinutesBeforeMaghrib', nextMins);
+    await _setSessionPrefInt(prefs, 'FeraciyeMinutesBeforeMaghrib', nextMins);
+    await prefs.setString('FeraciyeCustomTime', nextCustom);
+    await _setSessionPrefString(prefs, 'FeraciyeCustomTime', nextCustom);
+    await prefs.setString('FeraciyeSound', nextSound);
+    await _setSessionPrefString(prefs, 'FeraciyeSound', nextSound);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> toggleThursdaySelaNotification(bool enabled) async {
+    state = state.copyWith(isThursdaySelaEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('IsThursdaySelaEnabled_v2', enabled);
+    await _setSessionPrefBool(prefs, 'IsThursdaySelaEnabled_v2', enabled);
+    await prefs.setBool('IsThursdaySelaNotificationEnabled', enabled);
+    await _setSessionPrefBool(prefs, 'IsThursdaySelaNotificationEnabled', enabled);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> setThursdaySelaTiming({int? minutesBefore, String? customTime, String? sound}) async {
+    final nextMins = minutesBefore ?? state.thursdaySelaMinutesBefore;
+    final nextCustom = customTime ?? state.thursdaySelaCustomTime;
+    final nextSound = sound ?? state.thursdaySelaSound;
+    state = state.copyWith(
+      thursdaySelaMinutesBefore: nextMins,
+      thursdaySelaCustomTime: nextCustom,
+      thursdaySelaSound: nextSound,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('ThursdaySelaMinutesBeforeIsha', nextMins);
+    await _setSessionPrefInt(prefs, 'ThursdaySelaMinutesBeforeIsha', nextMins);
+    await prefs.setString('ThursdaySelaCustomTime', nextCustom);
+    await _setSessionPrefString(prefs, 'ThursdaySelaCustomTime', nextCustom);
+    await prefs.setString('ThursdaySelaSound', nextSound);
+    await _setSessionPrefString(prefs, 'ThursdaySelaSound', nextSound);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> toggleFridaySelaNotification(bool enabled) async {
+    state = state.copyWith(isFridaySelaEnabled: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('IsFridaySelaEnabled_v2', enabled);
+    await _setSessionPrefBool(prefs, 'IsFridaySelaEnabled_v2', enabled);
+    await prefs.setBool('IsFridaySelaNotificationEnabled', enabled);
+    await _setSessionPrefBool(prefs, 'IsFridaySelaNotificationEnabled', enabled);
+    await _reschedulePrayersIfActive();
+  }
+
+  Future<void> setFridaySelaTiming({int? minutesBefore, String? customTime, String? sound}) async {
+    final nextMins = minutesBefore ?? state.fridaySelaMinutesBefore;
+    final nextCustom = customTime ?? state.fridaySelaCustomTime;
+    final nextSound = sound ?? state.fridaySelaSound;
+    state = state.copyWith(
+      fridaySelaMinutesBefore: nextMins,
+      fridaySelaCustomTime: nextCustom,
+      fridaySelaSound: nextSound,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('FridaySelaMinutesBeforeDhuhr', nextMins);
+    await _setSessionPrefInt(prefs, 'FridaySelaMinutesBeforeDhuhr', nextMins);
+    await prefs.setString('FridaySelaCustomTime', nextCustom);
+    await _setSessionPrefString(prefs, 'FridaySelaCustomTime', nextCustom);
+    await prefs.setString('FridaySelaSound', nextSound);
+    await _setSessionPrefString(prefs, 'FridaySelaSound', nextSound);
+    await _reschedulePrayersIfActive();
   }
 
   Future<void> setSelectedQuranTheme(String theme) async {

@@ -1,0 +1,3 @@
+• Bildirim Ayarları Sadeleştirmesi & Feraciye/Salâ Tercih Kaydı: Bildirim ayarları sadeleştirildi; Feraciye ve Salâ varsayılan kapalı hale getirildi ve tercihleriniz kalıcı kaydedilir.
+• Kusursuz Arapça Mushaf Hattı: Feraciye Duası, Salâ ve Ayarlar önizlemelerinde seçili Kur’ân hattı, kırmızı Lafzatullah vurgusu ve Selçuklu durak gülleri eklendi.
+• 40 Eserlik Külliyat, 84.141 Maddelik Risale-i Nur Lügati, Kayan Ok Takibi, Besmele ile Başlangıç ve Külliyat Widget’ı.

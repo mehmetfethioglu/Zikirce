@@ -14,11 +14,12 @@ import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/battery_optimization_service.dart';
 import '../../../../core/services/google_drive_backup_service.dart';
 import '../../../../core/services/google_oauth_sheet.dart';
-import '../../../../core/services/local_notification_service.dart';
 import '../../../../core/services/sound_pool_service.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/theme/theme_provider.dart';
+import '../../../../core/utils/quran_word_highlighter.dart';
+import '../../../kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../gamification/models/user_rank.dart';
 import '../../../gamification/providers/gamification_providers.dart';
@@ -32,6 +33,7 @@ import '../../../../core/services/haptic_service.dart';
 import '../../../../core/services/changelog_service.dart';
 import '../../../dashboard/presentation/widgets/whats_new_bottom_sheet.dart';
 import '../../../namaz_vakitleri/presentation/widgets/prayer_notification_settings_sheet.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -80,9 +82,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String _getSoundDisplayName(String soundKey, AppLocalizations l10n) {
-    if (soundKey.contains('Bülbül') || soundKey.contains('Nightingale') || soundKey.contains('bulbul')) {
+    final lower = soundKey.toLowerCase();
+    if (lower.contains('ezan')) {
+      return l10n.isTurkish ? 'Ezan Sesi' : 'Adhan Sound';
+    } else if (lower.contains('sela') || lower.contains('salâ') || lower.contains('sala')) {
+      return l10n.isTurkish ? 'Salâ Sesi' : 'Sala Sound';
+    } else if (lower.contains('feraciye')) {
+      return l10n.isTurkish ? 'Feraciye Duası' : 'Feraciye Prayer';
+    } else if (soundKey.contains('Bülbül') || soundKey.contains('Nightingale') || lower.contains('bulbul')) {
       return l10n.settingsSoundNightingale;
-    } else if (soundKey.contains('Kumru') || soundKey.contains('Dove') || soundKey.contains('kumru')) {
+    } else if (soundKey.contains('Kumru') || soundKey.contains('Dove') || lower.contains('kumru')) {
       return l10n.settingsSoundDove;
     } else if (soundKey.contains('Sessiz') || soundKey.contains('Silent')) {
       return l10n.isTurkish ? 'Sessiz' : 'Silent';
@@ -92,7 +101,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   String _soundDisplayToRaw(String display) {
-    if (display.contains('Bülbül') || display.contains('Nightingale')) {
+    final lower = display.toLowerCase();
+    if (lower.contains('ezan') || lower.contains('adhan')) {
+      return 'Ezan Sesi';
+    } else if (lower.contains('sela') || lower.contains('salâ') || lower.contains('sala')) {
+      return 'Salâ Sesi';
+    } else if (lower.contains('feraciye')) {
+      return 'Feraciye Duası';
+    } else if (display.contains('Bülbül') || display.contains('Nightingale')) {
       return 'Bülbül Sesi';
     } else if (display.contains('Kumru') || display.contains('Dove')) {
       return 'Kumru Sesi';
@@ -1652,6 +1668,62 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 14),
+
+          // ==========================================
+          // 4.2 ZİKİRCE TV MODU (ANDROID TV, KUMANDA & RAHLE GÖRÜNÜMÜ)
+          // ==========================================
+          _buildCategoryHeader(
+            l10n.isTurkish ? 'Zikirce TV & Rahle Modu' : 'Zikirce TV & Lectern Mode',
+            colors.primaryText,
+          ),
+          _buildContainerCard(
+            colors: colors,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.isTurkish
+                            ? '📺 Zikirce TV Modu (Kumanda & Rahlede Açık Kitap)'
+                            : '📺 Zikirce TV Mode (Remote & Two-Page Lectern)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: colors.primaryText,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        l10n.isTurkish
+                            ? 'Android TV cihazlarda otomatik açılır. Büyük ekran kumanda odağı (D-Pad), Ev Mescidi Vakit Panosu ve Külliyat kitaplarını rahlede açık çift sayfa (kaydırmasız) görünümüyle sunar.'
+                            : 'Auto-enabled on Android TV. Enables 10-foot remote D-Pad navigation, Ambient Prayer Dashboard, and full-screen two-page lectern book spreads.',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: colors.secondaryTextAlt,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: ref.watch(isTvModeProvider),
+                  activeTrackColor: colors.accent,
+                  onChanged: (val) async {
+                    await ref.read(isTvModeProvider.notifier).setTvMode(val);
+                    if (val && context.mounted) {
+                      context.go('/');
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 18),
 
           // ==========================================
@@ -1958,7 +2030,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 // Zikir Hatırlatıcısı
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Column(
@@ -1970,6 +2041,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     ),
+                    if (settings.isZikirReminderEnabled) ...[
+                      const SizedBox(width: 8),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _pickTime(context, settings.zikirReminderTime, (t) => settingsNotifier.setZikirReminderTime(t)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: colors.cardBackgroundAlt,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colors.borderStroke),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.schedule_rounded, size: 14, color: colors.accent),
+                              const SizedBox(width: 4),
+                              Text(settings.zikirReminderTime, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: colors.primaryText)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
                     Switch(
                       value: settings.isZikirReminderEnabled,
                       activeTrackColor: colors.accent,
@@ -1977,27 +2072,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ],
                 ),
-                if (settings.isZikirReminderEnabled) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: colors.primaryText,
-                        side: BorderSide(color: colors.borderStroke),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      ),
-                      onPressed: () => _pickTime(context, settings.zikirReminderTime, (t) => settingsNotifier.setZikirReminderTime(t)),
-                      child: Text(settings.zikirReminderTime, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ),
-                ],
-                const Divider(height: 20),
+                const Divider(height: 18),
 
                 // Kur'an Okuma Hatırlatıcısı
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Column(
@@ -2009,6 +2087,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ],
                       ),
                     ),
+                    if (settings.isQuranReminderEnabled) ...[
+                      const SizedBox(width: 8),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _pickTime(context, settings.quranReminderTime, (t) => settingsNotifier.setQuranReminderTime(t)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: colors.cardBackgroundAlt,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: colors.borderStroke),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.schedule_rounded, size: 14, color: colors.accent),
+                              const SizedBox(width: 4),
+                              Text(settings.quranReminderTime, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: colors.primaryText)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
                     Switch(
                       value: settings.isQuranReminderEnabled,
                       activeTrackColor: colors.accent,
@@ -2016,140 +2118,105 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ],
                 ),
-                if (settings.isQuranReminderEnabled) ...[
-                  const SizedBox(height: 8),
+                const Divider(height: 18),
+
+                // Namaz Vakitleri Bildirimleri (Aç/Kapa + Saat ve Detay Ayarı)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.settingsPrayerNotifications,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: colors.primaryText,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            settings.isNamazReminderEnabled
+                                ? (l10n.isTurkish
+                                    ? 'Açık (${settings.prayerNotifications.values.where((v) => v).length} vakit aktif • Hatırlatma: ${settings.kazaQuestionMinutesBefore} dk önce)'
+                                    : 'On (${settings.prayerNotifications.values.where((v) => v).length} prayers active • Reminder: ${settings.kazaQuestionMinutesBefore} min before)')
+                                : (l10n.isTurkish ? 'Tüm vakit bildirimleri kapalı' : 'All prayer notifications off'),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: settings.isNamazReminderEnabled
+                                  ? colors.accent
+                                  : colors.secondaryTextAlt,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: settings.isNamazReminderEnabled,
+                      activeTrackColor: colors.accent,
+                      onChanged: (val) => settingsNotifier.toggleNamazReminder(val),
+                    ),
+                  ],
+                ),
+                if (settings.isNamazReminderEnabled) ...[
+                  const SizedBox(height: 10),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: colors.primaryText,
-                          side: BorderSide(color: colors.borderStroke),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      Expanded(
+                        child: SizedBox(
+                          height: 38,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: colors.primaryText,
+                              side: BorderSide(color: colors.borderStroke),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: Icon(Icons.schedule_rounded, size: 15, color: colors.accent),
+                            label: Text(
+                              l10n.isTurkish ? 'Vakit & Saat Ayarları' : 'Prayer & Time Settings',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5),
+                            ),
+                            onPressed: () {
+                              HapticService.selectionClick();
+                              PrayerNotificationSettingsSheet.show(context);
+                            },
+                          ),
                         ),
-                        onPressed: () => _pickTime(context, settings.quranReminderTime, (t) => settingsNotifier.setQuranReminderTime(t)),
-                        child: Text(settings.quranReminderTime, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.accent,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      Expanded(
+                        child: SizedBox(
+                          height: 38,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: colors.accent,
+                              backgroundColor: colors.accent.withValues(alpha: 0.1),
+                              side: BorderSide(color: colors.accent.withValues(alpha: 0.35)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                            ),
+                            icon: const Icon(Icons.menu_book_rounded, size: 14),
+                            label: Text(
+                              l10n.isTurkish ? 'Feraciye & Salâ' : 'Feraciye & Sala',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              HapticService.selectionClick();
+                              PrayerNotificationSettingsSheet.showVirtueSheet(context);
+                            },
+                          ),
                         ),
-                        onPressed: () async {
-                          await LocalNotificationService.showTestNotification(sound: settings.selectedReminderSound);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('🔔 ${l10n.settingsSendTestNotification} (${_getSoundDisplayName(settings.selectedReminderSound, l10n)})')),
-                            );
-                          }
-                        },
-                        child: Text(l10n.settingsSendTestNotification, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
                       ),
                     ],
                   ),
                 ],
-                const Divider(height: 20),
-
-                // Namaz Vakitleri Bildirimleri (Entegre Bottom Sheet)
-                InkWell(
-                  onTap: () {
-                    HapticService.selectionClick();
-                    PrayerNotificationSettingsSheet.show(context);
-                  },
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: colors.cardBackgroundAlt,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: settings.isNamazReminderEnabled
-                            ? colors.accent.withValues(alpha: 0.35)
-                            : colors.borderStroke,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: settings.isNamazReminderEnabled
-                                ? colors.accent.withValues(alpha: 0.15)
-                                : colors.pageBackground,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            settings.isNamazReminderEnabled ? '🕌' : '🔕',
-                            style: const TextStyle(fontSize: 20),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.settingsPrayerNotifications,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: colors.primaryText,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                settings.isNamazReminderEnabled
-                                    ? (l10n.isTurkish
-                                        ? 'Açık (${settings.prayerNotifications.values.where((v) => v).length} vakit aktif)'
-                                        : 'On (${settings.prayerNotifications.values.where((v) => v).length} prayers active)')
-                                    : (l10n.isTurkish ? 'Kapalı' : 'Off'),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: settings.isNamazReminderEnabled
-                                      ? colors.accent
-                                      : colors.secondaryTextAlt,
-                                  fontWeight: settings.isNamazReminderEnabled
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: colors.pageBackground,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: colors.borderStroke),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                l10n.isTurkish ? 'Ayarla' : 'Configure',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: colors.primaryText,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Icon(Icons.chevron_right_rounded,
-                                  size: 16, color: colors.secondaryTextAlt),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 14),
 
                 // Xiaomi / Pil Optimizasyonu
@@ -2219,6 +2286,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: l10n.translate('Settings_PrayerSoundDesc'),
                   value: _getSoundDisplayName(settings.selectedPrayerSound, l10n),
                   items: [
+                    l10n.isTurkish ? 'Ezan Sesi' : 'Adhan Sound',
+                    l10n.isTurkish ? 'Salâ Sesi' : 'Sala Sound',
+                    l10n.isTurkish ? 'Feraciye Duası' : 'Feraciye Prayer',
                     l10n.settingsSoundDove,
                     l10n.settingsSoundNightingale,
                     l10n.settingsSoundDefaultClick,
@@ -2241,6 +2311,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   items: [
                     l10n.settingsSoundNightingale,
                     l10n.settingsSoundDove,
+                    l10n.isTurkish ? 'Ezan Sesi' : 'Adhan Sound',
+                    l10n.isTurkish ? 'Salâ Sesi' : 'Sala Sound',
+                    l10n.isTurkish ? 'Feraciye Duası' : 'Feraciye Prayer',
                     l10n.settingsSoundDefaultClick,
                   ],
                   colors: colors,
@@ -2326,16 +2399,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     border: Border.all(color: const Color(0xFFE2DDD2)),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontFamily: activeFontFamily,
-                      fontSize: activeFontSize.clamp(16.0, 72.0),
-                      fontWeight: settings.isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                      color: const Color(0xFF1B1917),
-                      height: activeLineHeight,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        ...QuranWordHighlighter.buildHighlightedSpans(
+                          rawText: 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحٖيمِ',
+                          baseStyle: TextStyle(
+                            fontFamily: activeFontFamily,
+                            fontSize: activeFontSize.clamp(16.0, 44.0),
+                            fontWeight: settings.isBoldArabic ? FontWeight.bold : FontWeight.normal,
+                            color: const Color(0xFF1B1917),
+                            height: activeLineHeight,
+                          ),
+                          isDark: false,
+                          enabled: highlightDivineWords,
+                        ),
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: ZikirceAyahStopMarker(
+                              number: '١',
+                              isDark: false,
+                              isHighlight: false,
+                              fontFamily: activeFontFamily,
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.rtl,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -2596,12 +2691,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                         color: const Color(0xFF00965E),
                                         borderRadius: BorderRadius.circular(7),
                                       ),
-                                      child: const Text(
-                                        'ٱلرَّحْمَـٰنِ',
+                                      child: Text(
+                                        QuranWordHighlighter.formatArabicTextForFont('الرَّحْمٰنِ', activeFontFamily),
                                         textDirection: TextDirection.rtl,
                                         style: TextStyle(
-                                          fontFamily: 'SchherazadeNew',
-                                          fontSize: 17,
+                                          fontFamily: activeFontFamily,
+                                          fontSize: 19,
                                           fontWeight: FontWeight.bold,
                                           color: Colors.white,
                                         ),
@@ -2670,18 +2765,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  const Center(
+                                  Center(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Text(
-                                          'ٱلرَّحْمَـٰنِ',
+                                          QuranWordHighlighter.formatArabicTextForFont('الرَّحْمٰنِ', activeFontFamily),
                                           textDirection: TextDirection.rtl,
                                           style: TextStyle(
-                                            fontFamily: 'SchherazadeNew',
-                                            fontSize: 17,
-                                            color: Color(0xFFE60000),
-                                            shadows: [
+                                            fontFamily: activeFontFamily,
+                                            fontSize: 19,
+                                            color: const Color(0xFFE60000),
+                                            shadows: const [
                                               Shadow(
                                                 color: Color(0x4DFF0000),
                                                 blurRadius: 2.0,
@@ -2689,7 +2784,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                             ],
                                           ),
                                         ),
-                                        Icon(
+                                        const Icon(
                                           Icons.arrow_drop_up_rounded,
                                           size: 18,
                                           color: Color(0xFFE60000),

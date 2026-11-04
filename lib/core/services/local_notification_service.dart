@@ -16,6 +16,9 @@ class LocalNotificationService {
 
   static const String channelBulbul = 'zikirce_channel_bulbul_v3';
   static const String channelKumru = 'zikirce_channel_kumru_v3';
+  static const String channelEzan = 'zikirce_channel_ezan_v2';
+  static const String channelSela = 'zikirce_channel_sela_v2';
+  static const String channelFeraciye = 'zikirce_channel_feraciye_v2';
   static const String channelDefault = 'zikirce_channel_default_v3';
   static const String channelSilent = 'zikirce_channel_silent_v3';
   static const String channelQuran = 'zikirce_channel_quran_v3';
@@ -23,6 +26,7 @@ class LocalNotificationService {
 
   static const int basePrayerNotificationId = 1000;
   static const int baseQuestionNotificationId = 6000;
+  static const int baseSpecialWeeklyNotificationId = 6500;
   static const int dailyKazaReminderNotificationId = 7000;
   static const int dailyQuranReminderNotificationId = 8000;
   static const int audioDownloadNotificationId = 9000;
@@ -35,6 +39,10 @@ class LocalNotificationService {
   /// Stream emitting when user taps a 32 Farz prayer notification
   static final StreamController<int> pendingFarzNotificationTapped =
       StreamController<int>.broadcast();
+
+  /// Stream emitting when user taps a special spiritual notification (feraciye, thursday_sela, friday_sela)
+  static final StreamController<String> pendingSpiritualNotificationTapped =
+      StreamController<String>.broadcast();
 
   static Future<void> initialize() async {
     // 1. Initialize Timezone database with native IANA lookup
@@ -91,6 +99,11 @@ class LocalNotificationService {
               pendingFarzNotificationTapped.add(farzId);
             }
           }
+        } else if (payload != null && payload.startsWith('special_spiritual|')) {
+          final parts = payload.split('|');
+          if (parts.length >= 2) {
+            pendingSpiritualNotificationTapped.add(parts[1]);
+          }
         }
       },
     );
@@ -133,6 +146,67 @@ class LocalNotificationService {
           description: 'Kumru kuşu sesi ile hatırlatma ve vakit bildirimleri',
           importance: Importance.max,
           sound: const RawResourceAndroidNotificationSound('kumru'),
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: vibrationPattern,
+          enableLights: true,
+          ledColor: ledColor,
+          showBadge: true,
+          audioAttributesUsage: AudioAttributesUsage.notification,
+        ),
+      );
+
+      // Clean up legacy v1 sound channels so updated raw audio files take effect
+      try {
+        await androidImpl.deleteNotificationChannel('zikirce_channel_ezan_v1');
+        await androidImpl.deleteNotificationChannel('zikirce_channel_sela_v1');
+        await androidImpl.deleteNotificationChannel('zikirce_channel_feraciye_v1');
+      } catch (_) {}
+
+      // 2b. Ezan Sound Channel
+      await androidImpl.createNotificationChannel(
+        AndroidNotificationChannel(
+          channelEzan,
+          'Zikirce (Ezan Sesi)',
+          description: 'Ezan-ı Muhammedi sesi ile vakit bildirimleri',
+          importance: Importance.max,
+          sound: const RawResourceAndroidNotificationSound('ezan'),
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: vibrationPattern,
+          enableLights: true,
+          ledColor: ledColor,
+          showBadge: true,
+          audioAttributesUsage: AudioAttributesUsage.notification,
+        ),
+      );
+
+      // 2c. Salâ (Sela) Sound Channel
+      await androidImpl.createNotificationChannel(
+        AndroidNotificationChannel(
+          channelSela,
+          'Zikirce (Salâ Sesi)',
+          description: 'Cuma ve Perşembe gecesi Salâ bildirimleri',
+          importance: Importance.max,
+          sound: const RawResourceAndroidNotificationSound('sela'),
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: vibrationPattern,
+          enableLights: true,
+          ledColor: ledColor,
+          showBadge: true,
+          audioAttributesUsage: AudioAttributesUsage.notification,
+        ),
+      );
+
+      // 2d. Feraciye Duası Sound Channel
+      await androidImpl.createNotificationChannel(
+        AndroidNotificationChannel(
+          channelFeraciye,
+          'Zikirce (Feraciye Duası)',
+          description: 'Perşembe akşamı Feraciye Duası bildirimleri',
+          importance: Importance.max,
+          sound: const RawResourceAndroidNotificationSound('feraciye'),
           playSound: true,
           enableVibration: true,
           vibrationPattern: vibrationPattern,
@@ -307,13 +381,30 @@ class LocalNotificationService {
   /// Cancels all prayer and question notifications across 7-day range
   static Future<void> cancelAllPrayerNotifications() async {
     try {
-      for (int i = 0; i < 70; i++) {
-        await _notificationsPlugin.cancel(basePrayerNotificationId + i);
+      final pending = await _notificationsPlugin.pendingNotificationRequests();
+      if (pending.isNotEmpty) {
+        final toCancel = pending
+            .map((p) => p.id)
+            .where((id) =>
+                id != dailyQuranReminderNotificationId &&
+                id != audioDownloadNotificationId)
+            .toList();
+        await Future.wait(toCancel.map((id) => _notificationsPlugin.cancel(id)));
+        return;
       }
-      for (int i = 0; i < 70; i++) {
-        await _notificationsPlugin.cancel(baseQuestionNotificationId + i);
-      }
-      await _notificationsPlugin.cancel(dailyKazaReminderNotificationId);
+    } catch (_) {}
+
+    try {
+      final futures = <Future<void>>[
+        for (int i = 0; i < 70; i++)
+          _notificationsPlugin.cancel(basePrayerNotificationId + i),
+        for (int i = 0; i < 70; i++)
+          _notificationsPlugin.cancel(baseQuestionNotificationId + i),
+        for (int i = 0; i < 50; i++)
+          _notificationsPlugin.cancel(baseSpecialWeeklyNotificationId + i),
+        _notificationsPlugin.cancel(dailyKazaReminderNotificationId),
+      ];
+      await Future.wait(futures);
     } catch (e) {
       debugPrint(
           '[LocalNotificationService] cancelAllPrayerNotifications error: $e');
@@ -340,17 +431,98 @@ class LocalNotificationService {
 
   static String? _lastScheduledSignature;
   static DateTime? _lastScheduledTime;
+  static bool _isScheduling = false;
+  static const String _scheduleSchemaVersion = 'v8_feraciye_sela_default_off';
+
+  static Future<void> _ensureTimezoneInitialized() async {
+    try {
+      if (tz.local.name != 'UTC' && tz.local.name != 'Etc/UTC') {
+        return;
+      }
+    } catch (_) {}
+    try {
+      tz.initializeTimeZones();
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (_) {
+      try {
+        tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
+      } catch (_) {}
+    }
+  }
+
+  static String _resolveActiveCityFromPrefs(SharedPreferences prefs) {
+    final activeSessionId = prefs.getString('ActiveSessionId');
+    if (activeSessionId != null &&
+        activeSessionId.isNotEmpty &&
+        activeSessionId != 'default_user') {
+      final sessionCity = prefs.getString('SelectedCity_$activeSessionId') ??
+          prefs.getString('AppCity_$activeSessionId') ??
+          prefs.getString('selected_city_$activeSessionId');
+      if (sessionCity != null && sessionCity.isNotEmpty) {
+        return sessionCity;
+      }
+    }
+    return prefs.getString('SelectedCity') ??
+        prefs.getString('AppCity') ??
+        prefs.getString('selected_city') ??
+        'İstanbul';
+  }
 
   /// Schedules 7-day rolling window for all 6 prayer entries and 5 "Namazınızı Kıldınız mı?" interactive questions
   static Future<void> scheduleAllPrayerNotifications(
-      PrayerTimings timings, {bool force = false}) async {
+      PrayerTimings timings, {bool force = false, String? cityOverride}) async {
+    if (_isScheduling) return;
+    _isScheduling = true;
     try {
+      await _ensureTimezoneInitialized();
+
       final now = DateTime.now();
       final todayStr =
           '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      final signature = '${timings.date}_${timings.fajr}_${timings.isha}_$todayStr';
+
+      final prefs = await SharedPreferences.getInstance();
+      final city = (cityOverride != null && cityOverride.isNotEmpty)
+          ? cityOverride
+          : _resolveActiveCityFromPrefs(prefs);
+
+      // Ensure global SelectedCity key stays synced with active session city
+      if (prefs.getString('SelectedCity') != city) {
+        await prefs.setString('SelectedCity', city);
+      }
+
+      // Guard against stale timings (e.g. if app resumed after midnight with yesterday's cached object)
+      PrayerTimings effectiveTodayTimings = timings;
+      if (timings.date.isNotEmpty && timings.date != todayStr) {
+        try {
+          effectiveTodayTimings = await PrayerTimesService.getPrayerTimes(city: city);
+        } catch (_) {
+          effectiveTodayTimings = PrayerTimesService.calculateOfflinePrayerTimes(city, now);
+        }
+      }
+
+      final isFeraciyeEnabled = prefs.getBool('IsFeraciyeEnabled_v2') ?? false;
+      final feraciyeMinutesBefore = prefs.getInt('FeraciyeMinutesBeforeMaghrib') ?? 15;
+      final feraciyeCustomTime = prefs.getString('FeraciyeCustomTime') ?? '';
+      final feraciyeSound = prefs.getString('FeraciyeSound') ?? 'Feraciye Duası';
+
+      final isThursdaySelaEnabled = prefs.getBool('IsThursdaySelaEnabled_v2') ?? false;
+      final thursdaySelaMinutesBefore = prefs.getInt('ThursdaySelaMinutesBeforeIsha') ?? 30;
+      final thursdaySelaCustomTime = prefs.getString('ThursdaySelaCustomTime') ?? '';
+      final thursdaySelaSound = prefs.getString('ThursdaySelaSound') ?? 'Salâ Sesi';
+
+      final isFridaySelaEnabled = prefs.getBool('IsFridaySelaEnabled_v2') ?? false;
+      final fridaySelaMinutesBefore = prefs.getInt('FridaySelaMinutesBeforeDhuhr') ?? 45;
+      final fridaySelaCustomTime = prefs.getString('FridaySelaCustomTime') ?? '';
+      final fridaySelaSound = prefs.getString('FridaySelaSound') ?? 'Salâ Sesi';
+
+      final savedSchema = prefs.getString('LastPrayerScheduleSchemaVersion');
+      final schemaUpgradeNeeded = savedSchema != _scheduleSchemaVersion;
+      final signature =
+          '${_scheduleSchemaVersion}_${city}_${effectiveTodayTimings.date}_${effectiveTodayTimings.fajr}_${effectiveTodayTimings.dhuhr}_${effectiveTodayTimings.asr}_${effectiveTodayTimings.isha}_${todayStr}_${isFeraciyeEnabled}_${feraciyeMinutesBefore}_${feraciyeCustomTime}_${isThursdaySelaEnabled}_${thursdaySelaMinutesBefore}_${thursdaySelaCustomTime}_${isFridaySelaEnabled}_${fridaySelaMinutesBefore}_$fridaySelaCustomTime';
 
       if (!force &&
+          !schemaUpgradeNeeded &&
           _lastScheduledSignature == signature &&
           _lastScheduledTime != null &&
           now.difference(_lastScheduledTime!) < const Duration(minutes: 30)) {
@@ -360,18 +532,18 @@ class LocalNotificationService {
       }
       _lastScheduledSignature = signature;
       _lastScheduledTime = now;
+      if (schemaUpgradeNeeded) {
+        await prefs.setString('LastPrayerScheduleSchemaVersion', _scheduleSchemaVersion);
+      }
 
       await cancelAllPrayerNotifications();
 
-      final prefs = await SharedPreferences.getInstance();
       final isNamazMasterEnabled = prefs.getBool('IsNamazReminderEnabled') ?? true;
       if (!isNamazMasterEnabled) {
         debugPrint(
             '[LocalNotificationService] scheduleAllPrayerNotifications skipped: IsNamazReminderEnabled is false');
         return;
       }
-
-      final city = prefs.getString('SelectedCity') ?? 'İstanbul';
 
       final soundSetting = prefs.getString('SelectedPrayerSound') ??
           prefs.getString('SelectedReminderSound') ??
@@ -380,6 +552,10 @@ class LocalNotificationService {
 
       final isQuestionMasterEnabled =
           prefs.getBool('KazaQuestionNotificationEnabled') ?? true;
+      final questionMinutesBeforeEnd =
+          prefs.getInt('KazaQuestionMinutesBeforeEnd') ?? 45;
+      final questionCustomTime =
+          prefs.getString('KazaQuestionCustomTime') ?? '';
 
       // 32 Farz progression tracker
       final lastScheduledDay = prefs.getString('FarzNotificationLastScheduledDay');
@@ -393,11 +569,18 @@ class LocalNotificationService {
 
       int globalFarzStep = 0;
 
-      // On iOS, limit rolling window to 5 days so total scheduled notifications (5 * 11 = 55)
-      // do not exceed Apple's strict 64 pending notification cap (which drops notifications silently).
-      // On Android / Desktop, keep full 7-day rolling window.
-      final daysLimit = Platform.isIOS ? 5 : 7;
+      // Schedule a 5-day rolling window (max 5 * 11 = 55 notifications, safely under Apple's 64 pending cap)
+      // directly from the cached Monthly Diyanet API Calendar, refreshed silently on every app open/resume.
+      const int daysLimit = 5;
       final currentTZNow = tz.TZDateTime.now(tz.local);
+      final todayFardDate = prefs.getString('TodayFardDate');
+
+      final rangeTimings = await PrayerTimesService.getPrayerTimesRange(
+        city: city,
+        startDate: now,
+        days: daysLimit,
+        referenceTodayTimings: effectiveTodayTimings,
+      );
 
       // Iterate rolling forward (Day 0 to Day daysLimit - 1)
       for (int dayOffset = 0; dayOffset < daysLimit; dayOffset++) {
@@ -405,12 +588,17 @@ class LocalNotificationService {
         final dayStr =
             '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
 
-        final dayTimings = (dayOffset == 0)
-            ? timings
-            : PrayerTimesService.calculateOfflinePrayerTimes(city, targetDate);
+        final dayTimings = (dayOffset < rangeTimings.length)
+            ? rangeTimings[dayOffset]
+            : PrayerTimesService.calculateCalibratedPrayerTimesForDate(
+                city: city,
+                targetDate: targetDate,
+                referenceTodayTimings: effectiveTodayTimings,
+                referenceDate: now,
+              );
 
         tz.TZDateTime parseTZTime(String hhmm, {Duration offset = Duration.zero}) {
-          final clean = hhmm.trim();
+          final clean = hhmm.trim().split(' ').first;
           final parts = clean.split(':');
           if (parts.length < 2) return tz.TZDateTime.fromMillisecondsSinceEpoch(tz.local, 0);
           final h = int.tryParse(parts[0].trim()) ?? 0;
@@ -419,14 +607,29 @@ class LocalNotificationService {
           return offset == Duration.zero ? base : base.add(offset);
         }
 
+        final tFajr = parseTZTime(dayTimings.fajr);
+        final tSunrise = parseTZTime(dayTimings.sunrise);
+        final tDhuhr = parseTZTime(dayTimings.dhuhr);
+        var tAsr = parseTZTime(dayTimings.asr);
+        var tMaghrib = parseTZTime(dayTimings.maghrib);
+        var tIsha = parseTZTime(dayTimings.isha);
+
+        // Poka-Yoke astronomical sanity guard: Asr is ALWAYS >= 90 minutes after Dhuhr in Turkey
+        if (tAsr.difference(tDhuhr).inMinutes < 90) {
+          final safeOffline = PrayerTimesService.calculateOfflinePrayerTimes(city, targetDate);
+          tAsr = parseTZTime(safeOffline.asr);
+          tMaghrib = parseTZTime(safeOffline.maghrib);
+          tIsha = parseTZTime(safeOffline.isha);
+        }
+
         // 1. Prayer Entry Items (İmsak, Güneş, Öğle, İkindi, Akşam, Yatsı)
         final prayerItems = [
-          (name: 'İmsak', time: parseTZTime(dayTimings.fajr), prefKey: 'ImsakNotificationEnabled'),
-          (name: 'Güneş', time: parseTZTime(dayTimings.sunrise), prefKey: 'GunesNotificationEnabled'),
-          (name: 'Öğle', time: parseTZTime(dayTimings.dhuhr), prefKey: 'OgleNotificationEnabled'),
-          (name: 'İkindi', time: parseTZTime(dayTimings.asr), prefKey: 'IkindiNotificationEnabled'),
-          (name: 'Akşam', time: parseTZTime(dayTimings.maghrib), prefKey: 'AksamNotificationEnabled'),
-          (name: 'Yatsı', time: parseTZTime(dayTimings.isha), prefKey: 'YatsiNotificationEnabled'),
+          (name: 'İmsak', time: tFajr, prefKey: 'ImsakNotificationEnabled'),
+          (name: 'Güneş', time: tSunrise, prefKey: 'GunesNotificationEnabled'),
+          (name: 'Öğle', time: tDhuhr, prefKey: 'OgleNotificationEnabled'),
+          (name: 'İkindi', time: tAsr, prefKey: 'IkindiNotificationEnabled'),
+          (name: 'Akşam', time: tMaghrib, prefKey: 'AksamNotificationEnabled'),
+          (name: 'Yatsı', time: tIsha, prefKey: 'YatsiNotificationEnabled'),
         ];
 
         for (int pIdx = 0; pIdx < prayerItems.length; pIdx++) {
@@ -436,14 +639,25 @@ class LocalNotificationService {
               true;
           if (!isEnabled) continue;
 
-          final targetTime = item.time;
+          final customTimeStr =
+              prefs.getString('PrayerCustomTime_${item.name}') ?? '';
+          final offsetMins =
+              prefs.getInt('PrayerOffset_${item.name}') ?? 0;
+
+          final tz.TZDateTime targetTime = customTimeStr.trim().contains(':')
+              ? parseTZTime(customTimeStr)
+              : (offsetMins > 0
+                  ? item.time.subtract(Duration(minutes: offsetMins))
+                  : item.time);
           if (targetTime.isBefore(currentTZNow)) continue; // Already in the past
 
           final farzIdx = (baseFarzIdx + globalFarzStep) % kFarz32List.length;
           globalFarzStep++;
           final farzItem = kFarz32List[farzIdx];
 
-          final title = '${item.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
+          final title = (customTimeStr.trim().isEmpty && offsetMins > 0)
+              ? '${item.name} Vaktine $offsetMins Dk Kaldı 🕌 • 32 Farz (#${farzItem.id})'
+              : '${item.name} Vakti Girdi 🕌 • 32 Farz (#${farzItem.id})';
           final body = '${farzItem.title}: ${farzItem.notificationSummary}';
           final details = _buildNotificationDetails(config: channelConfig, title: title);
 
@@ -460,34 +674,53 @@ class LocalNotificationService {
 
         // 2. Question Notifications ("Namazınızı Kıldınız mı? 🕌")
         if (isQuestionMasterEnabled) {
+          final qOffset = questionMinutesBeforeEnd.clamp(5, 180);
+          final yatsiTarget = questionCustomTime.trim().contains(':')
+              ? parseTZTime(questionCustomTime)
+              : tIsha.add(Duration(minutes: qOffset));
           final questionItems = [
             (
               name: 'Sabah',
-              targetTime: parseTZTime(dayTimings.sunrise, offset: const Duration(minutes: -45)),
+              entryTime: tFajr,
+              nextEntryTime: tSunrise,
+              targetTime: tSunrise.subtract(Duration(minutes: qOffset)),
+              minOffsetMinutes: 20,
               prefKey: 'ImsakNotificationEnabled',
               fallbackKey: 'SabahNotificationEnabled',
             ),
             (
               name: 'Öğle',
-              targetTime: parseTZTime(dayTimings.asr, offset: const Duration(minutes: -45)),
+              entryTime: tDhuhr,
+              nextEntryTime: tAsr,
+              targetTime: tAsr.subtract(Duration(minutes: qOffset)),
+              minOffsetMinutes: 60,
               prefKey: 'OgleNotificationEnabled',
               fallbackKey: 'OgleNotificationEnabled',
             ),
             (
               name: 'İkindi',
-              targetTime: parseTZTime(dayTimings.maghrib, offset: const Duration(minutes: -45)),
+              entryTime: tAsr,
+              nextEntryTime: tMaghrib,
+              targetTime: tMaghrib.subtract(Duration(minutes: qOffset)),
+              minOffsetMinutes: 45,
               prefKey: 'IkindiNotificationEnabled',
               fallbackKey: 'IkindiNotificationEnabled',
             ),
             (
               name: 'Akşam',
-              targetTime: parseTZTime(dayTimings.isha, offset: const Duration(minutes: -45)),
+              entryTime: tMaghrib,
+              nextEntryTime: tIsha,
+              targetTime: tIsha.subtract(Duration(minutes: qOffset)),
+              minOffsetMinutes: 20,
               prefKey: 'AksamNotificationEnabled',
               fallbackKey: 'AksamNotificationEnabled',
             ),
             (
               name: 'Yatsı',
-              targetTime: parseTZTime(dayTimings.isha, offset: const Duration(hours: 1)),
+              entryTime: tIsha,
+              nextEntryTime: tIsha.add(const Duration(hours: 4)),
+              targetTime: yatsiTarget,
+              minOffsetMinutes: 15,
               prefKey: 'YatsiNotificationEnabled',
               fallbackKey: 'YatsiNotificationEnabled',
             ),
@@ -498,7 +731,27 @@ class LocalNotificationService {
             final isEnabled = prefs.getBool(q.prefKey) ?? prefs.getBool(q.fallbackKey) ?? true;
             if (!isEnabled) continue;
 
-            final questionTime = q.targetTime;
+            // Skip today's question notification if the user has already answered or completed this prayer today
+            if (dayOffset == 0) {
+              final alreadyDoneToday = (todayFardDate == todayStr &&
+                      (prefs.getBool('TodayFard_${q.name}') ?? false)) ||
+                  (prefs.getBool('TodayPrayerAnswered_${todayStr}_${q.name}') ?? false);
+              if (alreadyDoneToday) continue;
+            }
+
+            // Poka-Yoke Guard: Question notification MUST NEVER fire before [entryTime + minOffsetMinutes]
+            final minQuestionTime = q.entryTime.add(Duration(minutes: q.minOffsetMinutes));
+            var questionTime = q.targetTime;
+            if (questionTime.isBefore(minQuestionTime)) {
+              final windowMinutes = q.nextEntryTime.difference(q.entryTime).inMinutes;
+              if (windowMinutes > q.minOffsetMinutes + 10) {
+                final safeOffset = (windowMinutes * 0.65).round().clamp(q.minOffsetMinutes, windowMinutes - 10);
+                questionTime = q.entryTime.add(Duration(minutes: safeOffset));
+              } else {
+                continue;
+              }
+            }
+            if (!questionTime.isAfter(q.entryTime)) continue;
             if (questionTime.isBefore(currentTZNow)) continue; // In the past
 
             const title = 'Namazınızı Kıldınız mı? 🕌';
@@ -518,6 +771,87 @@ class LocalNotificationService {
             );
           }
         }
+
+        // 3. Weekly Special Spiritual Recitations (Feraciye Duası & Perşembe/Cuma Salâsı)
+        if (targetDate.weekday == DateTime.thursday) {
+          // 3a. Perşembe Feraciye Duası (Varsayılan: Akşam namazından 15 dk önce)
+          if (isFeraciyeEnabled) {
+            final feraciyeTarget = feraciyeCustomTime.trim().contains(':')
+                ? parseTZTime(feraciyeCustomTime)
+                : tMaghrib.subtract(Duration(minutes: feraciyeMinutesBefore));
+            if (feraciyeTarget.isAfter(currentTZNow)) {
+              final feraciyeConfig = _resolveChannelConfig(feraciyeSound);
+              const fTitle = '🤲 Perşembe Feraciye Duası Vakti';
+              final fBody = feraciyeCustomTime.trim().contains(':')
+                  ? 'Cuma gecesine girerken okunan mübarek Feraciye Duası vakti girdi. Faziletini okumak ve dinlemek için dokunun.'
+                  : 'Akşam ezanına $feraciyeMinutesBefore dk kaldı. Mübarek Cuma gecesi Feraciye Duası vakti girdi.';
+              final fDetails = _buildNotificationDetails(
+                config: feraciyeConfig,
+                title: fTitle,
+              );
+              await _scheduleZonedWithFallback(
+                id: baseSpecialWeeklyNotificationId + (dayOffset * 10) + 0,
+                title: fTitle,
+                body: fBody,
+                scheduledDate: feraciyeTarget,
+                notificationDetails: fDetails,
+                payload: 'special_spiritual|feraciye',
+              );
+            }
+          }
+
+          // 3b. Perşembe Yatsı Öncesi Salâ (Varsayılan: Yatsıdan 30 dk önce)
+          if (isThursdaySelaEnabled) {
+            final thursdaySelaTarget = thursdaySelaCustomTime.trim().contains(':')
+                ? parseTZTime(thursdaySelaCustomTime)
+                : tIsha.subtract(Duration(minutes: thursdaySelaMinutesBefore));
+            if (thursdaySelaTarget.isAfter(currentTZNow)) {
+              final selaConfig = _resolveChannelConfig(thursdaySelaSound);
+              const sTitle = '🕌 Cuma Gecesi Salâ Vakti';
+              final sBody = thursdaySelaCustomTime.trim().contains(':')
+                  ? 'Mübarek Cuma gecesi salâ vakti girdi. Efendimiz\'e (s.a.v.) salât ü selâm getirmeyi unutmayın.'
+                  : 'Yatsı ezanına $thursdaySelaMinutesBefore dk kaldı. Mübarek Cuma gecesi salâ vakti girdi.';
+              final sDetails = _buildNotificationDetails(
+                config: selaConfig,
+                title: sTitle,
+              );
+              await _scheduleZonedWithFallback(
+                id: baseSpecialWeeklyNotificationId + (dayOffset * 10) + 1,
+                title: sTitle,
+                body: sBody,
+                scheduledDate: thursdaySelaTarget,
+                notificationDetails: sDetails,
+                payload: 'special_spiritual|thursday_sela',
+              );
+            }
+          }
+        } else if (targetDate.weekday == DateTime.friday) {
+          // 3c. Cuma Namazı Öncesi Salâ (Varsayılan: Cuma/Öğle vaktinden 45 dk önce)
+          if (isFridaySelaEnabled) {
+            final fridaySelaTarget = fridaySelaCustomTime.trim().contains(':')
+                ? parseTZTime(fridaySelaCustomTime)
+                : tDhuhr.subtract(Duration(minutes: fridaySelaMinutesBefore));
+            if (fridaySelaTarget.isAfter(currentTZNow)) {
+              final selaConfig = _resolveChannelConfig(fridaySelaSound);
+              const cTitle = '🕌 Cuma Vakti Salâsı';
+              final cBody = fridaySelaCustomTime.trim().contains(':')
+                  ? 'Mübarek Cuma salâsı vakti girdi. Cum\'anız mübarek olsun, salât ü selâm getirmeyi unutmayın.'
+                  : 'Cuma ezanına $fridaySelaMinutesBefore dk kaldı. Cuma salâsı vakti girdi, Cum\'anız mübarek olsun.';
+              final cDetails = _buildNotificationDetails(
+                config: selaConfig,
+                title: cTitle,
+              );
+              await _scheduleZonedWithFallback(
+                id: baseSpecialWeeklyNotificationId + (dayOffset * 10) + 2,
+                title: cTitle,
+                body: cBody,
+                scheduledDate: fridaySelaTarget,
+                notificationDetails: cDetails,
+                payload: 'special_spiritual|friday_sela',
+              );
+            }
+          }
+        }
       }
 
       await prefs.setInt('FarzNotificationDaySlotsCount', globalFarzStep.clamp(1, 42));
@@ -525,6 +859,8 @@ class LocalNotificationService {
     } catch (e) {
       debugPrint(
           '[LocalNotificationService] scheduleAllPrayerNotifications error: $e');
+    } finally {
+      _isScheduling = false;
     }
   }
 
@@ -643,7 +979,42 @@ class LocalNotificationService {
 
   static _NotificationChannelConfig _resolveChannelConfig(String soundName) {
     final lower = soundName.toLowerCase();
-    if (lower.contains('kumru')) {
+    if (lower.contains('ezan')) {
+      return const _NotificationChannelConfig(
+        channelId: channelEzan,
+        channelName: 'Zikirce (Ezan Sesi)',
+        description: 'Ezan-ı Muhammedi sesi ile bildirim',
+        sound: RawResourceAndroidNotificationSound('ezan'),
+        darwinSound: 'ezan.wav',
+        playSound: true,
+        enableVibration: true,
+        importance: Importance.max,
+      );
+    } else if (lower.contains('sela') ||
+        lower.contains('salâ') ||
+        lower.contains('sala')) {
+      return const _NotificationChannelConfig(
+        channelId: channelSela,
+        channelName: 'Zikirce (Salâ Sesi)',
+        description: 'Cuma ve Perşembe gecesi Salâ sesi ile bildirim',
+        sound: RawResourceAndroidNotificationSound('sela'),
+        darwinSound: 'sela.wav',
+        playSound: true,
+        enableVibration: true,
+        importance: Importance.max,
+      );
+    } else if (lower.contains('feraciye')) {
+      return const _NotificationChannelConfig(
+        channelId: channelFeraciye,
+        channelName: 'Zikirce (Feraciye Duası)',
+        description: 'Perşembe akşamı Feraciye Duası ile bildirim',
+        sound: RawResourceAndroidNotificationSound('feraciye'),
+        darwinSound: 'feraciye.wav',
+        playSound: true,
+        enableVibration: true,
+        importance: Importance.max,
+      );
+    } else if (lower.contains('kumru')) {
       return const _NotificationChannelConfig(
         channelId: channelKumru,
         channelName: 'Zikirce (Kumru Sesi)',
