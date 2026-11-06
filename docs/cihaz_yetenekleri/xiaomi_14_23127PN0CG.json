@@ -1,4 +1,4 @@
-﻿{
+{
   "platform": "android",
   "manufacturer": "Xiaomi",
   "brand": "Xiaomi",
@@ -6,10 +6,12 @@
   "device": "houji",
   "sdkInt": 36,
   "release": "16",
-  "rustCoreVersion": "zamera_core 0.2.0 (TrueColor 24-Patch ColorChecker + FlatField)",
+  "rustCoreVersion": "zamera_core 0.3.0 (JNI/FFI Active | 14-Bit RAW ISP + 24-Patch ColorChecker + FlatField)",
   "cameraIdList": [
     "0",
-    "1"
+    "1",
+    "2",
+    "3"
   ],
   "cameras": [
     {
@@ -17,6 +19,8 @@
       "isDirectlyOpenableInCameraIdList": true,
       "facing": "BACK",
       "hardwareLevel": "LEVEL_3",
+      "sensorOrientation": 90,
+      "lensShadingApplied": true,
       "capabilities": [
         "BACKWARD_COMPATIBLE",
         "MANUAL_SENSOR",
@@ -43,7 +47,7 @@
       "apertures": [
         1.6
       ],
-      "minimumFocusDistanceDiopters": null,
+      "minimumFocusDistanceDiopters": 10,
       "isoRange": [
         50,
         3188
@@ -64,6 +68,8 @@
       "isDirectlyOpenableInCameraIdList": true,
       "facing": "FRONT",
       "hardwareLevel": "LEVEL_3",
+      "sensorOrientation": 270,
+      "lensShadingApplied": true,
       "capabilities": [
         "BACKWARD_COMPATIBLE",
         "MANUAL_SENSOR",
@@ -88,7 +94,7 @@
       "apertures": [
         2
       ],
-      "minimumFocusDistanceDiopters": null,
+      "minimumFocusDistanceDiopters": 0,
       "isoRange": [
         50,
         800
@@ -109,6 +115,8 @@
       "isDirectlyOpenableInCameraIdList": false,
       "facing": "BACK",
       "hardwareLevel": "LEVEL_3",
+      "sensorOrientation": 90,
+      "lensShadingApplied": true,
       "capabilities": [
         "BACKWARD_COMPATIBLE",
         "MANUAL_SENSOR",
@@ -131,7 +139,7 @@
       "apertures": [
         1.6
       ],
-      "minimumFocusDistanceDiopters": null,
+      "minimumFocusDistanceDiopters": 10,
       "isoRange": [
         50,
         3188
@@ -152,6 +160,8 @@
       "isDirectlyOpenableInCameraIdList": false,
       "facing": "BACK",
       "hardwareLevel": "LEVEL_3",
+      "sensorOrientation": 90,
+      "lensShadingApplied": true,
       "capabilities": [
         "BACKWARD_COMPATIBLE",
         "MANUAL_SENSOR",
@@ -176,7 +186,7 @@
       "apertures": [
         2.2
       ],
-      "minimumFocusDistanceDiopters": null,
+      "minimumFocusDistanceDiopters": 0,
       "isoRange": [
         50,
         3200

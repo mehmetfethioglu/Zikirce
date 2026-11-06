@@ -68,6 +68,18 @@ class ColorCheckerCalibrationResult {
     required this.patchDeltaEBefore,
     required this.patchDeltaEAfter,
   });
+
+  List<double> get flattenedCamToXyzD50 => [
+        camToXyzD50[0][0],
+        camToXyzD50[0][1],
+        camToXyzD50[0][2],
+        camToXyzD50[1][0],
+        camToXyzD50[1][1],
+        camToXyzD50[1][2],
+        camToXyzD50[2][0],
+        camToXyzD50[2][1],
+        camToXyzD50[2][2],
+      ];
 }
 
 /// Active native preview texture session details.
@@ -75,6 +87,7 @@ class PreviewSessionInfo {
   final int textureId;
   final int previewWidth;
   final int previewHeight;
+  final int sensorOrientation;
   final String activeCameraId;
   final bool supportsRawSensor;
 
@@ -82,6 +95,7 @@ class PreviewSessionInfo {
     required this.textureId,
     required this.previewWidth,
     required this.previewHeight,
+    required this.sensorOrientation,
     required this.activeCameraId,
     required this.supportsRawSensor,
   });
@@ -89,37 +103,82 @@ class PreviewSessionInfo {
   factory PreviewSessionInfo.fromMap(Map<dynamic, dynamic> map) {
     return PreviewSessionInfo(
       textureId: (map['textureId'] as num?)?.toInt() ?? -1,
-      previewWidth: (map['previewWidth'] as num?)?.toInt() ?? 1920,
-      previewHeight: (map['previewHeight'] as num?)?.toInt() ?? 1440,
-      activeCameraId: map['activeCameraId']?.toString() ?? '0',
+      previewWidth: (map['previewWidth'] as num?)?.toInt() ?? 1440,
+      previewHeight: (map['previewHeight'] as num?)?.toInt() ?? 1080,
+      sensorOrientation: (map['sensorOrientation'] as num?)?.toInt() ?? 90,
+      activeCameraId: map['activeCameraId']?.toString() ?? '2',
       supportsRawSensor: map['supportsRawSensor'] == true,
     );
   }
 }
 
-/// Result of a still RAW (.dng) + JPEG photo capture.
+/// Result of a still RAW (.dng) + TrueColor / OEM JPEG photo capture.
 class CapturePhotoResult {
   final String? jpegPath;
+  final String? oemJpegPath;
   final String? dngPath;
+  final String? mediaStoreJpegUri;
+  final String? mediaStoreDngUri;
   final String cameraId;
   final int? iso;
   final int? exposureTimeNs;
+  final bool rustIspActive;
+  final bool lensShadingApplied;
+  final double? whiteLevel;
+  final List<double>? blackLevel;
+  final List<double>? wbGainsUsed;
+  final List<double>? centerLinearCamRgb;
+  final List<double>? meanRgb;
+  final double? highlightClippedRatio;
+  final double? gamutClippedRatio;
 
   const CapturePhotoResult({
     this.jpegPath,
+    this.oemJpegPath,
     this.dngPath,
+    this.mediaStoreJpegUri,
+    this.mediaStoreDngUri,
     required this.cameraId,
     this.iso,
     this.exposureTimeNs,
+    this.rustIspActive = false,
+    this.lensShadingApplied = false,
+    this.whiteLevel,
+    this.blackLevel,
+    this.wbGainsUsed,
+    this.centerLinearCamRgb,
+    this.meanRgb,
+    this.highlightClippedRatio,
+    this.gamutClippedRatio,
   });
 
   factory CapturePhotoResult.fromMap(Map<dynamic, dynamic> map) {
     return CapturePhotoResult(
       jpegPath: map['jpegPath']?.toString(),
+      oemJpegPath: map['oemJpegPath']?.toString(),
       dngPath: map['dngPath']?.toString(),
-      cameraId: map['cameraId']?.toString() ?? '0',
+      mediaStoreJpegUri: map['mediaStoreJpegUri']?.toString(),
+      mediaStoreDngUri: map['mediaStoreDngUri']?.toString(),
+      cameraId: map['cameraId']?.toString() ?? '2',
       iso: (map['iso'] as num?)?.toInt(),
       exposureTimeNs: (map['exposureTimeNs'] as num?)?.toInt(),
+      rustIspActive: map['rustIspActive'] == true,
+      lensShadingApplied: map['lensShadingApplied'] == true,
+      whiteLevel: (map['whiteLevel'] as num?)?.toDouble(),
+      blackLevel: (map['blackLevel'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      wbGainsUsed: (map['wbGainsUsed'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      centerLinearCamRgb: (map['centerLinearCamRgb'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      meanRgb: (map['meanRgb'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      highlightClippedRatio: (map['highlightClippedRatio'] as num?)?.toDouble(),
+      gamutClippedRatio: (map['gamutClippedRatio'] as num?)?.toDouble(),
     );
   }
 }
@@ -130,6 +189,8 @@ class CameraUnitCapability {
   final bool isDirectlyOpenable;
   final String facing;
   final String hardwareLevel;
+  final int sensorOrientation;
+  final bool lensShadingApplied;
   final List<String> capabilities;
   final bool supportsRawSensor;
   final List<String> rawSensorSizes;
@@ -139,6 +200,7 @@ class CameraUnitCapability {
   final List<double> apertures;
   final List<double>? isoRange;
   final List<int>? exposureTimeRangeNs;
+  final int? sensorWhiteLevel;
   final List<String> tenBitDynamicRangeProfiles;
   final bool supportsOis;
   final String? error;
@@ -148,6 +210,8 @@ class CameraUnitCapability {
     required this.isDirectlyOpenable,
     required this.facing,
     required this.hardwareLevel,
+    this.sensorOrientation = 90,
+    this.lensShadingApplied = false,
     required this.capabilities,
     required this.supportsRawSensor,
     required this.rawSensorSizes,
@@ -157,6 +221,7 @@ class CameraUnitCapability {
     required this.apertures,
     this.isoRange,
     this.exposureTimeRangeNs,
+    this.sensorWhiteLevel,
     required this.tenBitDynamicRangeProfiles,
     required this.supportsOis,
     this.error,
@@ -168,6 +233,8 @@ class CameraUnitCapability {
       isDirectlyOpenable: map['isDirectlyOpenableInCameraIdList'] == true,
       facing: map['facing']?.toString() ?? 'UNKNOWN',
       hardwareLevel: map['hardwareLevel']?.toString() ?? 'UNKNOWN',
+      sensorOrientation: (map['sensorOrientation'] as num?)?.toInt() ?? 90,
+      lensShadingApplied: map['lensShadingApplied'] == true,
       capabilities: (map['capabilities'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
           .toList(),
@@ -195,6 +262,7 @@ class CameraUnitCapability {
       exposureTimeRangeNs: (map['exposureTimeRangeNs'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      sensorWhiteLevel: (map['sensorWhiteLevel'] as num?)?.toInt(),
       tenBitDynamicRangeProfiles:
           (map['tenBitDynamicRangeProfiles'] as List<dynamic>? ?? const [])
               .map((e) => e.toString())
@@ -246,8 +314,7 @@ class ZameraProbeReport {
       device: map['device']?.toString() ?? 'unknown',
       sdkInt: (map['sdkInt'] as num?)?.toInt() ?? 0,
       release: map['release']?.toString() ?? '',
-      rustCoreVersion: map['rustCoreVersion']?.toString() ??
-          'zamera_core 0.2.0 (TrueColor 24-Patch ColorChecker + FlatField)',
+      rustCoreVersion: map['rustCoreVersion']?.toString() ?? 'UNKNOWN',
       cameraIdList: (map['cameraIdList'] as List<dynamic>? ?? const [])
           .map((e) => e.toString())
           .toList(),
@@ -324,14 +391,27 @@ class ZameraCapture {
     return ok == true;
   }
 
-  /// Triggers a still RAW (.dng) + JPEG photo capture on the active camera session.
+  /// Triggers a still RAW (.dng) + TrueColor / Pro JPEG photo capture on the active camera session.
   static Future<CapturePhotoResult> capturePhoto({
     bool captureRaw = true,
+    bool isArtworkMode = true,
     bool preferProRaw = false,
+    bool useDisplayP3 = false,
+    bool applyFlatField = true,
+    List<double>? wbGains,
+    List<double>? camToXyzD50,
   }) async {
     final map = await _channel.invokeMapMethod<dynamic, dynamic>(
       'capturePhoto',
-      {'captureRaw': captureRaw, 'preferProRaw': preferProRaw},
+      {
+        'captureRaw': captureRaw,
+        'isArtworkMode': isArtworkMode,
+        'preferProRaw': preferProRaw,
+        'useDisplayP3': useDisplayP3,
+        'applyFlatField': applyFlatField,
+        if (wbGains != null) 'wbGains': wbGains,
+        if (camToXyzD50 != null) 'camToXyzD50': camToXyzD50,
+      },
     );
     if (map == null) {
       throw PlatformException(
@@ -350,7 +430,6 @@ class ZameraCapture {
   /// Converts Kelvin (2000K..10000K) and Tint (-50..+50) into RGGB channel gains.
   static List<double> kelvinAndTintToRggbGains(double kelvin, double tint) {
     final temp = kelvin.clamp(2000.0, 10000.0) / 100.0;
-    // Normalized around 5500K daylight neutral
     final rGain = (temp / 55.0).clamp(0.8, 3.2);
     final bGain = (55.0 / temp).clamp(0.8, 3.2);
     final gTint = (1.0 - (tint / 250.0)).clamp(0.8, 1.5);
@@ -430,7 +509,6 @@ class ZameraCapture {
         .map((p) => labD50ToXyz(p.labD50))
         .toList(growable: false);
 
-    // 1. Neutral WB gains from Patch #20 (Neutral 8) + Patch #22 (Neutral 5 / 18% Gray Card)
     final p20 = measuredCamRgb[19];
     final p22 = measuredCamRgb[21];
     final rAvg = math.max(1e-6, 0.5 * (p20[0] + p22[0]));

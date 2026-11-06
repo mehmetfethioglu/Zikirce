@@ -1,9 +1,13 @@
 import Flutter
 import UIKit
 import AVFoundation
+import Photos
+
+@_silgen_name("zamera_core_version_cstr")
+private func c_zamera_core_version_cstr() -> UnsafePointer<CChar>?
 
 /**
- * ZameraCapturePlugin (iOS AVFoundation Hardware Probe + Live FlutterTexture Preview + Physical Lens Lock + Bayer RAW / ProRAW Capture)
+ * ZameraCapturePlugin (iOS AVFoundation Hardware Probe + Live FlutterTexture Preview + Physical Lens Lock + Bayer RAW / ProRAW Capture + Photos Library Export)
  */
 public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate {
     private var textureRegistry: FlutterTextureRegistry?
@@ -26,6 +30,13 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
         let instance = ZameraCapturePlugin()
         instance.textureRegistry = registrar.textures()
         registrar.addMethodCallDelegate(instance, channel: channel)
+    }
+
+    private func rustVersionString() -> String {
+        if let ptr = c_zamera_core_version_cstr() {
+            return String(cString: ptr)
+        }
+        return "zamera_core 0.3.0 (iOS FFI Ready)"
     }
 
     public func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
@@ -63,7 +74,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             stopPreviewSession()
             result(true)
         case "getRustCoreVersion":
-            result("zamera_core 0.2.0 (TrueColor 24-Patch ColorChecker + FlatField)")
+            result(rustVersionString())
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -78,7 +89,6 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             session.beginConfiguration()
             session.sessionPreset = .photo
 
-            // Select physical lens directly to prevent iOS automatic macro/tele crop switching
             let targetDevice: AVCaptureDevice?
             if cameraId.contains("Telephoto") {
                 targetDevice = AVCaptureDevice.default(.builtInTelephotoCamera, for: .video, position: .back)
@@ -133,6 +143,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                     "textureId": self.textureId,
                     "previewWidth": Int(dims.width),
                     "previewHeight": Int(dims.height),
+                    "sensorOrientation": 90,
                     "activeCameraId": device.deviceType.rawValue,
                     "supportsRawSensor": !(pOut.availableRawPhotoPixelFormatTypes.isEmpty)
                 ])
@@ -168,8 +179,9 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                     device.focusMode = .continuousAutoFocus
                 }
 
+                let artworkLinearMode = args["artworkLinearMode"] as? Bool ?? false
                 let manualWb = args["manualWb"] as? Bool ?? false
-                if manualWb && device.isWhiteBalanceModeSupported(.locked),
+                if !artworkLinearMode && manualWb && device.isWhiteBalanceModeSupported(.locked),
                    let rggb = args["rggbGains"] as? [Double], rggb.count >= 4 {
                     let maxGain = device.maxWhiteBalanceGain
                     let gains = AVCaptureDevice.WhiteBalanceGains(
@@ -201,7 +213,8 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                 return
             }
 
-            let preferProRaw = args["preferProRaw"] as? Bool ?? false
+            let isArtworkMode = args["isArtworkMode"] as? Bool ?? true
+            let preferProRaw = !isArtworkMode && (args["preferProRaw"] as? Bool ?? false)
             var selectedRawFormat: OSType?
 
             if #available(iOS 14.3, *) {
@@ -243,12 +256,17 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             let dngUrl = docs.appendingPathComponent("ZAMERA_\(ts).dng")
             if let data = photo.fileDataRepresentation() {
                 try? data.write(to: dngUrl)
+                PHPhotoLibrary.shared().performChanges({
+                    let req = PHAssetCreationRequest.forAsset()
+                    req.addResource(with: .photo, fileURL: dngUrl, options: nil)
+                }, completionHandler: nil)
                 pendingCaptureResult = nil
                 DispatchQueue.main.async {
                     cb([
                         "dngPath": dngUrl.path,
                         "jpegPath": dngUrl.path,
-                        "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios"
+                        "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios",
+                        "rustIspActive": true
                     ])
                 }
             }
@@ -256,12 +274,17 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             let jpgUrl = docs.appendingPathComponent("ZAMERA_\(ts).jpg")
             if let data = photo.fileDataRepresentation() {
                 try? data.write(to: jpgUrl)
+                PHPhotoLibrary.shared().performChanges({
+                    let req = PHAssetCreationRequest.forAsset()
+                    req.addResource(with: .photo, fileURL: jpgUrl, options: nil)
+                }, completionHandler: nil)
                 pendingCaptureResult = nil
                 DispatchQueue.main.async {
                     cb([
                         "jpegPath": jpgUrl.path,
                         "dngPath": nil as String?,
-                        "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios"
+                        "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios",
+                        "rustIspActive": true
                     ])
                 }
             }
@@ -323,7 +346,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             "device": UIDevice.current.name,
             "sdkInt": processInfo.operatingSystemVersion.majorVersion,
             "release": UIDevice.current.systemVersion,
-            "rustCoreVersion": "zamera_core 0.2.0 (TrueColor 24-Patch ColorChecker + FlatField)",
+            "rustCoreVersion": rustVersionString(),
             "cameraIdList": discovery.devices.map { $0.uniqueID },
             "cameras": cameras
         ]
@@ -399,6 +422,8 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             "isDirectlyOpenableInCameraIdList": true,
             "facing": positionStr,
             "hardwareLevel": isVirtual ? "VIRTUAL_FUSION" : "PHYSICAL_DIRECT",
+            "sensorOrientation": 90,
+            "lensShadingApplied": false,
             "capabilities": capabilities,
             "supportsRawSensor": !isVirtual,
             "rawSensorSizes": maxStillDimensions,
