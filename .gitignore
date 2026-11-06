@@ -1,0 +1,23 @@
+# Flutter / Dart / Android / iOS / Rust build artifacts
+**/build/
+**/.dart_tool/
+**/.packages
+**/.pub-cache/
+**/.pub/
+**/target/
+**/Cargo.lock
+**/*.iml
+**/*.ipr
+**/*.iws
+**/.idea/
+**/.vscode/
+**/.gradle/
+**/local.properties
+**/key.properties
+**/*.jks
+**/*.keystore
+**/Pods/
+**/Podfile.lock
+**/.symlinks/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies

@@ -1,0 +1,24 @@
+name: zamera
+description: "Zamera — Profesyonel Sanat (Gerçek Renk ΔE2000) & Pro Kamera Uygulaması"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  zamera_capture:
+    path: ../packages/zamera_capture
+  zamera_video:
+    path: ../packages/zamera_video
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

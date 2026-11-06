@@ -1,0 +1,13 @@
+[package]
+name = "zamera_core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Zamera TrueColor ISP & Colorimetric Calibration Engine (CIE DE2000, Bradford D50->D65, sRGB/Display P3 OETF, 3x3 ColorChecker Least-Squares Solver)"
+
+[lib]
+name = "zamera_core"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+# Zero-GPL dependency policy enforced via cargo-deny (MIT / Apache-2.0 only)

@@ -1,0 +1,78 @@
+name: Android Cloud Build & Google Play Console Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Google Play Track (internal, beta, production)"
+        required: false
+        default: "internal"
+      enable_video_module:
+        description: "Enable Pro Video module (ZAMERA_VIDEO)"
+        required: false
+        default: "false"
+
+jobs:
+  build-and-publish-android:
+    name: Build Rust JNI + Signed AAB & Upload to Google Play
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+      PLAY_TRACK: ${{ github.event.inputs.track || 'internal' }}
+      ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'false' }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Set up Rust & cargo-ndk for 16 KB aligned Android .so
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: 4. Build zamera_core JNI libraries with 16 KB page alignment
+        working-directory: rust/zamera_core
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
+          CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
+        run: |
+          cargo install cargo-ndk --locked
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../../packages/zamera_capture/android/src/main/jniLibs build --release
+
+      - name: 5. Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 6. Restore Upload Keystore & key.properties
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
+        working-directory: app
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/zamera-upload-keystore.jks
+          printf "%s\n" "$ANDROID_KEY_PROPERTIES" > android/key.properties
+
+      - name: 7. Build Signed Release AAB & APK
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build appbundle --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
+          flutter build apk --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
+
+      - name: 8. Upload Signed AAB & APK Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zamera-android-release-bundles
+          path: |
+            app/build/app/outputs/bundle/release/app-release.aab
+            app/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
