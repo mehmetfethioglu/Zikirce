@@ -1,10 +1,12 @@
 package com.akarworks.zamera_capture
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.ImageFormat
 import android.hardware.camera2.*
-import android.hardware.camera2.params.ColorSpaceTransform
 import android.hardware.camera2.params.DynamicRangeProfiles
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.RggbChannelVector
@@ -13,25 +15,42 @@ import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Range
 import android.view.Surface
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import io.flutter.embedding.engine.plugins.activity.ActivityAware
+import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.PluginRegistry
 import io.flutter.view.TextureRegistry
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
 
 /**
- * ZameraCapturePlugin (Android Camera2 Hardware Probe + Live Preview Texture + Manual Controls + RAW/DNG Capture)
+ * ZameraCapturePlugin (Android Camera2 Hardware Probe + Live Preview Texture + Physical Camera ID Routing + 14-bit RAW/DNG Capture)
+ *
+ * Verified on Xiaomi 14 (`23127PN0CG` / `houji`, HyperOS Android 16 API 36):
+ * - Logical camera `"0"` exposes physical cameras `"2"` (23mm f/1.6 14-bit RAW, whiteLevel=16383)
+ *   and `"3"` (14mm f/2.2 Ultra-Wide RAW, whiteLevel=1023).
+ * - Because HyperOS sets `isDirectlyOpenableInCameraIdList=false` on `"2"` and `"3"`, physical lenses
+ *   are locked by opening parent logical camera `"0"` and binding `OutputConfiguration.setPhysicalCameraId(physicalId)`.
  */
-class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
+class ZameraCapturePlugin :
+    FlutterPlugin,
+    MethodCallHandler,
+    ActivityAware,
+    PluginRegistry.RequestPermissionsResultListener {
+
     private lateinit var channel: MethodChannel
     private lateinit var appContext: Context
     private lateinit var textureRegistry: TextureRegistry
+    private var activity: Activity? = null
+    private var pendingPermissionAction: (() -> Unit)? = null
 
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
@@ -42,6 +61,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
     private var rawImageReader: ImageReader? = null
     private var jpegImageReader: ImageReader? = null
     private var activeCameraId: String = "0"
+    private var activePhysicalCameraId: String? = null
     private var lastTotalCaptureResult: TotalCaptureResult? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -49,6 +69,39 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
         textureRegistry = flutterPluginBinding.textureRegistry
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.akarworks.zamera/capture_probe")
         channel.setMethodCallHandler(this)
+    }
+
+    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        binding.addRequestPermissionsResultListener(this)
+    }
+
+    override fun onDetachedFromActivityForConfigChanges() {
+        activity = null
+    }
+
+    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        activity = binding.activity
+        binding.addRequestPermissionsResultListener(this)
+    }
+
+    override fun onDetachedFromActivity() {
+        activity = null
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ): Boolean {
+        if (requestCode == 9001) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pendingPermissionAction?.invoke()
+            }
+            pendingPermissionAction = null
+            return true
+        }
+        return false
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
@@ -64,7 +117,9 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                 val cameraId = call.argument<String>("cameraId") ?: "0"
                 val width = call.argument<Int>("width") ?: 1920
                 val height = call.argument<Int>("height") ?: 1440
-                startPreviewSession(cameraId, width, height, result)
+                ensureCameraPermissionAndRun(result) {
+                    startPreviewSession(cameraId, width, height, result)
+                }
             }
             "updateManualControls" -> {
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
@@ -85,6 +140,22 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
+    private fun ensureCameraPermissionAndRun(result: Result, action: () -> Unit) {
+        if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            action()
+            return
+        }
+        val act = activity
+        if (act != null) {
+            pendingPermissionAction = action
+            ActivityCompat.requestPermissions(act, arrayOf(Manifest.permission.CAMERA), 9001)
+        } else {
+            result.error("PERMISSION_DENIED", "Camera permission not granted", null)
+        }
+    }
+
     private fun ensureBackgroundThread() {
         if (backgroundThread == null) {
             backgroundThread = HandlerThread("ZameraCamera2Thread").also {
@@ -95,17 +166,29 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
     }
 
     @SuppressLint("MissingPermission")
-    private fun startPreviewSession(cameraId: String, reqWidth: Int, reqHeight: Int, result: Result) {
+    private fun startPreviewSession(requestedId: String, reqWidth: Int, reqHeight: Int, result: Result) {
         try {
             stopPreviewSession()
             ensureBackgroundThread()
 
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val availableIds = manager.cameraIdList
-            val targetId = if (availableIds.contains(cameraId)) cameraId else (availableIds.firstOrNull() ?: "0")
-            activeCameraId = targetId
+            val logicalIds = manager.cameraIdList.toList()
 
-            val chars = manager.getCameraCharacteristics(targetId)
+            // Determine whether requestedId is a direct logical camera or a physical sub-camera of "0"
+            val openLogicalId: String
+            val targetPhysicalId: String?
+            if (logicalIds.contains(requestedId)) {
+                openLogicalId = requestedId
+                targetPhysicalId = null
+            } else {
+                openLogicalId = logicalIds.firstOrNull() ?: "0"
+                targetPhysicalId = requestedId
+            }
+            activeCameraId = openLogicalId
+            activePhysicalCameraId = targetPhysicalId
+
+            val charsId = targetPhysicalId ?: openLogicalId
+            val chars = manager.getCameraCharacteristics(charsId)
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val previewSize = map?.getOutputSizes(android.graphics.SurfaceTexture::class.java)
                 ?.firstOrNull { it.width <= reqWidth && it.height <= reqHeight }
@@ -127,7 +210,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                 rawImageReader = ImageReader.newInstance(rawSize.width, rawSize.height, ImageFormat.RAW_SENSOR, 2)
             }
 
-            manager.openCamera(targetId, object : CameraDevice.StateCallback() {
+            manager.openCamera(openLogicalId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     cameraDevice = camera
                     try {
@@ -140,7 +223,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                         jpegImageReader?.surface?.let { surfaces.add(it) }
                         rawImageReader?.surface?.let { surfaces.add(it) }
 
-                        camera.createCaptureSession(surfaces, object : CameraCaptureSession.StateCallback() {
+                        val stateCallback = object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(session: CameraCaptureSession) {
                                 captureSession = session
                                 try {
@@ -162,7 +245,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                                             "textureId" to entry.id(),
                                             "previewWidth" to previewSize.width,
                                             "previewHeight" to previewSize.height,
-                                            "activeCameraId" to targetId,
+                                            "activeCameraId" to (targetPhysicalId ?: openLogicalId),
                                             "supportsRawSensor" to (rawImageReader != null)
                                         )
                                     )
@@ -174,7 +257,24 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                             override fun onConfigureFailed(session: CameraCaptureSession) {
                                 result.error("CONFIGURE_FAILED", "CameraCaptureSession configure failed", null)
                             }
-                        }, backgroundHandler)
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && targetPhysicalId != null) {
+                            val outConfigs = surfaces.map { surf ->
+                                OutputConfiguration(surf).apply {
+                                    setPhysicalCameraId(targetPhysicalId)
+                                }
+                            }
+                            val sessionConfig = SessionConfiguration(
+                                SessionConfiguration.SESSION_REGULAR,
+                                outConfigs,
+                                Executors.newSingleThreadExecutor(),
+                                stateCallback
+                            )
+                            camera.createCaptureSession(sessionConfig)
+                        } else {
+                            camera.createCaptureSession(surfaces, stateCallback, backgroundHandler)
+                        }
                     } catch (e: Exception) {
                         result.error("OPEN_BUILD_ERR", e.message, null)
                     }
@@ -245,7 +345,6 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                 builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
             }
 
-            // Artwork TrueColor mode disables OEM edge sharpening and noise reduction on YUV/JPEG
             val artworkLinearMode = args["artworkLinearMode"] as? Boolean ?: false
             if (artworkLinearMode) {
                 builder.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_OFF)
@@ -282,7 +381,6 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                 rawImageReader?.surface?.let { captureBuilder.addTarget(it) }
             }
 
-            // Copy manual settings from preview builder
             previewRequestBuilder?.let { prev ->
                 captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, prev.get(CaptureRequest.CONTROL_AE_MODE))
                 captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, prev.get(CaptureRequest.SENSOR_SENSITIVITY))
@@ -294,7 +392,8 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
             }
 
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            val chars = manager.getCameraCharacteristics(activeCameraId)
+            val charsId = activePhysicalCameraId ?: activeCameraId
+            val chars = manager.getCameraCharacteristics(charsId)
 
             jpegReader.setOnImageAvailableListener({ reader ->
                 val img = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
@@ -340,7 +439,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
                             mapOf(
                                 "jpegPath" to jpegFile.absolutePath,
                                 "dngPath" to if (captureRaw) dngFile.absolutePath else null,
-                                "cameraId" to activeCameraId,
+                                "cameraId" to (activePhysicalCameraId ?: activeCameraId),
                                 "iso" to res.get(CaptureResult.SENSOR_SENSITIVITY),
                                 "exposureTimeNs" to res.get(CaptureResult.SENSOR_EXPOSURE_TIME)
                             )
@@ -401,7 +500,7 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
             }
         }
 
-        return mapOf(
+        val report = mapOf(
             "platform" to "android",
             "manufacturer" to Build.MANUFACTURER,
             "brand" to Build.BRAND,
@@ -410,9 +509,15 @@ class ZameraCapturePlugin : FlutterPlugin, MethodCallHandler {
             "sdkInt" to Build.VERSION.SDK_INT,
             "release" to Build.VERSION.RELEASE,
             "rustCoreVersion" to ZameraRustBridge.safeCoreVersion(),
-            "cameraIdList" to logicalIds,
+            "cameraIdList" to allDiscoveredIds.toList(),
             "cameras" to cameras
         )
+        try {
+            val jsonStr = org.json.JSONObject(report).toString(2)
+            File(appContext.filesDir, "probe_report.json").writeText(jsonStr)
+        } catch (_: Exception) {
+        }
+        return report
     }
 
     private fun extractCameraCharacteristics(

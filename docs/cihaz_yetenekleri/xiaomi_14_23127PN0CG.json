@@ -1,0 +1,196 @@
+﻿{
+  "platform": "android",
+  "manufacturer": "Xiaomi",
+  "brand": "Xiaomi",
+  "model": "23127PN0CG",
+  "device": "houji",
+  "sdkInt": 36,
+  "release": "16",
+  "rustCoreVersion": "zamera_core 0.2.0 (TrueColor 24-Patch ColorChecker + FlatField)",
+  "cameraIdList": [
+    "0",
+    "1"
+  ],
+  "cameras": [
+    {
+      "cameraId": "0",
+      "isDirectlyOpenableInCameraIdList": true,
+      "facing": "BACK",
+      "hardwareLevel": "LEVEL_3",
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "MANUAL_SENSOR",
+        "MANUAL_POST_PROCESSING",
+        "RAW",
+        "LOGICAL_MULTI_CAMERA",
+        "DYNAMIC_RANGE_TEN_BIT"
+      ],
+      "supportsRawSensor": true,
+      "rawSensorSizes": [
+        "4096x3072"
+      ],
+      "raw10Sizes": [
+        "4096x3072"
+      ],
+      "maxResolutionRawSensorSizes": [],
+      "physicalCameraIds": [
+        "2",
+        "3"
+      ],
+      "focalLengthsMm": [
+        6.55
+      ],
+      "apertures": [
+        1.6
+      ],
+      "minimumFocusDistanceDiopters": null,
+      "isoRange": [
+        50,
+        3188
+      ],
+      "exposureTimeRangeNs": [
+        61440,
+        1000000000
+      ],
+      "sensorWhiteLevel": 16383,
+      "tenBitDynamicRangeProfiles": [
+        "HLG10"
+      ],
+      "supportsOis": true,
+      "supportsVideoStabilization": true
+    },
+    {
+      "cameraId": "1",
+      "isDirectlyOpenableInCameraIdList": true,
+      "facing": "FRONT",
+      "hardwareLevel": "LEVEL_3",
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "MANUAL_SENSOR",
+        "MANUAL_POST_PROCESSING",
+        "RAW",
+        "DYNAMIC_RANGE_TEN_BIT"
+      ],
+      "supportsRawSensor": true,
+      "rawSensorSizes": [
+        "3264x2448",
+        "3264x1836"
+      ],
+      "raw10Sizes": [
+        "3264x2448",
+        "3264x1836"
+      ],
+      "maxResolutionRawSensorSizes": [],
+      "physicalCameraIds": [],
+      "focalLengthsMm": [
+        2.83
+      ],
+      "apertures": [
+        2
+      ],
+      "minimumFocusDistanceDiopters": null,
+      "isoRange": [
+        50,
+        800
+      ],
+      "exposureTimeRangeNs": [
+        25008,
+        409724820
+      ],
+      "sensorWhiteLevel": 1023,
+      "tenBitDynamicRangeProfiles": [
+        "HLG10"
+      ],
+      "supportsOis": false,
+      "supportsVideoStabilization": true
+    },
+    {
+      "cameraId": "2",
+      "isDirectlyOpenableInCameraIdList": false,
+      "facing": "BACK",
+      "hardwareLevel": "LEVEL_3",
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "MANUAL_SENSOR",
+        "MANUAL_POST_PROCESSING",
+        "RAW",
+        "DYNAMIC_RANGE_TEN_BIT"
+      ],
+      "supportsRawSensor": true,
+      "rawSensorSizes": [
+        "4096x3072"
+      ],
+      "raw10Sizes": [
+        "4096x3072"
+      ],
+      "maxResolutionRawSensorSizes": [],
+      "physicalCameraIds": [],
+      "focalLengthsMm": [
+        6.55
+      ],
+      "apertures": [
+        1.6
+      ],
+      "minimumFocusDistanceDiopters": null,
+      "isoRange": [
+        50,
+        3188
+      ],
+      "exposureTimeRangeNs": [
+        61440,
+        1000000000
+      ],
+      "sensorWhiteLevel": 16383,
+      "tenBitDynamicRangeProfiles": [
+        "HLG10"
+      ],
+      "supportsOis": true,
+      "supportsVideoStabilization": true
+    },
+    {
+      "cameraId": "3",
+      "isDirectlyOpenableInCameraIdList": false,
+      "facing": "BACK",
+      "hardwareLevel": "LEVEL_3",
+      "capabilities": [
+        "BACKWARD_COMPATIBLE",
+        "MANUAL_SENSOR",
+        "MANUAL_POST_PROCESSING",
+        "RAW",
+        "DYNAMIC_RANGE_TEN_BIT"
+      ],
+      "supportsRawSensor": true,
+      "rawSensorSizes": [
+        "4080x3072",
+        "4080x2296"
+      ],
+      "raw10Sizes": [
+        "4080x3072",
+        "4080x2296"
+      ],
+      "maxResolutionRawSensorSizes": [],
+      "physicalCameraIds": [],
+      "focalLengthsMm": [
+        2.16
+      ],
+      "apertures": [
+        2.2
+      ],
+      "minimumFocusDistanceDiopters": null,
+      "isoRange": [
+        50,
+        3200
+      ],
+      "exposureTimeRangeNs": [
+        48852,
+        1000000000
+      ],
+      "sensorWhiteLevel": 1023,
+      "tenBitDynamicRangeProfiles": [
+        "HLG10"
+      ],
+      "supportsOis": false,
+      "supportsVideoStabilization": true
+    }
+  ]
+}
