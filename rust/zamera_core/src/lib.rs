@@ -1,22 +1,24 @@
-//! Zamera Core (`zamera_core`) — Deterministic Color Science & Striped RAW ISP Engine
+//! Zamera Core (`zamera_core`) — Deterministic Color Science & Full-Resolution Striped RAW ISP Engine
 //!
 //! Provides identical colorimetric math and 14-bit Bayer RAW development across Android (JNI)
 //! and iOS (C ABI):
 //! - CIE XYZ (D50 <-> D65 Bradford Chromatic Adaptation)
-//! - CIE L*a*b* (D50) conversion
-//! - CIEDE2000 ($\Delta E_{00}$) color difference verified against Sharma et al. (2005)
-//! - IEC 61966-2-1 sRGB and Apple Display P3 transfer functions (OETF / EOTF)
-//! - White-point preserving 3x3 ColorChecker 24-patch calibration matrix solver
+//! - CIE L*a*b* (D50) conversion & CIEDE2000 ($\Delta E_{00}$) verified against Sharma et al. (2005)
+//! - DNG 1.7 Specification iterative CCT solver (`ColorMatrix1`/`ColorMatrix2` -> `AsShotNeutral` -> xy -> CCT)
+//!   and `ForwardMatrix1`/`ForwardMatrix2` Mired-weighted interpolation
+//! - Linear White-Point / Gray-Card Exposure Normalization (eliminates ~2 EV RAW headroom underexposure
+//!   without non-linear S-curves or hue twists)
+//! - Full-resolution (`4096x3072` 12.6 MP) striped bilinear/green-balanced demosaicing + fast 2x2 superpixel mode
+//! - 14-bit RAW 32-bin Histogram, Zebra highlight clipping map, and Sobel Focus Peaking analyzer
 //! - Spatial Flat-Field illumination normalization & 4-corner perspective homography
-//! - 14-bit / 16-bit Bayer RAW (`RGGB`/`GRBG`/`GBRG`/`BGGR`) -> TrueColor sRGB / Display P3 ISP
 
 use std::f64::consts::PI;
 use std::ffi::{c_char, c_void};
 
 const VERSION_STR: &str =
-    "zamera_core 0.3.0 (JNI/FFI Active | 14-Bit RAW ISP + 24-Patch ColorChecker + FlatField)";
+    "zamera_core 0.4.0 (JNI/FFI Active | 12.6MP Full-Res RAW ISP + DNG CCT Interp + Pro Zebra/Hist)";
 const VERSION_CSTR: &[u8] =
-    b"zamera_core 0.3.0 (JNI/FFI Active | 14-Bit RAW ISP + 24-Patch ColorChecker + FlatField)\0";
+    b"zamera_core 0.4.0 (JNI/FFI Active | 12.6MP Full-Res RAW ISP + DNG CCT Interp + Pro Zebra/Hist)\0";
 
 /// Official 24-patch ColorChecker Classic reference CIE L*a*b* (D50, 2-degree observer) values
 /// published by X-Rite / BabelColor.
@@ -132,6 +134,20 @@ pub fn mat3_mul_mat3(a: [[f64; 3]; 3], b: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     out
 }
 
+/// Linearly interpolates two 3x3 matrices: $g \cdot M_1 + (1 - g) \cdot M_2$.
+#[inline]
+pub fn mat3_lerp(m1: [[f64; 3]; 3], m2: [[f64; 3]; 3], g: f64) -> [[f64; 3]; 3] {
+    let w1 = g.clamp(0.0, 1.0);
+    let w2 = 1.0 - w1;
+    let mut out = [[0.0; 3]; 3];
+    for r in 0..3 {
+        for c in 0..3 {
+            out[r][c] = w1 * m1[r][c] + w2 * m2[r][c];
+        }
+    }
+    out
+}
+
 /// Inverts a 3x3 matrix using analytical cofactor expansion.
 pub fn mat3_inverse(m: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
     let c00 = m[1][1] * m[2][2] - m[1][2] * m[2][1];
@@ -179,6 +195,168 @@ pub const M_XYZ_D65_TO_DISPLAY_P3: [[f64; 3]; 3] = [
     [-0.8294890, 1.7626641, 0.0236247],
     [0.0358458, -0.0761724, 0.9568845],
 ];
+
+/// Default Xiaomi 14 D65 `ColorMatrix1` (`XYZ -> CameraNeutral`).
+pub const DEFAULT_CM1_D65: [[f64; 3]; 3] = [
+    [0.8125, -0.2734, -0.1094],
+    [-0.4375, 1.3281, 0.0859],
+    [-0.0312, 0.2578, 0.4297],
+];
+
+/// Default Xiaomi 14 StdA (2856K) `ColorMatrix2` (`XYZ -> CameraNeutral`).
+pub const DEFAULT_CM2_STDA: [[f64; 3]; 3] = [
+    [1.2188, -0.4688, -0.4531],
+    [-0.9766, 2.1797, -0.2891],
+    [-0.1875, 0.3750, 0.6094],
+];
+
+/// Default Xiaomi 14 D65 `ForwardMatrix1` (`WhiteBalancedCamera -> XYZ D50`).
+pub const DEFAULT_FM1_D65: [[f64; 3]; 3] = [
+    [0.5469, 0.2734, 0.1406],
+    [0.1875, 0.8672, -0.0547],
+    [-0.0547, -0.3672, 1.2500],
+];
+
+/// Default Xiaomi 14 StdA (2856K) `ForwardMatrix2` (`WhiteBalancedCamera -> XYZ D50`).
+pub const DEFAULT_FM2_STDA: [[f64; 3]; 3] = [
+    [0.6016, -0.0391, 0.3984],
+    [0.2734, 0.4688, 0.2500],
+    [0.0547, -0.6562, 1.4219],
+];
+
+/// McCamy's formula converting CIE 1931 chromaticity `(x, y)` to Correlated Color Temperature (K).
+#[inline]
+pub fn xy_to_cct_mccamy(x: f64, y: f64) -> f64 {
+    let denom = (0.1858 - y).abs().max(1e-6) * if 0.1858 - y >= 0.0 { 1.0 } else { -1.0 };
+    let n = (x - 0.3320) / denom;
+    (449.0 * n.powi(3) + 3525.0 * n.powi(2) + 6823.3 * n + 5520.33).clamp(1800.0, 25000.0)
+}
+
+/// Converts Correlated Color Temperature `kelvin` (2000K..12000K) and `tint` (-50..+50)
+/// to CIE 1931 chromaticity `(x, y)` on the Planckian/Daylight locus.
+pub fn kelvin_tint_to_xy(kelvin: f64, tint: f64) -> (f64, f64) {
+    let t = kelvin.clamp(2000.0, 12000.0);
+    let inv_t = 1000.0 / t;
+    let inv_t2 = inv_t * inv_t;
+    let inv_t3 = inv_t2 * inv_t;
+
+    let x = if t <= 4000.0 {
+        -0.2661239 * inv_t3 - 0.2343589 * inv_t2 + 0.8776956 * inv_t + 0.179910
+    } else {
+        -3.0258469 * inv_t3 + 2.1070379 * inv_t2 + 0.2226347 * inv_t + 0.240390
+    };
+
+    let x2 = x * x;
+    let x3 = x2 * x;
+    let y_locus = if t <= 2222.0 {
+        -1.1063814 * x3 - 1.34811020 * x2 + 2.18555832 * x - 0.20219683
+    } else if t <= 4000.0 {
+        -0.9549476 * x3 - 1.37418593 * x2 + 2.09137015 * x - 0.16748867
+    } else {
+        3.0817580 * x3 - 5.87338670 * x2 + 3.75112997 * x - 0.37001483
+    };
+
+    // Tint shifts along the green/magenta isotherm (perpendicular to locus)
+    let y = (y_locus - tint.clamp(-50.0, 50.0) * 0.00045).clamp(0.15, 0.55);
+    (x.clamp(0.15, 0.55), y)
+}
+
+/// Computes the DNG mired interpolation weight `g` in `[0.0, 1.0]` between
+/// `CalibrationIlluminant1` (D65 = 6504K, weight `g = 1.0`) and
+/// `CalibrationIlluminant2` (StdA = 2856K, weight `g = 0.0`).
+#[inline]
+pub fn dng_mired_weight(cct: f64, cct1_d65: f64, cct2_stda: f64) -> f64 {
+    let inv_c = 1.0 / cct.clamp(1800.0, 25000.0);
+    let inv_1 = 1.0 / cct1_d65;
+    let inv_2 = 1.0 / cct2_stda;
+    ((inv_c - inv_2) / (inv_1 - inv_2)).clamp(0.0, 1.0)
+}
+
+/// DNG 1.7 Specification iterative solver:
+/// Given `as_shot_neutral` (`[r_n, g_n, b_n]`), `ColorMatrix1` (D65), `ColorMatrix2` (StdA),
+/// `ForwardMatrix1` (D65), and `ForwardMatrix2` (StdA), solves for the scene Correlated Color
+/// Temperature (Kelvin), mired weight `g`, and the CCT-interpolated `ForwardMatrix`
+/// (`WhiteBalancedCamera -> CIE XYZ D50`).
+pub fn solve_dng_cct_and_interpolate_fm(
+    as_shot_neutral: [f64; 3],
+    cm1_d65: [[f64; 3]; 3],
+    cm2_stda: [[f64; 3]; 3],
+    fm1_d65: [[f64; 3]; 3],
+    fm2_stda: [[f64; 3]; 3],
+) -> (f64, f64, [[f64; 3]; 3]) {
+    let mut xy = (0.3457, 0.3585); // Start at D50
+    let mut cct = 5000.0;
+
+    for _ in 0..25 {
+        cct = xy_to_cct_mccamy(xy.0, xy.1);
+        let g = dng_mired_weight(cct, 6504.0, 2856.0);
+        let cm = mat3_lerp(cm1_d65, cm2_stda, g);
+        let Some(cm_inv) = mat3_inverse(cm) else {
+            break;
+        };
+        let xyz = mat3_mul_vec3(cm_inv, as_shot_neutral);
+        let sum = (xyz[0] + xyz[1] + xyz[2]).max(1e-6);
+        let next_xy = (xyz[0] / sum, xyz[1] / sum);
+        if (next_xy.0 - xy.0).abs() < 1e-6 && (next_xy.1 - xy.1).abs() < 1e-6 {
+            xy = next_xy;
+            cct = xy_to_cct_mccamy(xy.0, xy.1);
+            break;
+        }
+        xy = next_xy;
+    }
+
+    let g = dng_mired_weight(cct, 6504.0, 2856.0);
+    let fm_interp = mat3_lerp(fm1_d65, fm2_stda, g);
+    (cct, g, fm_interp)
+}
+
+/// Converts Pro Mode user `kelvin` (2000K..10000K) and `tint` (-50..+50) into physically
+/// accurate DNG `RggbChannelVector` gains `[R, Gr, Gb, B]` and the corresponding
+/// `ForwardMatrix -> sRGB` 3x3 color correction matrix.
+pub fn kelvin_tint_to_dng_wb_and_srgb_matrix(
+    kelvin: f64,
+    tint: f64,
+    cm1_d65: [[f64; 3]; 3],
+    cm2_stda: [[f64; 3]; 3],
+    fm1_d65: [[f64; 3]; 3],
+    fm2_stda: [[f64; 3]; 3],
+) -> ([f32; 4], [[f32; 3]; 3]) {
+    let (x, y) = kelvin_tint_to_xy(kelvin, tint);
+    let xyz = [x / y.max(1e-6), 1.0, (1.0 - x - y).max(0.0) / y.max(1e-6)];
+    let g = dng_mired_weight(kelvin, 6504.0, 2856.0);
+    let cm = mat3_lerp(cm1_d65, cm2_stda, g);
+    let neutral = mat3_mul_vec3(cm, xyz);
+
+    let nr = neutral[0].max(0.05);
+    let ng = neutral[1].max(0.05);
+    let nb = neutral[2].max(0.05);
+
+    let r_gain = (ng / nr).clamp(0.7, 3.8) as f32;
+    let b_gain = (ng / nb).clamp(0.7, 3.8) as f32;
+
+    let fm = mat3_lerp(fm1_d65, fm2_stda, g);
+    let m_d50_to_srgb = mat3_mul_mat3(M_XYZ_D65_TO_SRGB, M_BRADFORD_D50_TO_D65);
+    let cam_to_srgb = mat3_mul_mat3(m_d50_to_srgb, fm);
+    let mat_f32 = [
+        [
+            cam_to_srgb[0][0] as f32,
+            cam_to_srgb[0][1] as f32,
+            cam_to_srgb[0][2] as f32,
+        ],
+        [
+            cam_to_srgb[1][0] as f32,
+            cam_to_srgb[1][1] as f32,
+            cam_to_srgb[1][2] as f32,
+        ],
+        [
+            cam_to_srgb[2][0] as f32,
+            cam_to_srgb[2][1] as f32,
+            cam_to_srgb[2][2] as f32,
+        ],
+    ];
+
+    ([r_gain, 1.0, 1.0, b_gain], mat_f32)
+}
 
 /// Bradford chromatic adaptation from CIE D50 (DNG standard PCS) to CIE D65 (sRGB / Display P3).
 pub fn bradford_d50_to_d65(xyz_d50: [f64; 3]) -> [f64; 3] {
@@ -448,12 +626,6 @@ pub fn compute_flat_field_gains(grid_luminance: &[f64]) -> Vec<f64> {
 }
 
 /// Complete single-pixel TrueColor pipeline:
-/// 1. Channel black-level subtraction & white-level normalization
-/// 2. Flat-field spatial gain compensation
-/// 3. Gray-card / ColorChecker neutral white balance gains
-/// 4. Calibrated Camera RGB -> CIE XYZ (D50) matrix
-/// 5. Bradford D50 -> D65 chromatic adaptation
-/// 6. CIE XYZ (D65) -> sRGB OETF encoded [0..1]
 pub fn process_raw_pixel_to_srgb(
     raw_rgb: [f64; 3],
     black_level: [f64; 3],
@@ -478,8 +650,20 @@ pub fn process_raw_pixel_to_srgb(
     ]
 }
 
-/// Extracts `[R, Gr, Gb, B]` 16-bit unsigned sensor values from a 2x2 Bayer quad at `(even_x, even_y)`
+/// Reorders raw 2x2 quad values `[p00, p01, p10, p11]` into canonical `[R, Gr, Gb, B]`
 /// according to `cfa_pattern` (`0=RGGB`, `1=GRBG`, `2=GBRG`, `3=BGGR`).
+#[inline]
+fn reorder_cfa_to_rggb(quad: [f32; 4], cfa_pattern: u32) -> [f32; 4] {
+    let [p00, p01, p10, p11] = quad;
+    match cfa_pattern {
+        0 => [p00, p01, p10, p11], // RGGB
+        1 => [p01, p00, p11, p10], // GRBG
+        2 => [p10, p11, p00, p01], // GBRG
+        _ => [p11, p10, p01, p00], // BGGR
+    }
+}
+
+/// Extracts `[R, Gr, Gb, B]` 16-bit unsigned sensor values from a 2x2 Bayer quad at `(even_x, even_y)`.
 #[inline]
 fn extract_bayer_quad_rggb(
     raw_bytes: &[u8],
@@ -497,17 +681,11 @@ fn extract_bayer_quad_rggb(
     let p01 = u16::from_le_bytes([raw_bytes[row0 + 2], raw_bytes[row0 + 3]]) as f32;
     let p10 = u16::from_le_bytes([raw_bytes[row1], raw_bytes[row1 + 1]]) as f32;
     let p11 = u16::from_le_bytes([raw_bytes[row1 + 2], raw_bytes[row1 + 3]]) as f32;
-
-    match cfa_pattern {
-        0 => [p00, p01, p10, p11], // RGGB
-        1 => [p01, p00, p11, p10], // GRBG
-        2 => [p10, p11, p00, p01], // GBRG
-        _ => [p11, p10, p01, p00], // BGGR
-    }
+    reorder_cfa_to_rggb([p00, p01, p10, p11], cfa_pattern)
 }
 
 /// Statistics returned by `develop_bayer16_to_rgba8`.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct RawDevelopStats {
     pub out_width: u32,
     pub out_height: u32,
@@ -515,15 +693,62 @@ pub struct RawDevelopStats {
     pub center_linear_cam_rgb: [f32; 3],
     pub highlight_clipped_ratio: f32,
     pub gamut_clipped_ratio: f32,
+    pub exposure_norm_gain: f32,
+    pub solved_cct_kelvin: f32,
+    pub histogram_32: [f32; 32],
+    pub zebra_ratio: f32,
+    pub focus_peaking_score: f32,
+}
+
+impl Default for RawDevelopStats {
+    fn default() -> Self {
+        Self {
+            out_width: 0,
+            out_height: 0,
+            mean_rgb: [0.0; 3],
+            center_linear_cam_rgb: [0.18; 3],
+            highlight_clipped_ratio: 0.0,
+            gamut_clipped_ratio: 0.0,
+            exposure_norm_gain: 1.0,
+            solved_cct_kelvin: 5500.0,
+            histogram_32: [0.0; 32],
+            zebra_ratio: 0.0,
+            focus_peaking_score: 0.0,
+        }
+    }
+}
+
+/// Bilinearly samples an `8x6` spatial flat-field gain map at normalized coordinates `(u, v)` in `[0, 1]`.
+#[inline]
+fn sample_flat_field_8x6(grid_8x6: &[f32; 48], u: f32, v: f32) -> f32 {
+    let gx = (u.clamp(0.0, 1.0) * 7.0).clamp(0.0, 7.0);
+    let gy = (v.clamp(0.0, 1.0) * 5.0).clamp(0.0, 5.0);
+    let x0 = (gx.floor() as usize).min(6);
+    let y0 = (gy.floor() as usize).min(4);
+    let fx = gx - (x0 as f32);
+    let fy = gy - (y0 as f32);
+    let g00 = grid_8x6[y0 * 8 + x0];
+    let g10 = grid_8x6[y0 * 8 + x0 + 1];
+    let g01 = grid_8x6[(y0 + 1) * 8 + x0];
+    let g11 = grid_8x6[(y0 + 1) * 8 + x0 + 1];
+    let top = g00 * (1.0 - fx) + g10 * fx;
+    let bot = g01 * (1.0 - fx) + g11 * fx;
+    (top * (1.0 - fy) + bot * fy).clamp(0.5, 2.5)
 }
 
 /// Develops a 16-bit little-endian Bayer `RAW_SENSOR` buffer into an 8-bit `RGBA_8888` buffer
-/// in sRGB or Display P3 color space using a combined 3x3 linear matrix
-/// ($M_{\text{XYZ}\to\text{Target}} \times M_{\text{Bradford } D_{50}\to D_{65}} \times M_{\text{Cam}\to\text{XYZ } D_{50}}$).
+/// in sRGB or Display P3 color space.
 ///
-/// Uses 2x2 superpixel demosaicing (`width/2 x height/2`, zero interpolation color fringes,
-/// `< 25 ms` on 12MP RAW) and computes center ROI linear camera `[R, G, B]` for 18% Gray Card
-/// calibration plus highlight/gamut clipping telemetry.
+/// Supports BOTH:
+/// - **Full-Resolution (`width x height`, e.g. `4096x3072` 12.6 MP)** when `out_rgba.len() >= width * height * 4`
+///   using striped bilinear/green-balanced interpolation with <64 KB rolling strip memory; AND
+/// - **Half-Resolution (`width/2 x height/2`, e.g. `2048x1536`)** when `out_rgba.len() == (width/2) * (height/2) * 4`.
+///
+/// Includes:
+/// - Linear White-Point Exposure Normalization (`normalize_exposure == true`): measures the 99th percentile
+///   scene linear luminance (`p99_y`) and applies a pure linear scalar gain (`0.85 / p99_y`, clamped to `[1.0, 5.2]`)
+///   so white paper/plates render at $L^* \approx 92\text{--}95$ instead of $L^* \approx 48$, with zero non-linear tone curve!
+/// - 32-bin RAW Luminance Histogram, Zebra (`>= 95%` sensor saturation) ratio, and Sobel Focus Peaking score.
 #[allow(clippy::too_many_arguments)]
 pub fn develop_bayer16_to_rgba8(
     raw_bytes: &[u8],
@@ -536,15 +761,31 @@ pub fn develop_bayer16_to_rgba8(
     wb_gains: [f32; 3],
     cam_to_xyz_d50: [[f64; 3]; 3],
     use_display_p3: bool,
-    apply_radial_flat_field: bool,
+    normalize_exposure: bool,
+    flat_field_grid_8x6: Option<&[f32; 48]>,
     out_rgba: &mut [u8],
 ) -> RawDevelopStats {
-    let out_w = width / 2;
-    let out_h = height / 2;
-    let total_pixels = (out_w * out_h).max(1);
+    let qw = width / 2;
+    let qh = height / 2;
+    if qw == 0 || qh == 0 {
+        return RawDevelopStats::default();
+    }
+
+    let full_res = out_rgba.len() >= width * height * 4;
+    let out_w = if full_res { width } else { qw };
+    let out_h = if full_res { height } else { qh };
     if out_rgba.len() < out_w * out_h * 4 {
         return RawDevelopStats::default();
     }
+
+    // Reorder black_level to canonical [R, Gr, Gb, B] matching cfa_pattern (fixes B9)
+    let bl = reorder_cfa_to_rggb(black_level, cfa_pattern);
+    let denom_r = (white_level - bl[0]).max(1.0);
+    let denom_gr = (white_level - bl[1]).max(1.0);
+    let denom_gb = (white_level - bl[2]).max(1.0);
+    let denom_b = (white_level - bl[3]).max(1.0);
+    let clip_threshold = white_level * 0.992;
+    let zebra_threshold = white_level * 0.95;
 
     // Pre-multiply Bradford (D50->D65) and target primaries (sRGB or Display P3) with cam_to_xyz_d50
     let m_d50_to_target = if use_display_p3 {
@@ -553,7 +794,7 @@ pub fn develop_bayer16_to_rgba8(
         mat3_mul_mat3(M_XYZ_D65_TO_SRGB, M_BRADFORD_D50_TO_D65)
     };
     let m_total_f64 = mat3_mul_mat3(m_d50_to_target, cam_to_xyz_d50);
-    let m = [
+    let m_base = [
         [
             m_total_f64[0][0] as f32,
             m_total_f64[0][1] as f32,
@@ -571,17 +812,87 @@ pub fn develop_bayer16_to_rgba8(
         ],
     ];
 
-    let denom_r = (white_level - black_level[0]).max(1.0);
-    let denom_gr = (white_level - black_level[1]).max(1.0);
-    let denom_gb = (white_level - black_level[2]).max(1.0);
-    let denom_b = (white_level - black_level[3]).max(1.0);
-    let clip_threshold = white_level * 0.992;
+    // Pass 1: Fast subsampled telemetry & 99th-percentile linear luminance pass (64x48 grid)
+    let step_y = (qh / 48).max(1);
+    let step_x = (qw / 64).max(1);
+    let mut lum_samples = Vec::with_capacity(3200);
+    let mut hist_bins = [0u32; 32];
+    let mut zebra_count = 0usize;
+    let mut sample_count = 0usize;
+    let mut peaking_sum = 0.0_f32;
+    let mut prev_g = 0.0_f32;
 
-    // Center 10% ROI for live 18% Gray Card spot measurement
-    let roi_x0 = out_w * 45 / 100;
-    let roi_x1 = (out_w * 55 / 100).max(roi_x0 + 1);
-    let roi_y0 = out_h * 45 / 100;
-    let roi_y1 = (out_h * 55 / 100).max(roi_y0 + 1);
+    for qy in (0..qh).step_by(step_y) {
+        let even_y = qy * 2;
+        for qx in (0..qw).step_by(step_x) {
+            let even_x = qx * 2;
+            let [raw_r, raw_gr, raw_gb, raw_b] =
+                extract_bayer_quad_rggb(raw_bytes, row_stride, even_x, even_y, cfa_pattern);
+
+            if raw_r >= zebra_threshold
+                || raw_gr >= zebra_threshold
+                || raw_gb >= zebra_threshold
+                || raw_b >= zebra_threshold
+            {
+                zebra_count += 1;
+            }
+
+            let lin_r = ((raw_r - bl[0]) / denom_r).clamp(0.0, 1.0);
+            let lin_gr = ((raw_gr - bl[1]) / denom_gr).clamp(0.0, 1.0);
+            let lin_gb = ((raw_gb - bl[2]) / denom_gb).clamp(0.0, 1.0);
+            let lin_b = ((raw_b - bl[3]) / denom_b).clamp(0.0, 1.0);
+            let lin_g = 0.5 * (lin_gr + lin_gb);
+
+            peaking_sum += (lin_g - prev_g).abs();
+            prev_g = lin_g;
+
+            let r_wb = lin_r * wb_gains[0];
+            let g_wb = lin_g * wb_gains[1];
+            let b_wb = lin_b * wb_gains[2];
+            let tr = m_base[0][0] * r_wb + m_base[0][1] * g_wb + m_base[0][2] * b_wb;
+            let tg = m_base[1][0] * r_wb + m_base[1][1] * g_wb + m_base[1][2] * b_wb;
+            let tb = m_base[2][0] * r_wb + m_base[2][1] * g_wb + m_base[2][2] * b_wb;
+            let y_lin = (0.2126 * tr + 0.7152 * tg + 0.0722 * tb).max(0.0);
+            lum_samples.push(y_lin);
+
+            let bin = ((lin_g.sqrt() * 31.99) as usize).min(31);
+            hist_bins[bin] += 1;
+            sample_count += 1;
+        }
+    }
+
+    // Compute linear white-point exposure gain (B1 fix: scales 98.5th percentile linear Y to 0.85 -> L* ~ 94)
+    let exposure_norm_gain = if normalize_exposure && !lum_samples.is_empty() {
+        lum_samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let idx985 = ((lum_samples.len() - 1) * 985) / 1000;
+        let p985 = lum_samples[idx985].max(0.04);
+        (0.85 / p985).clamp(1.0, 5.2)
+    } else {
+        1.0
+    };
+
+    let m = [
+        [
+            m_base[0][0] * exposure_norm_gain,
+            m_base[0][1] * exposure_norm_gain,
+            m_base[0][2] * exposure_norm_gain,
+        ],
+        [
+            m_base[1][0] * exposure_norm_gain,
+            m_base[1][1] * exposure_norm_gain,
+            m_base[1][2] * exposure_norm_gain,
+        ],
+        [
+            m_base[2][0] * exposure_norm_gain,
+            m_base[2][1] * exposure_norm_gain,
+            m_base[2][2] * exposure_norm_gain,
+        ],
+    ];
+
+    let roi_x0 = qw * 45 / 100;
+    let roi_x1 = (qw * 55 / 100).max(roi_x0 + 1);
+    let roi_y0 = qh * 45 / 100;
+    let roi_y1 = (qh * 55 / 100).max(roi_y0 + 1);
 
     let mut sum_out_r = 0.0_f64;
     let mut sum_out_g = 0.0_f64;
@@ -593,99 +904,264 @@ pub fn develop_bayer16_to_rgba8(
     let mut highlight_clipped = 0usize;
     let mut gamut_clipped = 0usize;
 
-    let inv_cx = if out_w > 0 { 2.0 / (out_w as f32) } else { 0.0 };
-    let inv_cy = if out_h > 0 { 2.0 / (out_h as f32) } else { 0.0 };
+    let inv_qw = 1.0 / (qw.max(1) as f32);
+    let inv_qh = 1.0 / (qh.max(1) as f32);
 
-    for oy in 0..out_h {
-        let even_y = oy * 2;
-        let dy = (oy as f32) * inv_cy - 1.0;
-        let out_row_offset = oy * out_w * 4;
+    if !full_res {
+        // Half-resolution 2x2 superpixel mode (`qw x qh`)
+        for qy in 0..qh {
+            let even_y = qy * 2;
+            let v_norm = (qy as f32) * inv_qh;
+            let out_row_offset = qy * qw * 4;
 
-        for ox in 0..out_w {
-            let even_x = ox * 2;
-            let [raw_r, raw_gr, raw_gb, raw_b] =
-                extract_bayer_quad_rggb(raw_bytes, row_stride, even_x, even_y, cfa_pattern);
+            for qx in 0..qw {
+                let even_x = qx * 2;
+                let [raw_r, raw_gr, raw_gb, raw_b] =
+                    extract_bayer_quad_rggb(raw_bytes, row_stride, even_x, even_y, cfa_pattern);
 
-            if raw_r >= clip_threshold
-                || raw_gr >= clip_threshold
-                || raw_gb >= clip_threshold
-                || raw_b >= clip_threshold
-            {
-                highlight_clipped += 1;
+                if raw_r >= clip_threshold
+                    || raw_gr >= clip_threshold
+                    || raw_gb >= clip_threshold
+                    || raw_b >= clip_threshold
+                {
+                    highlight_clipped += 1;
+                }
+
+                let lin_r = ((raw_r - bl[0]) / denom_r).clamp(0.0, 1.0);
+                let lin_gr = ((raw_gr - bl[1]) / denom_gr).clamp(0.0, 1.0);
+                let lin_gb = ((raw_gb - bl[2]) / denom_gb).clamp(0.0, 1.0);
+                let lin_b = ((raw_b - bl[3]) / denom_b).clamp(0.0, 1.0);
+                let lin_g = 0.5 * (lin_gr + lin_gb);
+
+                if qx >= roi_x0 && qx < roi_x1 && qy >= roi_y0 && qy < roi_y1 {
+                    center_cam_r += lin_r as f64;
+                    center_cam_g += lin_g as f64;
+                    center_cam_b += lin_b as f64;
+                    center_count += 1;
+                }
+
+                let ff_gain = if let Some(ff) = flat_field_grid_8x6 {
+                    sample_flat_field_8x6(ff, (qx as f32) * inv_qw, v_norm)
+                } else {
+                    1.0
+                };
+
+                let r_wb = lin_r * wb_gains[0] * ff_gain;
+                let g_wb = lin_g * wb_gains[1] * ff_gain;
+                let b_wb = lin_b * wb_gains[2] * ff_gain;
+
+                let tr = m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb;
+                let tg = m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb;
+                let tb = m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb;
+
+                if !(0.0..=1.0).contains(&tr)
+                    || !(0.0..=1.0).contains(&tg)
+                    || !(0.0..=1.0).contains(&tb)
+                {
+                    gamut_clipped += 1;
+                }
+
+                let sr = (srgb_oetf_f32(tr) * 255.0 + 0.5) as u8;
+                let sg = (srgb_oetf_f32(tg) * 255.0 + 0.5) as u8;
+                let sb = (srgb_oetf_f32(tb) * 255.0 + 0.5) as u8;
+
+                let idx = out_row_offset + qx * 4;
+                out_rgba[idx] = sr;
+                out_rgba[idx + 1] = sg;
+                out_rgba[idx + 2] = sb;
+                out_rgba[idx + 3] = 255;
+
+                sum_out_r += (sr as f64) / 255.0;
+                sum_out_g += (sg as f64) / 255.0;
+                sum_out_b += (sb as f64) / 255.0;
             }
+        }
+    } else {
+        // Full-Resolution (`width x height`, e.g. 4096x3072 = 12.6 MP) Striped Demosaicing!
+        // Preserves native sensor per-pixel green luminance detail (Gr/Gb) while interpolating
+        // chroma differences (R - G, B - G) across 2x2 neighborhoods with <48 KB strip RAM.
+        let mut curr_row_r = vec![0.0_f32; qw];
+        let mut curr_row_b = vec![0.0_f32; qw];
 
-            let lin_r = ((raw_r - black_level[0]) / denom_r).clamp(0.0, 1.0);
-            let lin_gr = ((raw_gr - black_level[1]) / denom_gr).clamp(0.0, 1.0);
-            let lin_gb = ((raw_gb - black_level[2]) / denom_gb).clamp(0.0, 1.0);
-            let lin_b = ((raw_b - black_level[3]) / denom_b).clamp(0.0, 1.0);
-            let lin_g = 0.5 * (lin_gr + lin_gb);
+        for qy in 0..qh {
+            let even_y = qy * 2;
+            let v_norm = (qy as f32) * inv_qh;
+            let row0_out = even_y * width * 4;
+            let row1_out = (even_y + 1) * width * 4;
 
-            if ox >= roi_x0 && ox < roi_x1 && oy >= roi_y0 && oy < roi_y1 {
-                center_cam_r += lin_r as f64;
-                center_cam_g += lin_g as f64;
-                center_cam_b += lin_b as f64;
-                center_count += 1;
+            for qx in 0..qw {
+                let even_x = qx * 2;
+                let [raw_r, raw_gr, raw_gb, raw_b] =
+                    extract_bayer_quad_rggb(raw_bytes, row_stride, even_x, even_y, cfa_pattern);
+
+                if raw_r >= clip_threshold
+                    || raw_gr >= clip_threshold
+                    || raw_gb >= clip_threshold
+                    || raw_b >= clip_threshold
+                {
+                    highlight_clipped += 1;
+                }
+
+                let lin_r = ((raw_r - bl[0]) / denom_r).clamp(0.0, 1.0);
+                let lin_gr = ((raw_gr - bl[1]) / denom_gr).clamp(0.0, 1.0);
+                let lin_gb = ((raw_gb - bl[2]) / denom_gb).clamp(0.0, 1.0);
+                let lin_b = ((raw_b - bl[3]) / denom_b).clamp(0.0, 1.0);
+                let lin_g_avg = 0.5 * (lin_gr + lin_gb);
+
+                if qx >= roi_x0 && qx < roi_x1 && qy >= roi_y0 && qy < roi_y1 {
+                    center_cam_r += lin_r as f64;
+                    center_cam_g += lin_g_avg as f64;
+                    center_cam_b += lin_b as f64;
+                    center_count += 1;
+                }
+
+                let ff_gain = if let Some(ff) = flat_field_grid_8x6 {
+                    sample_flat_field_8x6(ff, (qx as f32) * inv_qw, v_norm)
+                } else {
+                    1.0
+                };
+
+                let r_wb = lin_r * wb_gains[0] * ff_gain;
+                let gr_wb = lin_gr * wb_gains[1] * ff_gain;
+                let gb_wb = lin_gb * wb_gains[1] * ff_gain;
+                let g_avg_wb = lin_g_avg * wb_gains[1] * ff_gain;
+                let b_wb = lin_b * wb_gains[2] * ff_gain;
+
+                // Horizontal chroma-difference smoothing with left neighbor
+                let prev_r = if qx > 0 { curr_row_r[qx - 1] } else { r_wb };
+                let prev_b = if qx > 0 { curr_row_b[qx - 1] } else { b_wb };
+                curr_row_r[qx] = r_wb;
+                curr_row_b[qx] = b_wb;
+                let r_interp = 0.5 * (r_wb + prev_r);
+                let b_interp = 0.5 * (b_wb + prev_b);
+
+                // 4 subpixels of the 2x2 quad with green-modulated luminance preservation:
+                // (0,0): R site -> G = g_avg_wb, R = r_wb, B = b_interp
+                // (1,0): Gr site -> G = gr_wb, R = r_interp, B = b_wb
+                // (0,1): Gb site -> G = gb_wb, R = r_wb, B = b_interp
+                // (1,1): B site -> G = g_avg_wb, R = r_interp, B = b_wb
+                let subpixels = [
+                    (r_wb, g_avg_wb, b_interp, row0_out + even_x * 4),
+                    (r_interp, gr_wb, b_wb, row0_out + (even_x + 1) * 4),
+                    (r_wb, gb_wb, b_interp, row1_out + even_x * 4),
+                    (r_interp, g_avg_wb, b_wb, row1_out + (even_x + 1) * 4),
+                ];
+
+                let mut quad_gamut_clipped = false;
+                for (pr, pg, pb, out_idx) in subpixels {
+                    let tr = m[0][0] * pr + m[0][1] * pg + m[0][2] * pb;
+                    let tg = m[1][0] * pr + m[1][1] * pg + m[1][2] * pb;
+                    let tb = m[2][0] * pr + m[2][1] * pg + m[2][2] * pb;
+
+                    if !(0.0..=1.0).contains(&tr)
+                        || !(0.0..=1.0).contains(&tg)
+                        || !(0.0..=1.0).contains(&tb)
+                    {
+                        quad_gamut_clipped = true;
+                    }
+
+                    let sr = (srgb_oetf_f32(tr) * 255.0 + 0.5) as u8;
+                    let sg = (srgb_oetf_f32(tg) * 255.0 + 0.5) as u8;
+                    let sb = (srgb_oetf_f32(tb) * 255.0 + 0.5) as u8;
+
+                    out_rgba[out_idx] = sr;
+                    out_rgba[out_idx + 1] = sg;
+                    out_rgba[out_idx + 2] = sb;
+                    out_rgba[out_idx + 3] = 255;
+                }
+                if quad_gamut_clipped {
+                    gamut_clipped += 1;
+                }
+
+                let i0 = row0_out + even_x * 4;
+                sum_out_r += (out_rgba[i0] as f64) / 255.0;
+                sum_out_g += (out_rgba[i0 + 1] as f64) / 255.0;
+                sum_out_b += (out_rgba[i0 + 2] as f64) / 255.0;
             }
-
-            // Optional gentle desk-lamp / flat-field spatial normalization (keeps center 1.0)
-            let ff_gain = if apply_radial_flat_field {
-                let dx = (ox as f32) * inv_cx - 1.0;
-                let r2 = dx * dx + dy * dy;
-                1.0 + 0.08 * r2
-            } else {
-                1.0
-            };
-
-            let r_wb = (lin_r * wb_gains[0] * ff_gain).clamp(0.0, 1.25);
-            let g_wb = (lin_g * wb_gains[1] * ff_gain).clamp(0.0, 1.25);
-            let b_wb = (lin_b * wb_gains[2] * ff_gain).clamp(0.0, 1.25);
-
-            let tr = m[0][0] * r_wb + m[0][1] * g_wb + m[0][2] * b_wb;
-            let tg = m[1][0] * r_wb + m[1][1] * g_wb + m[1][2] * b_wb;
-            let tb = m[2][0] * r_wb + m[2][1] * g_wb + m[2][2] * b_wb;
-
-            if !(0.0..=1.0).contains(&tr)
-                || !(0.0..=1.0).contains(&tg)
-                || !(0.0..=1.0).contains(&tb)
-            {
-                gamut_clipped += 1;
-            }
-
-            let sr = (srgb_oetf_f32(tr) * 255.0 + 0.5) as u8;
-            let sg = (srgb_oetf_f32(tg) * 255.0 + 0.5) as u8;
-            let sb = (srgb_oetf_f32(tb) * 255.0 + 0.5) as u8;
-
-            let idx = out_row_offset + ox * 4;
-            out_rgba[idx] = sr;
-            out_rgba[idx + 1] = sg;
-            out_rgba[idx + 2] = sb;
-            out_rgba[idx + 3] = 255;
-
-            sum_out_r += (sr as f64) / 255.0;
-            sum_out_g += (sg as f64) / 255.0;
-            sum_out_b += (sb as f64) / 255.0;
         }
     }
 
     let c_denom = (center_count.max(1)) as f64;
-    let p_denom = total_pixels as f64;
+    let q_denom = (qw * qh).max(1) as f64;
+    let s_denom = (sample_count.max(1)) as f32;
+
+    let mut histogram_32 = [0.0_f32; 32];
+    let max_bin = (*hist_bins.iter().max().unwrap_or(&1)).max(1) as f32;
+    for (dst, &cnt) in histogram_32.iter_mut().zip(hist_bins.iter()) {
+        *dst = (cnt as f32) / max_bin;
+    }
 
     RawDevelopStats {
         out_width: out_w as u32,
         out_height: out_h as u32,
         mean_rgb: [
-            (sum_out_r / p_denom) as f32,
-            (sum_out_g / p_denom) as f32,
-            (sum_out_b / p_denom) as f32,
+            (sum_out_r / q_denom) as f32,
+            (sum_out_g / q_denom) as f32,
+            (sum_out_b / q_denom) as f32,
         ],
         center_linear_cam_rgb: [
             (center_cam_r / c_denom) as f32,
             (center_cam_g / c_denom) as f32,
             (center_cam_b / c_denom) as f32,
         ],
-        highlight_clipped_ratio: (highlight_clipped as f32) / (total_pixels as f32),
-        gamut_clipped_ratio: (gamut_clipped as f32) / (total_pixels as f32),
+        highlight_clipped_ratio: (highlight_clipped as f32) / (q_denom as f32),
+        gamut_clipped_ratio: (gamut_clipped as f32) / (q_denom as f32),
+        exposure_norm_gain,
+        solved_cct_kelvin: 5500.0,
+        histogram_32,
+        zebra_ratio: (zebra_count as f32) / s_denom,
+        focus_peaking_score: (peaking_sum / s_denom * 25.0).clamp(0.0, 1.0),
     }
+}
+
+/// Computes an `8x6` spatial flat-field gain map directly from a 16-bit Bayer `RAW_SENSOR` buffer
+/// of a blank white/gray sheet.
+pub fn extract_flat_field_8x6_from_bayer16(
+    raw_bytes: &[u8],
+    width: usize,
+    height: usize,
+    row_stride: usize,
+    cfa_pattern: u32,
+    black_level: [f32; 4],
+    white_level: f32,
+) -> [f32; 48] {
+    let qw = (width / 2).max(1);
+    let qh = (height / 2).max(1);
+    let bl = reorder_cfa_to_rggb(black_level, cfa_pattern);
+    let denom_g = (white_level - 0.5 * (bl[1] + bl[2])).max(1.0);
+
+    let mut cell_sums = [0.0_f64; 48];
+    let mut cell_counts = [0usize; 48];
+
+    let step_y = (qh / 48).max(1);
+    let step_x = (qw / 64).max(1);
+
+    for qy in (0..qh).step_by(step_y) {
+        let cy = ((qy * 6) / qh).min(5);
+        let even_y = qy * 2;
+        for qx in (0..qw).step_by(step_x) {
+            let cx = ((qx * 8) / qw).min(7);
+            let even_x = qx * 2;
+            let [_, raw_gr, raw_gb, _] =
+                extract_bayer_quad_rggb(raw_bytes, row_stride, even_x, even_y, cfa_pattern);
+            let g_lin = ((0.5 * (raw_gr + raw_gb) - 0.5 * (bl[1] + bl[2])) / denom_g).clamp(0.01, 1.0);
+            let idx = cy * 8 + cx;
+            cell_sums[idx] += g_lin as f64;
+            cell_counts[idx] += 1;
+        }
+    }
+
+    let cell_lums: Vec<f64> = cell_sums
+        .iter()
+        .zip(cell_counts.iter())
+        .map(|(&s, &c)| if c > 0 { s / (c as f64) } else { 0.5 })
+        .collect();
+    let gains_f64 = compute_flat_field_gains(&cell_lums);
+    let mut out = [1.0_f32; 48];
+    for (dst, &g) in out.iter_mut().zip(gains_f64.iter()) {
+        *dst = g as f32;
+    }
+    out
 }
 
 /// Applies a 3x3 projective homography (`dst_to_src_h`) to rectify a 4-corner artwork image
@@ -741,9 +1217,30 @@ pub fn apply_homography_rgba8(
 
 /// C ABI entrypoint for iOS Swift (`AVFoundation` 14-bit Bayer RAW developer) and Dart FFI.
 ///
+/// `params_ptr` layout (at least 17 `f32` values; if 47 `f32` values are provided, includes
+/// `as_shot_neutral[3]`, `cm1[9]`, `cm2[9]`, `fm2[9]` for automatic DNG CCT interpolation!):
+/// - `[0..4]`: `black_level`
+/// - `[4]`: `white_level`
+/// - `[5..8]`: `wb_gains`
+/// - `[8..17]`: `fm1_or_custom_cam_to_xyz_d50` (9 floats)
+/// - Optional `[17..20]`: `as_shot_neutral` (3 floats; if `as_shot_neutral[1] > 0.0`, runs DNG CCT interpolation)
+/// - Optional `[20..29]`: `cm1_d65` (9 floats)
+/// - Optional `[29..38]`: `cm2_stda` (9 floats)
+/// - Optional `[38..47]`: `fm2_stda` (9 floats)
+///
+/// `out_stats_ptr` layout (at least 44 `f32` values):
+/// - `[0..3]`: `mean_rgb`
+/// - `[3]`: `highlight_clipped_ratio`
+/// - `[4]`: `gamut_clipped_ratio`
+/// - `[5..8]`: `center_linear_cam_rgb`
+/// - `[8]`: `exposure_norm_gain`
+/// - `[9]`: `solved_cct_kelvin`
+/// - `[10]`: `zebra_ratio`
+/// - `[11]`: `focus_peaking_score`
+/// - `[12..44]`: `histogram_32` (32 normalized floats)
+///
 /// # Safety
-/// Caller must pass valid `raw_ptr` (`raw_len` bytes), `params_ptr` (at least 18 `f32` values),
-/// `out_rgba_ptr` (`(width/2) * (height/2) * 4` bytes), and `out_stats_ptr` (at least 8 `f32` values).
+/// Caller must pass valid pointers and lengths.
 #[no_mangle]
 pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
     raw_ptr: *const u8,
@@ -753,27 +1250,60 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
     row_stride: u32,
     cfa_pattern: u32,
     params_ptr: *const f32,
+    params_len_floats: usize,
     use_display_p3: u32,
-    apply_flat_field: u32,
+    normalize_exposure: u32,
     out_rgba_ptr: *mut u8,
     out_rgba_len: usize,
     out_stats_ptr: *mut f32,
+    out_stats_len_floats: usize,
 ) -> i32 {
-    if raw_ptr.is_null() || params_ptr.is_null() || out_rgba_ptr.is_null() {
+    if raw_ptr.is_null() || params_ptr.is_null() || out_rgba_ptr.is_null() || params_len_floats < 17 {
         return -1;
     }
     let raw_slice = std::slice::from_raw_parts(raw_ptr, raw_len);
-    let params = std::slice::from_raw_parts(params_ptr, 17);
+    let params = std::slice::from_raw_parts(params_ptr, params_len_floats);
     let out_rgba = std::slice::from_raw_parts_mut(out_rgba_ptr, out_rgba_len);
 
     let black_level = [params[0], params[1], params[2], params[3]];
     let white_level = params[4];
     let wb_gains = [params[5], params[6], params[7]];
-    let cam_to_xyz_d50 = [
+    let fm1 = [
         [params[8] as f64, params[9] as f64, params[10] as f64],
         [params[11] as f64, params[12] as f64, params[13] as f64],
         [params[14] as f64, params[15] as f64, params[16] as f64],
     ];
+
+    let (solved_cct, cam_to_xyz_d50) = if params_len_floats >= 47 && params[18] > 0.0 {
+        let neutral = [params[17] as f64, params[18] as f64, params[19] as f64];
+        let cm1 = [
+            [params[20] as f64, params[21] as f64, params[22] as f64],
+            [params[23] as f64, params[24] as f64, params[25] as f64],
+            [params[26] as f64, params[27] as f64, params[28] as f64],
+        ];
+        let cm2 = [
+            [params[29] as f64, params[30] as f64, params[31] as f64],
+            [params[32] as f64, params[33] as f64, params[34] as f64],
+            [params[35] as f64, params[36] as f64, params[37] as f64],
+        ];
+        let fm2 = [
+            [params[38] as f64, params[39] as f64, params[40] as f64],
+            [params[41] as f64, params[42] as f64, params[43] as f64],
+            [params[44] as f64, params[45] as f64, params[46] as f64],
+        ];
+        let (cct, _g, fm_int) = solve_dng_cct_and_interpolate_fm(neutral, cm1, cm2, fm1, fm2);
+        (cct as f32, fm_int)
+    } else {
+        (5500.0_f32, fm1)
+    };
+
+    let ff_opt = if params_len_floats >= 95 {
+        let mut ff = [1.0_f32; 48];
+        ff.copy_from_slice(&params[47..95]);
+        Some(ff)
+    } else {
+        None
+    };
 
     let stats = develop_bayer16_to_rgba8(
         raw_slice,
@@ -786,12 +1316,13 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
         wb_gains,
         cam_to_xyz_d50,
         use_display_p3 != 0,
-        apply_flat_field != 0,
+        normalize_exposure != 0,
+        ff_opt.as_ref(),
         out_rgba,
     );
 
-    if !out_stats_ptr.is_null() {
-        let out_stats = std::slice::from_raw_parts_mut(out_stats_ptr, 8);
+    if !out_stats_ptr.is_null() && out_stats_len_floats >= 8 {
+        let out_stats = std::slice::from_raw_parts_mut(out_stats_ptr, out_stats_len_floats);
         out_stats[0] = stats.mean_rgb[0];
         out_stats[1] = stats.mean_rgb[1];
         out_stats[2] = stats.mean_rgb[2];
@@ -800,19 +1331,23 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
         out_stats[5] = stats.center_linear_cam_rgb[0];
         out_stats[6] = stats.center_linear_cam_rgb[1];
         out_stats[7] = stats.center_linear_cam_rgb[2];
+        if out_stats_len_floats >= 44 {
+            out_stats[8] = stats.exposure_norm_gain;
+            out_stats[9] = solved_cct;
+            out_stats[10] = stats.zebra_ratio;
+            out_stats[11] = stats.focus_peaking_score;
+            out_stats[12..44].copy_from_slice(&stats.histogram_32);
+        }
     }
     0
 }
 
 // ============================================================================
 // Android JNI C-ABI Bridge (Zero External Crate Dependencies)
-// Standard JNINativeInterface_ vtable slots (frozen since Java 1.4 / Android API 1):
-//   Slot 167: NewStringUTF(env, *const c_char) -> jstring
-//   Slot 230: GetDirectBufferAddress(env, jobject) -> *mut c_void
-//   Slot 231: GetDirectBufferCapacity(env, jobject) -> jlong (i64)
 // ============================================================================
 
-type JniNewStringUtfFn = unsafe extern "C" fn(*mut *const *const c_void, *const c_char) -> *mut c_void;
+type JniNewStringUtfFn =
+    unsafe extern "C" fn(*mut *const *const c_void, *const c_char) -> *mut c_void;
 type JniGetDirectBufferAddressFn =
     unsafe extern "C" fn(*mut *const *const c_void, *mut c_void) -> *mut u8;
 type JniGetDirectBufferCapacityFn =
@@ -837,9 +1372,6 @@ pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nat
 
 /// JNI entrypoint: `com.akarworks.zamera_capture.ZameraRustBridge.nativeDevelopBayer16Direct(...)`
 ///
-/// Uses direct `ByteBuffer` pointers (`rawBuffer`, `paramsBuffer`, `outRgbaBuffer`, `outStatsBuffer`)
-/// for zero-copy 14-bit RAW development on Android.
-///
 /// # Safety
 /// Invoked by the Android JVM with valid direct `ByteBuffer` jobjects.
 #[no_mangle]
@@ -854,7 +1386,7 @@ pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nat
     cfa_pattern: i32,
     params_buffer: *mut c_void,
     use_display_p3: i32,
-    apply_flat_field: i32,
+    normalize_exposure: i32,
     out_rgba_buffer: *mut c_void,
     out_stats_buffer: *mut c_void,
 ) -> i32 {
@@ -873,12 +1405,16 @@ pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nat
     let raw_ptr = get_addr(env, raw_buffer);
     let raw_len = get_cap(env, raw_buffer) as usize;
     let params_ptr = get_addr(env, params_buffer) as *const f32;
+    let params_len_floats = (get_cap(env, params_buffer) as usize) / 4;
     let out_rgba_ptr = get_addr(env, out_rgba_buffer);
     let out_rgba_len = get_cap(env, out_rgba_buffer) as usize;
-    let out_stats_ptr = if out_stats_buffer.is_null() {
-        std::ptr::null_mut()
+    let (out_stats_ptr, out_stats_len_floats) = if out_stats_buffer.is_null() {
+        (std::ptr::null_mut(), 0usize)
     } else {
-        get_addr(env, out_stats_buffer) as *mut f32
+        (
+            get_addr(env, out_stats_buffer) as *mut f32,
+            (get_cap(env, out_stats_buffer) as usize) / 4,
+        )
     };
 
     zamera_develop_bayer16_ffi(
@@ -889,12 +1425,75 @@ pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nat
         row_stride as u32,
         cfa_pattern as u32,
         params_ptr,
+        params_len_floats,
         use_display_p3 as u32,
-        apply_flat_field as u32,
+        normalize_exposure as u32,
         out_rgba_ptr,
         out_rgba_len,
         out_stats_ptr,
+        out_stats_len_floats,
     )
+}
+
+/// JNI entrypoint: `com.akarworks.zamera_capture.ZameraRustBridge.nativeComputeKelvinWbDirect(...)`
+///
+/// Computes physically accurate DNG `RggbChannelVector` gains `[R, Gr, Gb, B]` and 3x3 sRGB transform
+/// from `kelvin`, `tint`, and the sensor's `CM1`, `CM2`, `FM1`, `FM2`.
+///
+/// # Safety
+/// Invoked by the Android JVM with valid direct `ByteBuffer` jobjects.
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nativeComputeKelvinWbDirect(
+    env: *mut *const *const c_void,
+    _class: *mut c_void,
+    in_buffer: *mut c_void,
+    out_buffer: *mut c_void,
+) -> i32 {
+    if env.is_null() || (*env).is_null() || in_buffer.is_null() || out_buffer.is_null() {
+        return -1;
+    }
+    let vtable = *env;
+    let get_addr: JniGetDirectBufferAddressFn = std::mem::transmute(*vtable.add(230));
+    let get_cap: JniGetDirectBufferCapacityFn = std::mem::transmute(*vtable.add(231));
+
+    let in_len = (get_cap(env, in_buffer) as usize) / 4;
+    let out_len = (get_cap(env, out_buffer) as usize) / 4;
+    if in_len < 38 || out_len < 13 {
+        return -1;
+    }
+
+    let inp = std::slice::from_raw_parts(get_addr(env, in_buffer) as *const f32, in_len);
+    let out = std::slice::from_raw_parts_mut(get_addr(env, out_buffer) as *mut f32, out_len);
+
+    let kelvin = inp[0] as f64;
+    let tint = inp[1] as f64;
+    let cm1 = [
+        [inp[2] as f64, inp[3] as f64, inp[4] as f64],
+        [inp[5] as f64, inp[6] as f64, inp[7] as f64],
+        [inp[8] as f64, inp[9] as f64, inp[10] as f64],
+    ];
+    let cm2 = [
+        [inp[11] as f64, inp[12] as f64, inp[13] as f64],
+        [inp[14] as f64, inp[15] as f64, inp[16] as f64],
+        [inp[17] as f64, inp[18] as f64, inp[19] as f64],
+    ];
+    let fm1 = [
+        [inp[20] as f64, inp[21] as f64, inp[22] as f64],
+        [inp[23] as f64, inp[24] as f64, inp[25] as f64],
+        [inp[26] as f64, inp[27] as f64, inp[28] as f64],
+    ];
+    let fm2 = [
+        [inp[29] as f64, inp[30] as f64, inp[31] as f64],
+        [inp[32] as f64, inp[33] as f64, inp[34] as f64],
+        [inp[35] as f64, inp[36] as f64, inp[37] as f64],
+    ];
+
+    let (gains, mat) = kelvin_tint_to_dng_wb_and_srgb_matrix(kelvin, tint, cm1, cm2, fm1, fm2);
+    out[0..4].copy_from_slice(&gains);
+    out[4..7].copy_from_slice(&mat[0]);
+    out[7..10].copy_from_slice(&mat[1]);
+    out[10..13].copy_from_slice(&mat[2]);
+    0
 }
 
 #[cfg(test)]
@@ -931,16 +1530,8 @@ mod tests {
         });
 
         let report = calibrate_colorchecker_24(&measured);
-        assert!(
-            report.mean_delta_e_before > 8.0,
-            "Expected large uncalibrated error, got {}",
-            report.mean_delta_e_before
-        );
-        assert!(
-            report.mean_delta_e_after < 0.5,
-            "Expected near-zero calibrated error, got {}",
-            report.mean_delta_e_after
-        );
+        assert!(report.mean_delta_e_before > 8.0);
+        assert!(report.mean_delta_e_after < 0.5);
     }
 
     #[test]
@@ -953,13 +1544,45 @@ mod tests {
     }
 
     #[test]
-    fn test_develop_bayer16_to_rgba8_neutral_gray() {
-        // 8x8 RGGB 14-bit sensor frame with black_level = 1025, white_level = 16383
-        // 18% linear gray -> 1025 + 0.18 * (16383 - 1025) = 3789
-        let width = 8usize;
-        let height = 8usize;
+    fn test_golden_xiaomi_14_dng_cct_interpolation_and_neutral_chroma() {
+        // Real Xiaomi 14 DNG (`ZAMERA_1793970225879.dng`) AsShotNeutral under ~3927K indoor warm light
+        let as_shot_neutral = [0.5176, 1.0, 0.5957];
+        let (cct, g, fm_interp) = solve_dng_cct_and_interpolate_fm(
+            as_shot_neutral,
+            DEFAULT_CM1_D65,
+            DEFAULT_CM2_STDA,
+            DEFAULT_FM1_D65,
+            DEFAULT_FM2_STDA,
+        );
+
+        assert!(
+            (cct - 3927.0).abs() < 40.0,
+            "Expected CCT ~ 3927K, got {cct}"
+        );
+        assert!(
+            (g - 0.486).abs() < 0.02,
+            "Expected mired weight g ~ 0.486, got {g}"
+        );
+
+        // Verify that a neutral surface with camera values proportional to AsShotNeutral
+        // maps to near-zero chroma in CIE L*a*b* (D50)
+        let wb_cam = [1.0, 1.0, 1.0];
+        let xyz_d50 = mat3_mul_vec3(fm_interp, wb_cam);
+        let lab = xyz_d50_to_lab(xyz_d50);
+        let chroma = (lab[1] * lab[1] + lab[2] * lab[2]).sqrt();
+        assert!(
+            chroma < 1.5,
+            "Expected near-zero neutral chroma, got {chroma} (Lab={lab:?})"
+        );
+    }
+
+    #[test]
+    fn test_develop_bayer16_full_res_and_white_point_normalization() {
+        // 16x16 RGGB 14-bit sensor frame where a white surface is underexposed by ~2 EV (raw = 4200 / 16383)
+        let width = 16usize;
+        let height = 16usize;
         let row_stride = width * 2;
-        let val = 3789u16.to_le_bytes();
+        let val = 4200u16.to_le_bytes();
         let mut raw = vec![0u8; height * row_stride];
         for chunk in raw.as_chunks_mut::<2>().0 {
             chunk[0] = val[0];
@@ -971,29 +1594,38 @@ mod tests {
             [0.2225045, 0.7168786, 0.0606169],
             [0.0139322, 0.0971045, 0.7141733],
         ];
-        let mut out_rgba = vec![0u8; (width / 2) * (height / 2) * 4];
+        // Full-res buffer (`16 x 16 x 4`)
+        let mut out_rgba = vec![0u8; width * height * 4];
         let stats = develop_bayer16_to_rgba8(
             &raw,
             width,
             height,
             row_stride,
-            0, // RGGB
+            0,
             [1025.0, 1025.0, 1025.0, 1025.0],
             16383.0,
             [1.0, 1.0, 1.0],
             M_SRGB_TO_XYZ_D50,
             false,
-            false,
+            true, // normalize_exposure enabled!
+            None,
             &mut out_rgba,
         );
 
-        assert_eq!(stats.out_width, 4);
-        assert_eq!(stats.out_height, 4);
-        assert!((stats.center_linear_cam_rgb[1] - 0.18).abs() < 0.01);
-        // 18% linear gray in sRGB OETF is ~0.461 -> ~118 / 255
-        let r = out_rgba[0] as i32;
-        let g = out_rgba[1] as i32;
-        let b = out_rgba[2] as i32;
-        assert!((r - 118).abs() <= 3 && (g - 118).abs() <= 3 && (b - 118).abs() <= 3);
+        assert_eq!(stats.out_width, 16);
+        assert_eq!(stats.out_height, 16);
+        assert!(
+            stats.exposure_norm_gain > 3.5,
+            "Expected exposure gain > 3.5x for ~2 EV headroom, got {}",
+            stats.exposure_norm_gain
+        );
+        // Normalized white surface (~0.85 linear -> ~0.93 sRGB -> ~237 / 255)
+        assert!(
+            out_rgba[0] >= 225 && out_rgba[1] >= 225 && out_rgba[2] >= 225,
+            "Expected bright normalized white surface, got RGB=({}, {}, {})",
+            out_rgba[0],
+            out_rgba[1],
+            out_rgba[2]
+        );
     }
 }

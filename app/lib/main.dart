@@ -53,18 +53,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   String? _lastCaptureMessage;
   CapturePhotoResult? _lastCaptureResult;
   bool _isCapturing = false;
+  Offset? _lastFocusTapNorm;
 
-  // Sanat Modu (TrueColor) State
+  // Sanat Modu (TrueColor) State — Faz 2.0
   double _simulatedSensorWarmth = 1.45;
   bool _showPerspectiveGrid = true;
   bool _flatFieldEnabled = true;
   bool _useDisplayP3 = false;
+  bool _fullResolution = true;
+  bool _normalizeExposure = true;
   bool _useMeasuredGrayCardWb = false;
   List<double>? _measuredGrayCardWbGains;
   late ColorCheckerCalibrationResult _calibrationResult;
 
-  // Pro Fotoğraf State
+  // Pro Fotoğraf State — Faz 2A & 2B
   bool _manualExposure = false;
+  double _evCompensation = 0.0;
   double _iso = 100.0;
   double _shutterDenominator = 125.0; // 1/125 sec
   bool _manualFocus = false;
@@ -92,6 +96,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     _calibrationResult = ZameraCapture.calibrateColorChecker24(measured);
   }
 
+  CameraUnitCapability? get _activeCameraCap {
+    final report = _probeReport;
+    if (report == null) return null;
+    for (final cam in report.cameras) {
+      if (cam.cameraId == _selectedCameraId) return cam;
+    }
+    return null;
+  }
+
   Future<void> _runDeviceProbe() async {
     setState(() {
       _loadingProbe = true;
@@ -100,7 +113,6 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     try {
       final report = await ZameraCapture.probeDeviceCapabilities();
       if (!mounted) return;
-      // Prefer physical camera "2" (23mm 14-bit RAW main sensor on Xiaomi) if available
       final preferredId = report.cameraIdList.contains('2')
           ? '2'
           : (report.cameraIdList.isNotEmpty ? report.cameraIdList.first : '0');
@@ -122,10 +134,23 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   }
 
   Future<void> _startOrSwitchCamera(String cameraId) async {
-    setState(() => _selectedCameraId = cameraId);
+    setState(() {
+      _selectedCameraId = cameraId;
+      _lastFocusTapNorm = null;
+    });
     try {
       final info = await ZameraCapture.startPreviewSession(cameraId: cameraId);
       if (!mounted) return;
+      final cap = _activeCameraCap;
+      if (cap != null && !cap.supportsVariableFocus && _manualFocus) {
+        _manualFocus = false;
+      }
+      final isoRange = cap?.isoRange;
+      if (isoRange != null && isoRange.length >= 2) {
+        final minIso = isoRange[0].toDouble();
+        final maxIso = isoRange[1].toDouble();
+        _iso = _iso.clamp(minIso, maxIso);
+      }
       setState(() => _previewSession = info);
       await _pushManualControlsToNative(artworkMode: _selectedIndex == 0);
     } catch (e) {
@@ -140,17 +165,46 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     if (_previewSession == null) return;
     final exposureNs = (1e9 / _shutterDenominator).round();
     final gains = ZameraCapture.kelvinAndTintToRggbGains(_kelvin, _tint);
+    final supportsFocus = _activeCameraCap?.supportsVariableFocus ?? true;
     try {
       await ZameraCapture.updateManualControls(
-        manualExposure: _manualExposure,
+        manualExposure: !artworkMode && _manualExposure,
         iso: _iso,
         exposureTimeNs: exposureNs,
-        manualFocus: _manualFocus,
+        evCompensation: !artworkMode && !_manualExposure ? _evCompensation : 0.0,
+        manualFocus: !artworkMode && supportsFocus && _manualFocus,
         focusDistance: _focusDistance,
         manualWb: !artworkMode && _manualWb,
+        kelvin: _kelvin,
+        tint: _tint,
         rggbGains: gains,
         artworkLinearMode: artworkMode,
       );
+    } catch (_) {}
+  }
+
+  Future<void> _onViewfinderTapUp(
+    TapUpDetails details,
+    BoxConstraints constraints,
+  ) async {
+    if (_previewSession == null) return;
+    final normX = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+    final normY = (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
+    setState(() {
+      _lastFocusTapNorm = Offset(normX, normY);
+    });
+    try {
+      final ok = await ZameraCapture.setFocusAndMeteringPoint(
+        x: normX,
+        y: normY,
+      );
+      if (!mounted) return;
+      final afSupported = _activeCameraCap?.supportsVariableFocus ?? true;
+      setState(() {
+        _lastCaptureMessage = (ok && afSupported)
+            ? 'Dokunmatik AF + Spot AE Noktası: (${(normX * 100).round()}%, ${(normY * 100).round()}%)'
+            : 'Sabit Odaklı Lens — Yalnızca Spot AE Ölçüm Noktası Güncellendi';
+      });
     } catch (_) {}
   }
 
@@ -162,7 +216,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     setState(() {
       _isCapturing = true;
       _lastCaptureMessage = isArtworkMode
-          ? '14-Bit RAW çekiliyor ve Rust TrueColor ISP işleniyor...'
+          ? '14-Bit RAW (${_fullResolution ? "12.6MP Tam Çözünürlük" : "3.1MP Hızlı"}) çekiliyor ve Rust TrueColor ISP işleniyor...'
           : 'Pro RAW (.dng) + JPEG çekiliyor...';
     });
     try {
@@ -171,7 +225,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         isArtworkMode: isArtworkMode,
         preferProRaw: !isArtworkMode && _preferProRaw48Mp,
         useDisplayP3: _useDisplayP3,
-        applyFlatField: _flatFieldEnabled,
+        fullResolution: _fullResolution,
+        normalizeExposure: _normalizeExposure && !_useMeasuredGrayCardWb,
         wbGains: _useMeasuredGrayCardWb ? _measuredGrayCardWbGains : null,
       );
       if (!mounted) return;
@@ -192,15 +247,49 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         final dcimStatus = res.mediaStoreJpegUri != null
             ? 'Galeriye (DCIM/Zamera) kaydedildi'
             : 'Uygulama dizinine kaydedildi';
+        final cctStr = res.solvedCctKelvin != null
+            ? ' · ${res.solvedCctKelvin!.round()}K'
+            : '';
+        final resStr = (res.outputWidth != null && res.outputHeight != null)
+            ? ' (${res.outputWidth}×${res.outputHeight})'
+            : '';
         _lastCaptureMessage = isArtworkMode
-            ? 'Sanat RAW + TrueColor (${_useDisplayP3 ? "Display P3" : "sRGB"}) $dcimStatus!'
-            : 'Pro RAW+JPEG (${res.cameraId}) $dcimStatus!';
+            ? 'Sanat RAW + TrueColor$resStr$cctStr $dcimStatus!'
+            : 'Pro RAW+JPEG (#${res.cameraId}$cctStr) $dcimStatus!';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isCapturing = false;
         _lastCaptureMessage = 'Çekim bildirimi: $e';
+      });
+    }
+  }
+
+  Future<void> _triggerBracketedCapture() async {
+    if (_isCapturing) return;
+    setState(() {
+      _isCapturing = true;
+      _lastCaptureMessage = '3-Kare AE Braketleme (-1.5 EV, 0 EV, +1.5 EV) çekiliyor...';
+    });
+    try {
+      final results = await ZameraCapture.captureBracketedPhotos(
+        evOffsets: const [-1.5, 0.0, 1.5],
+      );
+      if (!mounted) return;
+      setState(() {
+        _isCapturing = false;
+        if (results.isNotEmpty) {
+          _lastCaptureResult = results[results.length ~/ 2];
+        }
+        _lastCaptureMessage =
+            '3-Kare AE Braketleme tamamlandı (${results.length} adet DNG+JPEG DCIM/Zamera dizinine kaydedildi)!';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCapturing = false;
+        _lastCaptureMessage = 'Braketleme bildirimi: $e';
       });
     }
   }
@@ -263,7 +352,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (idx) => setState(() => _selectedIndex = idx),
+        onDestinationSelected: (idx) {
+          setState(() => _selectedIndex = idx);
+          if (idx == 0 || idx == 1) {
+            _pushManualControlsToNative(artworkMode: idx == 0);
+          }
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.palette_outlined),
@@ -288,6 +382,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
 
   Widget _buildViewfinderCard({required bool isArtworkMode}) {
     final session = _previewSession;
+    final lastRes = _lastCaptureResult;
+    final hist = lastRes?.rawHistogram32;
     return Card(
       color: const Color(0xFF12151C),
       clipBehavior: Clip.antiAlias,
@@ -295,107 +391,167 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         children: [
           AspectRatio(
             aspectRatio: 3 / 4,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (session != null && session.textureId >= 0)
-                  ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: session.previewHeight.toDouble(),
-                        height: session.previewWidth.toDouble(),
-                        child: Texture(textureId: session.textureId),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    color: const Color(0xFF0A0C10),
-                    alignment: Alignment.center,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.sensors_rounded,
-                          size: 42,
-                          color: Color(0xFFE5A93C),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          isArtworkMode
-                              ? 'Sanat Modu Canlı RAW Vizörü (sRGB / Display P3 Doğrusal)'
-                              : 'Pro Kamera Fiziksel Lens Vizörü (Sıfır Otomatik Lens Geçişi)',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.white70,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (details) => _onViewfinderTapUp(details, constraints),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (session != null && session.textureId >= 0)
+                        ClipRect(
+                          child: FittedBox(
+                            fit: BoxFit.cover,
+                            child: SizedBox(
+                              width: session.previewHeight.toDouble(),
+                              height: session.previewWidth.toDouble(),
+                              child: Texture(textureId: session.textureId),
+                            ),
                           ),
-                          textAlign: TextAlign.center,
+                        )
+                      else
+                        Container(
+                          color: const Color(0xFF0A0C10),
+                          alignment: Alignment.center,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.sensors_rounded,
+                                size: 42,
+                                color: Color(0xFFE5A93C),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                isArtworkMode
+                                    ? 'Sanat Modu Canlı RAW Vizörü (sRGB / Display P3 Doğrusal)'
+                                    : 'Pro Kamera Fiziksel Lens Vizörü (Sıfır Otomatik Lens Geçişi)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 10),
+                              FilledButton.tonalIcon(
+                                onPressed: () =>
+                                    _startOrSwitchCamera(_selectedCameraId),
+                                icon: const Icon(Icons.play_arrow_rounded),
+                                label: const Text('Canlı Vizörü Başlat'),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 10),
-                        FilledButton.tonalIcon(
-                          onPressed: () =>
-                              _startOrSwitchCamera(_selectedCameraId),
-                          icon: const Icon(Icons.play_arrow_rounded),
-                          label: const Text('Canlı Vizörü Başlat'),
+                      if (isArtworkMode && _showPerspectiveGrid)
+                        IgnorePointer(
+                          child: CustomPaint(
+                            painter: _ArtworkPerspectivePainter(),
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                if (isArtworkMode && _showPerspectiveGrid)
-                  IgnorePointer(
-                    child: CustomPaint(painter: _ArtworkPerspectivePainter()),
-                  ),
-                if (!isArtworkMode && _showZebra)
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black87,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'ZEBRA %95 | ${_showFocusPeaking ? "PEAKING ON | " : ""}LENS #$_selectedCameraId | ${_manualExposure ? "ISO ${_iso.toInt()} 1/${_shutterDenominator.toInt()}s" : "AE AUTO"}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: Color(0xFF4ECDC4),
+                      if (_lastFocusTapNorm != null)
+                        Positioned(
+                          left: (_lastFocusTapNorm!.dx * constraints.maxWidth) - 26,
+                          top: (_lastFocusTapNorm!.dy * constraints.maxHeight) - 26,
+                          child: IgnorePointer(
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                  color: const Color(0xFFE5A93C),
+                                  width: 2.0,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF4ECDC4),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (!isArtworkMode && _showZebra)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'ZEBRA ${((lastRes?.zebraRatio ?? 0.0) * 100).toStringAsFixed(1)}% | '
+                              '${_showFocusPeaking ? "PEAK ${(lastRes?.focusPeakingScore ?? 0.0).toStringAsFixed(2)} | " : ""}'
+                              'LENS #$_selectedCameraId | '
+                              '${_manualExposure ? "ISO ${_iso.toInt()} 1/${_shutterDenominator.toInt()}s" : "AE ${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)}EV"}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontFamily: 'monospace',
+                                color: Color(0xFF4ECDC4),
+                              ),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black87,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            isArtworkMode
+                                ? (_useMeasuredGrayCardWb
+                                    ? 'GRİ KART WB KİLİTLİ'
+                                    : 'DNG CCT WB (${lastRes?.solvedCctKelvin?.round() ?? 5500}K)')
+                                : (_manualWb
+                                    ? '${_kelvin.toInt()}K (T:${_tint.toInt()})'
+                                    : 'RAW+JPEG (${lastRes?.solvedCctKelvin?.round() ?? 5500}K)'),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFE5A93C),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      if (hist != null && hist.length == 32)
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          child: Container(
+                            width: 148,
+                            height: 46,
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black87,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: CustomPaint(
+                              painter: _RawHistogramPainter(hist),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      isArtworkMode
-                          ? (_useMeasuredGrayCardWb
-                              ? 'GRİ KART WB KİLİTLİ'
-                              : 'AS-SHOT NEUTRAL WB')
-                          : 'RAW+JPEG',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFE5A93C),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
           Padding(
@@ -406,8 +562,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                 Text(
                   _lastCaptureMessage ??
                       (isArtworkMode
-                          ? 'Aktif Fiziksel Lens #$_selectedCameraId (14-Bit RAW → Rust TrueColor ISP)'
-                          : 'Aktif Fiziksel Lens ID: $_selectedCameraId'),
+                          ? 'Aktif Fiziksel Lens #$_selectedCameraId (14-Bit RAW → 12.6MP Rust TrueColor ISP)'
+                          : 'Aktif Fiziksel Lens: ${_activeCameraCap?.opticalBadgeLabel ?? "#$_selectedCameraId"} (Dokunmatik AF/AE Aktif)'),
                   style: const TextStyle(fontSize: 12, color: Colors.white70),
                 ),
                 const SizedBox(height: 8),
@@ -424,13 +580,25 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                                   isArtworkMode: true,
                                   lockGrayCardFromCenter: true,
                                 ),
-                        icon: const Icon(Icons.filter_center_focus_rounded, size: 18),
+                        icon: const Icon(
+                          Icons.filter_center_focus_rounded,
+                          size: 18,
+                        ),
                         label: const Text('Merkez %18 Gri Kart Ölç'),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isCapturing ? null : _triggerBracketedCapture,
+                        icon: const Icon(Icons.burst_mode_rounded, size: 18),
+                        label: const Text('3-Kare Braket (±1.5 EV)'),
                       ),
                     FilledButton.icon(
                       onPressed: _isCapturing
                           ? null
-                          : () => _triggerPhotoCapture(isArtworkMode: isArtworkMode),
+                          : () => _triggerPhotoCapture(
+                                isArtworkMode: isArtworkMode,
+                              ),
                       icon: _isCapturing
                           ? const SizedBox(
                               width: 16,
@@ -471,11 +639,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.compare_rounded, color: Color(0xFF4ECDC4), size: 20),
+                const Icon(
+                  Icons.compare_rounded,
+                  color: Color(0xFF4ECDC4),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Son Çekim: Rust TrueColor ISP vs. OEM Kamera (${res.rustIspActive ? "Rust JNI Aktif" : "Fallback"})',
+                    'Son Çekim: ${res.rustIspActive ? "Rust TrueColor ISP (${res.outputWidth ?? "-"}×${res.outputHeight ?? "-"})" : "Pro RAW + OEM JPEG (Hızlı Telemetri)"}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF4ECDC4),
@@ -502,7 +674,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Zamera TrueColor (${_useDisplayP3 ? "P3" : "sRGB"})',
+                            res.rustIspActive
+                                ? 'Zamera TrueColor (${_useDisplayP3 ? "P3" : "sRGB"})'
+                                : 'Kaydedilen JPEG',
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -553,9 +727,18 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                     style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                   ),
                   Text(
-                    '• Arşiv DNG (14-Bit): ${res.mediaStoreDngUri ?? res.dngPath ?? "-"}',
+                    '• Arşiv DNG (14-Bit Dik Orientation=6): ${res.mediaStoreDngUri ?? res.dngPath ?? "-"}',
                     style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                   ),
+                  if (res.solvedCctKelvin != null)
+                    Text(
+                      '• Çözülen Işık CCT: ${res.solvedCctKelvin!.round()}K | Pozlama Kazancı: ×${(res.exposureNormGain ?? 1.0).toStringAsFixed(2)} | Zebra: ${((res.zebraRatio ?? 0.0) * 100).toStringAsFixed(2)}%',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: Color(0xFF4ECDC4),
+                      ),
+                    ),
                   if (res.whiteLevel != null)
                     Text(
                       '• Sensör Dinamik: WhiteLevel=${res.whiteLevel!.toInt()} | Black=${res.blackLevel?.map((e) => e.toInt()).toList()} | LensShadingApplied=${res.lensShadingApplied}',
@@ -595,7 +778,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  '1. Çizim & Sanat Eseri Hizalama ve Renk Uzayı (iOS + Android)',
+                  '1. Çizim & Sanat Eseri Hizalama, Tam Çözünürlük ve Pozlama (Faz 2.0)',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFE5A93C),
@@ -607,18 +790,36 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                   runSpacing: 8,
                   children: [
                     FilterChip(
+                      label: Text(
+                        _fullResolution
+                            ? 'Tam Çözünürlük 12.6MP (3072×4096)'
+                            : 'Hızlı Önizleme 3.1MP (1536×2048)',
+                      ),
+                      selected: _fullResolution,
+                      onSelected: (v) => setState(() => _fullResolution = v),
+                    ),
+                    FilterChip(
+                      label: const Text('Beyaz Nokta Pozlama Dengeleme (L*≈94)'),
+                      selected: _normalizeExposure,
+                      onSelected: (v) => setState(() => _normalizeExposure = v),
+                    ),
+                    FilterChip(
                       label: const Text('4-Köşe Perspektif Kılavuzu'),
                       selected: _showPerspectiveGrid,
                       onSelected: (v) =>
                           setState(() => _showPerspectiveGrid = v),
                     ),
                     FilterChip(
-                      label: const Text('Flat-Field (Masa Lambası Dengeleme)'),
+                      label: const Text('Flat-Field (8×6 Aydınlatma Düzeltme)'),
                       selected: _flatFieldEnabled,
                       onSelected: (v) => setState(() => _flatFieldEnabled = v),
                     ),
                     FilterChip(
-                      label: Text(_useDisplayP3 ? 'Çıktı: Display P3' : 'Çıktı: sRGB (Standart)'),
+                      label: Text(
+                        _useDisplayP3
+                            ? 'Çıktı: Display P3'
+                            : 'Çıktı: sRGB (Standart)',
+                      ),
                       selected: _useDisplayP3,
                       onSelected: (v) => setState(() => _useDisplayP3 = v),
                     ),
@@ -656,7 +857,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: _useMeasuredGrayCardWb
                             ? const Color(0xFF1D4E4A)
@@ -664,15 +868,20 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        _useMeasuredGrayCardWb ? 'CANLI SENSÖR WB' : 'MATRİS SİMÜLASYONU',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                        _useMeasuredGrayCardWb
+                            ? 'CANLI SENSÖR WB'
+                            : 'DNG CCT İNTERPOLASYON',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Kağıt beyazı optik parlatıcı içerdiğinden beyaz dengesi Yama #20 (Neutral 8) ve Yama #22 (%18 Gri Kart) üzerinden kilitlenir; 24 yamanın tamamıyla 3×3 Kamera RGB → CIE XYZ (D50) matrisi çözülür.',
+                  'DNG 1.7 standardına göre sahne renk sıcaklığı (CCT) AsShotNeutral + ColorMatrix1/2 üzerinden çözülür ve ForwardMatrix1 (D65) ile ForwardMatrix2 (StdA) mired uzayında enterpole edilir.',
                   style: TextStyle(fontSize: 13, color: Colors.white70),
                 ),
                 const SizedBox(height: 12),
@@ -779,9 +988,17 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   }
 
   Widget _buildProCameraStudioTab() {
-    final cameraIds = _probeReport?.cameraIdList.isNotEmpty == true
-        ? _probeReport!.cameraIdList
-        : const ['0', '1', '2', '3'];
+    final cameras = _probeReport?.cameras ?? const <CameraUnitCapability>[];
+    final activeCap = _activeCameraCap;
+    final isoRange = activeCap?.isoRange;
+    final isoMin = (isoRange != null && isoRange.length >= 2)
+        ? isoRange[0].toDouble()
+        : 50.0;
+    final isoMax = (isoRange != null && isoRange.length >= 2)
+        ? isoRange[1].toDouble()
+        : 3200.0;
+    final clampedIso = _iso.clamp(isoMin, isoMax);
+    final supportsVariableFocus = activeCap?.supportsVariableFocus ?? true;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -797,7 +1014,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Fiziksel Lens Kilidi (Otomatik Makro / Dijital Crop Engelleme)',
+                  'Fiziksel Lens Kilidi (1.0× Optik Sabit — Otomatik Makro / Dijital Crop Engelleme)',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFE5A93C),
@@ -808,37 +1025,76 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final id in cameraIds)
-                      ChoiceChip(
-                        label: Text('Fiziksel Lens #$id'),
-                        selected: _selectedCameraId == id,
-                        onSelected: (_) => _startOrSwitchCamera(id),
-                      ),
+                    if (cameras.isNotEmpty)
+                      for (final cam in cameras)
+                        ChoiceChip(
+                          label: Text(cam.opticalBadgeLabel),
+                          selected: _selectedCameraId == cam.cameraId,
+                          onSelected: (_) => _startOrSwitchCamera(cam.cameraId),
+                        )
+                    else
+                      for (final id in const ['0', '1', '2', '3'])
+                        ChoiceChip(
+                          label: Text('Fiziksel Lens #$id'),
+                          selected: _selectedCameraId == id,
+                          onSelected: (_) => _startOrSwitchCamera(id),
+                        ),
                   ],
                 ),
                 const Divider(height: 24),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Manuel Pozlama Kilidi (ISO & Enstantane)'),
+                  subtitle: Text(
+                    _manualExposure
+                        ? 'Sensör Donanım Aralığı: ISO ${isoMin.toInt()}..${isoMax.toInt()}'
+                        : 'Otomatik AE Aktif — Aşağıdan ±3.0 EV Pozlama Telafisi Verilebilir',
+                    style: const TextStyle(fontSize: 12, color: Colors.white60),
+                  ),
                   value: _manualExposure,
                   onChanged: (v) {
                     setState(() => _manualExposure = v);
                     _pushManualControlsToNative(artworkMode: false);
                   },
                 ),
+                if (!_manualExposure)
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 115,
+                        child: Text(
+                          'EV Telafi: ${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)}',
+                        ),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: _evCompensation,
+                          min: -3.0,
+                          max: 3.0,
+                          divisions: 24,
+                          label:
+                              '${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)} EV',
+                          onChanged: (v) {
+                            setState(() => _evCompensation = v);
+                            _pushManualControlsToNative(artworkMode: false);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 if (_manualExposure) ...[
                   Row(
                     children: [
                       SizedBox(
                         width: 110,
-                        child: Text('ISO: ${_iso.toInt()}'),
+                        child: Text('ISO: ${clampedIso.toInt()}'),
                       ),
                       Expanded(
                         child: Slider(
-                          value: _iso,
-                          min: 50,
-                          max: 6400,
-                          divisions: 63,
+                          value: clampedIso,
+                          min: isoMin,
+                          max: isoMax,
+                          divisions: ((isoMax - isoMin) / 25).round().clamp(10, 120),
                           onChanged: (v) {
                             setState(() => _iso = v);
                             _pushManualControlsToNative(artworkMode: false);
@@ -889,7 +1145,13 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                 const Divider(height: 24),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Manuel Beyaz Dengesi (Kelvin & Tint Kilidi)'),
+                  title: const Text(
+                    'Manuel Beyaz Dengesi (DNG Kelvin & Tint Matris Kilidi)',
+                  ),
+                  subtitle: const Text(
+                    'Sensör ColorMatrix1/2 & ForwardMatrix1/2 üzerinden gerçek kromatik uyarlama',
+                    style: TextStyle(fontSize: 12, color: Colors.white60),
+                  ),
                   value: _manualWb,
                   onChanged: (v) {
                     setState(() => _manualWb = v);
@@ -939,37 +1201,51 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                   ),
                 ],
                 const Divider(height: 24),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Manuel Odak (Focus Pull Kilidi)'),
-                  value: _manualFocus,
-                  onChanged: (v) {
-                    setState(() => _manualFocus = v);
-                    _pushManualControlsToNative(artworkMode: false);
-                  },
-                ),
-                if (_manualFocus)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text(
-                          'Odak: ${_focusDistance.toStringAsFixed(2)}',
-                        ),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _focusDistance,
-                          min: 0.0,
-                          max: 1.0,
-                          onChanged: (v) {
-                            setState(() => _focusDistance = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
+                if (!supportsVariableFocus)
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.lock_clock_rounded, color: Colors.amber),
+                    title: Text('Sabit Odaklı Fiziksel Lens (Sonsuz Hiperfokal)'),
+                    subtitle: Text(
+                      'Bu lens (minimumFocusDistance = 0.0 dioptri) sabit odaklıdır; manuel odak sürgüsü devre dışıdır.',
+                      style: TextStyle(fontSize: 12, color: Colors.white60),
+                    ),
+                  )
+                else ...[
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Manuel Odak (0.0 Sonsuz .. ${(activeCap?.minimumFocusDistanceDiopters ?? 10.0).toStringAsFixed(1)} Dioptri)',
+                    ),
+                    value: _manualFocus,
+                    onChanged: (v) {
+                      setState(() => _manualFocus = v);
+                      _pushManualControlsToNative(artworkMode: false);
+                    },
                   ),
+                  if (_manualFocus)
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 110,
+                          child: Text(
+                            'Odak: ${_focusDistance.toStringAsFixed(2)}',
+                          ),
+                        ),
+                        Expanded(
+                          child: Slider(
+                            value: _focusDistance,
+                            min: 0.0,
+                            max: 1.0,
+                            onChanged: (v) {
+                              setState(() => _focusDistance = v);
+                              _pushManualControlsToNative(artworkMode: false);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
                 const Divider(height: 24),
                 Wrap(
                   spacing: 8,
@@ -989,7 +1265,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                       label: Text(
                         _preferProRaw48Mp
                             ? 'iOS 48MP ProRAW / Max-Res'
-                            : 'Saf Bayer RAW (12MP Sıfır ISP)',
+                            : 'Saf Bayer RAW (12.6MP Sıfır ISP)',
                       ),
                       selected: _preferProRaw48Mp,
                       onSelected: (v) => setState(() => _preferProRaw48Mp = v),
@@ -1115,7 +1391,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text('Keşfedilen Kamera ID Listesi: ${report.cameraIdList.join(", ")}'),
+                Text(
+                  'Keşfedilen Kamera ID Listesi: ${report.cameraIdList.join(", ")}',
+                ),
               ],
             ),
           ),
@@ -1144,7 +1422,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Kamera #${cam.cameraId} (${cam.facing}) — ${cam.hardwareLevel}',
+                          '${cam.opticalBadgeLabel} (${cam.facing}) — ${cam.hardwareLevel}',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -1181,6 +1459,44 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   }
 }
 
+class _RawHistogramPainter extends CustomPainter {
+  const _RawHistogramPainter(this.bins);
+  final List<double> bins;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bins.isEmpty) return;
+    double maxVal = 1e-5;
+    for (final v in bins) {
+      if (v > maxVal) maxVal = v;
+    }
+    final barW = size.width / bins.length;
+    for (int i = 0; i < bins.length; i++) {
+      final norm = (bins[i] / maxVal).clamp(0.0, 1.0);
+      final barH = norm * (size.height - 2);
+      final isHighlightZone = i >= 30;
+      final paint = Paint()
+        ..color = isHighlightZone
+            ? const Color(0xFFE5A93C)
+            : const Color(0xFF4ECDC4).withValues(alpha: 0.85)
+        ..style = PaintingStyle.fill;
+      canvas.drawRect(
+        Rect.fromLTWH(
+          i * barW,
+          size.height - barH,
+          (barW - 1.0).clamp(1.0, barW),
+          barH,
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RawHistogramPainter oldDelegate) =>
+      oldDelegate.bins != bins;
+}
+
 class _ArtworkPerspectivePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1197,7 +1513,6 @@ class _ArtworkPerspectivePainter extends CustomPainter {
     );
     canvas.drawRect(rect, borderPaint);
 
-    // Center 10% ROI target box for 18% Gray Card spot measurement
     final centerRoi = Rect.fromCenter(
       center: Offset(size.width * 0.5, size.height * 0.5),
       width: size.width * 0.14,

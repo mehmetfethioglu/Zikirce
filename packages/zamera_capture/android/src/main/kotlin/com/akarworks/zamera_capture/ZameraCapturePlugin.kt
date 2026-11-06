@@ -10,12 +10,15 @@ import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.graphics.ImageFormat
 import android.graphics.Matrix
+import android.graphics.Rect
 import android.hardware.camera2.*
 import android.hardware.camera2.params.ColorSpaceTransform
 import android.hardware.camera2.params.DynamicRangeProfiles
+import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.RggbChannelVector
 import android.hardware.camera2.params.SessionConfiguration
+import android.media.ExifInterface
 import android.media.Image
 import android.media.ImageReader
 import android.os.Build
@@ -24,6 +27,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.provider.MediaStore
+import android.util.Rational
 import android.view.Surface
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -42,10 +46,12 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
 /**
  * ZameraCapturePlugin (Android Camera2 Hardware Probe + Live Preview Texture + Physical Camera ID Routing
- * + Real JNI Rust `zamera_core` 14-bit RAW -> TrueColor sRGB/Display P3 ISP + MediaStore DCIM/Zamera Export)
+ * + Real JNI Rust `zamera_core` 12.6MP Full-Res RAW -> TrueColor sRGB/Display P3 ISP + DNG CCT Interpolation
+ * + Pro Mode DNG Kelvin/Tint WB + EV Compensation + Tap-to-Focus + 3-Frame AE Bracketing + MediaStore DCIM/Zamera Export)
  */
 class ZameraCapturePlugin :
     FlutterPlugin,
@@ -62,17 +68,21 @@ class ZameraCapturePlugin :
     private val mainHandler = Handler(Looper.getMainLooper())
     private var backgroundThread: HandlerThread? = null
     private var backgroundHandler: Handler? = null
-    private var rustIspExecutor = Executors.newSingleThreadExecutor()
+    private val rustIspExecutor = Executors.newSingleThreadExecutor()
+    // Single shared session executor (Fixes B10 leak)
+    private val cameraSessionExecutor = Executors.newSingleThreadExecutor()
 
     private var surfaceEntry: TextureRegistry.SurfaceTextureEntry? = null
     private var cameraDevice: CameraDevice? = null
     private var captureSession: CameraCaptureSession? = null
     private var previewRequestBuilder: CaptureRequest.Builder? = null
+    private var previewSurface: Surface? = null
     private var rawImageReader: ImageReader? = null
     private var jpegImageReader: ImageReader? = null
     private var activeCameraId: String = "0"
     private var activePhysicalCameraId: String? = null
     private var activeSensorOrientation: Int = 90
+    @Volatile
     private var lastTotalCaptureResult: TotalCaptureResult? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -118,10 +128,12 @@ class ZameraCapturePlugin :
     override fun onMethodCall(call: MethodCall, result: Result) {
         when (call.method) {
             "probeDeviceCapabilities" -> {
-                try {
-                    result.success(probeCamera2Capabilities())
-                } catch (e: Exception) {
-                    result.error("PROBE_FAILED", e.message, e.stackTraceToString())
+                ensureCameraPermissionAndRun(result) {
+                    try {
+                        result.success(probeCamera2Capabilities())
+                    } catch (e: Exception) {
+                        result.error("PROBE_FAILED", e.message, e.stackTraceToString())
+                    }
                 }
             }
             "startPreviewSession" -> {
@@ -136,9 +148,20 @@ class ZameraCapturePlugin :
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
                 updateManualControls(args, result)
             }
+            "setFocusAndMeteringPoint" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                setFocusAndMeteringPoint(args, result)
+            }
+            "getLiveTelemetry" -> {
+                result.success(extractLiveTelemetry())
+            }
             "capturePhoto" -> {
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
                 captureRawAndJpegPhoto(args, result)
+            }
+            "captureBracketedPhotos" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                captureBracketedPhotos(args, result)
             }
             "stopPreviewSession" -> {
                 stopPreviewSession()
@@ -200,9 +223,11 @@ class ZameraCapturePlugin :
             val charsId = targetPhysicalId ?: openLogicalId
             val chars = manager.getCameraCharacteristics(charsId)
             activeSensorOrientation = chars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+            val minFocusDist = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0.0f
+            val isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+            val expRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
 
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-            // Pick a 4:3 preview size matching the 4:3 RAW sensor aspect ratio
             val previewSize = map?.getOutputSizes(android.graphics.SurfaceTexture::class.java)
                 ?.filter { it.width <= reqWidth && it.height <= reqHeight && it.width * 3 == it.height * 4 }
                 ?.maxByOrNull { it.width * it.height }
@@ -214,16 +239,17 @@ class ZameraCapturePlugin :
             surfaceEntry = entry
             val surfaceTexture = entry.surfaceTexture()
             surfaceTexture.setDefaultBufferSize(previewSize.width, previewSize.height)
-            val previewSurface = Surface(surfaceTexture)
+            val surf = Surface(surfaceTexture)
+            previewSurface = surf
 
             val jpegSize = map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width * it.height }
                 ?: previewSize
-            jpegImageReader = ImageReader.newInstance(jpegSize.width, jpegSize.height, ImageFormat.JPEG, 2)
+            jpegImageReader = ImageReader.newInstance(jpegSize.width, jpegSize.height, ImageFormat.JPEG, 3)
 
             val rawSizes = map?.getOutputSizes(ImageFormat.RAW_SENSOR)
             if (!rawSizes.isNullOrEmpty()) {
                 val rawSize = rawSizes.maxByOrNull { it.width * it.height }!!
-                rawImageReader = ImageReader.newInstance(rawSize.width, rawSize.height, ImageFormat.RAW_SENSOR, 2)
+                rawImageReader = ImageReader.newInstance(rawSize.width, rawSize.height, ImageFormat.RAW_SENSOR, 3)
             }
 
             manager.openCamera(openLogicalId, object : CameraDevice.StateCallback() {
@@ -231,14 +257,18 @@ class ZameraCapturePlugin :
                     cameraDevice = camera
                     try {
                         val builder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-                        builder.addTarget(previewSurface)
+                        builder.addTarget(surf)
                         builder.set(
                             CaptureRequest.CONTROL_AF_MODE,
                             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                         )
+                        // Lock zoom ratio to 1.0x to prevent OEM automatic macro/crop switching (Faz 2A)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, 1.0f)
+                        }
                         previewRequestBuilder = builder
 
-                        val surfaces = mutableListOf<Surface>(previewSurface)
+                        val surfaces = mutableListOf<Surface>(surf)
                         jpegImageReader?.surface?.let { surfaces.add(it) }
                         rawImageReader?.surface?.let { surfaces.add(it) }
 
@@ -267,7 +297,12 @@ class ZameraCapturePlugin :
                                                 "previewHeight" to previewSize.height,
                                                 "sensorOrientation" to activeSensorOrientation,
                                                 "activeCameraId" to (targetPhysicalId ?: openLogicalId),
-                                                "supportsRawSensor" to (rawImageReader != null)
+                                                "supportsRawSensor" to (rawImageReader != null),
+                                                "minimumFocusDistanceDiopters" to minFocusDist.toDouble(),
+                                                "isoMin" to (isoRange?.lower ?: 50),
+                                                "isoMax" to (isoRange?.upper ?: 3200),
+                                                "exposureNsMin" to (expRange?.lower ?: 50_000L),
+                                                "exposureNsMax" to (expRange?.upper ?: 1_000_000_000L)
                                             )
                                         )
                                     }
@@ -286,15 +321,15 @@ class ZameraCapturePlugin :
                         }
 
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && targetPhysicalId != null) {
-                            val outConfigs = surfaces.map { surf ->
-                                OutputConfiguration(surf).apply {
+                            val outConfigs = surfaces.map { s ->
+                                OutputConfiguration(s).apply {
                                     setPhysicalCameraId(targetPhysicalId)
                                 }
                             }
                             val sessionConfig = SessionConfiguration(
                                 SessionConfiguration.SESSION_REGULAR,
                                 outConfigs,
-                                Executors.newSingleThreadExecutor(),
+                                cameraSessionExecutor,
                                 stateCallback
                             )
                             camera.createCaptureSession(sessionConfig)
@@ -326,6 +361,105 @@ class ZameraCapturePlugin :
         }
     }
 
+    private fun extractLiveTelemetry(): Map<String, Any?> {
+        val logicalRes = lastTotalCaptureResult ?: return emptyMap()
+        val physRes: CaptureResult = if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+            activePhysicalCameraId != null
+        ) {
+            logicalRes.physicalCameraResults[activePhysicalCameraId] ?: logicalRes
+        } else {
+            logicalRes
+        }
+
+        val iso = physRes.get(CaptureResult.SENSOR_SENSITIVITY)
+        val expNs = physRes.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+        val focusDiopters = physRes.get(CaptureResult.LENS_FOCUS_DISTANCE)
+        val wbGains = physRes.get(CaptureResult.COLOR_CORRECTION_GAINS)
+        val neutralPt = physRes.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)
+        val aeState = physRes.get(CaptureResult.CONTROL_AE_STATE)
+        val afState = physRes.get(CaptureResult.CONTROL_AF_STATE)
+
+        return mapOf(
+            "cameraId" to (activePhysicalCameraId ?: activeCameraId),
+            "iso" to iso,
+            "exposureTimeNs" to expNs,
+            "focusDistanceDiopters" to focusDiopters?.toDouble(),
+            "wbGains" to if (wbGains != null) listOf(
+                wbGains.red.toDouble(),
+                wbGains.greenEven.toDouble(),
+                wbGains.greenOdd.toDouble(),
+                wbGains.blue.toDouble()
+            ) else null,
+            "asShotNeutral" to neutralPt?.map { it.toDouble() },
+            "aeState" to aeState,
+            "afState" to afState
+        )
+    }
+
+    private fun setFocusAndMeteringPoint(args: Map<String, Any?>, result: Result) {
+        val builder = previewRequestBuilder
+        val session = captureSession
+        if (builder == null || session == null) {
+            result.success(false)
+            return
+        }
+        try {
+            val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val charsId = activePhysicalCameraId ?: activeCameraId
+            val chars = manager.getCameraCharacteristics(charsId)
+            val sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+            if (sensorRect == null) {
+                result.success(false)
+                return
+            }
+
+            val normX = ((args["x"] as? Number)?.toFloat() ?: 0.5f).coerceIn(0.05f, 0.95f)
+            val normY = ((args["y"] as? Number)?.toFloat() ?: 0.5f).coerceIn(0.05f, 0.95f)
+
+            val cx = (sensorRect.left + normX * sensorRect.width()).toInt()
+            val cy = (sensorRect.top + normY * sensorRect.height()).toInt()
+            val halfW = (sensorRect.width() * 0.08f).toInt().coerceAtLeast(32)
+            val halfH = (sensorRect.height() * 0.08f).toInt().coerceAtLeast(32)
+
+            val region = MeteringRectangle(
+                Rect(
+                    (cx - halfW).coerceAtLeast(sensorRect.left),
+                    (cy - halfH).coerceAtLeast(sensorRect.top),
+                    (cx + halfW).coerceAtMost(sensorRect.right),
+                    (cy + halfH).coerceAtMost(sensorRect.bottom)
+                ),
+                MeteringRectangle.METERING_WEIGHT_MAX - 1
+            )
+
+            val maxAf = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
+            val maxAe = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
+            if (maxAf > 0) {
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
+            }
+            if (maxAe > 0) {
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
+            }
+
+            session.setRepeatingRequest(
+                builder.build(),
+                object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(
+                        session: CameraCaptureSession,
+                        request: CaptureRequest,
+                        res: TotalCaptureResult
+                    ) {
+                        lastTotalCaptureResult = res
+                    }
+                },
+                backgroundHandler
+            )
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("TAP_FOCUS_ERR", e.message, null)
+        }
+    }
+
     private fun updateManualControls(args: Map<String, Any?>, result: Result) {
         val builder = previewRequestBuilder
         val session = captureSession
@@ -341,6 +475,10 @@ class ZameraCapturePlugin :
             val expRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
             val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0.0f
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, 1.0f)
+            }
+
             val manualExposure = args["manualExposure"] as? Boolean ?: false
             if (manualExposure) {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
@@ -352,6 +490,14 @@ class ZameraCapturePlugin :
                 builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedShutter)
             } else {
                 builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                val evComp = (args["evCompensation"] as? Number)?.toDouble() ?: 0.0
+                val compRange = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+                val compStep = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)
+                if (compRange != null && compStep != null && compStep.toDouble() > 0.0) {
+                    val steps = (evComp / compStep.toDouble()).roundToInt()
+                        .coerceIn(compRange.lower, compRange.upper)
+                    builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps)
+                }
             }
 
             val manualFocus = args["manualFocus"] as? Boolean ?: false
@@ -369,30 +515,60 @@ class ZameraCapturePlugin :
 
             val artworkLinearMode = args["artworkLinearMode"] as? Boolean ?: false
             val manualWb = args["manualWb"] as? Boolean ?: false
+            val kelvin = (args["kelvin"] as? Number)?.toFloat()
+            val tint = (args["tint"] as? Number)?.toFloat() ?: 0.0f
             val rggb = args["rggbGains"] as? List<*>
 
-            // In Sanat (Artwork) mode, keep viewfinder AWB smooth unless manual WB is explicitly enabled in Pro mode.
-            // Whenever TRANSFORM_MATRIX is used, always supply a valid COLOR_CORRECTION_TRANSFORM so preview never turns black/green.
-            if (!artworkLinearMode && manualWb && rggb != null && rggb.size == 4) {
-                val colorTransform = chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)
-                    ?: chars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1)
+            if (!artworkLinearMode && manualWb) {
+                val cm1 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1))
+                    ?: floatArrayOf(0.8125f, -0.2734f, -0.1094f, -0.4375f, 1.3281f, 0.0859f, -0.0312f, 0.2578f, 0.4297f)
+                val cm2 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2))
+                    ?: floatArrayOf(1.2188f, -0.4688f, -0.4531f, -0.9766f, 2.1797f, -0.2891f, -0.1875f, 0.3750f, 0.6094f)
+                val fm1 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1))
+                    ?: floatArrayOf(0.5469f, 0.2734f, 0.1406f, 0.1875f, 0.8672f, -0.0547f, -0.0547f, -0.3672f, 1.2500f)
+                val fm2 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2))
+                    ?: floatArrayOf(0.6016f, -0.0391f, 0.3984f, 0.2734f, 0.4688f, 0.2500f, 0.0547f, -0.6562f, 1.4219f)
+
+                val dngWb = if (kelvin != null) {
+                    ZameraRustBridge.computeDngKelvinWb(kelvin, tint, cm1, cm2, fm1, fm2)
+                } else {
+                    null
+                }
+
                 builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-                if (colorTransform != null) {
+                if (dngWb != null) {
                     builder.set(
                         CaptureRequest.COLOR_CORRECTION_MODE,
                         CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
                     )
-                    builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, colorTransform)
-                }
-                builder.set(
-                    CaptureRequest.COLOR_CORRECTION_GAINS,
-                    RggbChannelVector(
-                        (rggb[0] as Number).toFloat().coerceIn(0.5f, 4.0f),
-                        (rggb[1] as Number).toFloat().coerceIn(0.5f, 4.0f),
-                        (rggb[2] as Number).toFloat().coerceIn(0.5f, 4.0f),
-                        (rggb[3] as Number).toFloat().coerceIn(0.5f, 4.0f)
+                    builder.set(
+                        CaptureRequest.COLOR_CORRECTION_TRANSFORM,
+                        floatArrayToColorSpaceTransform(dngWb.second)
                     )
-                )
+                    builder.set(
+                        CaptureRequest.COLOR_CORRECTION_GAINS,
+                        RggbChannelVector(dngWb.first[0], dngWb.first[1], dngWb.first[2], dngWb.first[3])
+                    )
+                } else if (rggb != null && rggb.size == 4) {
+                    val colorTransform = chars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1)
+                        ?: chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)
+                    if (colorTransform != null) {
+                        builder.set(
+                            CaptureRequest.COLOR_CORRECTION_MODE,
+                            CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+                        )
+                        builder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, colorTransform)
+                    }
+                    builder.set(
+                        CaptureRequest.COLOR_CORRECTION_GAINS,
+                        RggbChannelVector(
+                            (rggb[0] as Number).toFloat().coerceIn(0.5f, 4.0f),
+                            (rggb[1] as Number).toFloat().coerceIn(0.5f, 4.0f),
+                            (rggb[2] as Number).toFloat().coerceIn(0.5f, 4.0f),
+                            (rggb[3] as Number).toFloat().coerceIn(0.5f, 4.0f)
+                        )
+                    )
+                }
             } else {
                 builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
                 builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_FAST)
@@ -417,6 +593,63 @@ class ZameraCapturePlugin :
         }
     }
 
+    private fun captureBracketedPhotos(args: Map<String, Any?>, result: Result) {
+        val evSteps = (args["evOffsets"] as? List<*>)?.mapNotNull { (it as? Number)?.toDouble() }
+            ?: listOf(-1.5, 0.0, 1.5)
+        val baseTelemetry = extractLiveTelemetry()
+        val baseIso = (baseTelemetry["iso"] as? Number)?.toInt() ?: 100
+        val baseExpNs = (baseTelemetry["exposureTimeNs"] as? Number)?.toLong() ?: 10_000_000L
+
+        val resultsList = mutableListOf<Map<String, Any?>>()
+
+        fun captureNext(idx: Int) {
+            if (idx >= evSteps.size) {
+                // Restore preview AE after bracketing
+                previewRequestBuilder?.let { prev ->
+                    captureSession?.setRepeatingRequest(prev.build(), null, backgroundHandler)
+                }
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "bracketCount" to resultsList.size,
+                            "captures" to resultsList
+                        )
+                    )
+                }
+                return
+            }
+
+            val ev = evSteps[idx]
+            val factor = Math.pow(2.0, ev)
+            val targetExpNs = (baseExpNs * factor).toLong().coerceIn(50_000L, 500_000_000L)
+            val singleArgs = HashMap<String, Any?>(args).apply {
+                put("isArtworkMode", false)
+                put("overrideIso", baseIso)
+                put("overrideExposureTimeNs", targetExpNs)
+                put("bracketTag", if (ev >= 0) "EV+${ev}" else "EV${ev}")
+            }
+
+            captureRawAndJpegPhoto(singleArgs, object : Result {
+                override fun success(res: Any?) {
+                    @Suppress("UNCHECKED_CAST")
+                    val map = res as? Map<String, Any?>
+                    if (map != null) resultsList.add(map)
+                    captureNext(idx + 1)
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                    captureNext(idx + 1)
+                }
+
+                override fun notImplemented() {
+                    captureNext(idx + 1)
+                }
+            })
+        }
+
+        captureNext(0)
+    }
+
     private fun captureRawAndJpegPhoto(args: Map<String, Any?>, result: Result) {
         val camera = cameraDevice
         val session = captureSession
@@ -428,32 +661,55 @@ class ZameraCapturePlugin :
 
         try {
             val timestamp = System.currentTimeMillis()
+            val bracketTag = (args["bracketTag"] as? String)?.replace(".", "_")
+            val baseName = if (bracketTag != null) "ZAMERA_${timestamp}_${bracketTag}" else "ZAMERA_${timestamp}"
             val outDir = File(appContext.filesDir, "captures").apply { mkdirs() }
-            val oemJpegFile = File(outDir, "ZAMERA_${timestamp}_OEM.jpg")
-            val trueColorJpegFile = File(outDir, "ZAMERA_${timestamp}_TRUECOLOR.jpg")
-            val dngFile = File(outDir, "ZAMERA_${timestamp}.dng")
+            val oemJpegFile = File(outDir, "${baseName}_OEM.jpg")
+            val trueColorJpegFile = File(outDir, "${baseName}_TRUECOLOR.jpg")
+            val dngFile = File(outDir, "${baseName}.dng")
 
             val captureBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             captureBuilder.addTarget(jpegReader.surface)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                captureBuilder.set(CaptureRequest.CONTROL_ZOOM_RATIO, 1.0f)
+            }
+            captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, activeSensorOrientation)
 
             val captureRaw = (args["captureRaw"] as? Boolean ?: true) && rawImageReader != null
             val isArtworkMode = args["isArtworkMode"] as? Boolean ?: true
             val useDisplayP3 = args["useDisplayP3"] as? Boolean ?: false
-            val applyFlatField = args["applyFlatField"] as? Boolean ?: true
+            val fullResolution = args["fullResolution"] as? Boolean ?: true
+            val normalizeExposure = args["normalizeExposure"] as? Boolean ?: true
             val customWbGains = (args["wbGains"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
             val customCamToXyz = (args["camToXyzD50"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
+            val flatFieldGrid = (args["flatFieldGrid8x6"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
 
             if (captureRaw) {
                 rawImageReader?.surface?.let { captureBuilder.addTarget(it) }
             }
 
             previewRequestBuilder?.let { prev ->
-                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, prev.get(CaptureRequest.CONTROL_AE_MODE))
-                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, prev.get(CaptureRequest.SENSOR_SENSITIVITY))
-                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, prev.get(CaptureRequest.SENSOR_EXPOSURE_TIME))
+                val overrideIso = (args["overrideIso"] as? Number)?.toInt()
+                val overrideExpNs = (args["overrideExposureTimeNs"] as? Number)?.toLong()
+                if (overrideIso != null && overrideExpNs != null) {
+                    captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, overrideIso)
+                    captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, overrideExpNs)
+                } else {
+                    captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, prev.get(CaptureRequest.CONTROL_AE_MODE))
+                    captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, prev.get(CaptureRequest.SENSOR_SENSITIVITY))
+                    captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, prev.get(CaptureRequest.SENSOR_EXPOSURE_TIME))
+                    captureBuilder.set(
+                        CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,
+                        prev.get(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION)
+                    )
+                }
                 captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, prev.get(CaptureRequest.CONTROL_AF_MODE))
                 captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, prev.get(CaptureRequest.LENS_FOCUS_DISTANCE))
                 captureBuilder.set(CaptureRequest.CONTROL_AWB_MODE, prev.get(CaptureRequest.CONTROL_AWB_MODE))
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_MODE, prev.get(CaptureRequest.COLOR_CORRECTION_MODE))
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, prev.get(CaptureRequest.COLOR_CORRECTION_TRANSFORM))
+                captureBuilder.set(CaptureRequest.COLOR_CORRECTION_GAINS, prev.get(CaptureRequest.COLOR_CORRECTION_GAINS))
             }
 
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -481,7 +737,6 @@ class ZameraCapturePlugin :
                 rustIspExecutor.execute {
                     val (jpegBytes, rawImg, logicalResult) = res
                     try {
-                        // Resolve physical camera CaptureResult if available on API 29+
                         val activePhysResult: CaptureResult = if (
                             Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                             activePhysicalCameraId != null
@@ -491,7 +746,6 @@ class ZameraCapturePlugin :
                             logicalResult
                         }
 
-                        // Save OEM JPEG locally
                         FileOutputStream(oemJpegFile).use { it.write(jpegBytes) }
 
                         var mediaStoreDngUri: String? = null
@@ -500,19 +754,20 @@ class ZameraCapturePlugin :
 
                         if (rawImg != null) {
                             try {
-                                // 1. Write archival 14-bit DNG via DngCreator
+                                // 1. Write archival 14-bit DNG with proper EXIF Orientation (Fixes B5!)
                                 DngCreator(physChars, activePhysResult).use { dngCreator ->
+                                    dngCreator.setOrientation(exifOrientationFromDegrees(activeSensorOrientation))
                                     FileOutputStream(dngFile).use { fos ->
                                         dngCreator.writeImage(fos, rawImg)
                                     }
                                 }
                                 mediaStoreDngUri = saveFileToMediaStoreDcim(
                                     sourceFile = dngFile,
-                                    displayName = "ZAMERA_${timestamp}.dng",
+                                    displayName = "${baseName}.dng",
                                     mimeType = "image/x-adobe-dng"
                                 )
 
-                                // 2. Extract dynamic sensor metadata for Rust `zamera_core` TrueColor ISP
+                                // 2. Extract dynamic sensor metadata for Rust `zamera_core`
                                 val dynBlack = activePhysResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)
                                 val staticBlackPattern = physChars.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)
                                 val blackLevel = when {
@@ -542,16 +797,22 @@ class ZameraCapturePlugin :
                                     false
                                 }
 
-                                // Neutral White Balance gains: use user Gray-Card gains if provided, else AsShotNeutral
                                 val neutralPoint = activePhysResult.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)
-                                val asShotWbGains = if (neutralPoint != null && neutralPoint.size >= 3) {
-                                    val nr = neutralPoint[0].toFloat().coerceAtLeast(1e-4f)
-                                    val ng = neutralPoint[1].toFloat().coerceAtLeast(1e-4f)
-                                    val nb = neutralPoint[2].toFloat().coerceAtLeast(1e-4f)
-                                    floatArrayOf(ng / nr, 1.0f, ng / nb)
+                                val asShotNeutral = if (neutralPoint != null && neutralPoint.size >= 3) {
+                                    floatArrayOf(
+                                        neutralPoint[0].toFloat().coerceAtLeast(1e-4f),
+                                        neutralPoint[1].toFloat().coerceAtLeast(1e-4f),
+                                        neutralPoint[2].toFloat().coerceAtLeast(1e-4f)
+                                    )
                                 } else {
-                                    floatArrayOf(2.15f, 1.0f, 1.55f)
+                                    floatArrayOf(0.465f, 1.0f, 0.645f)
                                 }
+
+                                val asShotWbGains = floatArrayOf(
+                                    asShotNeutral[1] / asShotNeutral[0],
+                                    1.0f,
+                                    asShotNeutral[1] / asShotNeutral[2]
+                                )
 
                                 val wbGains = if (customWbGains != null && customWbGains.size >= 3) {
                                     floatArrayOf(customWbGains[0], customWbGains[1], customWbGains[2])
@@ -559,25 +820,44 @@ class ZameraCapturePlugin :
                                     asShotWbGains
                                 }
 
-                                // Camera RGB -> CIE XYZ (D50) 3x3 matrix: use calibrated ColorChecker matrix or DNG ForwardMatrix1
-                                val dngForwardMatrix = extractMatrix3x3(
-                                    physChars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1)
-                                ) ?: floatArrayOf(
-                                    0.5469f, 0.2734f, 0.1406f,
-                                    0.1875f, 0.8672f, -0.0547f,
-                                    -0.0547f, -0.3672f, 1.2500f
-                                )
-                                val camToXyzD50 = if (customCamToXyz != null && customCamToXyz.size == 9) {
-                                    customCamToXyz.toFloatArray()
-                                } else {
-                                    dngForwardMatrix
-                                }
+                                // Extract DNG ColorMatrix1/2 and ForwardMatrix1/2 for DNG 1.7 CCT interpolation (Fixes B2!)
+                                val cm1 = extractMatrix3x3(physChars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1))
+                                    ?: floatArrayOf(
+                                        0.8125f, -0.2734f, -0.1094f,
+                                        -0.4375f, 1.3281f, 0.0859f,
+                                        -0.0312f, 0.2578f, 0.4297f
+                                    )
+                                val cm2 = extractMatrix3x3(physChars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2))
+                                    ?: floatArrayOf(
+                                        1.2188f, -0.4688f, -0.4531f,
+                                        -0.9766f, 2.1797f, -0.2891f,
+                                        -0.1875f, 0.3750f, 0.6094f
+                                    )
+                                val fm1 = extractMatrix3x3(physChars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1))
+                                    ?: floatArrayOf(
+                                        0.5469f, 0.2734f, 0.1406f,
+                                        0.1875f, 0.8672f, -0.0547f,
+                                        -0.0547f, -0.3672f, 1.2500f
+                                    )
+                                val fm2 = extractMatrix3x3(physChars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2))
+                                    ?: floatArrayOf(
+                                        0.6016f, -0.0391f, 0.3984f,
+                                        0.2734f, 0.4688f, 0.2500f,
+                                        0.0547f, -0.6562f, 1.4219f
+                                    )
 
-                                // 3. Run Rust `zamera_core` 14-bit RAW -> TrueColor sRGB / Display P3 ISP
+                                val hasCustomMatrix = customCamToXyz != null && customCamToXyz.size == 9
+                                val primaryFm1OrCustom = if (hasCustomMatrix) customCamToXyz!!.toFloatArray() else fm1
+
                                 val plane = rawImg.planes[0]
                                 val rawBuffer = plane.buffer
                                 rawBuffer.rewind()
 
+                                // Fixes B1, B2, B3, B7:
+                                // - In Sanat Mode (`isArtworkMode == true`), develop full-res (4096x3072 -> rotated 3072x4096 12.6 MP)
+                                //   with DNG CCT interpolation (`FM1`/`FM2`) and White-Point Exposure Normalization!
+                                // - In Pro Mode (`isArtworkMode == false`), skip redundant Bitmap encoding (`writeTrueColorBitmap = false`)
+                                //   and only compute fast 14-bit RAW telemetry (32-bin histogram, zebra, focus peaking, CCT)!
                                 val devResult = ZameraRustBridge.developRawToTrueColorFile(
                                     rawDirectBuffer = rawBuffer,
                                     width = rawImg.width,
@@ -587,9 +867,16 @@ class ZameraCapturePlugin :
                                     blackLevel = blackLevel,
                                     whiteLevel = whiteLevel,
                                     wbGains = wbGains,
-                                    camToXyzD50 = camToXyzD50,
+                                    fm1OrCustomMatrix = primaryFm1OrCustom,
+                                    asShotNeutralForCct = if (hasCustomMatrix) null else asShotNeutral,
+                                    cm1 = cm1,
+                                    cm2 = cm2,
+                                    fm2 = fm2,
+                                    flatField8x6 = if (flatFieldGrid != null && flatFieldGrid.size == 48) flatFieldGrid.toFloatArray() else null,
                                     useDisplayP3 = useDisplayP3,
-                                    applyFlatField = applyFlatField && !lensShadingApplied,
+                                    normalizeExposure = normalizeExposure,
+                                    fullResolution = isArtworkMode && fullResolution,
+                                    writeTrueColorBitmap = isArtworkMode,
                                     sensorOrientationDegrees = activeSensorOrientation,
                                     outFile = trueColorJpegFile
                                 )
@@ -602,7 +889,7 @@ class ZameraCapturePlugin :
                                 val suffix = if (isArtworkMode && trueColorJpegFile.exists()) "TRUECOLOR" else "PRO"
                                 mediaStoreJpegUri = saveFileToMediaStoreDcim(
                                     sourceFile = primaryJpegToExport,
-                                    displayName = "ZAMERA_${timestamp}_${suffix}.jpg",
+                                    displayName = "${baseName}_${suffix}.jpg",
                                     mimeType = "image/jpeg"
                                 )
 
@@ -616,7 +903,14 @@ class ZameraCapturePlugin :
                                     "meanRgb" to devResult.meanRgb,
                                     "highlightClippedRatio" to devResult.highlightClippedRatio,
                                     "gamutClippedRatio" to devResult.gamutClippedRatio,
-                                    "rustIspActive" to devResult.rustIspSucceeded
+                                    "exposureNormGain" to devResult.exposureNormGain,
+                                    "solvedCctKelvin" to devResult.solvedCctKelvin,
+                                    "zebraRatio" to devResult.zebraRatio,
+                                    "focusPeakingScore" to devResult.focusPeakingScore,
+                                    "rawHistogram32" to devResult.rawHistogram32,
+                                    "outputWidth" to devResult.outWidth,
+                                    "outputHeight" to devResult.outHeight,
+                                    "rustIspActive" to (isArtworkMode && devResult.rustIspSucceeded)
                                 )
                             } finally {
                                 rawImg.close()
@@ -624,7 +918,7 @@ class ZameraCapturePlugin :
                         } else {
                             mediaStoreJpegUri = saveFileToMediaStoreDcim(
                                 sourceFile = oemJpegFile,
-                                displayName = "ZAMERA_${timestamp}.jpg",
+                                displayName = "${baseName}.jpg",
                                 mimeType = "image/jpeg"
                             )
                         }
@@ -709,6 +1003,15 @@ class ZameraCapturePlugin :
         }
     }
 
+    private fun exifOrientationFromDegrees(degrees: Int): Int {
+        return when ((degrees % 360 + 360) % 360) {
+            90 -> ExifInterface.ORIENTATION_ROTATE_90
+            180 -> ExifInterface.ORIENTATION_ROTATE_180
+            270 -> ExifInterface.ORIENTATION_ROTATE_270
+            else -> ExifInterface.ORIENTATION_NORMAL
+        }
+    }
+
     private fun extractMatrix3x3(transform: ColorSpaceTransform?): FloatArray? {
         if (transform == null) return null
         val out = FloatArray(9)
@@ -720,6 +1023,14 @@ class ZameraCapturePlugin :
             }
         }
         return out
+    }
+
+    private fun floatArrayToColorSpaceTransform(m: FloatArray): ColorSpaceTransform {
+        val elements = Array(9) { i ->
+            val num = (m[i] * 10000.0f).roundToInt()
+            Rational(num, 10000)
+        }
+        return ColorSpaceTransform(elements)
     }
 
     private fun saveFileToMediaStoreDcim(
@@ -766,6 +1077,8 @@ class ZameraCapturePlugin :
             rawImageReader = null
             jpegImageReader?.close()
             jpegImageReader = null
+            previewSurface?.release()
+            previewSurface = null
             surfaceEntry?.release()
             surfaceEntry = null
         } catch (_: Exception) {
@@ -890,6 +1203,7 @@ class ZameraCapturePlugin :
         val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.toList() ?: emptyList()
         val apertures = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.toList() ?: emptyList()
         val minFocusDist = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+        val focusCalibration = chars.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION) ?: 0
         val isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
         val exposureNsRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
         val whiteLevel = chars.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL)
@@ -920,6 +1234,7 @@ class ZameraCapturePlugin :
             "hardwareLevel" to hwLevel,
             "sensorOrientation" to sensorOrientation,
             "lensShadingApplied" to lensShadingApplied,
+            "focusDistanceCalibration" to focusCalibration,
             "capabilities" to capNames,
             "supportsRawSensor" to rawSensorSizes.isNotEmpty(),
             "rawSensorSizes" to rawSensorSizes,
@@ -949,10 +1264,17 @@ class ZameraCapturePlugin :
 
 data class RustRawDevelopOutput(
     val rustIspSucceeded: Boolean,
+    val outWidth: Int,
+    val outHeight: Int,
     val meanRgb: List<Double>,
     val centerLinearCamRgb: List<Double>,
     val highlightClippedRatio: Double,
-    val gamutClippedRatio: Double
+    val gamutClippedRatio: Double,
+    val exposureNormGain: Double,
+    val solvedCctKelvin: Double,
+    val zebraRatio: Double,
+    val focusPeakingScore: Double,
+    val rawHistogram32: List<Double>
 )
 
 object ZameraRustBridge {
@@ -979,9 +1301,15 @@ object ZameraRustBridge {
         cfaPattern: Int,
         paramsBuffer: ByteBuffer,
         useDisplayP3: Int,
-        applyFlatField: Int,
+        normalizeExposure: Int,
         outRgbaBuffer: ByteBuffer,
         outStatsBuffer: ByteBuffer
+    ): Int
+
+    @JvmStatic
+    private external fun nativeComputeKelvinWbDirect(
+        inBuffer: ByteBuffer,
+        outBuffer: ByteBuffer
     ): Int
 
     fun safeCoreVersion(): String {
@@ -995,6 +1323,33 @@ object ZameraRustBridge {
         }
     }
 
+    fun computeDngKelvinWb(
+        kelvin: Float,
+        tint: Float,
+        cm1: FloatArray,
+        cm2: FloatArray,
+        fm1: FloatArray,
+        fm2: FloatArray
+    ): Pair<FloatArray, FloatArray>? {
+        if (!loaded) return null
+        val inBuf = ByteBuffer.allocateDirect(38 * 4).order(ByteOrder.nativeOrder())
+        val inf = inBuf.asFloatBuffer()
+        inf.put(kelvin)
+        inf.put(tint)
+        for (i in 0 until 9) inf.put(cm1[i])
+        for (i in 0 until 9) inf.put(cm2[i])
+        for (i in 0 until 9) inf.put(fm1[i])
+        for (i in 0 until 9) inf.put(fm2[i])
+
+        val outBuf = ByteBuffer.allocateDirect(13 * 4).order(ByteOrder.nativeOrder())
+        val rc = nativeComputeKelvinWbDirect(inBuf, outBuf)
+        if (rc != 0) return null
+        val outf = outBuf.asFloatBuffer()
+        val gains = FloatArray(4) { i -> outf.get(i) }
+        val mat = FloatArray(9) { i -> outf.get(4 + i) }
+        return Pair(gains, mat)
+    }
+
     fun developRawToTrueColorFile(
         rawDirectBuffer: ByteBuffer,
         width: Int,
@@ -1004,25 +1359,41 @@ object ZameraRustBridge {
         blackLevel: FloatArray,
         whiteLevel: Float,
         wbGains: FloatArray,
-        camToXyzD50: FloatArray,
+        fm1OrCustomMatrix: FloatArray,
+        asShotNeutralForCct: FloatArray?,
+        cm1: FloatArray,
+        cm2: FloatArray,
+        fm2: FloatArray,
+        flatField8x6: FloatArray?,
         useDisplayP3: Boolean,
-        applyFlatField: Boolean,
+        normalizeExposure: Boolean,
+        fullResolution: Boolean,
+        writeTrueColorBitmap: Boolean,
         sensorOrientationDegrees: Int,
         outFile: File
     ): RustRawDevelopOutput {
         if (!loaded) {
             return RustRawDevelopOutput(
                 rustIspSucceeded = false,
+                outWidth = 0,
+                outHeight = 0,
                 meanRgb = listOf(0.0, 0.0, 0.0),
                 centerLinearCamRgb = listOf(0.18, 0.18, 0.18),
                 highlightClippedRatio = 0.0,
-                gamutClippedRatio = 0.0
+                gamutClippedRatio = 0.0,
+                exposureNormGain = 1.0,
+                solvedCctKelvin = 5500.0,
+                zebraRatio = 0.0,
+                focusPeakingScore = 0.0,
+                rawHistogram32 = List(32) { 0.0 }
             )
         }
 
-        val outW = width / 2
-        val outH = height / 2
-        val paramsBuffer = ByteBuffer.allocateDirect(17 * 4).order(ByteOrder.nativeOrder())
+        val outW = if (fullResolution && writeTrueColorBitmap) width else width / 2
+        val outH = if (fullResolution && writeTrueColorBitmap) height else height / 2
+
+        val paramFloats = if (flatField8x6 != null) 95 else 47
+        val paramsBuffer = ByteBuffer.allocateDirect(paramFloats * 4).order(ByteOrder.nativeOrder())
         val pf = paramsBuffer.asFloatBuffer()
         pf.put(blackLevel[0])
         pf.put(blackLevel[1])
@@ -1032,12 +1403,25 @@ object ZameraRustBridge {
         pf.put(wbGains[0])
         pf.put(wbGains[1])
         pf.put(wbGains[2])
-        for (i in 0 until 9) {
-            pf.put(camToXyzD50[i])
+        for (i in 0 until 9) pf.put(fm1OrCustomMatrix[i])
+        if (asShotNeutralForCct != null && asShotNeutralForCct.size >= 3) {
+            pf.put(asShotNeutralForCct[0])
+            pf.put(asShotNeutralForCct[1])
+            pf.put(asShotNeutralForCct[2])
+        } else {
+            pf.put(0.0f)
+            pf.put(0.0f)
+            pf.put(0.0f)
+        }
+        for (i in 0 until 9) pf.put(cm1[i])
+        for (i in 0 until 9) pf.put(cm2[i])
+        for (i in 0 until 9) pf.put(fm2[i])
+        if (flatField8x6 != null) {
+            for (i in 0 until 48) pf.put(flatField8x6[i])
         }
 
         val outRgbaBuffer = ByteBuffer.allocateDirect(outW * outH * 4)
-        val outStatsBuffer = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder())
+        val outStatsBuffer = ByteBuffer.allocateDirect(44 * 4).order(ByteOrder.nativeOrder())
 
         val rc = nativeDevelopBayer16Direct(
             rawDirectBuffer,
@@ -1047,7 +1431,7 @@ object ZameraRustBridge {
             cfaPattern,
             paramsBuffer,
             if (useDisplayP3) 1 else 0,
-            if (applyFlatField) 1 else 0,
+            if (normalizeExposure) 1 else 0,
             outRgbaBuffer,
             outStatsBuffer
         )
@@ -1055,40 +1439,53 @@ object ZameraRustBridge {
         if (rc != 0) {
             return RustRawDevelopOutput(
                 rustIspSucceeded = false,
+                outWidth = 0,
+                outHeight = 0,
                 meanRgb = listOf(0.0, 0.0, 0.0),
                 centerLinearCamRgb = listOf(0.18, 0.18, 0.18),
                 highlightClippedRatio = 0.0,
-                gamutClippedRatio = 0.0
+                gamutClippedRatio = 0.0,
+                exposureNormGain = 1.0,
+                solvedCctKelvin = 5500.0,
+                zebraRatio = 0.0,
+                focusPeakingScore = 0.0,
+                rawHistogram32 = List(32) { 0.0 }
             )
         }
 
-        outRgbaBuffer.rewind()
-        val colorSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ColorSpace.get(if (useDisplayP3) ColorSpace.Named.DISPLAY_P3 else ColorSpace.Named.SRGB)
-        } else {
-            null
-        }
+        var finalW = outW
+        var finalH = outH
+        if (writeTrueColorBitmap) {
+            outRgbaBuffer.rewind()
+            val colorSpace = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ColorSpace.get(if (useDisplayP3) ColorSpace.Named.DISPLAY_P3 else ColorSpace.Named.SRGB)
+            } else {
+                null
+            }
 
-        val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && colorSpace != null) {
-            Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888, false, colorSpace)
-        } else {
-            Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
-        }
-        rawBitmap.copyPixelsFromBuffer(outRgbaBuffer)
+            val rawBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && colorSpace != null) {
+                Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888, false, colorSpace)
+            } else {
+                Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+            }
+            rawBitmap.copyPixelsFromBuffer(outRgbaBuffer)
 
-        val finalBitmap = if (sensorOrientationDegrees != 0) {
-            val matrix = Matrix().apply { postRotate(sensorOrientationDegrees.toFloat()) }
-            val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, outW, outH, matrix, true)
-            if (rotated !== rawBitmap) rawBitmap.recycle()
-            rotated
-        } else {
-            rawBitmap
-        }
+            val finalBitmap = if (sensorOrientationDegrees != 0) {
+                val matrix = Matrix().apply { postRotate(sensorOrientationDegrees.toFloat()) }
+                val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, outW, outH, matrix, true)
+                if (rotated !== rawBitmap) rawBitmap.recycle()
+                rotated
+            } else {
+                rawBitmap
+            }
 
-        FileOutputStream(outFile).use { fos ->
-            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 96, fos)
+            finalW = finalBitmap.width
+            finalH = finalBitmap.height
+            FileOutputStream(outFile).use { fos ->
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 96, fos)
+            }
+            finalBitmap.recycle()
         }
-        finalBitmap.recycle()
 
         val sf = outStatsBuffer.asFloatBuffer()
         val meanR = sf.get(0).toDouble()
@@ -1099,13 +1496,25 @@ object ZameraRustBridge {
         val centerR = sf.get(5).toDouble()
         val centerG = sf.get(6).toDouble()
         val centerB = sf.get(7).toDouble()
+        val expNormGain = sf.get(8).toDouble()
+        val solvedCct = sf.get(9).toDouble()
+        val zebraRatio = sf.get(10).toDouble()
+        val peakingScore = sf.get(11).toDouble()
+        val hist32 = List(32) { i -> sf.get(12 + i).toDouble() }
 
         return RustRawDevelopOutput(
             rustIspSucceeded = true,
+            outWidth = finalW,
+            outHeight = finalH,
             meanRgb = listOf(meanR, meanG, meanB),
             centerLinearCamRgb = listOf(centerR, centerG, centerB),
             highlightClippedRatio = highlightClip,
-            gamutClippedRatio = gamutClip
+            gamutClippedRatio = gamutClip,
+            exposureNormGain = expNormGain,
+            solvedCctKelvin = solvedCct,
+            zebraRatio = zebraRatio,
+            focusPeakingScore = peakingScore,
+            rawHistogram32 = hist32
         )
     }
 }

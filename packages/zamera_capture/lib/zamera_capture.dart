@@ -90,6 +90,11 @@ class PreviewSessionInfo {
   final int sensorOrientation;
   final String activeCameraId;
   final bool supportsRawSensor;
+  final double minimumFocusDistanceDiopters;
+  final int isoMin;
+  final int isoMax;
+  final int exposureNsMin;
+  final int exposureNsMax;
 
   const PreviewSessionInfo({
     required this.textureId,
@@ -98,7 +103,14 @@ class PreviewSessionInfo {
     required this.sensorOrientation,
     required this.activeCameraId,
     required this.supportsRawSensor,
+    this.minimumFocusDistanceDiopters = 10.0,
+    this.isoMin = 50,
+    this.isoMax = 3200,
+    this.exposureNsMin = 50000,
+    this.exposureNsMax = 1000000000,
   });
+
+  bool get supportsVariableFocus => minimumFocusDistanceDiopters > 0.0;
 
   factory PreviewSessionInfo.fromMap(Map<dynamic, dynamic> map) {
     return PreviewSessionInfo(
@@ -108,6 +120,12 @@ class PreviewSessionInfo {
       sensorOrientation: (map['sensorOrientation'] as num?)?.toInt() ?? 90,
       activeCameraId: map['activeCameraId']?.toString() ?? '2',
       supportsRawSensor: map['supportsRawSensor'] == true,
+      minimumFocusDistanceDiopters:
+          (map['minimumFocusDistanceDiopters'] as num?)?.toDouble() ?? 10.0,
+      isoMin: (map['isoMin'] as num?)?.toInt() ?? 50,
+      isoMax: (map['isoMax'] as num?)?.toInt() ?? 3200,
+      exposureNsMin: (map['exposureNsMin'] as num?)?.toInt() ?? 50000,
+      exposureNsMax: (map['exposureNsMax'] as num?)?.toInt() ?? 1000000000,
     );
   }
 }
@@ -122,6 +140,8 @@ class CapturePhotoResult {
   final String cameraId;
   final int? iso;
   final int? exposureTimeNs;
+  final int? outputWidth;
+  final int? outputHeight;
   final bool rustIspActive;
   final bool lensShadingApplied;
   final double? whiteLevel;
@@ -131,6 +151,11 @@ class CapturePhotoResult {
   final List<double>? meanRgb;
   final double? highlightClippedRatio;
   final double? gamutClippedRatio;
+  final double? exposureNormGain;
+  final double? solvedCctKelvin;
+  final double? zebraRatio;
+  final double? focusPeakingScore;
+  final List<double>? rawHistogram32;
 
   const CapturePhotoResult({
     this.jpegPath,
@@ -141,6 +166,8 @@ class CapturePhotoResult {
     required this.cameraId,
     this.iso,
     this.exposureTimeNs,
+    this.outputWidth,
+    this.outputHeight,
     this.rustIspActive = false,
     this.lensShadingApplied = false,
     this.whiteLevel,
@@ -150,6 +177,11 @@ class CapturePhotoResult {
     this.meanRgb,
     this.highlightClippedRatio,
     this.gamutClippedRatio,
+    this.exposureNormGain,
+    this.solvedCctKelvin,
+    this.zebraRatio,
+    this.focusPeakingScore,
+    this.rawHistogram32,
   });
 
   factory CapturePhotoResult.fromMap(Map<dynamic, dynamic> map) {
@@ -162,6 +194,8 @@ class CapturePhotoResult {
       cameraId: map['cameraId']?.toString() ?? '2',
       iso: (map['iso'] as num?)?.toInt(),
       exposureTimeNs: (map['exposureTimeNs'] as num?)?.toInt(),
+      outputWidth: (map['outputWidth'] as num?)?.toInt(),
+      outputHeight: (map['outputHeight'] as num?)?.toInt(),
       rustIspActive: map['rustIspActive'] == true,
       lensShadingApplied: map['lensShadingApplied'] == true,
       whiteLevel: (map['whiteLevel'] as num?)?.toDouble(),
@@ -179,6 +213,13 @@ class CapturePhotoResult {
           .toList(),
       highlightClippedRatio: (map['highlightClippedRatio'] as num?)?.toDouble(),
       gamutClippedRatio: (map['gamutClippedRatio'] as num?)?.toDouble(),
+      exposureNormGain: (map['exposureNormGain'] as num?)?.toDouble(),
+      solvedCctKelvin: (map['solvedCctKelvin'] as num?)?.toDouble(),
+      zebraRatio: (map['zebraRatio'] as num?)?.toDouble(),
+      focusPeakingScore: (map['focusPeakingScore'] as num?)?.toDouble(),
+      rawHistogram32: (map['rawHistogram32'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
     );
   }
 }
@@ -198,6 +239,7 @@ class CameraUnitCapability {
   final List<String> physicalCameraIds;
   final List<double> focalLengthsMm;
   final List<double> apertures;
+  final double minimumFocusDistanceDiopters;
   final List<double>? isoRange;
   final List<int>? exposureTimeRangeNs;
   final int? sensorWhiteLevel;
@@ -219,6 +261,7 @@ class CameraUnitCapability {
     required this.physicalCameraIds,
     required this.focalLengthsMm,
     required this.apertures,
+    this.minimumFocusDistanceDiopters = 0.0,
     this.isoRange,
     this.exposureTimeRangeNs,
     this.sensorWhiteLevel,
@@ -226,6 +269,21 @@ class CameraUnitCapability {
     required this.supportsOis,
     this.error,
   });
+
+  bool get supportsVariableFocus => minimumFocusDistanceDiopters > 0.0;
+
+  String get opticalBadgeLabel {
+    if (facing == 'FRONT') return 'Ön Kamera (#$cameraId)';
+    final fl = focalLengthsMm.isNotEmpty ? focalLengthsMm.first : 0.0;
+    final ap = apertures.isNotEmpty ? apertures.first : 0.0;
+    final eqMm = fl >= 6.0
+        ? '23mm'
+        : (fl >= 2.0 ? '14mm Ultra' : '#$cameraId');
+    final apStr = ap > 0 ? ' · f/${ap.toStringAsFixed(1)}' : '';
+    final oisStr = supportsOis ? ' · OIS' : '';
+    final bitStr = (sensorWhiteLevel ?? 0) > 4000 ? ' (14b)' : '';
+    return '$eqMm$apStr$oisStr$bitStr (#$cameraId)';
+  }
 
   factory CameraUnitCapability.fromMap(Map<dynamic, dynamic> map) {
     return CameraUnitCapability(
@@ -256,6 +314,8 @@ class CameraUnitCapability {
       apertures: (map['apertures'] as List<dynamic>? ?? const [])
           .map((e) => (e as num).toDouble())
           .toList(),
+      minimumFocusDistanceDiopters:
+          (map['minimumFocusDistanceDiopters'] as num?)?.toDouble() ?? 0.0,
       isoRange: (map['isoRange'] as List<dynamic>?)
           ?.map((e) => (e as num).toDouble())
           .toList(),
@@ -300,6 +360,13 @@ class ZameraProbeReport {
     required this.cameras,
     required this.rawJsonMap,
   });
+
+  CameraUnitCapability? cameraById(String id) {
+    for (final c in cameras) {
+      if (c.cameraId == id) return c;
+    }
+    return null;
+  }
 
   factory ZameraProbeReport.fromMap(Map<dynamic, dynamic> map) {
     final normalized = Map<String, dynamic>.from(
@@ -367,14 +434,18 @@ class ZameraCapture {
     return PreviewSessionInfo.fromMap(map);
   }
 
-  /// Dynamically locks/updates manual ISO, Shutter Speed, Focus Distance, and RGGB White Balance Gains.
+  /// Dynamically locks/updates manual ISO, Shutter Speed, EV Compensation, Focus Distance,
+  /// and DNG-interpolated Kelvin/Tint White Balance.
   static Future<bool> updateManualControls({
     required bool manualExposure,
     required double iso,
     required int exposureTimeNs,
+    double evCompensation = 0.0,
     required bool manualFocus,
     required double focusDistance,
     required bool manualWb,
+    double kelvin = 5500.0,
+    double tint = 0.0,
     required List<double> rggbGains,
     bool artworkLinearMode = false,
   }) async {
@@ -382,24 +453,50 @@ class ZameraCapture {
       'manualExposure': manualExposure,
       'iso': iso,
       'exposureTimeNs': exposureTimeNs,
+      'evCompensation': evCompensation,
       'manualFocus': manualFocus,
       'focusDistance': focusDistance,
       'manualWb': manualWb,
+      'kelvin': kelvin,
+      'tint': tint,
       'rggbGains': rggbGains,
       'artworkLinearMode': artworkLinearMode,
     });
     return ok == true;
   }
 
-  /// Triggers a still RAW (.dng) + TrueColor / Pro JPEG photo capture on the active camera session.
+  /// Sets tap-to-focus and AE spot metering region at normalized coordinates `(x, y)` in `[0..1]`.
+  static Future<bool> setFocusAndMeteringPoint({
+    required double x,
+    required double y,
+  }) async {
+    final ok = await _channel.invokeMethod<bool>(
+      'setFocusAndMeteringPoint',
+      {'x': x, 'y': y},
+    );
+    return ok == true;
+  }
+
+  /// Reads live hardware telemetry (`iso`, `exposureTimeNs`, `focusDistanceDiopters`, `wbGains`, `asShotNeutral`).
+  static Future<Map<String, dynamic>> getLiveTelemetry() async {
+    final map = await _channel.invokeMapMethod<dynamic, dynamic>('getLiveTelemetry');
+    if (map == null) return const {};
+    return Map<String, dynamic>.from(
+      map.map((k, v) => MapEntry(k.toString(), v)),
+    );
+  }
+
+  /// Triggers a still RAW (.dng) + TrueColor (12.6MP) / Pro JPEG photo capture on the active camera session.
   static Future<CapturePhotoResult> capturePhoto({
     bool captureRaw = true,
     bool isArtworkMode = true,
     bool preferProRaw = false,
     bool useDisplayP3 = false,
-    bool applyFlatField = true,
+    bool fullResolution = true,
+    bool normalizeExposure = true,
     List<double>? wbGains,
     List<double>? camToXyzD50,
+    List<double>? flatFieldGrid8x6,
   }) async {
     final map = await _channel.invokeMapMethod<dynamic, dynamic>(
       'capturePhoto',
@@ -408,9 +505,11 @@ class ZameraCapture {
         'isArtworkMode': isArtworkMode,
         'preferProRaw': preferProRaw,
         'useDisplayP3': useDisplayP3,
-        'applyFlatField': applyFlatField,
+        'fullResolution': fullResolution,
+        'normalizeExposure': normalizeExposure,
         if (wbGains != null) 'wbGains': wbGains,
         if (camToXyzD50 != null) 'camToXyzD50': camToXyzD50,
+        if (flatFieldGrid8x6 != null) 'flatFieldGrid8x6': flatFieldGrid8x6,
       },
     );
     if (map == null) {
@@ -420,6 +519,21 @@ class ZameraCapture {
       );
     }
     return CapturePhotoResult.fromMap(map);
+  }
+
+  /// Triggers a 3-frame AE Bracketed RAW+JPEG capture (`[-1.5 EV, 0.0 EV, +1.5 EV]`).
+  static Future<List<CapturePhotoResult>> captureBracketedPhotos({
+    List<double> evOffsets = const [-1.5, 0.0, 1.5],
+  }) async {
+    final map = await _channel.invokeMapMethod<dynamic, dynamic>(
+      'captureBracketedPhotos',
+      {'evOffsets': evOffsets},
+    );
+    final rawList = map?['captures'] as List<dynamic>? ?? const [];
+    return rawList
+        .whereType<Map<dynamic, dynamic>>()
+        .map(CapturePhotoResult.fromMap)
+        .toList();
   }
 
   /// Stops the active native preview session and releases the GPU texture.

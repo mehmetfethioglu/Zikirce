@@ -2,12 +2,13 @@ import Flutter
 import UIKit
 import AVFoundation
 import Photos
-
-@_silgen_name("zamera_core_version_cstr")
-private func c_zamera_core_version_cstr() -> UnsafePointer<CChar>?
+import Darwin
 
 /**
  * ZameraCapturePlugin (iOS AVFoundation Hardware Probe + Live FlutterTexture Preview + Physical Lens Lock + Bayer RAW / ProRAW Capture + Photos Library Export)
+ *
+ * Uses dynamic `dlsym` lookup for `zamera_core_version_cstr` so iOS builds succeed both before and after
+ * `zamera_core.xcframework` static linking (Fixes B4).
  */
 public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCaptureVideoDataOutputSampleBufferDelegate, AVCapturePhotoCaptureDelegate {
     private var textureRegistry: FlutterTextureRegistry?
@@ -32,11 +33,16 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
 
-    private func rustVersionString() -> String {
-        if let ptr = c_zamera_core_version_cstr() {
-            return String(cString: ptr)
+    private func resolveRustCoreVersion() -> (version: String, isLinked: Bool) {
+        let rtldDefault = UnsafeMutableRawPointer(bitPattern: -2)
+        if let sym = dlsym(rtldDefault, "zamera_core_version_cstr") {
+            typealias VersionFn = @convention(c) () -> UnsafePointer<CChar>?
+            let fn = unsafeBitCast(sym, to: VersionFn.self)
+            if let ptr = fn() {
+                return (String(cString: ptr), true)
+            }
         }
-        return "zamera_core 0.3.0 (iOS FFI Ready)"
+        return ("UNLINKED: zamera_core.xcframework henüz bağlanmadı", false)
     }
 
     public func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
@@ -67,6 +73,9 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
         case "updateManualControls":
             let args = call.arguments as? [String: Any] ?? [:]
             updateManualControls(args: args, result: result)
+        case "setFocusAndMeteringPoint":
+            let args = call.arguments as? [String: Any] ?? [:]
+            setFocusAndMeteringPoint(args: args, result: result)
         case "capturePhoto":
             let args = call.arguments as? [String: Any] ?? [:]
             captureRawAndHeicPhoto(args: args, result: result)
@@ -74,7 +83,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             stopPreviewSession()
             result(true)
         case "getRustCoreVersion":
-            result(rustVersionString())
+            result(resolveRustCoreVersion().version)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -151,6 +160,33 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
         }
     }
 
+    private func setFocusAndMeteringPoint(args: [String: Any], result: @escaping FlutterResult) {
+        sessionQueue.async { [weak self] in
+            guard let device = self?.activeDevice else {
+                DispatchQueue.main.async { result(false) }
+                return
+            }
+            let x = CGFloat(args["x"] as? Double ?? 0.5)
+            let y = CGFloat(args["y"] as? Double ?? 0.5)
+            let pt = CGPoint(x: max(0.0, min(1.0, x)), y: max(0.0, min(1.0, y)))
+            do {
+                try device.lockForConfiguration()
+                if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.autoFocus) {
+                    device.focusPointOfInterest = pt
+                    device.focusMode = .autoFocus
+                }
+                if device.isExposurePointOfInterestSupported && device.isExposureModeSupported(.autoExpose) {
+                    device.exposurePointOfInterest = pt
+                    device.exposureMode = .autoExpose
+                }
+                device.unlockForConfiguration()
+                DispatchQueue.main.async { result(true) }
+            } catch {
+                DispatchQueue.main.async { result(false) }
+            }
+        }
+    }
+
     private func updateManualControls(args: [String: Any], result: @escaping FlutterResult) {
         sessionQueue.async { [weak self] in
             guard let device = self?.activeDevice else {
@@ -169,6 +205,10 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                     device.setExposureModeCustom(duration: reqDuration, iso: clampedIso, completionHandler: nil)
                 } else if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
+                    if let ev = args["evCompensation"] as? Double {
+                        let clampedEv = max(device.minExposureTargetBias, min(device.maxExposureTargetBias, Float(ev)))
+                        device.setExposureTargetBias(clampedEv, completionHandler: nil)
+                    }
                 }
 
                 let manualFocus = args["manualFocus"] as? Bool ?? false
@@ -181,15 +221,28 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
 
                 let artworkLinearMode = args["artworkLinearMode"] as? Bool ?? false
                 let manualWb = args["manualWb"] as? Bool ?? false
-                if !artworkLinearMode && manualWb && device.isWhiteBalanceModeSupported(.locked),
-                   let rggb = args["rggbGains"] as? [Double], rggb.count >= 4 {
-                    let maxGain = device.maxWhiteBalanceGain
-                    let gains = AVCaptureDevice.WhiteBalanceGains(
-                        redGain: max(1.0, min(maxGain, Float(rggb[0]))),
-                        greenGain: max(1.0, min(maxGain, Float(rggb[1]))),
-                        blueGain: max(1.0, min(maxGain, Float(rggb[3])))
-                    )
-                    device.setWhiteBalanceModeLocked(with: gains, completionHandler: nil)
+                if !artworkLinearMode && manualWb && device.isWhiteBalanceModeSupported(.locked) {
+                    if let kelvin = args["kelvin"] as? Double {
+                        let tint = Float(args["tint"] as? Double ?? 0.0)
+                        let tempAndTint = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
+                            temperature: Float(kelvin),
+                            tint: tint
+                        )
+                        var gains = device.deviceWhiteBalanceGains(for: tempAndTint)
+                        let maxGain = device.maxWhiteBalanceGain
+                        gains.redGain = max(1.0, min(maxGain, gains.redGain))
+                        gains.greenGain = max(1.0, min(maxGain, gains.greenGain))
+                        gains.blueGain = max(1.0, min(maxGain, gains.blueGain))
+                        device.setWhiteBalanceModeLocked(with: gains, completionHandler: nil)
+                    } else if let rggb = args["rggbGains"] as? [Double], rggb.count >= 4 {
+                        let maxGain = device.maxWhiteBalanceGain
+                        let gains = AVCaptureDevice.WhiteBalanceGains(
+                            redGain: max(1.0, min(maxGain, Float(rggb[0]))),
+                            greenGain: max(1.0, min(maxGain, Float(rggb[1]))),
+                            blueGain: max(1.0, min(maxGain, Float(rggb[3])))
+                        )
+                        device.setWhiteBalanceModeLocked(with: gains, completionHandler: nil)
+                    }
                 } else if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                     device.whiteBalanceMode = .continuousAutoWhiteBalance
                 }
@@ -250,6 +303,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             return
         }
 
+        let isRustLinked = resolveRustCoreVersion().isLinked
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let ts = Int(Date().timeIntervalSince1970 * 1000)
         if photo.isRawPhoto {
@@ -266,7 +320,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                         "dngPath": dngUrl.path,
                         "jpegPath": dngUrl.path,
                         "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios",
-                        "rustIspActive": true
+                        "rustIspActive": isRustLinked
                     ])
                 }
             }
@@ -284,7 +338,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
                         "jpegPath": jpgUrl.path,
                         "dngPath": nil as String?,
                         "cameraId": self.activeDevice?.deviceType.rawValue ?? "ios",
-                        "rustIspActive": true
+                        "rustIspActive": isRustLinked
                     ])
                 }
             }
@@ -346,7 +400,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             "device": UIDevice.current.name,
             "sdkInt": processInfo.operatingSystemVersion.majorVersion,
             "release": UIDevice.current.systemVersion,
-            "rustCoreVersion": rustVersionString(),
+            "rustCoreVersion": resolveRustCoreVersion().version,
             "cameraIdList": discovery.devices.map { $0.uniqueID },
             "cameras": cameras
         ]
@@ -432,7 +486,7 @@ public class ZameraCapturePlugin: NSObject, FlutterPlugin, FlutterTexture, AVCap
             "physicalCameraIds": constituentIds,
             "focalLengthsMm": switchOverZooms,
             "apertures": [Double(device.lensAperture)],
-            "minimumFocusDistanceDiopters": nil as Double?,
+            "minimumFocusDistanceDiopters": device.isFocusModeSupported(.locked) ? 10.0 : 0.0,
             "isoRange": [Double(minISO), Double(maxISO)],
             "exposureTimeRangeNs": [
                 Int64(minExpSec * 1_000_000_000.0),
