@@ -1338,6 +1338,18 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
             out_stats[11] = stats.focus_peaking_score;
             out_stats[12..44].copy_from_slice(&stats.histogram_32);
         }
+        if out_stats_len_floats >= 92 {
+            let ff_measured = extract_flat_field_8x6_from_bayer16(
+                raw_slice,
+                width as usize,
+                height as usize,
+                row_stride as usize,
+                cfa_pattern,
+                black_level,
+                white_level,
+            );
+            out_stats[44..92].copy_from_slice(&ff_measured);
+        }
     }
     0
 }

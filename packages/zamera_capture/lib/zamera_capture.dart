@@ -156,6 +156,7 @@ class CapturePhotoResult {
   final double? zebraRatio;
   final double? focusPeakingScore;
   final List<double>? rawHistogram32;
+  final List<double>? measuredFlatField8x6;
 
   const CapturePhotoResult({
     this.jpegPath,
@@ -182,6 +183,7 @@ class CapturePhotoResult {
     this.zebraRatio,
     this.focusPeakingScore,
     this.rawHistogram32,
+    this.measuredFlatField8x6,
   });
 
   factory CapturePhotoResult.fromMap(Map<dynamic, dynamic> map) {
@@ -218,6 +220,9 @@ class CapturePhotoResult {
       zebraRatio: (map['zebraRatio'] as num?)?.toDouble(),
       focusPeakingScore: (map['focusPeakingScore'] as num?)?.toDouble(),
       rawHistogram32: (map['rawHistogram32'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      measuredFlatField8x6: (map['measuredFlatField8x6'] as List<dynamic>?)
           ?.map((e) => (e as num).toDouble())
           .toList(),
     );
@@ -494,6 +499,8 @@ class ZameraCapture {
     bool useDisplayP3 = false,
     bool fullResolution = true,
     bool normalizeExposure = true,
+    bool applyPerspectiveWarp = false,
+    List<double>? perspectiveCornersNorm,
     List<double>? wbGains,
     List<double>? camToXyzD50,
     List<double>? flatFieldGrid8x6,
@@ -507,6 +514,9 @@ class ZameraCapture {
         'useDisplayP3': useDisplayP3,
         'fullResolution': fullResolution,
         'normalizeExposure': normalizeExposure,
+        'applyPerspectiveWarp': applyPerspectiveWarp,
+        if (perspectiveCornersNorm != null)
+          'perspectiveCornersNorm': perspectiveCornersNorm,
         if (wbGains != null) 'wbGains': wbGains,
         if (camToXyzD50 != null) 'camToXyzD50': camToXyzD50,
         if (flatFieldGrid8x6 != null) 'flatFieldGrid8x6': flatFieldGrid8x6,

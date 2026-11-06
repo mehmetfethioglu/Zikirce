@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +7,18 @@ import 'package:zamera_video/zamera_video.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Color(0xFF08090C),
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
   runApp(const ZameraApp());
 }
+
+enum ActiveProDial { none, ev, iso, shutter, wb, focus }
 
 class ZameraApp extends StatelessWidget {
   const ZameraApp({super.key});
@@ -19,11 +30,11 @@ class ZameraApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0E1014),
+        scaffoldBackgroundColor: const Color(0xFF08090C),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFE5A93C),
           secondary: Color(0xFF4ECDC4),
-          surface: Color(0xFF181B22),
+          surface: Color(0xFF12141A),
         ),
         useMaterial3: true,
       ),
@@ -39,31 +50,44 @@ class ZameraHomeScreen extends StatefulWidget {
   State<ZameraHomeScreen> createState() => _ZameraHomeScreenState();
 }
 
-class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
-  int _selectedIndex = 0;
+class _ZameraHomeScreenState extends State<ZameraHomeScreen>
+    with WidgetsBindingObserver {
+  // 0 = Sanat (Gerçek Renk), 1 = Pro Fotoğraf, 2 = Pro Video
+  int _selectedMode = 0;
+  ActiveProDial _activeDial = ActiveProDial.none;
 
   // Device Probe State
   ZameraProbeReport? _probeReport;
-  String? _probeError;
   bool _loadingProbe = true;
 
-  // Live Camera Session State (shared between Sanat Modu & Pro Foto)
+  // Live Camera Session & Telemetry State
   PreviewSessionInfo? _previewSession;
   String _selectedCameraId = '2';
-  String? _lastCaptureMessage;
+  String? _statusBanner;
   CapturePhotoResult? _lastCaptureResult;
   bool _isCapturing = false;
+  bool _isStartingCamera = false;
   Offset? _lastFocusTapNorm;
+  Timer? _telemetryTimer;
+  Map<String, dynamic> _liveTelemetry = const {};
 
   // Sanat Modu (TrueColor) State — Faz 2.0
-  double _simulatedSensorWarmth = 1.45;
+  final double _simulatedSensorWarmth = 1.45;
   bool _showPerspectiveGrid = true;
+  bool _applyPerspectiveWarp = false;
+  List<Offset> _perspectiveCorners = const [
+    Offset(0.10, 0.10),
+    Offset(0.90, 0.10),
+    Offset(0.90, 0.90),
+    Offset(0.10, 0.90),
+  ];
   bool _flatFieldEnabled = true;
   bool _useDisplayP3 = false;
   bool _fullResolution = true;
   bool _normalizeExposure = true;
   bool _useMeasuredGrayCardWb = false;
   List<double>? _measuredGrayCardWbGains;
+  List<double>? _measuredFlatField8x6;
   late ColorCheckerCalibrationResult _calibrationResult;
 
   // Pro Fotoğraf State — Faz 2A & 2B
@@ -76,15 +100,42 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   bool _manualWb = false;
   double _kelvin = 5500.0;
   double _tint = 0.0;
-  bool _preferProRaw48Mp = false;
+  final bool _preferProRaw48Mp = false;
   bool _showZebra = true;
   bool _showFocusPeaking = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _recomputeCalibration();
     _runDeviceProbe();
+    _telemetryTimer = Timer.periodic(
+      const Duration(milliseconds: 350),
+      (_) => _pollLiveTelemetry(),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _telemetryTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        _previewSession == null &&
+        !_isStartingCamera &&
+        !_loadingProbe) {
+      _startOrSwitchCamera(_selectedCameraId);
+    } else if (state == AppLifecycleState.paused) {
+      ZameraCapture.stopPreviewSession();
+      if (mounted) {
+        setState(() => _previewSession = null);
+      }
+    }
   }
 
   void _recomputeCalibration() {
@@ -94,6 +145,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
       blueShift: 0.82,
     );
     _calibrationResult = ZameraCapture.calibrateColorChecker24(measured);
+  }
+
+  Future<void> _pollLiveTelemetry() async {
+    if (!mounted || _previewSession == null || _isCapturing) return;
+    try {
+      final tel = await ZameraCapture.getLiveTelemetry();
+      if (!mounted || tel.isEmpty) return;
+      setState(() => _liveTelemetry = tel);
+    } catch (_) {}
   }
 
   CameraUnitCapability? get _activeCameraCap {
@@ -108,7 +168,6 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
   Future<void> _runDeviceProbe() async {
     setState(() {
       _loadingProbe = true;
-      _probeError = null;
     });
     try {
       final report = await ZameraCapture.probeDeviceCapabilities();
@@ -121,22 +180,23 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         _selectedCameraId = preferredId;
         _loadingProbe = false;
       });
-      if (_previewSession == null) {
-        await _startOrSwitchCamera(preferredId);
-      }
+      await _startOrSwitchCamera(preferredId);
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _probeError = e.toString();
+        _statusBanner = 'Donanım tarama: $e';
         _loadingProbe = false;
       });
     }
   }
 
   Future<void> _startOrSwitchCamera(String cameraId) async {
+    if (_isStartingCamera) return;
+    _isStartingCamera = true;
     setState(() {
       _selectedCameraId = cameraId;
       _lastFocusTapNorm = null;
+      _statusBanner = null;
     });
     try {
       final info = await ZameraCapture.startPreviewSession(cameraId: cameraId);
@@ -144,20 +204,29 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
       final cap = _activeCameraCap;
       if (cap != null && !cap.supportsVariableFocus && _manualFocus) {
         _manualFocus = false;
+        if (_activeDial == ActiveProDial.focus) {
+          _activeDial = ActiveProDial.none;
+        }
       }
       final isoRange = cap?.isoRange;
       if (isoRange != null && isoRange.length >= 2) {
-        final minIso = isoRange[0].toDouble();
-        final maxIso = isoRange[1].toDouble();
-        _iso = _iso.clamp(minIso, maxIso);
+        _iso = _iso.clamp(isoRange[0].toDouble(), isoRange[1].toDouble());
       }
-      setState(() => _previewSession = info);
-      await _pushManualControlsToNative(artworkMode: _selectedIndex == 0);
+      setState(() {
+        _previewSession = info;
+        _statusBanner = null;
+      });
+      await _pushManualControlsToNative(artworkMode: _selectedMode == 0);
+      await _pollLiveTelemetry();
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _lastCaptureMessage = 'Kamera oturumu başlatılamadı: $e';
-      });
+      if (_previewSession == null) {
+        setState(() {
+          _statusBanner = 'Kamera başlatılamadı: $e';
+        });
+      }
+    } finally {
+      _isStartingCamera = false;
     }
   }
 
@@ -188,8 +257,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     BoxConstraints constraints,
   ) async {
     if (_previewSession == null) return;
-    final normX = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
-    final normY = (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
+    final normX =
+        (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+    final normY =
+        (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
     setState(() {
       _lastFocusTapNorm = Offset(normX, normY);
     });
@@ -201,9 +272,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
       if (!mounted) return;
       final afSupported = _activeCameraCap?.supportsVariableFocus ?? true;
       setState(() {
-        _lastCaptureMessage = (ok && afSupported)
-            ? 'Dokunmatik AF + Spot AE Noktası: (${(normX * 100).round()}%, ${(normY * 100).round()}%)'
-            : 'Sabit Odaklı Lens — Yalnızca Spot AE Ölçüm Noktası Güncellendi';
+        _statusBanner = (ok && afSupported)
+            ? 'AF + Spot AE Kilitlendi (${(normX * 100).round()}%, ${(normY * 100).round()}%)'
+            : 'Sabit Odak — Spot AE Ölçüm Noktası Güncellendi';
       });
     } catch (_) {}
   }
@@ -215,11 +286,14 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     if (_isCapturing) return;
     setState(() {
       _isCapturing = true;
-      _lastCaptureMessage = isArtworkMode
-          ? '14-Bit RAW (${_fullResolution ? "12.6MP Tam Çözünürlük" : "3.1MP Hızlı"}) çekiliyor ve Rust TrueColor ISP işleniyor...'
-          : 'Pro RAW (.dng) + JPEG çekiliyor...';
+      _statusBanner = isArtworkMode
+          ? '14-Bit RAW → ${_fullResolution ? "12.6MP" : "3.1MP"} TrueColor ISP işleniyor...'
+          : 'Pro DNG + JPEG çekiliyor...';
     });
     try {
+      final cornersFlat = <double>[
+        for (final pt in _perspectiveCorners) ...[pt.dx, pt.dy],
+      ];
       final res = await ZameraCapture.capturePhoto(
         captureRaw: true,
         isArtworkMode: isArtworkMode,
@@ -227,41 +301,53 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         useDisplayP3: _useDisplayP3,
         fullResolution: _fullResolution,
         normalizeExposure: _normalizeExposure && !_useMeasuredGrayCardWb,
+        applyPerspectiveWarp: isArtworkMode && _applyPerspectiveWarp,
+        perspectiveCornersNorm:
+            (isArtworkMode && _applyPerspectiveWarp) ? cornersFlat : null,
         wbGains: _useMeasuredGrayCardWb ? _measuredGrayCardWbGains : null,
+        flatFieldGrid8x6:
+            (_flatFieldEnabled && _measuredFlatField8x6 != null)
+                ? _measuredFlatField8x6
+                : null,
       );
       if (!mounted) return;
 
-      if (lockGrayCardFromCenter &&
-          res.centerLinearCamRgb != null &&
-          res.centerLinearCamRgb!.length >= 3) {
-        final cr = res.centerLinearCamRgb![0].clamp(1e-4, 1.0);
-        final cg = res.centerLinearCamRgb![1].clamp(1e-4, 1.0);
-        final cb = res.centerLinearCamRgb![2].clamp(1e-4, 1.0);
-        _measuredGrayCardWbGains = [cg / cr, 1.0, cg / cb];
-        _useMeasuredGrayCardWb = true;
+      if (lockGrayCardFromCenter) {
+        if (res.centerLinearCamRgb != null &&
+            res.centerLinearCamRgb!.length >= 3) {
+          final cr = res.centerLinearCamRgb![0].clamp(1e-4, 1.0);
+          final cg = res.centerLinearCamRgb![1].clamp(1e-4, 1.0);
+          final cb = res.centerLinearCamRgb![2].clamp(1e-4, 1.0);
+          _measuredGrayCardWbGains = [cg / cr, 1.0, cg / cb];
+          _useMeasuredGrayCardWb = true;
+        }
+        if (res.measuredFlatField8x6 != null &&
+            res.measuredFlatField8x6!.length == 48) {
+          _measuredFlatField8x6 = res.measuredFlatField8x6;
+          _flatFieldEnabled = true;
+        }
       }
 
       setState(() {
         _isCapturing = false;
         _lastCaptureResult = res;
-        final dcimStatus = res.mediaStoreJpegUri != null
-            ? 'Galeriye (DCIM/Zamera) kaydedildi'
-            : 'Uygulama dizinine kaydedildi';
         final cctStr = res.solvedCctKelvin != null
-            ? ' · ${res.solvedCctKelvin!.round()}K'
+            ? '${res.solvedCctKelvin!.round()}K'
             : '';
         final resStr = (res.outputWidth != null && res.outputHeight != null)
-            ? ' (${res.outputWidth}×${res.outputHeight})'
+            ? '${res.outputWidth}×${res.outputHeight}'
             : '';
-        _lastCaptureMessage = isArtworkMode
-            ? 'Sanat RAW + TrueColor$resStr$cctStr $dcimStatus!'
-            : 'Pro RAW+JPEG (#${res.cameraId}$cctStr) $dcimStatus!';
+        _statusBanner = lockGrayCardFromCenter
+            ? 'Gri Kart WB + 8×6 Flat-Field Kalibre Edildi ($cctStr)'
+            : (isArtworkMode
+                ? 'TrueColor $resStr ($cctStr) DCIM/Zamera\'ya kaydedildi'
+                : 'Pro DNG+JPEG ($cctStr) DCIM/Zamera\'ya kaydedildi');
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isCapturing = false;
-        _lastCaptureMessage = 'Çekim bildirimi: $e';
+        _statusBanner = 'Çekim hatası: $e';
       });
     }
   }
@@ -270,7 +356,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     if (_isCapturing) return;
     setState(() {
       _isCapturing = true;
-      _lastCaptureMessage = '3-Kare AE Braketleme (-1.5 EV, 0 EV, +1.5 EV) çekiliyor...';
+      _statusBanner = '3x AEB (-1.5, 0.0, +1.5 EV) DNG+JPEG çekiliyor...';
     });
     try {
       final results = await ZameraCapture.captureBracketedPhotos(
@@ -282,479 +368,611 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         if (results.isNotEmpty) {
           _lastCaptureResult = results[results.length ~/ 2];
         }
-        _lastCaptureMessage =
-            '3-Kare AE Braketleme tamamlandı (${results.length} adet DNG+JPEG DCIM/Zamera dizinine kaydedildi)!';
+        _statusBanner =
+            '3x AEB Tamamlandı (${results.length} DNG+JPEG DCIM/Zamera\'da)';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isCapturing = false;
-        _lastCaptureMessage = 'Braketleme bildirimi: $e';
+        _statusBanner = 'AEB hatası: $e';
       });
     }
   }
 
-  Future<void> _copyJsonToClipboard() async {
-    final report = _probeReport;
-    if (report == null) return;
-    await Clipboard.setData(ClipboardData(text: report.toPrettyJson()));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Cihaz yetenek JSON raporu panoya kopyalandı (docs/cihaz_yetenekleri/ için hazır).',
-        ),
-      ),
-    );
+  String _formatShutter(int? expNs) {
+    if (_selectedMode == 1 && _manualExposure) {
+      return '1/${_shutterDenominator.round()}s';
+    }
+    if (expNs == null || expNs <= 0) return '1/100s';
+    final sec = expNs / 1e9;
+    if (sec >= 0.5) return '${sec.toStringAsFixed(1)}s';
+    final denom = (1.0 / sec).round().clamp(1, 16000);
+    return '1/${denom}s';
+  }
+
+  String _formatFocusDistance(double? diopters) {
+    final cap = _activeCameraCap;
+    if (cap != null && !cap.supportsVariableFocus) return '∞ SABİT';
+    final d = (_selectedMode == 1 && _manualFocus)
+        ? (_focusDistance * (cap?.minimumFocusDistanceDiopters ?? 10.0))
+        : (diopters ?? 0.0);
+    if (d <= 0.05) return '∞';
+    final meters = (1.0 / d).clamp(0.08, 99.0);
+    return meters < 1.0
+        ? '${(meters * 100).round()}cm'
+        : '${meters.toStringAsFixed(1)}m';
   }
 
   @override
   Widget build(BuildContext context) {
+    final isArtwork = _selectedMode == 0;
+    final isProPhoto = _selectedMode == 1;
+    final isVideo = _selectedMode == 2;
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF14171E),
-        title: const Row(
+      backgroundColor: const Color(0xFF08090C),
+      body: SafeArea(
+        child: Column(
           children: [
-            Icon(Icons.camera_enhance_rounded, color: Color(0xFFE5A93C)),
-            SizedBox(width: 10),
-            Text(
-              'ZAMERA',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.4,
-                fontSize: 18,
+            _buildTopProHudBar(isArtwork: isArtwork, isProPhoto: isProPhoto),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Center(
+                  child: isVideo
+                      ? _buildProVideoViewfinderOverlay()
+                      : _buildCameraViewfinder(isArtworkMode: isArtwork),
+                ),
               ),
+            ),
+            if (!isVideo && _activeDial != ActiveProDial.none)
+              _buildExpandableProDialBar(isArtwork: isArtwork),
+            _buildBottomProControlDeck(
+              isArtwork: isArtwork,
+              isProPhoto: isProPhoto,
             ),
           ],
         ),
-        actions: [
-          if (_probeReport != null)
-            IconButton(
-              tooltip: 'Probe JSON Kopyala',
-              onPressed: _copyJsonToClipboard,
-              icon: const Icon(Icons.copy_all_rounded),
-            ),
-          IconButton(
-            tooltip: 'Donanımı Yeniden Tara',
-            onPressed: _runDeviceProbe,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
       ),
-      body: IndexedStack(
-        index: _selectedIndex,
+    );
+  }
+
+  Widget _buildTopProHudBar({
+    required bool isArtwork,
+    required bool isProPhoto,
+  }) {
+    final liveIso = _manualExposure && isProPhoto
+        ? _iso.round()
+        : ((_liveTelemetry['iso'] as num?)?.round() ??
+            _lastCaptureResult?.iso ??
+            100);
+    final liveExpNs = (_liveTelemetry['exposureTimeNs'] as num?)?.toInt() ??
+        _lastCaptureResult?.exposureTimeNs;
+    final liveCct = (isProPhoto && _manualWb)
+        ? _kelvin.round()
+        : ((_lastCaptureResult?.solvedCctKelvin ??
+                    (_liveTelemetry['solvedCctKelvin'] as num?)?.toDouble() ??
+                    5500.0)
+                .round());
+    final liveDiopters =
+        (_liveTelemetry['focusDistanceDiopters'] as num?)?.toDouble();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0D0F14),
+        border: Border(
+          bottom: BorderSide(color: Colors.white10, width: 0.8),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildArtworkTrueColorStudioTab(),
-          _buildProCameraStudioTab(),
-          _buildProVideoIsolationTab(),
-          _buildProbeTab(),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (idx) {
-          setState(() => _selectedIndex = idx);
-          if (idx == 0 || idx == 1) {
-            _pushManualControlsToNative(artworkMode: idx == 0);
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.palette_outlined),
-            label: 'Sanat (Gerçek Renk)',
+          Row(
+            children: [
+              const Icon(
+                Icons.camera_enhance_rounded,
+                color: Color(0xFFE5A93C),
+                size: 18,
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                'ZAMERA',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                  fontSize: 13,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildHudMetricChip('ISO $liveIso', highlight: _manualExposure && isProPhoto),
+                      const SizedBox(width: 4),
+                      _buildHudMetricChip(_formatShutter(liveExpNs), highlight: _manualExposure && isProPhoto),
+                      const SizedBox(width: 4),
+                      _buildHudMetricChip('${liveCct}K', highlight: (_manualWb && isProPhoto) || _useMeasuredGrayCardWb),
+                      const SizedBox(width: 4),
+                      _buildHudMetricChip('AF ${_formatFocusDistance(liveDiopters)}', highlight: _manualFocus && isProPhoto),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: _showCalibrationAndProbeSheet,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1E28),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white24, width: 0.8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.tune_rounded, size: 13, color: Color(0xFFE5A93C)),
+                      SizedBox(width: 4),
+                      Text(
+                        'Faz 0: Probe',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.camera_rounded),
-            label: 'Pro Fotoğraf',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.videocam_outlined),
-            label: 'Pro Video',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.memory_rounded),
-            label: 'Faz 0: Probe',
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                if (isArtwork) ...[
+                  _buildQuickTogglePill(
+                    label: _fullResolution ? '12.6MP TAM' : '3.1MP HIZLI',
+                    active: _fullResolution,
+                    onTap: () => setState(() => _fullResolution = !_fullResolution),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: _useDisplayP3 ? 'DISPLAY P3' : 'sRGB',
+                    active: _useDisplayP3,
+                    onTap: () => setState(() => _useDisplayP3 = !_useDisplayP3),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: 'L*≈94 POZLAMA',
+                    active: _normalizeExposure,
+                    onTap: () =>
+                        setState(() => _normalizeExposure = !_normalizeExposure),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: '8×6 FLAT-FIELD',
+                    active: _flatFieldEnabled,
+                    onTap: () =>
+                        setState(() => _flatFieldEnabled = !_flatFieldEnabled),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: _applyPerspectiveWarp ? 'WARP AÇIK' : '4-KÖŞE KILAVUZ',
+                    active: _showPerspectiveGrid,
+                    onTap: () {
+                      setState(() {
+                        if (!_showPerspectiveGrid) {
+                          _showPerspectiveGrid = true;
+                        } else if (!_applyPerspectiveWarp) {
+                          _applyPerspectiveWarp = true;
+                        } else {
+                          _applyPerspectiveWarp = false;
+                          _showPerspectiveGrid = false;
+                        }
+                      });
+                    },
+                  ),
+                ] else ...[
+                  _buildQuickTogglePill(
+                    label: 'DNG 14-BİT',
+                    active: true,
+                    onTap: () {},
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: 'ZEBRA %95',
+                    active: _showZebra,
+                    onTap: () => setState(() => _showZebra = !_showZebra),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: 'PEAKING',
+                    active: _showFocusPeaking,
+                    onTap: () =>
+                        setState(() => _showFocusPeaking = !_showFocusPeaking),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickTogglePill(
+                    label: '1.0× OPTİK KİLİT',
+                    active: true,
+                    onTap: () {},
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildViewfinderCard({required bool isArtworkMode}) {
+  Widget _buildHudMetricChip(String text, {bool highlight = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: highlight ? const Color(0xFF2B2210) : const Color(0xFF151821),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: highlight ? const Color(0xFFE5A93C) : Colors.white12,
+          width: 0.8,
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10,
+          fontFamily: 'monospace',
+          fontWeight: FontWeight.w700,
+          color: highlight ? const Color(0xFFE5A93C) : const Color(0xFF4ECDC4),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickTogglePill({
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFFE5A93C).withValues(alpha: 0.18)
+              : const Color(0xFF14171F),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active ? const Color(0xFFE5A93C) : Colors.white12,
+            width: 0.9,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+            color: active ? const Color(0xFFE5A93C) : Colors.white60,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraViewfinder({required bool isArtworkMode}) {
     final session = _previewSession;
     final lastRes = _lastCaptureResult;
     final hist = lastRes?.rawHistogram32;
-    return Card(
-      color: const Color(0xFF12151C),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          AspectRatio(
-            aspectRatio: 3 / 4,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (details) => _onViewfinderTapUp(details, constraints),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (session != null && session.textureId >= 0)
-                        ClipRect(
-                          child: FittedBox(
-                            fit: BoxFit.cover,
-                            child: SizedBox(
-                              width: session.previewHeight.toDouble(),
-                              height: session.previewWidth.toDouble(),
-                              child: Texture(textureId: session.textureId),
-                            ),
-                          ),
-                        )
-                      else
-                        Container(
-                          color: const Color(0xFF0A0C10),
-                          alignment: Alignment.center,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.sensors_rounded,
-                                size: 42,
-                                color: Color(0xFFE5A93C),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                isArtworkMode
-                                    ? 'Sanat Modu Canlı RAW Vizörü (sRGB / Display P3 Doğrusal)'
-                                    : 'Pro Kamera Fiziksel Lens Vizörü (Sıfır Otomatik Lens Geçişi)',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.white70,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 10),
-                              FilledButton.tonalIcon(
-                                onPressed: () =>
-                                    _startOrSwitchCamera(_selectedCameraId),
-                                icon: const Icon(Icons.play_arrow_rounded),
-                                label: const Text('Canlı Vizörü Başlat'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (isArtworkMode && _showPerspectiveGrid)
-                        IgnorePointer(
-                          child: CustomPaint(
-                            painter: _ArtworkPerspectivePainter(),
-                          ),
-                        ),
-                      if (_lastFocusTapNorm != null)
-                        Positioned(
-                          left: (_lastFocusTapNorm!.dx * constraints.maxWidth) - 26,
-                          top: (_lastFocusTapNorm!.dy * constraints.maxHeight) - 26,
-                          child: IgnorePointer(
-                            child: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                  color: const Color(0xFFE5A93C),
-                                  width: 2.0,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              alignment: Alignment.center,
-                              child: Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF4ECDC4),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (!isArtworkMode && _showZebra)
-                        Positioned(
-                          top: 10,
-                          left: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'ZEBRA ${((lastRes?.zebraRatio ?? 0.0) * 100).toStringAsFixed(1)}% | '
-                              '${_showFocusPeaking ? "PEAK ${(lastRes?.focusPeakingScore ?? 0.0).toStringAsFixed(2)} | " : ""}'
-                              'LENS #$_selectedCameraId | '
-                              '${_manualExposure ? "ISO ${_iso.toInt()} 1/${_shutterDenominator.toInt()}s" : "AE ${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)}EV"}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontFamily: 'monospace',
-                                color: Color(0xFF4ECDC4),
-                              ),
-                            ),
-                          ),
-                        ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black87,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            isArtworkMode
-                                ? (_useMeasuredGrayCardWb
-                                    ? 'GRİ KART WB KİLİTLİ'
-                                    : 'DNG CCT WB (${lastRes?.solvedCctKelvin?.round() ?? 5500}K)')
-                                : (_manualWb
-                                    ? '${_kelvin.toInt()}K (T:${_tint.toInt()})'
-                                    : 'RAW+JPEG (${lastRes?.solvedCctKelvin?.round() ?? 5500}K)'),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE5A93C),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (hist != null && hist.length == 32)
-                        Positioned(
-                          bottom: 10,
-                          left: 10,
-                          child: Container(
-                            width: 148,
-                            height: 46,
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: CustomPaint(
-                              painter: _RawHistogramPainter(hist),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
+
+    return AspectRatio(
+      aspectRatio: 3 / 4,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF050608),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isArtworkMode
+                ? const Color(0xFFE5A93C).withValues(alpha: 0.45)
+                : Colors.white24,
+            width: 1.2,
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _lastCaptureMessage ??
-                      (isArtworkMode
-                          ? 'Aktif Fiziksel Lens #$_selectedCameraId (14-Bit RAW → 12.6MP Rust TrueColor ISP)'
-                          : 'Aktif Fiziksel Lens: ${_activeCameraCap?.opticalBadgeLabel ?? "#$_selectedCameraId"} (Dokunmatik AF/AE Aktif)'),
-                  style: const TextStyle(fontSize: 12, color: Colors.white70),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.spaceBetween,
-                  children: [
-                    if (isArtworkMode)
-                      OutlinedButton.icon(
-                        onPressed: _isCapturing
-                            ? null
-                            : () => _triggerPhotoCapture(
-                                  isArtworkMode: true,
-                                  lockGrayCardFromCenter: true,
-                                ),
-                        icon: const Icon(
-                          Icons.filter_center_focus_rounded,
-                          size: 18,
-                        ),
-                        label: const Text('Merkez %18 Gri Kart Ölç'),
-                      )
-                    else
-                      OutlinedButton.icon(
-                        onPressed:
-                            _isCapturing ? null : _triggerBracketedCapture,
-                        icon: const Icon(Icons.burst_mode_rounded, size: 18),
-                        label: const Text('3-Kare Braket (±1.5 EV)'),
-                      ),
-                    FilledButton.icon(
-                      onPressed: _isCapturing
-                          ? null
-                          : () => _triggerPhotoCapture(
-                                isArtworkMode: isArtworkMode,
-                              ),
-                      icon: _isCapturing
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.camera_alt_rounded),
-                      label: Text(
-                        isArtworkMode ? 'RAW + Gerçek Renk Çek' : 'RAW + Pro Çek',
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLastCaptureComparisonCard() {
-    final res = _lastCaptureResult;
-    if (res == null) return const SizedBox.shrink();
-
-    final trueColorFile = res.jpegPath != null ? File(res.jpegPath!) : null;
-    final oemFile = res.oemJpegPath != null ? File(res.oemJpegPath!) : null;
-    final hasTrueColor = trueColorFile != null && trueColorFile.existsSync();
-    final hasOem = oemFile != null && oemFile.existsSync();
-
-    return Card(
-      color: const Color(0xFF181B22),
-      margin: const EdgeInsets.only(top: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.compare_rounded,
-                  color: Color(0xFF4ECDC4),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Son Çekim: ${res.rustIspActive ? "Rust TrueColor ISP (${res.outputWidth ?? "-"}×${res.outputHeight ?? "-"})" : "Pro RAW + OEM JPEG (Hızlı Telemetri)"}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF4ECDC4),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            if (hasTrueColor || hasOem)
-              Row(
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapUp: (details) => _onViewfinderTapUp(details, constraints),
+              onPanUpdate: (isArtworkMode && _showPerspectiveGrid)
+                  ? (details) {
+                      final nx = (details.localPosition.dx /
+                              constraints.maxWidth)
+                          .clamp(0.04, 0.96);
+                      final ny = (details.localPosition.dy /
+                              constraints.maxHeight)
+                          .clamp(0.04, 0.96);
+                      final pt = Offset(nx, ny);
+                      int closestIdx = -1;
+                      double minDist = 0.14;
+                      for (int i = 0; i < _perspectiveCorners.length; i++) {
+                        final d = (_perspectiveCorners[i] - pt).distance;
+                        if (d < minDist) {
+                          minDist = d;
+                          closestIdx = i;
+                        }
+                      }
+                      if (closestIdx >= 0) {
+                        setState(() {
+                          final updated = List<Offset>.from(_perspectiveCorners);
+                          updated[closestIdx] = pt;
+                          _perspectiveCorners = updated;
+                        });
+                      }
+                    }
+                  : null,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  if (hasTrueColor)
-                    Expanded(
+                  if (session != null && session.textureId >= 0)
+                    ClipRect(
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: session.previewHeight.toDouble(),
+                          height: session.previewWidth.toDouble(),
+                          child: Texture(textureId: session.textureId),
+                        ),
+                      ),
+                    )
+                  else
+                    Center(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              trueColorFile,
-                              height: 160,
-                              fit: BoxFit.cover,
+                          const Icon(
+                            Icons.sensors_rounded,
+                            size: 40,
+                            color: Color(0xFFE5A93C),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _loadingProbe
+                                ? 'Fiziksel Sensörler Taranıyor...'
+                                : 'Canlı Vizör Hazır (#$_selectedCameraId)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white70,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 10),
+                          FilledButton.tonalIcon(
+                            onPressed: () =>
+                                _startOrSwitchCamera(_selectedCameraId),
+                            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                            label: const Text('Vizörü Başlat'),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Subtle Rule-of-Thirds & Perspective Overlay
+                  IgnorePointer(
+                    child: CustomPaint(
+                      painter: _ViewfinderGridAndPerspectivePainter(
+                        showPerspectiveQuad:
+                            isArtworkMode && _showPerspectiveGrid,
+                        warpActive: isArtworkMode && _applyPerspectiveWarp,
+                        corners: _perspectiveCorners,
+                      ),
+                    ),
+                  ),
+
+                  // Tap-to-Focus & Spot AE Reticle
+                  if (_lastFocusTapNorm != null)
+                    Positioned(
+                      left:
+                          (_lastFocusTapNorm!.dx * constraints.maxWidth) - 26,
+                      top:
+                          (_lastFocusTapNorm!.dy * constraints.maxHeight) - 26,
+                      child: IgnorePointer(
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: const Color(0xFFE5A93C),
+                              width: 1.8,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 5,
+                            height: 5,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF4ECDC4),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Top-Left: Compact 32-Bin 14-Bit RAW Histogram & Telemetry Overlay
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 116,
+                            height: 30,
+                            child: CustomPaint(
+                              painter: _RawHistogramPainter(
+                                (hist != null && hist.length == 32)
+                                    ? hist
+                                    : const [
+                                        0.05, 0.12, 0.22, 0.35, 0.48, 0.62,
+                                        0.75, 0.82, 0.78, 0.68, 0.58, 0.52,
+                                        0.48, 0.44, 0.40, 0.38, 0.35, 0.32,
+                                        0.28, 0.25, 0.22, 0.18, 0.15, 0.12,
+                                        0.10, 0.08, 0.06, 0.05, 0.04, 0.03,
+                                        0.02, 0.01,
+                                      ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
                           Text(
-                            res.rustIspActive
-                                ? 'Zamera TrueColor (${_useDisplayP3 ? "P3" : "sRGB"})'
-                                : 'Kaydedilen JPEG',
+                            'RAW 14b · ZEBRA ${((lastRes?.zebraRatio ?? 0.0) * 100).toStringAsFixed(1)}%'
+                            '${_showFocusPeaking ? " · PEAK ${(lastRes?.focusPeakingScore ?? 0.0).toStringAsFixed(2)}" : ""}',
                             style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 9,
+                              fontFamily: 'monospace',
                               color: Color(0xFF4ECDC4),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  if (hasTrueColor && hasOem) const SizedBox(width: 10),
-                  if (hasOem)
-                    Expanded(
-                      child: Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              oemFile,
-                              height: 160,
-                              fit: BoxFit.cover,
+                  ),
+
+                  // Top-Right: Active Color Science / WB Badge
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFFE5A93C).withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        isArtworkMode
+                            ? (_useMeasuredGrayCardWb
+                                ? 'GRİ KART + FF KİLİTLİ'
+                                : 'DNG CCT MATRİS WB')
+                            : (_manualWb
+                                ? 'MANUEL ${_kelvin.round()}K'
+                                : 'AWB DNG 14-BİT'),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: Color(0xFFE5A93C),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Floating Status Pill inside Viewfinder
+                  if (_statusBanner != null)
+                    Positioned(
+                      bottom: 8,
+                      left: 12,
+                      right: 12,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.78),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Text(
+                            _statusBanner!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'OEM Kamera (Leica/ISP)',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amberAccent,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                 ],
               ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProVideoViewfinderOverlay() {
+    const videoInfo = ZameraVideoIsolationInfo();
+    return AspectRatio(
+      aspectRatio: 3 / 4,
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D1016),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF4ECDC4).withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.videocam_rounded,
+              size: 46,
+              color: Color(0xFF4ECDC4),
+            ),
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFF101318),
-                borderRadius: BorderRadius.circular(8),
+            Text(
+              'Pro Video Sinema Modülü (ZAMERA_VIDEO=${videoInfo.isEnabledByFlag})',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFE5A93C),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '• Galeri (DCIM/Zamera): ${res.mediaStoreJpegUri ?? "Yerel Dizin"}',
-                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                  ),
-                  Text(
-                    '• Arşiv DNG (14-Bit Dik Orientation=6): ${res.mediaStoreDngUri ?? res.dngPath ?? "-"}',
-                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                  ),
-                  if (res.solvedCctKelvin != null)
-                    Text(
-                      '• Çözülen Işık CCT: ${res.solvedCctKelvin!.round()}K | Pozlama Kazancı: ×${(res.exposureNormGain ?? 1.0).toStringAsFixed(2)} | Zebra: ${((res.zebraRatio ?? 0.0) * 100).toStringAsFixed(2)}%',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: Color(0xFF4ECDC4),
-                      ),
-                    ),
-                  if (res.whiteLevel != null)
-                    Text(
-                      '• Sensör Dinamik: WhiteLevel=${res.whiteLevel!.toInt()} | Black=${res.blackLevel?.map((e) => e.toInt()).toList()} | LensShadingApplied=${res.lensShadingApplied}',
-                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                    ),
-                  if (res.centerLinearCamRgb != null)
-                    Text(
-                      '• Merkez ROI Doğrusal RGB: [${res.centerLinearCamRgb!.map((e) => e.toStringAsFixed(4)).join(", ")}] | Highlight Clip: ${((res.highlightClippedRatio ?? 0.0) * 100).toStringAsFixed(2)}%',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        color: Color(0xFFE5A93C),
-                      ),
-                    ),
-                ],
-              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              videoInfo.isolationPolicy,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12, color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              '• 10-Bit HLG10 / HDR10 (DynamicRangeProfiles)\n'
+              '• iOS 17+ Apple Log & ProRes 422 HQ (Harici USB-C SSD)\n'
+              '• 180° Shutter Angle Kilidi (24fps → 1/48s, 60fps → 1/120s)',
+              style: TextStyle(fontSize: 11, color: Color(0xFF4ECDC4), height: 1.5),
             ),
           ],
         ),
@@ -762,233 +980,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
     );
   }
 
-  Widget _buildArtworkTrueColorStudioTab() {
-    final cal = _calibrationResult;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildViewfinderCard(isArtworkMode: true),
-        _buildLastCaptureComparisonCard(),
-        const SizedBox(height: 12),
-        Card(
-          color: const Color(0xFF181B22),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '1. Çizim & Sanat Eseri Hizalama, Tam Çözünürlük ve Pozlama (Faz 2.0)',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFE5A93C),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    FilterChip(
-                      label: Text(
-                        _fullResolution
-                            ? 'Tam Çözünürlük 12.6MP (3072×4096)'
-                            : 'Hızlı Önizleme 3.1MP (1536×2048)',
-                      ),
-                      selected: _fullResolution,
-                      onSelected: (v) => setState(() => _fullResolution = v),
-                    ),
-                    FilterChip(
-                      label: const Text('Beyaz Nokta Pozlama Dengeleme (L*≈94)'),
-                      selected: _normalizeExposure,
-                      onSelected: (v) => setState(() => _normalizeExposure = v),
-                    ),
-                    FilterChip(
-                      label: const Text('4-Köşe Perspektif Kılavuzu'),
-                      selected: _showPerspectiveGrid,
-                      onSelected: (v) =>
-                          setState(() => _showPerspectiveGrid = v),
-                    ),
-                    FilterChip(
-                      label: const Text('Flat-Field (8×6 Aydınlatma Düzeltme)'),
-                      selected: _flatFieldEnabled,
-                      onSelected: (v) => setState(() => _flatFieldEnabled = v),
-                    ),
-                    FilterChip(
-                      label: Text(
-                        _useDisplayP3
-                            ? 'Çıktı: Display P3'
-                            : 'Çıktı: sRGB (Standart)',
-                      ),
-                      selected: _useDisplayP3,
-                      onSelected: (v) => setState(() => _useDisplayP3 = v),
-                    ),
-                    if (_measuredGrayCardWbGains != null)
-                      FilterChip(
-                        label: const Text('Ölçülen %18 Gri Kart WB Aktif'),
-                        selected: _useMeasuredGrayCardWb,
-                        onSelected: (v) =>
-                            setState(() => _useMeasuredGrayCardWb = v),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          color: const Color(0xFF181B22),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        '2. 24-Yama ColorChecker & %18 Gri Kart Kalibrasyon Motoru',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFFE5A93C),
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _useMeasuredGrayCardWb
-                            ? const Color(0xFF1D4E4A)
-                            : const Color(0xFF3A2E18),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        _useMeasuredGrayCardWb
-                            ? 'CANLI SENSÖR WB'
-                            : 'DNG CCT İNTERPOLASYON',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'DNG 1.7 standardına göre sahne renk sıcaklığı (CCT) AsShotNeutral + ColorMatrix1/2 üzerinden çözülür ve ForwardMatrix1 (D65) ile ForwardMatrix2 (StdA) mired uzayında enterpole edilir.',
-                  style: TextStyle(fontSize: 13, color: Colors.white70),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Text('Sensör Sıcaklık Sapması Simülasyonu:'),
-                    Expanded(
-                      child: Slider(
-                        value: _simulatedSensorWarmth,
-                        min: 1.0,
-                        max: 2.0,
-                        divisions: 20,
-                        label: _simulatedSensorWarmth.toStringAsFixed(2),
-                        onChanged: (v) {
-                          setState(() {
-                            _simulatedSensorWarmth = v;
-                            _recomputeCalibration();
-                          });
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF101318),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '• Kalibrasyon Öncesi Ortalama Sapma: ΔE00 = ${cal.meanDeltaEBefore.toStringAsFixed(2)} (Bozuk Renk)',
-                        style: const TextStyle(color: Colors.amberAccent),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '• Zamera 3×3 Kalibrasyon Sonrası: ΔE00 Ort = ${cal.meanDeltaEAfter.toStringAsFixed(2)} | Maks = ${cal.maxDeltaEAfter.toStringAsFixed(2)} (Müze Standardı ≤ 2.0)',
-                        style: const TextStyle(
-                          color: Color(0xFF4ECDC4),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _useMeasuredGrayCardWb && _measuredGrayCardWbGains != null
-                            ? '• Canlı Ölçülen %18 Gri Kart Kazançları: R=${_measuredGrayCardWbGains![0].toStringAsFixed(3)}, G=1.000, B=${_measuredGrayCardWbGains![2].toStringAsFixed(3)}'
-                            : '• Simüle Gri Kart RGGB Kazançları: R=${cal.wbGains[0].toStringAsFixed(3)}, G=${cal.wbGains[1].toStringAsFixed(3)}, B=${cal.wbGains[2].toStringAsFixed(3)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 6,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                    childAspectRatio: 1.05,
-                  ),
-                  itemCount: kColorChecker24Patches.length,
-                  itemBuilder: (context, i) {
-                    final patch = kColorChecker24Patches[i];
-                    final deAfter = cal.patchDeltaEAfter[i];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Color(patch.previewArgb),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      padding: const EdgeInsets.all(4),
-                      alignment: Alignment.bottomLeft,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 3,
-                          vertical: 1,
-                        ),
-                        color: Colors.black54,
-                        child: Text(
-                          '#${patch.index}\nΔ${deAfter.toStringAsFixed(1)}',
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: Colors.white,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProCameraStudioTab() {
-    final cameras = _probeReport?.cameras ?? const <CameraUnitCapability>[];
+  Widget _buildExpandableProDialBar({required bool isArtwork}) {
     final activeCap = _activeCameraCap;
     final isoRange = activeCap?.isoRange;
     final isoMin = (isoRange != null && isoRange.length >= 2)
@@ -998,463 +990,901 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen> {
         ? isoRange[1].toDouble()
         : 3200.0;
     final clampedIso = _iso.clamp(isoMin, isoMax);
-    final supportsVariableFocus = activeCap?.supportsVariableFocus ?? true;
+    final supportsFocus = activeCap?.supportsVariableFocus ?? true;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildViewfinderCard(isArtworkMode: false),
-        _buildLastCaptureComparisonCard(),
-        const SizedBox(height: 12),
-        Card(
-          color: const Color(0xFF181B22),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF12151E),
+        border: Border(top: BorderSide(color: Colors.white12)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_activeDial == ActiveProDial.ev)
+            Row(
               children: [
                 const Text(
-                  'Fiziksel Lens Kilidi (1.0× Optik Sabit — Otomatik Makro / Dijital Crop Engelleme)',
+                  'EV TELAFİ',
                   style: TextStyle(
+                    fontSize: 11,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFFE5A93C),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (cameras.isNotEmpty)
-                      for (final cam in cameras)
-                        ChoiceChip(
-                          label: Text(cam.opticalBadgeLabel),
-                          selected: _selectedCameraId == cam.cameraId,
-                          onSelected: (_) => _startOrSwitchCamera(cam.cameraId),
-                        )
-                    else
-                      for (final id in const ['0', '1', '2', '3'])
-                        ChoiceChip(
-                          label: Text('Fiziksel Lens #$id'),
-                          selected: _selectedCameraId == id,
-                          onSelected: (_) => _startOrSwitchCamera(id),
-                        ),
-                  ],
-                ),
-                const Divider(height: 24),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Manuel Pozlama Kilidi (ISO & Enstantane)'),
-                  subtitle: Text(
-                    _manualExposure
-                        ? 'Sensör Donanım Aralığı: ISO ${isoMin.toInt()}..${isoMax.toInt()}'
-                        : 'Otomatik AE Aktif — Aşağıdan ±3.0 EV Pozlama Telafisi Verilebilir',
-                    style: const TextStyle(fontSize: 12, color: Colors.white60),
-                  ),
-                  value: _manualExposure,
-                  onChanged: (v) {
-                    setState(() => _manualExposure = v);
-                    _pushManualControlsToNative(artworkMode: false);
-                  },
-                ),
-                if (!_manualExposure)
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 115,
-                        child: Text(
-                          'EV Telafi: ${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)}',
-                        ),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _evCompensation,
-                          min: -3.0,
-                          max: 3.0,
-                          divisions: 24,
-                          label:
-                              '${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)} EV',
-                          onChanged: (v) {
-                            setState(() => _evCompensation = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                if (_manualExposure) ...[
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text('ISO: ${clampedIso.toInt()}'),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: clampedIso,
-                          min: isoMin,
-                          max: isoMax,
-                          divisions: ((isoMax - isoMin) / 25).round().clamp(10, 120),
-                          onChanged: (v) {
-                            setState(() => _iso = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text('Shutter: 1/${_shutterDenominator.toInt()}s'),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _shutterDenominator,
-                          min: 2,
-                          max: 4000,
-                          onChanged: (v) {
-                            setState(() => _shutterDenominator = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ActionChip(
-                        label: const Text('180° (24fps → 1/48s)'),
-                        onPressed: () {
-                          setState(() => _shutterDenominator = 48);
-                          _pushManualControlsToNative(artworkMode: false);
-                        },
-                      ),
-                      ActionChip(
-                        label: const Text('180° (60fps → 1/120s)'),
-                        onPressed: () {
-                          setState(() => _shutterDenominator = 120);
-                          _pushManualControlsToNative(artworkMode: false);
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-                const Divider(height: 24),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Manuel Beyaz Dengesi (DNG Kelvin & Tint Matris Kilidi)',
-                  ),
-                  subtitle: const Text(
-                    'Sensör ColorMatrix1/2 & ForwardMatrix1/2 üzerinden gerçek kromatik uyarlama',
-                    style: TextStyle(fontSize: 12, color: Colors.white60),
-                  ),
-                  value: _manualWb,
-                  onChanged: (v) {
-                    setState(() => _manualWb = v);
-                    _pushManualControlsToNative(artworkMode: false);
-                  },
-                ),
-                if (_manualWb) ...[
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text('Kelvin: ${_kelvin.toInt()}K'),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _kelvin,
-                          min: 2500,
-                          max: 9000,
-                          divisions: 65,
-                          onChanged: (v) {
-                            setState(() => _kelvin = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 110,
-                        child: Text('Tint: ${_tint.toInt()}'),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _tint,
-                          min: -50,
-                          max: 50,
-                          divisions: 100,
-                          onChanged: (v) {
-                            setState(() => _tint = v);
-                            _pushManualControlsToNative(artworkMode: false);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const Divider(height: 24),
-                if (!supportsVariableFocus)
-                  const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.lock_clock_rounded, color: Colors.amber),
-                    title: Text('Sabit Odaklı Fiziksel Lens (Sonsuz Hiperfokal)'),
-                    subtitle: Text(
-                      'Bu lens (minimumFocusDistance = 0.0 dioptri) sabit odaklıdır; manuel odak sürgüsü devre dışıdır.',
-                      style: TextStyle(fontSize: 12, color: Colors.white60),
-                    ),
-                  )
-                else ...[
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Manuel Odak (0.0 Sonsuz .. ${(activeCap?.minimumFocusDistanceDiopters ?? 10.0).toStringAsFixed(1)} Dioptri)',
-                    ),
-                    value: _manualFocus,
+                Expanded(
+                  child: Slider(
+                    value: _evCompensation,
+                    min: -3.0,
+                    max: 3.0,
+                    divisions: 24,
+                    label:
+                        '${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)} EV',
                     onChanged: (v) {
-                      setState(() => _manualFocus = v);
-                      _pushManualControlsToNative(artworkMode: false);
+                      setState(() {
+                        _manualExposure = false;
+                        _evCompensation = v;
+                      });
+                      _pushManualControlsToNative(artworkMode: isArtwork);
                     },
                   ),
-                  if (_manualFocus)
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 110,
-                          child: Text(
-                            'Odak: ${_focusDistance.toStringAsFixed(2)}',
-                          ),
-                        ),
-                        Expanded(
-                          child: Slider(
-                            value: _focusDistance,
-                            min: 0.0,
-                            max: 1.0,
-                            onChanged: (v) {
-                              setState(() => _focusDistance = v);
-                              _pushManualControlsToNative(artworkMode: false);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
-                const Divider(height: 24),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _evCompensation = 0.0);
+                    _pushManualControlsToNative(artworkMode: isArtwork);
+                  },
+                  child: const Text('0.0 EV', style: TextStyle(fontSize: 11)),
+                ),
+              ],
+            ),
+          if (_activeDial == ActiveProDial.iso)
+            Row(
+              children: [
+                FilterChip(
+                  label: Text(_manualExposure ? 'MANUEL' : 'AUTO AE'),
+                  selected: _manualExposure,
+                  onSelected: (v) {
+                    setState(() => _manualExposure = v);
+                    _pushManualControlsToNative(artworkMode: isArtwork);
+                  },
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Slider(
+                    value: clampedIso,
+                    min: isoMin,
+                    max: isoMax,
+                    divisions: ((isoMax - isoMin) / 25).round().clamp(10, 120),
+                    label: 'ISO ${clampedIso.round()}',
+                    onChanged: (v) {
+                      setState(() {
+                        _manualExposure = true;
+                        _iso = v;
+                      });
+                      _pushManualControlsToNative(artworkMode: isArtwork);
+                    },
+                  ),
+                ),
+                Text(
+                  'ISO ${clampedIso.round()}',
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          if (_activeDial == ActiveProDial.shutter)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
                   children: [
                     FilterChip(
-                      label: const Text('Zebra (%95 Gelinlik Highlight)'),
-                      selected: _showZebra,
-                      onSelected: (v) => setState(() => _showZebra = v),
+                      label: Text(_manualExposure ? 'MANUEL' : 'AUTO AE'),
+                      selected: _manualExposure,
+                      onSelected: (v) {
+                        setState(() => _manualExposure = v);
+                        _pushManualControlsToNative(artworkMode: isArtwork);
+                      },
                     ),
-                    FilterChip(
-                      label: const Text('Focus Peaking'),
-                      selected: _showFocusPeaking,
-                      onSelected: (v) => setState(() => _showFocusPeaking = v),
-                    ),
-                    FilterChip(
-                      label: Text(
-                        _preferProRaw48Mp
-                            ? 'iOS 48MP ProRAW / Max-Res'
-                            : 'Saf Bayer RAW (12.6MP Sıfır ISP)',
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Slider(
+                        value: _shutterDenominator,
+                        min: 2,
+                        max: 4000,
+                        label: '1/${_shutterDenominator.round()}s',
+                        onChanged: (v) {
+                          setState(() {
+                            _manualExposure = true;
+                            _shutterDenominator = v;
+                          });
+                          _pushManualControlsToNative(artworkMode: isArtwork);
+                        },
                       ),
-                      selected: _preferProRaw48Mp,
-                      onSelected: (v) => setState(() => _preferProRaw48Mp = v),
+                    ),
+                    Text(
+                      '1/${_shutterDenominator.round()}s',
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                    ),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final denom in const [48, 60, 120, 250, 500, 1000])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _manualExposure = true;
+                              _shutterDenominator = denom.toDouble();
+                            });
+                            _pushManualControlsToNative(artworkMode: isArtwork);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: (_shutterDenominator.round() == denom &&
+                                      _manualExposure)
+                                  ? const Color(0xFFE5A93C)
+                                  : const Color(0xFF1C202B),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '1/${denom}s',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: (_shutterDenominator.round() == denom &&
+                                        _manualExposure)
+                                    ? Colors.black
+                                    : Colors.white70,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          if (_activeDial == ActiveProDial.wb)
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    FilterChip(
+                      label: Text(_manualWb ? 'MANUEL K' : 'AWB DNG'),
+                      selected: _manualWb,
+                      onSelected: (v) {
+                        setState(() => _manualWb = v);
+                        _pushManualControlsToNative(artworkMode: isArtwork);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Slider(
+                        value: _kelvin,
+                        min: 2500,
+                        max: 9000,
+                        divisions: 65,
+                        label: '${_kelvin.round()}K',
+                        onChanged: (v) {
+                          setState(() {
+                            _manualWb = true;
+                            _kelvin = v;
+                          });
+                          _pushManualControlsToNative(artworkMode: isArtwork);
+                        },
+                      ),
+                    ),
+                    Text(
+                      '${_kelvin.round()}K',
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 72,
+                      child: Text('Tint (G/M)', style: TextStyle(fontSize: 11)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: _tint,
+                        min: -50,
+                        max: 50,
+                        divisions: 100,
+                        label: '${_tint.round()}',
+                        onChanged: (v) {
+                          setState(() {
+                            _manualWb = true;
+                            _tint = v;
+                          });
+                          _pushManualControlsToNative(artworkMode: isArtwork);
+                        },
+                      ),
+                    ),
+                    Text(
+                      '${_tint >= 0 ? "+" : ""}${_tint.round()}',
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                     ),
                   ],
                 ),
               ],
             ),
-          ),
-        ),
-      ],
+          if (_activeDial == ActiveProDial.focus)
+            if (!supportsFocus)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6),
+                child: Text(
+                  'Bu fiziksel lens sabit odaklıdır (0.0 Dioptri / Sonsuz Hiperfokal).',
+                  style: TextStyle(fontSize: 11, color: Colors.amberAccent),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  FilterChip(
+                    label: Text(_manualFocus ? 'MF KİLİT' : 'AF SÜREKLİ'),
+                    selected: _manualFocus,
+                    onSelected: (v) {
+                      setState(() => _manualFocus = v);
+                      _pushManualControlsToNative(artworkMode: isArtwork);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Slider(
+                      value: _focusDistance,
+                      min: 0.0,
+                      max: 1.0,
+                      onChanged: (v) {
+                        setState(() {
+                          _manualFocus = true;
+                          _focusDistance = v;
+                        });
+                        _pushManualControlsToNative(artworkMode: isArtwork);
+                      },
+                    ),
+                  ),
+                  Text(
+                    _formatFocusDistance(
+                      _focusDistance *
+                          (activeCap?.minimumFocusDistanceDiopters ?? 10.0),
+                    ),
+                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                  ),
+                ],
+              ),
+        ],
+      ),
     );
   }
 
-  Widget _buildProVideoIsolationTab() {
-    const videoInfo = ZameraVideoIsolationInfo();
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          color: const Color(0xFF181B22),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildBottomProControlDeck({
+    required bool isArtwork,
+    required bool isProPhoto,
+  }) {
+    final cameras = _probeReport?.cameras ?? const <CameraUnitCapability>[];
+    final lastRes = _lastCaptureResult;
+    final thumbFile = lastRes?.jpegPath != null ? File(lastRes!.jpegPath!) : null;
+    final hasThumb = thumbFile != null && thumbFile.existsSync();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0C0E13),
+        border: Border(top: BorderSide(color: Colors.white12, width: 0.8)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Row 1: Physical Optical Lens Switcher + Pro Dial Selector Pills
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (cameras.isNotEmpty)
+                  for (final cam in cameras.where((c) => c.cameraId != '0'))
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _buildLensPill(
+                        label: cam.facing == 'FRONT'
+                            ? 'Ön'
+                            : (cam.focalLengthsMm.isNotEmpty &&
+                                    cam.focalLengthsMm.first >= 6.0
+                                ? '23mm 14b'
+                                : '14mm'),
+                        selected: _selectedCameraId == cam.cameraId,
+                        onTap: () => _startOrSwitchCamera(cam.cameraId),
+                      ),
+                    )
+                else
+                  for (final id in const ['3', '2', '1'])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: _buildLensPill(
+                        label: id == '2'
+                            ? '23mm 14b'
+                            : (id == '3' ? '14mm' : 'Ön'),
+                        selected: _selectedCameraId == id,
+                        onTap: () => _startOrSwitchCamera(id),
+                      ),
+                    ),
+                const SizedBox(width: 6),
+                Container(width: 1, height: 18, color: Colors.white24),
+                const SizedBox(width: 8),
+                _buildDialPill('EV', ActiveProDial.ev, activeValue: _evCompensation != 0),
+                const SizedBox(width: 5),
+                _buildDialPill('ISO', ActiveProDial.iso, activeValue: _manualExposure),
+                const SizedBox(width: 5),
+                _buildDialPill('S', ActiveProDial.shutter, activeValue: _manualExposure),
+                const SizedBox(width: 5),
+                _buildDialPill('WB', ActiveProDial.wb, activeValue: _manualWb),
+                const SizedBox(width: 5),
+                _buildDialPill('AF', ActiveProDial.focus, activeValue: _manualFocus),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Row 2: Mode Selector Strip (Sanat · Pro Fotoğraf · Pro Video)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildModeTab('Sanat (Gerçek Renk)', 0),
+              const SizedBox(width: 14),
+              _buildModeTab('Pro Fotoğraf', 1),
+              const SizedBox(width: 14),
+              _buildModeTab('Pro Video', 2),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Row 3: Thumbnail Preview | Tactile Pro Shutter Ring | Context Action Button
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Left: Last Capture Thumbnail & Inspector Trigger
+              GestureDetector(
+                onTap: lastRes != null ? _showLastCaptureInspectorModal : null,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF161922),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: hasThumb ? const Color(0xFF4ECDC4) : Colors.white24,
+                      width: 1.4,
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: hasThumb
+                      ? Image.file(thumbFile, fit: BoxFit.cover)
+                      : const Icon(
+                          Icons.photo_library_outlined,
+                          color: Colors.white38,
+                          size: 22,
+                        ),
+                ),
+              ),
+
+              // Center: Tactile Concentric Pro Shutter Button
+              GestureDetector(
+                onTap: _isCapturing
+                    ? null
+                    : () => _triggerPhotoCapture(isArtworkMode: isArtwork),
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isArtwork
+                          ? const Color(0xFFE5A93C)
+                          : const Color(0xFF4ECDC4),
+                      width: 3.0,
+                    ),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isCapturing
+                          ? Colors.white38
+                          : (isArtwork
+                              ? const Color(0xFFE5A93C)
+                              : Colors.white),
+                    ),
+                    alignment: Alignment.center,
+                    child: _isCapturing
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.black,
+                            ),
+                          )
+                        : Icon(
+                            isArtwork
+                                ? Icons.palette_rounded
+                                : Icons.camera_rounded,
+                            color: Colors.black87,
+                            size: 26,
+                          ),
+                  ),
+                ),
+              ),
+
+              // Right: Context Pro Action (Gray Card + Flat-Field Lock OR 3x AEB Bracketing)
+              if (isArtwork)
+                 InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: _isCapturing
+                      ? null
+                      : () {
+                          if (_useMeasuredGrayCardWb) {
+                            setState(() {
+                              _useMeasuredGrayCardWb = false;
+                              _statusBanner = 'DNG Otomatik CCT WB\'ye dönüldü';
+                            });
+                          } else {
+                            _triggerPhotoCapture(
+                              isArtworkMode: true,
+                              lockGrayCardFromCenter: true,
+                            );
+                          }
+                        },
+                  child: Container(
+                    width: 92,
+                    height: 52,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _useMeasuredGrayCardWb
+                          ? const Color(0xFF193C38)
+                          : const Color(0xFF161922),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _useMeasuredGrayCardWb
+                            ? const Color(0xFF4ECDC4)
+                            : Colors.white24,
+                      ),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _useMeasuredGrayCardWb
+                                ? Icons.lock_rounded
+                                : Icons.filter_center_focus_rounded,
+                            size: 18,
+                            color: _useMeasuredGrayCardWb
+                                ? const Color(0xFF4ECDC4)
+                                : const Color(0xFFE5A93C),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _useMeasuredGrayCardWb ? 'WB Kilitli' : 'Gri Kart Ölç',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: _isCapturing ? null : _triggerBracketedCapture,
+                  child: Container(
+                    width: 92,
+                    height: 52,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161922),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.burst_mode_rounded,
+                            size: 18,
+                            color: Color(0xFF4ECDC4),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '3x AEB ±1.5',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLensPill({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFE5A93C) : const Color(0xFF171A24),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? const Color(0xFFE5A93C) : Colors.white24,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.black : Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialPill(
+    String label,
+    ActiveProDial dial, {
+    bool activeValue = false,
+  }) {
+    final isOpen = _activeDial == dial;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _activeDial = isOpen ? ActiveProDial.none : dial;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: isOpen
+              ? const Color(0xFF4ECDC4)
+              : (activeValue
+                  ? const Color(0xFF282214)
+                  : const Color(0xFF151821)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isOpen
+                ? const Color(0xFF4ECDC4)
+                : (activeValue ? const Color(0xFFE5A93C) : Colors.white24),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isOpen
+                ? Colors.black
+                : (activeValue ? const Color(0xFFE5A93C) : Colors.white70),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeTab(String label, int modeIndex) {
+    final selected = _selectedMode == modeIndex;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedMode = modeIndex;
+          _activeDial = ActiveProDial.none;
+        });
+        if (modeIndex == 0 || modeIndex == 1) {
+          _pushManualControlsToNative(artworkMode: modeIndex == 0);
+        }
+      },
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+              color: selected ? const Color(0xFFE5A93C) : Colors.white54,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Container(
+            width: selected ? 22 : 0,
+            height: 2.5,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5A93C),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLastCaptureInspectorModal() {
+    final res = _lastCaptureResult;
+    if (res == null) return;
+    final trueColorFile = res.jpegPath != null ? File(res.jpegPath!) : null;
+    final oemFile = res.oemJpegPath != null ? File(res.oemJpegPath!) : null;
+    final hasTrueColor = trueColorFile != null && trueColorFile.existsSync();
+    final hasOem = oemFile != null && oemFile.existsSync();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF10131A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.72,
+          maxChildSize: 0.92,
+          builder: (context, scrollController) {
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  'Son Çekim Analizi (${res.outputWidth ?? "-"}×${res.outputHeight ?? "-"} · ${res.solvedCctKelvin?.round() ?? 5500}K)',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFE5A93C),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (hasTrueColor || hasOem)
+                  Row(
+                    children: [
+                      if (hasTrueColor)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.file(
+                                  trueColorFile,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                res.rustIspActive
+                                    ? 'Zamera TrueColor 12.6MP'
+                                    : 'Kaydedilen Pro JPEG',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4ECDC4),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (hasTrueColor && hasOem) const SizedBox(width: 10),
+                      if (hasOem)
+                        Expanded(
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.file(
+                                  oemFile,
+                                  height: 220,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                'OEM Kamera (Leica/ISP)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.amberAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0C10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '• DCIM JPEG: ${res.mediaStoreJpegUri ?? res.jpegPath ?? "-"}',
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                      Text(
+                        '• DCIM 14-Bit DNG (Orientation=6): ${res.mediaStoreDngUri ?? res.dngPath ?? "-"}',
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                      ),
+                      Text(
+                        '• Işık Sıcaklığı: ${res.solvedCctKelvin?.round() ?? "-"}K | Pozlama Kazancı: ×${(res.exposureNormGain ?? 1.0).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: Color(0xFF4ECDC4),
+                        ),
+                      ),
+                      if (res.centerLinearCamRgb != null)
+                        Text(
+                          '• Merkez Doğrusal RGB: [${res.centerLinearCamRgb!.map((e) => e.toStringAsFixed(4)).join(", ")}]',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                            color: Color(0xFFE5A93C),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showCalibrationAndProbeSheet() {
+    final cal = _calibrationResult;
+    final report = _probeReport;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF10131A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.78,
+          maxChildSize: 0.94,
+          builder: (context, scrollController) {
+            return ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.all(16),
               children: [
                 Row(
                   children: [
-                    Icon(
-                      videoInfo.isEnabledByFlag
-                          ? Icons.videocam_rounded
-                          : Icons.shield_outlined,
-                      color: const Color(0xFF4ECDC4),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
+                    const Expanded(
                       child: Text(
-                        'Pro Video Modülü (ZAMERA_VIDEO=${videoInfo.isEnabledByFlag})',
-                        style: const TextStyle(
-                          fontSize: 16,
+                        '24-Yama ColorChecker Kalibrasyon & Donanım Raporu',
+                        style: TextStyle(
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFFE5A93C),
                         ),
                       ),
                     ),
+                    if (report != null)
+                      IconButton(
+                        tooltip: 'JSON Kopyala',
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: report.toPrettyJson()),
+                          );
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.copy_all_rounded),
+                      ),
                   ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  videoInfo.isolationPolicy,
-                  style: const TextStyle(height: 1.45),
-                ),
-                const Divider(height: 24),
-                const Text(
-                  'Desteklenen / Planlanan Sinema Profilleri:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '• iOS 17+ Apple Log & ProRes 422 HQ (Harici USB-C SSD Doğrudan Kayıt)\n'
-                  '• Android 14+ 10-bit HLG10 / HDR10 (DynamicRangeProfiles)\n'
-                  '• 180° Shutter Angle Kilidi (24fps → 1/48s, 60fps → 1/120s)\n'
-                  '• Termal & Bellek İzolasyonu: Sanat Modu RAW oturumu ile sıfır çakışma',
-                  style: TextStyle(color: Colors.white70, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProbeTab() {
-    if (_loadingProbe) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_probeError != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Donanım tarama hatası:\n$_probeError',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.redAccent),
-          ),
-        ),
-      );
-    }
-    final report = _probeReport;
-    if (report == null) {
-      return const Center(child: Text('Henüz rapor yok.'));
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          color: const Color(0xFF181B22),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${report.brand.toUpperCase()} ${report.model} (${report.device})',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFE5A93C),
-                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Platform: ${report.platform.toUpperCase()} ${report.release} (API/SDK ${report.sdkInt})',
-                ),
-                Text(
-                  'Rust Motoru: ${report.rustCoreVersion}',
-                  style: TextStyle(
-                    color: report.rustCoreVersion.contains('UNLOADED')
-                        ? Colors.redAccent
-                        : const Color(0xFF4ECDC4),
+                  '• Kalibrasyon Öncesi: ΔE00 = ${cal.meanDeltaEBefore.toStringAsFixed(2)} → Kalibrasyon Sonrası: ΔE00 Ort = ${cal.meanDeltaEAfter.toStringAsFixed(2)} (Maks = ${cal.maxDeltaEAfter.toStringAsFixed(2)})',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF4ECDC4),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  'Keşfedilen Kamera ID Listesi: ${report.cameraIdList.join(", ")}',
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final cam in report.cameras)
-          Card(
-            color: const Color(0xFF181B22),
-            margin: const EdgeInsets.only(bottom: 10),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        cam.supportsRawSensor
-                            ? Icons.check_circle_rounded
-                            : Icons.info_outline_rounded,
-                        color: cam.supportsRawSensor
-                            ? const Color(0xFF4ECDC4)
-                            : Colors.amber,
-                        size: 20,
+                const SizedBox(height: 10),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 6,
+                    mainAxisSpacing: 5,
+                    crossAxisSpacing: 5,
+                    childAspectRatio: 1.15,
+                  ),
+                  itemCount: kColorChecker24Patches.length,
+                  itemBuilder: (context, i) {
+                    final patch = kColorChecker24Patches[i];
+                    final deAfter = cal.patchDeltaEAfter[i];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: Color(patch.previewArgb),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: Colors.white24),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
+                      alignment: Alignment.bottomLeft,
+                      padding: const EdgeInsets.all(3),
+                      child: Container(
+                        color: Colors.black54,
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: Text(
-                          '${cam.opticalBadgeLabel} (${cam.facing}) — ${cam.hardwareLevel}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          '#${patch.index} Δ${deAfter.toStringAsFixed(1)}',
+                          style: const TextStyle(fontSize: 8, color: Colors.white),
                         ),
                       ),
-                    ],
+                    );
+                  },
+                ),
+                const Divider(height: 24),
+                if (report != null) ...[
+                  Text(
+                    '${report.brand.toUpperCase()} ${report.model} (${report.device}) — ${report.rustCoreVersion}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFE5A93C),
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  if (cam.error != null)
-                    Text(
-                      'HAL Durumu: ${cam.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                    )
-                  else ...[
-                    Text(
-                      '• RAW_SENSOR: ${cam.supportsRawSensor ? "EVET (${cam.rawSensorSizes.join(", ")})" : "HAYIR"} | WhiteLevel: ${cam.sensorWhiteLevel ?? "-"}',
-                    ),
-                    Text(
-                      '• LensShadingApplied: ${cam.lensShadingApplied} | Orientation: ${cam.sensorOrientation}°',
-                    ),
-                    if (cam.physicalCameraIds.isNotEmpty)
-                      Text(
-                        '• Alt Fiziksel Lens ID\'leri: ${cam.physicalCameraIds.join(", ")}',
+                  const SizedBox(height: 8),
+                  for (final cam in report.cameras)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        '• ${cam.opticalBadgeLabel}: RAW=${cam.rawSensorSizes.join("/")} | White=${cam.sensorWhiteLevel ?? "-"} | MinFocus=${cam.minimumFocusDistanceDiopters}D',
+                        style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
                       ),
-                    if (cam.focalLengthsMm.isNotEmpty)
-                      Text(
-                        '• Odak Uzaklığı / Diyafram: ${cam.focalLengthsMm.join(", ")} mm | f/${cam.apertures.join(", f/")}',
-                      ),
-                  ],
+                    ),
                 ],
-              ),
-            ),
-          ),
-      ],
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -1497,46 +1927,91 @@ class _RawHistogramPainter extends CustomPainter {
       oldDelegate.bins != bins;
 }
 
-class _ArtworkPerspectivePainter extends CustomPainter {
+class _ViewfinderGridAndPerspectivePainter extends CustomPainter {
+  const _ViewfinderGridAndPerspectivePainter({
+    required this.showPerspectiveQuad,
+    required this.warpActive,
+    required this.corners,
+  });
+
+  final bool showPerspectiveQuad;
+  final bool warpActive;
+  final List<Offset> corners;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final borderPaint = Paint()
-      ..color = const Color(0xFFE5A93C).withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0;
-
-    final rect = Rect.fromLTWH(
-      size.width * 0.1,
-      size.height * 0.1,
-      size.width * 0.8,
-      size.height * 0.8,
+    // Subtle Rule of Thirds lines
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.14)
+      ..strokeWidth = 0.8;
+    canvas.drawLine(
+      Offset(size.width / 3, 0),
+      Offset(size.width / 3, size.height),
+      gridPaint,
     );
-    canvas.drawRect(rect, borderPaint);
+    canvas.drawLine(
+      Offset(size.width * 2 / 3, 0),
+      Offset(size.width * 2 / 3, size.height),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height / 3),
+      Offset(size.width, size.height / 3),
+      gridPaint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * 2 / 3),
+      Offset(size.width, size.height * 2 / 3),
+      gridPaint,
+    );
 
+    if (!showPerspectiveQuad || corners.length < 4) return;
+
+    final pts = [
+      for (final c in corners) Offset(c.dx * size.width, c.dy * size.height),
+    ];
+    final path = Path()
+      ..moveTo(pts[0].dx, pts[0].dy)
+      ..lineTo(pts[1].dx, pts[1].dy)
+      ..lineTo(pts[2].dx, pts[2].dy)
+      ..lineTo(pts[3].dx, pts[3].dy)
+      ..close();
+
+    final borderPaint = Paint()
+      ..color = warpActive
+          ? const Color(0xFF4ECDC4).withValues(alpha: 0.9)
+          : const Color(0xFFE5A93C).withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+    canvas.drawPath(path, borderPaint);
+
+    // Center 18% Gray Card spot target
     final centerRoi = Rect.fromCenter(
       center: Offset(size.width * 0.5, size.height * 0.5),
-      width: size.width * 0.14,
-      height: size.width * 0.14,
+      width: size.width * 0.12,
+      height: size.width * 0.12,
     );
-    final roiPaint = Paint()
-      ..color = const Color(0xFF4ECDC4).withValues(alpha: 0.9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    canvas.drawRect(centerRoi, roiPaint);
+    canvas.drawRect(
+      centerRoi,
+      Paint()
+        ..color = const Color(0xFF4ECDC4).withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
 
-    final cornerPaint = Paint()
-      ..color = const Color(0xFF4ECDC4)
+    final handlePaint = Paint()
+      ..color = const Color(0xFFE5A93C)
       ..style = PaintingStyle.fill;
-    for (final pt in [
-      rect.topLeft,
-      rect.topRight,
-      rect.bottomLeft,
-      rect.bottomRight,
-    ]) {
-      canvas.drawCircle(pt, 6.0, cornerPaint);
+    for (final pt in pts) {
+      canvas.drawCircle(pt, 6.5, handlePaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(
+    covariant _ViewfinderGridAndPerspectivePainter oldDelegate,
+  ) =>
+      oldDelegate.showPerspectiveQuad != showPerspectiveQuad ||
+      oldDelegate.warpActive != warpActive ||
+      oldDelegate.corners != corners;
 }
