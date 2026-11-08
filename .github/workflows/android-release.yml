@@ -114,6 +114,6 @@ jobs:
           packageName: com.akarworks.zamera
           releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
           track: ${{ env.PLAY_TRACK }}
-          status: completed
+          status: draft
           changesNotSentForReview: true
           whatsNewDirectory: docs/play_store_whats_new
