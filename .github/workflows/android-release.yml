@@ -60,16 +60,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: 5.1 Patch Flutter tools Gradle settings & Pre-cache Kotlin Compiler
-        run: |
-          FLUTTER_SETTINGS="$FLUTTER_ROOT/packages/flutter_tools/gradle/settings.gradle.kts"
-          if [ -f "$FLUTTER_SETTINGS" ]; then
-            sed -i 's|mavenCentral()|maven { url = java.net.URI("https://maven.aliyun.com/repository/public") }\n        mavenCentral()|g' "$FLUTTER_SETTINGS"
-            echo "✅ Patched $FLUTTER_SETTINGS with Aliyun Maven repository mirror"
-          fi
-          mkdir -p ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1
-          curl -f -s -S -o ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1/kotlin-compiler-embeddable-2.2.20.jar https://maven.aliyun.com/repository/public/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.20/kotlin-compiler-embeddable-2.2.20.jar
-
       - name: 6. Restore Upload Keystore & key.properties
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
         working-directory: app
