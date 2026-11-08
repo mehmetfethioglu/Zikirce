@@ -1,8 +1,6 @@
 name: Zamera iOS Cloud Build & TestFlight Ready
 
 on:
-  push:
-    branches: [ main, zamera-release ]
   workflow_dispatch:
     inputs:
       enable_video_module:
