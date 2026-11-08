@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       track:
-        description: "Google Play Track (beta, internal, production)"
+        description: "Google Play Track (alpha, internal, beta, production)"
         required: false
-        default: "beta"
+        default: "alpha"
       enable_video_module:
         description: "Enable Pro Video module (ZAMERA_VIDEO)"
         required: false
@@ -23,7 +23,7 @@ jobs:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ZAMERA_KEYSTORE_BASE64 || secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_PROPERTIES: ${{ secrets.ZAMERA_KEY_PROPERTIES || secrets.ANDROID_KEY_PROPERTIES }}
       PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
-      PLAY_TRACK: ${{ github.event.inputs.track || 'beta' }}
+      PLAY_TRACK: ${{ github.event.inputs.track || 'alpha' }}
       ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'true' }}
 
     steps:
@@ -115,5 +115,4 @@ jobs:
           releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
           track: ${{ env.PLAY_TRACK }}
           status: draft
-          changesNotSentForReview: true
           whatsNewDirectory: docs/play_store_whats_new
