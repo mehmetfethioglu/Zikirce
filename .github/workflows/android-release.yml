@@ -70,6 +70,26 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zamera-upload-keystore.jks
           printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
 
+      - name: 6.5 Configure Fast Maven Repository Mirrors
+        run: |
+          mkdir -p ~/.gradle/init.d
+          cat << 'EOF' > ~/.gradle/init.d/mirror.init.gradle
+          allprojects {
+              buildscript {
+                  repositories {
+                      maven { url 'https://maven.aliyun.com/repository/public' }
+                      google()
+                      mavenCentral()
+                  }
+              }
+              repositories {
+                  maven { url 'https://maven.aliyun.com/repository/public' }
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
       - name: 7. Build Signed Release AAB & APK
         working-directory: app
         run: |
