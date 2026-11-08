@@ -81,8 +81,21 @@ jobs:
         working-directory: app
         run: |
           flutter pub get
-          flutter build appbundle --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
-          flutter build apk --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
+          export GRADLE_OPTS="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000"
+          for attempt in 1 2 3; do
+            echo "📦 Attempt $attempt: Building AAB & APK..."
+            if flutter build appbundle --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }} && \
+               flutter build apk --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}; then
+              echo "✅ Android build succeeded on attempt $attempt"
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "❌ Android build failed after 3 attempts"
+              exit 1
+            fi
+            echo "⚠️ Attempt $attempt failed due to network/Gradle timeout, retrying in 10s..."
+            sleep 10
+          done
 
       - name: 8. Upload Signed AAB & APK Artifacts
         uses: actions/upload-artifact@v4
