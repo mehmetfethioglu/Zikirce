@@ -453,7 +453,7 @@ public class ZameraCapturePlugin: NSObject,
             self.pendingBracketPhotos = []
             self.expectedBracketCount = evOffsets.count
 
-            if pOut.isAutoExposureBracketedCaptureSupported {
+            if pOut.maxBracketedCapturePhotoCount > 1 {
                 var bracketSettings: [AVCaptureAutoExposureBracketedStillImageSettings] = []
                 for ev in evOffsets {
                     let clampedEv = max(-3.0, min(3.0, Float(ev)))
