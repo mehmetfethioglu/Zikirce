@@ -43,9 +43,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 2.1 Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
       - name: 3. Set up Rust & cargo-ndk for 16 KB page alignment
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -76,13 +73,6 @@ jobs:
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zamera-upload-keystore.jks
           printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
-
-      - name: 6.5 Pre-cache Kotlin Compiler Embeddable JARs
-        run: |
-          mkdir -p ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1
-          curl -f -s -S -o ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1/kotlin-compiler-embeddable-2.2.20.jar https://maven.aliyun.com/repository/public/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.20/kotlin-compiler-embeddable-2.2.20.jar
-          mkdir -p ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31
-          curl -f -s -S -o ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar https://maven.aliyun.com/repository/public/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.1.0/kotlin-compiler-embeddable-2.1.0.jar
 
       - name: 7. Build Signed Release AAB & APK
         working-directory: app
@@ -126,7 +116,7 @@ jobs:
 
   build-publish-ios:
     name: 🍎 iOS: Rust Staticlib + Fastlane -> Apple TestFlight
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'ios' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && (github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'ios')) }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
