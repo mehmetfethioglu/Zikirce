@@ -115,4 +115,5 @@ jobs:
           releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
           track: ${{ env.PLAY_TRACK }}
           status: completed
+          changesNotSentForReview: true
           whatsNewDirectory: docs/play_store_whats_new
