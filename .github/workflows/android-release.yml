@@ -84,8 +84,8 @@ jobs:
           export GRADLE_OPTS="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000"
           for attempt in 1 2 3; do
             echo "📦 Attempt $attempt: Building AAB & APK..."
-            if flutter build appbundle --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }} && \
-               flutter build apk --release --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}; then
+            if flutter build appbundle --release --android-skip-build-dependency-validation --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }} && \
+               flutter build apk --release --android-skip-build-dependency-validation --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}; then
               echo "✅ Android build succeeded on attempt $attempt"
               break
             fi
