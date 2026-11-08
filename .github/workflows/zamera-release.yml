@@ -43,6 +43,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: 2.1 Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: 3. Set up Rust & cargo-ndk for 16 KB page alignment
         uses: dtolnay/rust-toolchain@stable
         with:
