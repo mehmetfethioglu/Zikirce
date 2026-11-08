@@ -4,7 +4,6 @@ version = "1.0-SNAPSHOT"
 buildscript {
     val kotlinVersion = "2.1.0"
     repositories {
-        maven { url = java.net.URI("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }
@@ -17,7 +16,6 @@ buildscript {
 
 allprojects {
     repositories {
-        maven { url = java.net.URI("https://maven.aliyun.com/repository/public") }
         google()
         mavenCentral()
     }

@@ -70,25 +70,12 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zamera-upload-keystore.jks
           printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
 
-      - name: 6.5 Configure Fast Maven Repository Mirrors
+      - name: 6.5 Pre-cache Kotlin Compiler Embeddable JARs
         run: |
-          mkdir -p ~/.gradle/init.d
-          cat << 'EOF' > ~/.gradle/init.d/mirror.init.gradle
-          allprojects {
-              buildscript {
-                  repositories {
-                      maven { url 'https://maven.aliyun.com/repository/public' }
-                      google()
-                      mavenCentral()
-                  }
-              }
-              repositories {
-                  maven { url 'https://maven.aliyun.com/repository/public' }
-                  google()
-                  mavenCentral()
-              }
-          }
-          EOF
+          mkdir -p ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1
+          curl -f -s -S -o ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.20/bb8331b7585e36ea311825b01a1c06860c055fd1/kotlin-compiler-embeddable-2.2.20.jar https://maven.aliyun.com/repository/public/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.20/kotlin-compiler-embeddable-2.2.20.jar
+          mkdir -p ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31
+          curl -f -s -S -o ~/.gradle/caches/modules-2/files-2.1/org.jetbrains.kotlin/kotlin-compiler-embeddable/2.1.0/988bf980588bbbcfa1ba19c1ffd7aa869b335a31/kotlin-compiler-embeddable-2.1.0.jar https://maven.aliyun.com/repository/public/org/jetbrains/kotlin/kotlin-compiler-embeddable/2.1.0/kotlin-compiler-embeddable-2.1.0.jar
 
       - name: 7. Build Signed Release AAB & APK
         working-directory: app
