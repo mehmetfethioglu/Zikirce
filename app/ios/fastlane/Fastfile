@@ -72,10 +72,12 @@ platform :ios do
         api_key: api_key,
         app_identifier: "com.akarworks.zamera",
         app_name: "Zamera",
-        skip_itc: true
+        language: "Turkish",
+        sku: "zamera-ios-pro",
+        skip_itc: false
       )
     rescue => ex
-      UI.message("ℹ️ Produce Bundle ID kontrol notu: #{ex.message}")
+      UI.message("ℹ️ Produce Bundle ID / App Store Connect notu: #{ex.message}")
     end
 
     get_provisioning_profile(
@@ -127,7 +129,7 @@ platform :ios do
       api_key: api_key,
       ipa: "../build/ios/ipa/Zamera.ipa",
       skip_waiting_for_build_processing: true,
-      changelog: "Zamera Faz 0 — Cihaz Yetenek Tarayıcısı (Zamera Probe) ve TrueColor CIEDE2000 Çekirdeği."
+      changelog: "Zamera v0.1.1 (Build 2) — Faz 0-3 iOS Apple Log & ProRes 422 HQ tam eşliği, 180° enstantane kilidi, Apple Vision çıkartma kopyalama, ilk açılış rehberi & sürüm notları."
     )
   end
 end

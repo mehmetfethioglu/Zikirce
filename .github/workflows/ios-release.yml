@@ -1,8 +1,8 @@
-name: iOS Cloud Build & TestFlight Ready
+name: Zamera iOS Cloud Build & TestFlight Ready
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, zamera-release ]
   workflow_dispatch:
     inputs:
       enable_video_module:
@@ -32,7 +32,7 @@ jobs:
         with:
           targets: aarch64-apple-ios
 
-      - name: 3. Build zamera_core staticlib for iOS
+      - name: 3. Build & Test zamera_core staticlib for iOS
         working-directory: rust/zamera_core
         run: |
           cargo test --release
@@ -47,26 +47,33 @@ jobs:
       - name: 5. Prepare Flutter iOS & CocoaPods
         working-directory: app
         run: |
+          xcodebuild -version
           flutter config --no-enable-swift-package-manager
+          flutter doctor -v
           flutter pub get
           flutter build ios --config-only --no-codesign --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
           cd ios
           pod install --repo-update
 
-      - name: 6. Deploy to TestFlight via Fastlane (if secrets configured)
+      - name: 6. Deploy to TestFlight via Fastlane
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         working-directory: app/ios
+        env:
+          APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         run: |
           bundle install
           bundle exec fastlane beta
 
-      - name: 7. Fallback No-Codesign Build (when secrets are not yet set)
-        if: ${{ env.APP_STORE_KEY_ID == '' }}
-        working-directory: app
+      - name: Print gym build log on failure
+        if: failure()
         run: |
-          flutter build ios --release --no-codesign --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}
+          find ~/Library/Logs/gym -name "*.log" -exec cat {} + || true
 
-      - name: 8. Upload Signed IPA Artifact
+      - name: 7. Upload Signed IPA Artifact
         if: always() && hashFiles('app/build/ios/ipa/Zamera.ipa') != ''
         uses: actions/upload-artifact@v4
         with:

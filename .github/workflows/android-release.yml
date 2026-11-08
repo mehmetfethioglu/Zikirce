@@ -1,12 +1,14 @@
-name: Android Cloud Build & Google Play Console Release
+name: Zamera Android Cloud Build & Google Play Console Release
 
 on:
+  push:
+    branches: [ main, zamera-release ]
   workflow_dispatch:
     inputs:
       track:
-        description: "Google Play Track (internal, beta, production)"
+        description: "Google Play Track (beta, internal, production)"
         required: false
-        default: "internal"
+        default: "beta"
       enable_video_module:
         description: "Enable Pro Video module (ZAMERA_VIDEO)"
         required: false
@@ -18,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ZAMERA_KEYSTORE_BASE64 || secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_PROPERTIES: ${{ secrets.ZAMERA_KEY_PROPERTIES || secrets.ANDROID_KEY_PROPERTIES }}
       PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
-      PLAY_TRACK: ${{ github.event.inputs.track || 'internal' }}
+      PLAY_TRACK: ${{ github.event.inputs.track || 'beta' }}
       ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'true' }}
 
     steps:
@@ -45,6 +47,10 @@ jobs:
           CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
           CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS: "-C link-arg=-Wl,-z,max-page-size=16384"
         run: |
+          if [ -z "$ANDROID_NDK_HOME" ] && [ -d "$ANDROID_HOME/ndk" ]; then
+            export ANDROID_NDK_HOME=$(ls -d $ANDROID_HOME/ndk/* | tail -n 1)
+            echo "ANDROID_NDK_HOME set to: $ANDROID_NDK_HOME"
+          fi
           cargo install cargo-ndk --locked
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../../packages/zamera_capture/android/src/main/jniLibs build --release
 
@@ -58,8 +64,8 @@ jobs:
         if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
         working-directory: app
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/zamera-upload-keystore.jks
-          printf "%s\n" "$ANDROID_KEY_PROPERTIES" > android/key.properties
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zamera-upload-keystore.jks
+          printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
 
       - name: 7. Build Signed Release AAB & APK
         working-directory: app
@@ -77,7 +83,7 @@ jobs:
             app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
 
-      - name: 9. Upload to Google Play Console (Closed Testing / Internal Track)
+      - name: 9. Upload to Google Play Console (Closed Testing Track)
         if: ${{ env.PLAY_STORE_JSON_KEY != '' }}
         uses: r0adkll/upload-google-play@v1
         with:
