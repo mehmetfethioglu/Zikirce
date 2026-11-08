@@ -458,7 +458,7 @@ public class ZameraCapturePlugin: NSObject,
                 for ev in evOffsets {
                     let clampedEv = max(-3.0, min(3.0, Float(ev)))
                     bracketSettings.append(
-                        AVCaptureAutoExposureBracketedStillImageSettings.autoExposureSettings(withExposureTargetBias: clampedEv)
+                        AVCaptureAutoExposureBracketedStillImageSettings.autoExposureSettings(exposureTargetBias: clampedEv)
                     )
                 }
 
