@@ -1508,6 +1508,478 @@ pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nat
     0
 }
 
+// ============================================================================
+// FAZ 3 — WP-3.2: 180° Cinema Shutter Angle, CFR & Software Auto-ISO Controller
+// ============================================================================
+
+/// Computes sensor exposure time in nanoseconds from cinema shutter angle $\theta$ (degrees)
+/// and frame rate $f$ (fps):
+/// $$t = \frac{\theta}{360^\circ \cdot f} \times 10^9\text{ ns}$$
+#[inline]
+pub fn shutter_exposure_ns_from_angle(angle_deg: f64, fps: f64) -> i64 {
+    let clamped_angle = angle_deg.clamp(11.25, 360.0);
+    let clamped_fps = fps.clamp(1.0, 240.0);
+    ((clamped_angle / (360.0 * clamped_fps)) * 1_000_000_000.0).round() as i64
+}
+
+/// Computes exact Constant Frame Rate (CFR) frame duration in nanoseconds ($10^9 / f$).
+#[inline]
+pub fn frame_duration_ns_from_fps(fps: f64) -> i64 {
+    let clamped_fps = fps.clamp(1.0, 240.0);
+    (1_000_000_000.0 / clamped_fps).round() as i64
+}
+
+/// Software Auto-ISO PI step controller for 180° shutter-locked cinema recording (WP-3.2):
+/// - Since Camera2 `AE_MODE_OFF` disables hardware Auto-ISO when locking shutter speed,
+///   this controller drives ISO smoothly toward `target_luma` (default 18% gray / 0.42 IRE).
+/// - Uses a $\pm 0.06\text{ EV}$ deadband and clamps per-frame ISO changes to $\le 1/6\text{ EV}$
+///   ($2^{\pm 1/6}$) to eliminate exposure pumping.
+/// - Returns `(next_iso, recommended_nd_factor)` where `recommended_nd_factor` is `0` (none),
+///   `4` (`ND4`), `8` (`ND8`), or `16` (`ND16`) when ISO is at minimum and the scene is still
+///   more than $+1.0\text{ EV}$ overexposed.
+pub fn compute_software_auto_iso_step(
+    current_iso: f64,
+    iso_min: f64,
+    iso_max: f64,
+    measured_luma: f64,
+    target_luma: f64,
+) -> (f64, u32) {
+    let min_i = iso_min.max(10.0);
+    let max_i = iso_max.max(min_i);
+    let cur = current_iso.clamp(min_i, max_i);
+    let meas = measured_luma.clamp(1e-4, 1.0);
+    let tgt = target_luma.clamp(0.05, 0.90);
+
+    // EV error: positive when scene is darker than target (need higher ISO)
+    let ev_error = (tgt / meas).log2();
+    let next_iso = if ev_error.abs() < 0.06 {
+        cur
+    } else {
+        // Damped proportional step clamped to +/- (1/6) EV per frame
+        let step_ev = (ev_error * 0.55).clamp(-1.0 / 6.0, 1.0 / 6.0);
+        (cur * 2.0_f64.powf(step_ev)).clamp(min_i, max_i)
+    };
+
+    // Check if ISO is pinned at minimum while scene is > +1.0 EV overexposed
+    let over_ev = (meas / tgt).log2();
+    let nd_factor = if next_iso <= min_i * 1.05 && over_ev > 1.0 {
+        if over_ev > 3.5 {
+            16 // ND16 (4 stops)
+        } else if over_ev > 2.5 {
+            8 // ND8 (3 stops)
+        } else {
+            4 // ND4 (2 stops)
+        }
+    } else {
+        0
+    };
+
+    (next_iso, nd_factor)
+}
+
+// ============================================================================
+// FAZ 3 — WP-3.3: 3D LUT (.cube Parser, Trilinear Sampler & Zamera Cinema LUTs)
+// ============================================================================
+
+/// 3D Lookup Table (`LUT_3D_SIZE` 17, 33, 65) with custom domain bounds.
+#[derive(Debug, Clone)]
+pub struct CubeLut3D {
+    pub title: String,
+    pub size: usize,
+    pub domain_min: [f32; 3],
+    pub domain_max: [f32; 3],
+    /// Flattened $N^3$ RGB table in standard `.cube` order (R fastest, G middle, B slowest):
+    /// `index = (b * size + g) * size + r`
+    pub table: Vec<[f32; 3]>,
+}
+
+impl CubeLut3D {
+    /// Evaluates the 3D LUT at `rgb` using hardware-equivalent 8-corner trilinear interpolation.
+    pub fn sample_trilinear(&self, rgb: [f32; 3]) -> [f32; 3] {
+        let n = self.size;
+        if n < 2 || self.table.len() != n * n * n {
+            return rgb;
+        }
+        let max_idx = (n - 1) as f32;
+        let norm_r = ((rgb[0] - self.domain_min[0])
+            / (self.domain_max[0] - self.domain_min[0]).max(1e-6))
+        .clamp(0.0, 1.0)
+            * max_idx;
+        let norm_g = ((rgb[1] - self.domain_min[1])
+            / (self.domain_max[1] - self.domain_min[1]).max(1e-6))
+        .clamp(0.0, 1.0)
+            * max_idx;
+        let norm_b = ((rgb[2] - self.domain_min[2])
+            / (self.domain_max[2] - self.domain_min[2]).max(1e-6))
+        .clamp(0.0, 1.0)
+            * max_idx;
+
+        let r0 = (norm_r.floor() as usize).min(n - 1);
+        let g0 = (norm_g.floor() as usize).min(n - 1);
+        let b0 = (norm_b.floor() as usize).min(n - 1);
+        let r1 = (r0 + 1).min(n - 1);
+        let g1 = (g0 + 1).min(n - 1);
+        let b1 = (b0 + 1).min(n - 1);
+
+        let fr = norm_r - r0 as f32;
+        let fg = norm_g - g0 as f32;
+        let fb = norm_b - b0 as f32;
+
+        let idx = |r: usize, g: usize, b: usize| -> usize { (b * n + g) * n + r };
+        let c000 = self.table[idx(r0, g0, b0)];
+        let c100 = self.table[idx(r1, g0, b0)];
+        let c010 = self.table[idx(r0, g1, b0)];
+        let c110 = self.table[idx(r1, g1, b0)];
+        let c001 = self.table[idx(r0, g0, b1)];
+        let c101 = self.table[idx(r1, g0, b1)];
+        let c011 = self.table[idx(r0, g1, b1)];
+        let c111 = self.table[idx(r1, g1, b1)];
+
+        let mut out = [0.0f32; 3];
+        for ch in 0..3 {
+            let c00 = c000[ch] * (1.0 - fr) + c100[ch] * fr;
+            let c10 = c010[ch] * (1.0 - fr) + c110[ch] * fr;
+            let c01 = c001[ch] * (1.0 - fr) + c101[ch] * fr;
+            let c11 = c011[ch] * (1.0 - fr) + c111[ch] * fr;
+            let c0 = c00 * (1.0 - fg) + c10 * fg;
+            let c1 = c01 * (1.0 - fg) + c11 * fg;
+            out[ch] = (c0 * (1.0 - fb) + c1 * fb).clamp(0.0, 1.0);
+        }
+        out
+    }
+}
+
+/// Parses an industry-standard Adobe/Iridas `.cube` 3D LUT file (`LUT_3D_SIZE` 17, 33, 65).
+pub fn parse_cube_lut(content: &str) -> Result<CubeLut3D, String> {
+    let mut title = String::from("Zamera Custom LUT");
+    let mut size: Option<usize> = None;
+    let mut domain_min = [0.0f32, 0.0, 0.0];
+    let mut domain_max = [1.0f32, 1.0, 1.0];
+    let mut table: Vec<[f32; 3]> = Vec::new();
+
+    for (line_idx, raw_line) in content.lines().enumerate() {
+        let line_no = line_idx + 1;
+        let trimmed = raw_line.split('#').next().unwrap_or("").trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let upper = trimmed.to_ascii_uppercase();
+        if upper.starts_with("TITLE") {
+            if let Some(first_quote) = trimmed.find('"') {
+                if let Some(last_quote) = trimmed.rfind('"') {
+                    if last_quote > first_quote {
+                        title = trimmed[first_quote + 1..last_quote].to_string();
+                    }
+                }
+            }
+            continue;
+        }
+        if upper.starts_with("LUT_1D_SIZE") {
+            return Err(format!(
+                "Satır {line_no}: 1D LUT desteklenmiyor, 3D .cube (LUT_3D_SIZE 17/33/65) gereklidir"
+            ));
+        }
+        if upper.starts_with("LUT_3D_SIZE") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() != 2 {
+                return Err(format!("Satır {line_no}: Geçersiz LUT_3D_SIZE sözdizimi"));
+            }
+            let parsed_n = parts[1]
+                .parse::<usize>()
+                .map_err(|_| format!("Satır {line_no}: LUT_3D_SIZE tam sayı değil"))?;
+            if !(2..=65).contains(&parsed_n) {
+                return Err(format!(
+                    "Satır {line_no}: Desteklenmeyen LUT_3D_SIZE={parsed_n} (17, 33 veya 65 olmalı)"
+                ));
+            }
+            size = Some(parsed_n);
+            table.reserve(parsed_n * parsed_n * parsed_n);
+            continue;
+        }
+        if upper.starts_with("DOMAIN_MIN") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() != 4 {
+                return Err(format!("Satır {line_no}: DOMAIN_MIN 3 float değer içermelidir"));
+            }
+            for ch in 0..3 {
+                domain_min[ch] = parts[1 + ch]
+                    .parse::<f32>()
+                    .map_err(|_| format!("Satır {line_no}: Geçersiz DOMAIN_MIN değeri"))?;
+            }
+            continue;
+        }
+        if upper.starts_with("DOMAIN_MAX") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() != 4 {
+                return Err(format!("Satır {line_no}: DOMAIN_MAX 3 float değer içermelidir"));
+            }
+            for ch in 0..3 {
+                domain_max[ch] = parts[1 + ch]
+                    .parse::<f32>()
+                    .map_err(|_| format!("Satır {line_no}: Geçersiz DOMAIN_MAX değeri"))?;
+            }
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() == 3 {
+            let r = parts[0]
+                .parse::<f32>()
+                .map_err(|_| format!("Satır {line_no}: Geçersiz R float değeri"))?;
+            let g = parts[1]
+                .parse::<f32>()
+                .map_err(|_| format!("Satır {line_no}: Geçersiz G float değeri"))?;
+            let b = parts[2]
+                .parse::<f32>()
+                .map_err(|_| format!("Satır {line_no}: Geçersiz B float değeri"))?;
+            if !r.is_finite() || !g.is_finite() || !b.is_finite() {
+                return Err(format!("Satır {line_no}: NaN veya sonsuz LUT değeri"));
+            }
+            table.push([r, g, b]);
+        } else {
+            return Err(format!(
+                "Satır {line_no}: Tanınmayan .cube satırı: '{trimmed}'"
+            ));
+        }
+    }
+
+    let n = size.ok_or_else(|| String::from("LUT_3D_SIZE başlığı bulunamadı"))?;
+    for ch in 0..3 {
+        if domain_max[ch] <= domain_min[ch] {
+            return Err(String::from("DOMAIN_MAX her kanalda DOMAIN_MIN'den büyük olmalıdır"));
+        }
+    }
+    let expected = n * n * n;
+    if table.len() != expected {
+        return Err(format!(
+            "LUT_3D_SIZE={n} için {expected} satır beklendi, fakat {} satır bulundu",
+            table.len()
+        ));
+    }
+
+    Ok(CubeLut3D {
+        title,
+        size: n,
+        domain_min,
+        domain_max,
+        table,
+    })
+}
+
+/// Generates Zamera's proprietary built-in 3D LUTs (WP-3.3 — zero third-party trademark risk):
+/// - `preset_id = 0`: `IDENTITY` (1:1 pass-through)
+/// - `preset_id = 1`: `REC.709 İZLEME` (BT.2408 HLG / Log to SDR monitoring tone-map)
+/// - `preset_id = 2`: `SICAK SİNEMA` (Warm golden highlights + teal shadows cinema grade)
+/// - `preset_id = 3`: `NOIR` (Silver-gelatin high-contrast monochrome cinema grade)
+pub fn generate_builtin_lut(preset_id: u32, size: usize) -> CubeLut3D {
+    let n = size.clamp(2, 65);
+    let max_f = (n - 1) as f32;
+    let mut table = Vec::with_capacity(n * n * n);
+
+    let title = match preset_id {
+        1 => "REC.709 IZLEME",
+        2 => "SICAK SINEMA",
+        3 => "NOIR",
+        _ => "IDENTITY",
+    };
+
+    for b_idx in 0..n {
+        let b = b_idx as f32 / max_f;
+        for g_idx in 0..n {
+            let g = g_idx as f32 / max_f;
+            for r_idx in 0..n {
+                let r = r_idx as f32 / max_f;
+                let rgb = match preset_id {
+                    1 => {
+                        // BT.2408 HLG / Log -> Rec.709 SDR soft knee roll-off + saturation recovery
+                        let map_ch = |x: f32| -> f32 {
+                            let lifted = (x * 1.12).clamp(0.0, 1.25);
+                            let knee = lifted / (1.0 + 0.28 * lifted * lifted);
+                            let s = knee * knee * (3.0 - 2.0 * knee);
+                            (0.35 * knee + 0.65 * s).clamp(0.0, 1.0)
+                        };
+                        [map_ch(r), map_ch(g), map_ch(b)]
+                    }
+                    2 => {
+                        // SICAK SİNEMA: warm golden highlights, cool cyan-teal deep shadows, filmic S-curve
+                        let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                        let shadow_w = (1.0 - luma).powi(2);
+                        let high_w = luma.powi(2);
+                        let sr = (r + 0.045 * high_w - 0.025 * shadow_w).clamp(0.0, 1.0);
+                        let sg = (g + 0.018 * high_w + 0.010 * shadow_w).clamp(0.0, 1.0);
+                        let sb = (b - 0.040 * high_w + 0.038 * shadow_w).clamp(0.0, 1.0);
+                        let filmic = |x: f32| -> f32 {
+                            let s = x * x * (3.0 - 2.0 * x);
+                            (0.25 * x + 0.75 * s).clamp(0.0, 1.0)
+                        };
+                        [filmic(sr), filmic(sg), filmic(sb)]
+                    }
+                    3 => {
+                        // NOIR: Panchromatic silver-gelatin monochrome with deep D-max toe
+                        let y = (0.34 * r + 0.56 * g + 0.10 * b).clamp(0.0, 1.0);
+                        let s = y * y * (3.0 - 2.0 * y);
+                        let mono = ((0.22 * y + 0.78 * s - 0.50) * 1.18 + 0.50).clamp(0.0, 1.0);
+                        [mono, mono, mono]
+                    }
+                    _ => [r, g, b],
+                };
+                table.push(rgb);
+            }
+        }
+    }
+
+    CubeLut3D {
+        title: title.to_string(),
+        size: n,
+        domain_min: [0.0, 0.0, 0.0],
+        domain_max: [1.0, 1.0, 1.0],
+        table,
+    }
+}
+
+// ============================================================================
+// FAZ 3 — WP-3.4 & WP-3.0: Float-Normalized Audio dBFS & 6-Band IRE False Color
+// ============================================================================
+
+/// Computes format-independent Sample Peak dBFS and RMS dBFS from normalized float audio
+/// samples $x_i \in [-1.0, 1.0]$ (WP-3.4):
+/// $$\text{dBFS} = 20 \log_{10}(\max_i |x_i|)$$
+pub fn compute_audio_peak_rms_dbfs(samples: &[f32]) -> (f32, f32) {
+    if samples.is_empty() {
+        return (-96.0, -96.0);
+    }
+    let mut peak = 0.0f32;
+    let mut sum_sq = 0.0f64;
+    for &s in samples {
+        let a = if s.is_finite() { s.abs().min(1.0) } else { 0.0 };
+        if a > peak {
+            peak = a;
+        }
+        sum_sq += (a as f64) * (a as f64);
+    }
+    let rms = (sum_sq / (samples.len() as f64)).sqrt() as f32;
+    let peak_dbfs = if peak <= 1.584_893_2e-5 {
+        -96.0
+    } else {
+        (20.0 * peak.log10()).clamp(-96.0, 0.0)
+    };
+    let rms_dbfs = if rms <= 1.584_893_2e-5 {
+        -96.0
+    } else {
+        (20.0 * rms.log10()).clamp(-96.0, 0.0)
+    };
+    (peak_dbfs, rms_dbfs)
+}
+
+/// JNI entrypoint: `com.akarworks.zamera_capture.ZameraRustBridge.nativeComputeSoftwareAutoIsoDirect(...)`
+///
+/// Input direct float buffer `[7]`: `[current_iso, iso_min, iso_max, measured_luma, target_luma, angle_deg, fps]`
+/// Output direct float buffer `[4]`: `[next_iso, nd_factor, shutter_exposure_ns_hi, frame_duration_ns_hi]`
+///
+/// # Safety
+/// Invoked by Android JVM with valid direct `ByteBuffer` instances.
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nativeComputeSoftwareAutoIsoDirect(
+    env: *mut *const *const c_void,
+    _class: *mut c_void,
+    in_buffer: *mut c_void,
+    out_buffer: *mut c_void,
+) -> i32 {
+    if env.is_null() || (*env).is_null() || in_buffer.is_null() || out_buffer.is_null() {
+        return -1;
+    }
+    let vtable = *env;
+    let get_addr: JniGetDirectBufferAddressFn = std::mem::transmute(*vtable.add(230));
+    let get_cap: JniGetDirectBufferCapacityFn = std::mem::transmute(*vtable.add(231));
+
+    let in_len = (get_cap(env, in_buffer) as usize) / 4;
+    let out_len = (get_cap(env, out_buffer) as usize) / 4;
+    if in_len < 7 || out_len < 4 {
+        return -1;
+    }
+
+    let inp = std::slice::from_raw_parts(get_addr(env, in_buffer) as *const f32, in_len);
+    let out = std::slice::from_raw_parts_mut(get_addr(env, out_buffer) as *mut f32, out_len);
+
+    let (next_iso, nd_factor) = compute_software_auto_iso_step(
+        inp[0] as f64,
+        inp[1] as f64,
+        inp[2] as f64,
+        inp[3] as f64,
+        inp[4] as f64,
+    );
+    let shutter_ns = shutter_exposure_ns_from_angle(inp[5] as f64, inp[6] as f64);
+    let frame_ns = frame_duration_ns_from_fps(inp[6] as f64);
+
+    out[0] = next_iso as f32;
+    out[1] = nd_factor as f32;
+    out[2] = shutter_ns as f32;
+    out[3] = frame_ns as f32;
+    0
+}
+
+/// JNI entrypoint: `com.akarworks.zamera_capture.ZameraRustBridge.nativeComputeAudioDbfsDirect(...)`
+///
+/// Input direct float buffer `[N]`: normalized PCM float audio samples $x_i \in [-1.0, 1.0]$.
+/// Output direct float buffer `[2]`: `[sample_peak_dbfs, rms_dbfs]`.
+///
+/// # Safety
+/// Invoked by Android JVM with valid direct `ByteBuffer` instances.
+#[no_mangle]
+pub unsafe extern "C" fn Java_com_akarworks_zamera_1capture_ZameraRustBridge_nativeComputeAudioDbfsDirect(
+    env: *mut *const *const c_void,
+    _class: *mut c_void,
+    in_buffer: *mut c_void,
+    sample_count: i32,
+    out_buffer: *mut c_void,
+) -> i32 {
+    if env.is_null() || (*env).is_null() || in_buffer.is_null() || out_buffer.is_null() {
+        return -1;
+    }
+    let vtable = *env;
+    let get_addr: JniGetDirectBufferAddressFn = std::mem::transmute(*vtable.add(230));
+    let get_cap: JniGetDirectBufferCapacityFn = std::mem::transmute(*vtable.add(231));
+
+    let cap_floats = (get_cap(env, in_buffer) as usize) / 4;
+    let out_len = (get_cap(env, out_buffer) as usize) / 4;
+    let count = (sample_count.max(0) as usize).min(cap_floats);
+    if count == 0 || out_len < 2 {
+        return -1;
+    }
+
+    let samples = std::slice::from_raw_parts(get_addr(env, in_buffer) as *const f32, count);
+    let out = std::slice::from_raw_parts_mut(get_addr(env, out_buffer) as *mut f32, out_len);
+    let (peak_db, rms_db) = compute_audio_peak_rms_dbfs(samples);
+    out[0] = peak_db;
+    out[1] = rms_db;
+    0
+}
+
+/// Maps normalized IRE luma percentage (`0.0..=100.0`) into one of 6 cinema False Color bands (WP-3.0):
+/// - Band 0 (`0..10%` IRE): Deep Shadow Clipping — Purple `[128, 0, 200]`
+/// - Band 1 (`10..25%` IRE): Underexposed Toe — Blue `[0, 110, 255]`
+/// - Band 2 (`25..48%` IRE): 18% Gray / Midtones — Green `[40, 210, 80]`
+/// - Band 3 (`48..70%` IRE): Key Skin Tones — Pink `[255, 130, 170]`
+/// - Band 4 (`70..94%` IRE): Bright Highlights — Yellow `[255, 214, 10]`
+/// - Band 5 (`94..100%` IRE): Highlight Clipping — Red `[255, 50, 48]`
+#[inline]
+pub fn ire_to_false_color_band(ire_percent: f32) -> (u8, [u8; 3]) {
+    let ire = ire_percent.clamp(0.0, 100.0);
+    if ire < 10.0 {
+        (0, [128, 0, 200])
+    } else if ire < 25.0 {
+        (1, [0, 110, 255])
+    } else if ire < 48.0 {
+        (2, [40, 210, 80])
+    } else if ire < 70.0 {
+        (3, [255, 130, 170])
+    } else if ire < 94.0 {
+        (4, [255, 214, 10])
+    } else {
+        (5, [255, 50, 48])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1639,5 +2111,103 @@ mod tests {
             out_rgba[1],
             out_rgba[2]
         );
+    }
+
+    #[test]
+    fn test_wp32_shutter_angle_and_auto_iso_controller() {
+        // 180-degree shutter rule: 24 -> 1/48s, 25 -> 1/50s, 30 -> 1/60s, 60 -> 1/120s
+        assert_eq!(shutter_exposure_ns_from_angle(180.0, 24.0), 20_833_333);
+        assert_eq!(shutter_exposure_ns_from_angle(180.0, 25.0), 20_000_000);
+        assert_eq!(shutter_exposure_ns_from_angle(180.0, 30.0), 16_666_667);
+        assert_eq!(shutter_exposure_ns_from_angle(180.0, 60.0), 8_333_333);
+        assert_eq!(frame_duration_ns_from_fps(30.0), 33_333_333);
+
+        // Software Auto-ISO: max step per frame <= 1/6 EV (2^(1/6) ≈ 1.12246)
+        let (next_iso, nd) = compute_software_auto_iso_step(100.0, 50.0, 3200.0, 0.15, 0.42);
+        assert!(next_iso > 100.0 && next_iso <= 100.0 * 2.0_f64.powf(1.0 / 6.0) + 1e-4);
+        assert_eq!(nd, 0);
+
+        // Deadband (< 0.06 EV): zero ISO pumping
+        let (steady_iso, _) = compute_software_auto_iso_step(200.0, 50.0, 3200.0, 0.415, 0.42);
+        assert!((steady_iso - 200.0).abs() < 1e-6);
+
+        // Overexposed at base ISO (50) by > 2.5 EV -> recommends ND8
+        let (pinned_iso, nd8) = compute_software_auto_iso_step(50.0, 50.0, 3200.0, 0.95, 0.14);
+        assert!((pinned_iso - 50.0).abs() < 1e-6);
+        assert_eq!(nd8, 8);
+    }
+
+    #[test]
+    fn test_wp33_cube_lut_parser_identity_and_builtin_luts() {
+        // Generate 17x17x17 identity LUT in .cube text format and parse it
+        let mut cube_str = String::from(
+            "# Zamera Identity 3D LUT\nTITLE \"Zamera Identity 17\"\nDOMAIN_MIN 0.0 0.0 0.0\nDOMAIN_MAX 1.0 1.0 1.0\nLUT_3D_SIZE 17\n",
+        );
+        for b in 0..17 {
+            for g in 0..17 {
+                for r in 0..17 {
+                    cube_str.push_str(&format!(
+                        "{:.6} {:.6} {:.6}\n",
+                        r as f32 / 16.0,
+                        g as f32 / 16.0,
+                        b as f32 / 16.0
+                    ));
+                }
+            }
+        }
+        let lut = parse_cube_lut(&cube_str).expect("Valid 17^3 .cube must parse");
+        assert_eq!(lut.title, "Zamera Identity 17");
+        assert_eq!(lut.size, 17);
+
+        // Identity LUT DoD: reproduces arbitrary RGB inputs with error <= 1/1023
+        let test_colors = [
+            [0.0, 0.0, 0.0],
+            [1.0, 1.0, 1.0],
+            [0.18, 0.42, 0.73],
+            [0.91, 0.12, 0.34],
+            [0.50, 0.50, 0.50],
+        ];
+        for c in test_colors {
+            let out = lut.sample_trilinear(c);
+            for ch in 0..3 {
+                assert!(
+                    (out[ch] - c[ch]).abs() <= (1.0 / 1023.0),
+                    "Identity LUT error exceeded 1/1023: in={c:?}, out={out:?}"
+                );
+            }
+        }
+
+        // Corrupted .cube file returns descriptive Err instead of panicking
+        let bad = parse_cube_lut("TITLE \"Bad\"\nLUT_3D_SIZE 17\n0.0 0.0 0.0\n");
+        assert!(bad.is_err());
+
+        // Built-in LUTs (Rec.709, Sıcak Sinema, Noir)
+        let noir = generate_builtin_lut(3, 17);
+        let noir_sample = noir.sample_trilinear([0.8, 0.3, 0.2]);
+        assert!((noir_sample[0] - noir_sample[1]).abs() < 1e-5);
+        assert!((noir_sample[1] - noir_sample[2]).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_wp34_audio_dbfs_and_false_color_ire_bands() {
+        // Full scale 1.0 -> 0.0 dBFS peak; 0.5 amplitude -> -6.0206 dBFS
+        let (peak0, rms0) = compute_audio_peak_rms_dbfs(&[1.0, -1.0, 1.0, -1.0]);
+        assert!(peak0.abs() < 1e-3);
+        assert!(rms0.abs() < 1e-3);
+
+        let (peak_half, _) = compute_audio_peak_rms_dbfs(&[0.5, -0.5]);
+        assert!((peak_half - (-6.0206)).abs() < 0.02);
+
+        let (peak_silent, rms_silent) = compute_audio_peak_rms_dbfs(&[0.0, 0.0]);
+        assert_eq!(peak_silent, -96.0);
+        assert_eq!(rms_silent, -96.0);
+
+        // 6-Band IRE False Color verification
+        assert_eq!(ire_to_false_color_band(5.0).0, 0);
+        assert_eq!(ire_to_false_color_band(18.0).0, 1);
+        assert_eq!(ire_to_false_color_band(40.0).0, 2);
+        assert_eq!(ire_to_false_color_band(60.0).0, 3);
+        assert_eq!(ire_to_false_color_band(80.0).0, 4);
+        assert_eq!(ire_to_false_color_band(98.0).0, 5);
     }
 }

@@ -114,13 +114,70 @@ void main() {
     expect(art2Warped['outputWidth'], equals(3072));
     expect(art2Warped['outputHeight'], equals(4096));
 
-    // Dokunmatik AF/AE (90 derece sensör rotasyonlu) + Canlı Telemetri + 3x AEB Braketleme testi
+    // Dokunmatik AF/AE (90 derece sensör rotasyonlu) + Gerçek YUV Canlı Telemetri (32-bin Histogram, Zebra, Focus Peaking) + 3x AEB Braketleme testi
     final focusOk = await ZameraCapture.setFocusAndMeteringPoint(x: 0.35, y: 0.65);
     expect(focusOk, isTrue);
 
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     final liveTel = await ZameraCapture.getLiveTelemetry();
     expect(liveTel['iso'], isNotNull);
     expect(liveTel['solvedCctKelvin'], isNotNull);
+    final liveHist = liveTel['liveHistogram32'] as List<dynamic>?;
+    final liveZebraGrid = liveTel['liveZebraGrid16x12'] as List<dynamic>?;
+    final livePeakingGrid = liveTel['livePeakingGrid16x12'] as List<dynamic>?;
+    expect(liveHist, isNotNull);
+    expect(liveHist!.length, equals(32));
+    expect(liveZebraGrid?.length, equals(192));
+    expect(livePeakingGrid?.length, equals(192));
+
+    // Portre Modu (Arka Kamera #2): Doğal Işık (lighting: 0) ve Panjur Gölgesi (lighting: 6) + Panjur Mono Refocus (lighting: 7) + Özne Kopyalama testi
+    final swPortrait = Stopwatch()..start();
+    final portraitRes = await ZameraCapture.capturePhoto(
+      isArtworkMode: false,
+      isPortraitMode: true,
+      captureRaw: false,
+      portraitAperture: 2.0,
+      portraitLighting: 0, // DOĞAL IŞIK
+      portraitLightIntensity: 0.80,
+      portraitSubjectRadius: 0.36,
+      focusPointX: 0.50,
+      focusPointY: 0.45,
+    );
+    swPortrait.stop();
+    expect(portraitRes.jpegPath, isNotNull);
+    expect(File(portraitRes.jpegPath!).existsSync(), isTrue);
+    expect(File(portraitRes.jpegPath!).lengthSync(), greaterThan(50000));
+
+    final swRefocus = Stopwatch()..start();
+    final refocused = await ZameraCapture.reprocessPortraitPhoto(
+      sourceJpegPath: portraitRes.oemJpegPath ?? portraitRes.jpegPath!,
+      aperture: 2.0,
+      lightingMode: 6, // PANJUR GÖLGESİ
+      lightIntensity: 0.82,
+      subjectRadiusRatio: 0.36,
+      focusX: 0.50,
+      focusY: 0.45,
+      isFrontCamera: false,
+      saveToGallery: true,
+    );
+    swRefocus.stop();
+    final refocusPath = refocused['jpegPath']?.toString();
+    expect(refocusPath, isNotNull);
+    expect(File(refocusPath!).existsSync(), isTrue);
+
+    final swCutout = Stopwatch()..start();
+    final cutout = await ZameraCapture.extractSubjectCutoutPng(
+      sourceJpegPath: portraitRes.oemJpegPath ?? portraitRes.jpegPath!,
+      focusX: 0.50,
+      focusY: 0.45,
+      subjectRadiusRatio: 0.36,
+      isFrontCamera: false,
+      shareNow: false,
+    );
+    swCutout.stop();
+    final pngPath = cutout['pngPath']?.toString();
+    expect(pngPath, isNotNull);
+    expect(File(pngPath!).existsSync(), isTrue);
 
     final brackets = await ZameraCapture.captureBracketedPhotos(
       evOffsets: const [-1.5, 0.0, 1.5],
@@ -128,14 +185,39 @@ void main() {
     expect(brackets.length, equals(3));
     expect(brackets[0].exposureTimeNs!, lessThan(brackets[2].exposureTimeNs!));
 
+    // Ön Kamera (#1 Selfie) Portre Modu Testi
+    final sessionFront = await ZameraCapture.startPreviewSession(cameraId: '1');
+    expect(sessionFront.textureId, greaterThanOrEqualTo(0));
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    final frontPortraitRes = await ZameraCapture.capturePhoto(
+      isArtworkMode: false,
+      isPortraitMode: true,
+      captureRaw: false,
+      portraitAperture: 2.0,
+      portraitLighting: 0,
+      portraitLightIntensity: 0.80,
+      portraitSubjectRadius: 0.36,
+      focusPointX: 0.50,
+      focusPointY: 0.45,
+    );
+    expect(frontPortraitRes.jpegPath, isNotNull);
+    expect(File(frontPortraitRes.jpegPath!).existsSync(), isTrue);
+
     await ZameraCapture.stopPreviewSession();
 
     // ignore: avoid_print
     print('ZAMERA_FAZ2_FULL_IT ${jsonEncode({
           'rust': probe.rustCoreVersion,
-          'liveTelemetry': liveTel,
+          'liveTelemetryHistLen': liveHist.length,
+          'liveZebraRatio': liveTel['liveZebraRatio'],
+          'liveFocusPeakingScore': liveTel['liveFocusPeakingScore'],
+          'sanatRoundTripMs': art2['roundTripMs'],
+          'sanatWarpedRoundTripMs': art2Warped['roundTripMs'],
+          'portraitBlindsRoundTripMs': swPortrait.elapsedMilliseconds,
+          'portraitMonoRefocusMs': swRefocus.elapsedMilliseconds,
+          'subjectCutoutMs': swCutout.elapsedMilliseconds,
           'bracketExpNs': brackets.map((b) => b.exposureTimeNs).toList(),
-          'capturesCount': results.length,
+          'capturesCount': results.length + 1,
         })}');
   });
 }

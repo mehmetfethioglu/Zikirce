@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zamera İndir — TrueColor & Pro Kamera</title>
+    <meta property="og:title" content="Zamera — Gerçek Renk (Sanat Modu) & Pro Kamera">
+    <meta property="og:description" content="Android ve iOS için profesyonel renk doğruluğu (ΔE00), Bayer RAW / ProRAW ve 180° kilitli Pro Video.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FFD60A;
+            --secondary: #4ECDC4;
+            --bg: #0A0A0E;
+            --card: #12131A;
+            --border: #1E202C;
+            --text: #F4F4F8;
+            --muted: #8E92A4;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); text-align: center; padding: 50px 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .logo { width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), #FF9F0A); border-radius: 16px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 900; color: #0A0A0E; }
+        h1 { font-size: 32px; margin-bottom: 8px; }
+        p { color: var(--muted); font-size: 16px; margin-bottom: 30px; }
+        .btn-stack { display: flex; flex-direction: column; gap: 14px; max-width: 320px; margin: 0 auto; }
+        .btn { display: block; padding: 16px 24px; border-radius: 30px; font-size: 16px; font-weight: 700; text-decoration: none; transition: transform 0.2s; }
+        .btn:hover { transform: scale(1.02); }
+        .btn-ios { background: #FFFFFF; color: #000000; }
+        .btn-android { background: var(--primary); color: #0A0A0E; }
+        .btn-outline { border: 1px solid var(--border); color: var(--text); background: var(--card); }
+        .nav-links { display: flex; justify-content: center; gap: 20px; margin-bottom: 30px; }
+        .nav-links a { color: var(--muted); font-size: 14px; font-weight: 600; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav class="nav-links">
+            <a href="index.html">Gizlilik / Privacy</a>
+            <a href="support.html">Destek / Support</a>
+            <a href="indir.html" style="color: var(--primary);">İndir / Download</a>
+        </nav>
+        <div class="logo">Z</div>
+        <h1>Zamera</h1>
+        <p>Gerçek Renk (&Delta;E<sub>00</sub>) & Profesyonel Kamera</p>
+        <div class="btn-stack">
+            <a href="https://testflight.apple.com/join/zamera" id="ios-link" class="btn btn-ios">🍎 TestFlight ile iOS'ta Dene</a>
+            <a href="https://play.google.com/apps/testing/com.akarworks.zamera" id="android-link" class="btn btn-android">🤖 Google Play Kapalı Test</a>
+            <a href="index.html" class="btn btn-outline">Gizlilik Politikası</a>
+        </div>
+    </div>
+    <script>
+        // Automatic platform detection
+        const ua = navigator.userAgent || navigator.vendor || window.opera;
+        if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) {
+            document.getElementById('ios-link').style.boxShadow = "0 0 20px rgba(255,255,255,0.4)";
+        } else if (/android/i.test(ua)) {
+            document.getElementById('android-link').style.boxShadow = "0 0 20px rgba(255, 214, 10, 0.4)";
+        }
+    </script>
+</body>
+</html>

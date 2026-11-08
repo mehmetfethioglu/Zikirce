@@ -1,0 +1,49 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Zamera",
+      "operatingSystem": "Android, iOS, Windows, macOS",
+      "applicationCategory": "UtilitiesApplication",
+      "softwareVersion": "1.0.0",
+      "description": "Zamera is a cross-platform application developed by Akarworks that delivers zamera — Akarworks Autonomous Software & Mobile Application. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Zamera combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Zamera reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: [`app/`](app/) — Flutter UI (`com.akarworks.zamera`): Faz 0 Probe ekranı, Sanat Modu ($\\Delta E_{00}$) ve Pro Foto/Video kontrol arayüzü.; [`packages/zamera_capture/`](packages/zamera_capture/) — Native kamera eklentisi:; Android: [`ZameraCapturePlugin.kt`](packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`Camera2` donanım seviyesi, fiziksel lens ID'leri, `RAW_SENSOR`, 50MP `ULTRA_HIGH_RESOLUTION_SENSOR`, 10-bit `HLG10` probe ve JNI Rust köprüsü).; iOS: [`ZameraCapturePlugin.swift`](packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`AVFoundation` ayrık fiziksel lensler 13mm/24mm/100mm, Bayer RAW vs ProRAW, Apple Log, Open Gate 4:3 probe).. Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Zamera (version 1.0.0+1) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/zamera.",
+      "url": "https://akarworks.com/zamera",
+      "inLanguage": [
+        "tr-TR",
+        "en-US"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks",
+        "url": "https://akarworks.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Zamera nedir ve ne işe yarar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Zamera is a cross-platform application developed by Akarworks that delivers zamera — Akarworks Autonomous Software & Mobile Application. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Zamera combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Zamera reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: [`app/`](app/) — Flutter UI (`com.akarworks.zamera`): Faz 0 Probe ekranı, Sanat Modu ($\\Delta E_{00}$) ve Pro Foto/Video kontrol arayüzü.; [`packages/zamera_capture/`](packages/zamera_capture/) — Native kamera eklentisi:; Android: [`ZameraCapturePlugin.kt`](packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`Camera2` donanım seviyesi, fiziksel lens ID'leri, `RAW_SENSOR`, 50MP `ULTRA_HIGH_RESOLUTION_SENSOR`, 10-bit `HLG10` probe ve JNI Rust köprüsü).; iOS: [`ZameraCapturePlugin.swift`](packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`AVFoundation` ayrık fiziksel lensler 13mm/24mm/100mm, Bayer RAW vs ProRAW, Apple Log, Open Gate 4:3 probe).. Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Zamera (version 1.0.0+1) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/zamera."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Zamera?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Zamera is a cross-platform application developed by Akarworks that delivers zamera — Akarworks Autonomous Software & Mobile Application. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Zamera combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Zamera reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: [`app/`](app/) — Flutter UI (`com.akarworks.zamera`): Faz 0 Probe ekranı, Sanat Modu ($\\Delta E_{00}$) ve Pro Foto/Video kontrol arayüzü.; [`packages/zamera_capture/`](packages/zamera_capture/) — Native kamera eklentisi:; Android: [`ZameraCapturePlugin.kt`](packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`Camera2` donanım seviyesi, fiziksel lens ID'leri, `RAW_SENSOR`, 50MP `ULTRA_HIGH_RESOLUTION_SENSOR`, 10-bit `HLG10` probe ve JNI Rust köprüsü).; iOS: [`ZameraCapturePlugin.swift`](packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`AVFoundation` ayrık fiziksel lensler 13mm/24mm/100mm, Bayer RAW vs ProRAW, Apple Log, Open Gate 4:3 probe).. Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Zamera (version 1.0.0+1) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/zamera."
+          }
+        }
+      ]
+    }
+  ]
+}

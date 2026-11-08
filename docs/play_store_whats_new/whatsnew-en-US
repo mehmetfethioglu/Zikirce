@@ -1,0 +1,6 @@
+Zamera v0.1.1:
+• Phase 0-3 parity across iOS and Android: Apple Log, ProRes 422 HQ, and 180° locked Pro Video.
+• New Release Notes & Welcome Feature Guide (accessible anytime from Settings).
+• 24-Patch ColorChecker true-color calibration (ΔE00 ≤ 1.0).
+• 14-bit Bayer RAW/DNG, manual exposure controls, AE bracketing, and subject cutout sticker.
+• 100% on-device offline processing with zero tracking.

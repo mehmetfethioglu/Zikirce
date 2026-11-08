@@ -1,8 +1,7 @@
-library zamera_capture;
-
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/services.dart';
+import 'zamera_capture_platform_interface.dart';
 
 /// Official 24-patch ColorChecker Classic metadata and D50 CIE L*a*b* reference values.
 class ColorCheckerPatch {
@@ -404,6 +403,10 @@ class ZameraProbeReport {
 
 /// Primary interface for `zamera_capture` (Sanat Modu + Pro Foto + Cihaz Probe).
 class ZameraCapture {
+  /// Returns the current platform version via platform interface.
+  Future<String?> getPlatformVersion() {
+    return ZameraCapturePlatform.instance.getPlatformVersion();
+  }
   static const MethodChannel _channel =
       MethodChannel('com.akarworks.zamera/capture_probe');
 
@@ -440,7 +443,7 @@ class ZameraCapture {
   }
 
   /// Dynamically locks/updates manual ISO, Shutter Speed, EV Compensation, Focus Distance,
-  /// and DNG-interpolated Kelvin/Tint White Balance.
+  /// Optical/Digital Zoom Ratio, and DNG-interpolated Kelvin/Tint White Balance.
   static Future<bool> updateManualControls({
     required bool manualExposure,
     required double iso,
@@ -453,6 +456,8 @@ class ZameraCapture {
     double tint = 0.0,
     required List<double> rggbGains,
     bool artworkLinearMode = false,
+    double zoomRatio = 1.0,
+    bool monoMode = false,
   }) async {
     final ok = await _channel.invokeMethod<bool>('updateManualControls', {
       'manualExposure': manualExposure,
@@ -466,6 +471,8 @@ class ZameraCapture {
       'tint': tint,
       'rggbGains': rggbGains,
       'artworkLinearMode': artworkLinearMode,
+      'zoomRatio': zoomRatio,
+      'monoMode': monoMode,
     });
     return ok == true;
   }
@@ -491,10 +498,18 @@ class ZameraCapture {
     );
   }
 
-  /// Triggers a still RAW (.dng) + TrueColor (12.6MP) / Pro JPEG photo capture on the active camera session.
+  /// Triggers a still RAW (.dng) + TrueColor (12.6MP) / Pro / Portrait JPEG photo capture on the active camera session.
   static Future<CapturePhotoResult> capturePhoto({
     bool captureRaw = true,
     bool isArtworkMode = true,
+    bool isPortraitMode = false,
+    double portraitAperture = 2.8,
+    int portraitLighting = 0,
+    double portraitLightIntensity = 0.80,
+    double portraitSubjectRadius = 0.36,
+    double focusPointX = 0.5,
+    double focusPointY = 0.45,
+    double zoomRatio = 1.0,
     bool preferProRaw = false,
     bool useDisplayP3 = false,
     bool fullResolution = true,
@@ -510,6 +525,14 @@ class ZameraCapture {
       {
         'captureRaw': captureRaw,
         'isArtworkMode': isArtworkMode,
+        'isPortraitMode': isPortraitMode,
+        'portraitAperture': portraitAperture,
+        'portraitLighting': portraitLighting,
+        'portraitLightIntensity': portraitLightIntensity,
+        'portraitSubjectRadius': portraitSubjectRadius,
+        'focusPointX': focusPointX,
+        'focusPointY': focusPointY,
+        'zoomRatio': zoomRatio,
         'preferProRaw': preferProRaw,
         'useDisplayP3': useDisplayP3,
         'fullResolution': fullResolution,
@@ -549,6 +572,66 @@ class ZameraCapture {
   /// Stops the active native preview session and releases the GPU texture.
   static Future<void> stopPreviewSession() async {
     await _channel.invokeMethod<void>('stopPreviewSession');
+  }
+
+  /// Post-capture interactive Portrait Re-Focus, Aperture (`f/1.4..f/16`), and Studio Lighting reprocessing.
+  static Future<Map<String, dynamic>> reprocessPortraitPhoto({
+    required String sourceJpegPath,
+    required double aperture,
+    required int lightingMode,
+    required double lightIntensity,
+    required double subjectRadiusRatio,
+    required double focusX,
+    required double focusY,
+    bool isFrontCamera = false,
+    bool saveToGallery = false,
+  }) async {
+    final map = await _channel.invokeMapMethod<dynamic, dynamic>(
+      'reprocessPortraitPhoto',
+      {
+        'sourceJpegPath': sourceJpegPath,
+        'aperture': aperture,
+        'lightingMode': lightingMode,
+        'lightIntensity': lightIntensity,
+        'subjectRadiusRatio': subjectRadiusRatio,
+        'focusX': focusX,
+        'focusY': focusY,
+        'isFrontCamera': isFrontCamera,
+        'saveToGallery': saveToGallery,
+      },
+    );
+    if (map == null) return const {};
+    return Map<String, dynamic>.from(
+      map.map((k, v) => MapEntry(k.toString(), v)),
+    );
+  }
+
+  /// iOS / Xiaomi Style Subject Lift & Cutout Sticker Extractor:
+  /// Segments the person or tapped object into a 100% transparent PNG (`ZAM_..._CUTOUT.png`),
+  /// copies the sticker to the Android system clipboard, saves to `DCIM/Zamera`, and optionally opens Share sheet.
+  static Future<Map<String, dynamic>> extractSubjectCutoutPng({
+    required String sourceJpegPath,
+    double focusX = 0.5,
+    double focusY = 0.45,
+    double subjectRadiusRatio = 0.36,
+    bool isFrontCamera = false,
+    bool shareNow = false,
+  }) async {
+    final map = await _channel.invokeMapMethod<dynamic, dynamic>(
+      'extractSubjectCutoutPng',
+      {
+        'sourceJpegPath': sourceJpegPath,
+        'focusX': focusX,
+        'focusY': focusY,
+        'subjectRadiusRatio': subjectRadiusRatio,
+        'isFrontCamera': isFrontCamera,
+        'shareNow': shareNow,
+      },
+    );
+    if (map == null) return const {};
+    return Map<String, dynamic>.from(
+      map.map((k, v) => MapEntry(k.toString(), v)),
+    );
   }
 
   /// Converts Kelvin (2000K..10000K) and Tint (-50..+50) into RGGB channel gains.

@@ -1,0 +1,6 @@
+Zamera v0.1.1:
+• Faz 0-3 tam iOS ve Android eşliği: Apple Log, ProRes 422 HQ ve 180° kilitli Pro Video.
+• Yeni Sürüm Notları ve İlk Açılış Özellikleri rehberi (Ayarlar menüsünden her an erişilebilir).
+• 24-Yama ColorChecker gerçek renk kalibrasyonu (ΔE00 ≤ 1.0).
+• 14-bit Bayer RAW/DNG, manuel pozlama, AE braketleme ve nesne ayırma çıkartması.
+• %100 cihaz içi işleme, sıfır takip güvencesi.

@@ -10,7 +10,7 @@ on:
       enable_video_module:
         description: "Enable Pro Video module (ZAMERA_VIDEO)"
         required: false
-        default: "false"
+        default: "true"
 
 jobs:
   build-and-publish-android:
@@ -22,7 +22,7 @@ jobs:
       ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
       PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
       PLAY_TRACK: ${{ github.event.inputs.track || 'internal' }}
-      ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'false' }}
+      ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'true' }}
 
     steps:
       - name: 1. Checkout repository
@@ -76,3 +76,14 @@ jobs:
             app/build/app/outputs/bundle/release/app-release.aab
             app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
+
+      - name: 9. Upload to Google Play Console (Closed Testing / Internal Track)
+        if: ${{ env.PLAY_STORE_JSON_KEY != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_STORE_JSON_KEY }}
+          packageName: com.akarworks.zamera
+          releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: completed
+          whatsNewDirectory: docs/play_store_whats_new
