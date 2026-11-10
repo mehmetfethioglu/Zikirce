@@ -1,17 +1,12 @@
-import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/localization/app_localizations.dart';
-import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
-import '../../../../core/services/widget_sync_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
-import '../../../gamification/providers/gamification_providers.dart';
-import '../../../gamification/services/daily_streak_service.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../providers/zikir_providers.dart';
@@ -19,8 +14,8 @@ import '../../providers/zikir_providers.dart';
 class AddEditZikirSheet extends ConsumerStatefulWidget {
   final Zikir? zikir;
   final int initialTabIndex;
-  final Function(drift.Insertable<Zikir>)? onSave;
-  final Function(Zikir targetZikir, int amount)? onTransfer;
+  final FutureOr<void> Function(drift.Insertable<Zikir>)? onSave;
+  final FutureOr<void> Function(Zikir targetZikir, int amount)? onTransfer;
 
   const AddEditZikirSheet({
     super.key,
@@ -34,8 +29,8 @@ class AddEditZikirSheet extends ConsumerStatefulWidget {
     BuildContext context, {
     Zikir? zikir,
     int initialTabIndex = 0,
-    Function(drift.Insertable<Zikir>)? onSave,
-    Function(Zikir targetZikir, int amount)? onTransfer,
+    FutureOr<void> Function(drift.Insertable<Zikir>)? onSave,
+    FutureOr<void> Function(Zikir targetZikir, int amount)? onTransfer,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -72,7 +67,8 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
   late TextEditingController _transferAmountController;
   Zikir? _selectedTransferZikir;
 
-  final List<String> _categories = [
+  late List<String> _categories;
+  static const List<String> _baseCategories = [
     'Hadislerden Zikirler',
     'Esmaül-Hüsna',
     'Dualar',
@@ -90,11 +86,12 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
   @override
   void initState() {
     super.initState();
-    _activeTabIndex = widget.zikir != null ? 0 : widget.initialTabIndex;
+    final isEditMode = widget.zikir != null && widget.initialTabIndex == 0;
+    _activeTabIndex = isEditMode ? 0 : widget.initialTabIndex.clamp(0, 1);
     _tabController = TabController(
       length: 2,
       vsync: this,
-      initialIndex: _activeTabIndex.clamp(0, 1),
+      initialIndex: _activeTabIndex,
     );
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
@@ -104,16 +101,17 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
       }
     });
 
-    _nameController = TextEditingController(text: widget.zikir?.name ?? '');
-    _arabicController = TextEditingController(text: widget.zikir?.arabic ?? '');
+    final editTarget = isEditMode ? widget.zikir : null;
+    _nameController = TextEditingController(text: editTarget?.name ?? '');
+    _arabicController = TextEditingController(text: editTarget?.arabic ?? '');
     _targetController = TextEditingController(
-      text: (widget.zikir?.target ?? 33).toString(),
+      text: (editTarget?.target ?? 33).toString(),
     );
-    _selectedCategory = widget.zikir?.category ?? 'Hadislerden Zikirler';
-    if (!_categories.contains(_selectedCategory)) {
-      _categories.insert(0, _selectedCategory);
-    }
-    _isFavorite = widget.zikir?.isFavorite ?? false;
+    _selectedCategory = editTarget?.category ?? 'Hadislerden Zikirler';
+    _categories = _baseCategories.contains(_selectedCategory)
+        ? List<String>.from(_baseCategories)
+        : [_selectedCategory, ..._baseCategories];
+    _isFavorite = editTarget?.isFavorite ?? false;
 
     _transferAmountController = TextEditingController();
     _selectedTransferZikir = widget.zikir;
@@ -993,12 +991,12 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
   // ACTIONS / HANDLERS
   // =========================================================================
 
-  void _handleSaveDhikr(
+  Future<void> _handleSaveDhikr(
     BuildContext context,
     AppThemeColors colors,
     AppLocalizations l10n,
     bool isEditMode,
-  ) {
+  ) async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1021,35 +1019,60 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
       isFavorite: drift.Value(_isFavorite),
     );
 
-    if (widget.onSave != null) {
-      widget.onSave!(comp);
-    }
+    try {
+      if (widget.onSave != null) {
+        await widget.onSave!(comp);
+      } else {
+        final crud = ref.read(zikirCrudProvider);
+        if (isEditMode && widget.zikir != null) {
+          await crud.updateZikir(widget.zikir!.id, comp);
+        } else {
+          final newId = await crud.insertZikir(comp);
+          await ref.read(selectedZikirIdProvider.notifier).select(newId);
+        }
+      }
 
-    HapticService.selectionClick();
-    Navigator.of(context).pop();
+      HapticService.selectionClick();
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                isEditMode
-                    ? (l10n.isTurkish ? "'$name' güncellendi!" : "'$name' updated!")
-                    : (l10n.isTurkish ? "'$name' zikri eklendi!" : "'$name' dhikr added!"),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isEditMode
+                      ? (l10n.isTurkish ? "'$name' güncellendi!" : "'$name' updated!")
+                      : (l10n.isTurkish ? "'$name' zikri eklendi!" : "'$name' dhikr added!"),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+          backgroundColor: colors.accent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
         ),
-        backgroundColor: colors.accent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[AddEditZikirSheet] _handleSaveDhikr error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.isTurkish
+                  ? 'Kayıt sırasında hata oluştu: $e'
+                  : 'Failed to save dhikr: $e',
+            ),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleTransferDhikr(
@@ -1080,77 +1103,58 @@ class _AddEditZikirSheetState extends ConsumerState<AddEditZikirSheet>
       return;
     }
 
-    final db = ref.read(databaseProvider);
+    try {
+      await ref.read(zikirCrudProvider).transferZikirCount(
+            target: target,
+            amount: amount,
+          );
 
-    // 1. Update target zikir total count & lastPracticed in DB
-    final newTotal = target.totalCount + amount;
-    await (db.update(db.zikirs)..where((t) => t.id.equals(target.id))).write(
-      ZikirsCompanion(
-        totalCount: drift.Value(newTotal),
-        lastPracticed: drift.Value(DateTime.now()),
-      ),
-    );
+      if (widget.onTransfer != null) {
+        await widget.onTransfer!(target, amount);
+      }
 
-    // 2. Insert into ZikirLogs for Bismillah Dashboard / Heatmap / Streak / Stats
-    final now = DateTime.now();
-    final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    await db.into(db.zikirLogs).insert(
-      ZikirLogsCompanion.insert(
-        zikirId: target.id,
-        count: amount,
-        dateStr: dateStr,
-      ),
-    );
+      HapticService.targetReached();
 
-    // Update SharedPreferences total and daily zikir counts
-    final prefs = await SharedPreferences.getInstance();
-    final allZikirs = await db.select(db.zikirs).get();
-    final zikirsSum = allZikirs.fold<int>(0, (sum, z) => sum + z.totalCount);
-    final curTotalZikir = prefs.getInt('TotalZikir') ?? 0;
-    await prefs.setInt('TotalZikir', max(curTotalZikir, zikirsSum));
-    final curTodayCount = prefs.getInt('TodayZikirCount') ?? 0;
-    await prefs.setInt('TodayZikirCount', curTodayCount + amount);
+      if (context.mounted) {
+        Navigator.of(context).pop();
 
-    // Update daily streak
-    await DailyStreakService.recordDailyActivity(db);
-
-    // 3. Sync widgets & badges
-    WidgetSyncService.syncAll(db);
-    ref.read(badgeRefreshTriggerProvider.notifier).state++;
-
-    // 4. Callback if provided
-    if (widget.onTransfer != null) {
-      widget.onTransfer!(target, amount);
-    }
-
-    // 5. Haptic feedback & Toast / SnackBar
-    HapticService.targetReached();
-
-    if (context.mounted) {
-      Navigator.of(context).pop();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  l10n.isTurkish
-                      ? "'${target.name}' için $amount zikir aktarıldı!"
-                      : "$amount dhikr imported for '${target.name}'!",
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    l10n.isTurkish
+                        ? "'${target.name}' için $amount zikir aktarıldı!"
+                        : "$amount dhikr imported for '${target.name}'!",
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            backgroundColor: colors.accent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 3),
           ),
-          backgroundColor: colors.accent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      debugPrint('[AddEditZikirSheet] _handleTransferDhikr error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.isTurkish
+                  ? 'Aktarım sırasında hata oluştu: $e'
+                  : 'Failed to import dhikr count: $e',
+            ),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
     }
   }
 }

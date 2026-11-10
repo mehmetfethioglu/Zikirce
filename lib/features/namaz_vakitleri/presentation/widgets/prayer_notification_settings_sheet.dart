@@ -78,30 +78,35 @@ class PrayerNotificationSettingsSheet extends ConsumerWidget {
 
             // Header
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: colors.accent.withValues(alpha: isDark ? 0.2 : 0.12),
-                        borderRadius: BorderRadius.circular(12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: colors.accent.withValues(alpha: isDark ? 0.2 : 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text('🔔', style: TextStyle(fontSize: 18)),
                       ),
-                      alignment: Alignment.center,
-                      child: const Text('🔔', style: TextStyle(fontSize: 18)),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      l10n.isTurkish ? 'Bildirim Ayarları' : 'Notification Settings',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primaryText,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          l10n.isTurkish ? 'Bildirim Ayarları' : 'Notification Settings',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded),
@@ -577,21 +582,40 @@ class PrayerNotificationSettingsSheet extends ConsumerWidget {
                           ),
                           const SizedBox(height: 16),
 
-                          // Test Notification Button
+                          // Sample Notification Button
                           OutlinedButton.icon(
                             onPressed: () async {
                               HapticService.selectionClick();
-                              await LocalNotificationService.showTestNotification(
-                                  sound: settings.selectedPrayerSound);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(l10n.isTurkish
-                                        ? 'Test bildirimi gönderildi! 🔔 (${settings.selectedPrayerSound})'
-                                        : 'Test notification sent! 🔔 (${settings.selectedPrayerSound})'),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                              try {
+                                await LocalNotificationService.showTestNotification(
+                                  sound: settings.selectedPrayerSound,
                                 );
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        l10n.isTurkish
+                                            ? 'Örnek bildirim gönderildi! 🔔 (${settings.selectedPrayerSound})'
+                                            : 'Sample notification sent! 🔔 (${settings.selectedPrayerSound})',
+                                      ),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                debugPrint('[PrayerNotificationSettingsSheet] sample notification error: $e');
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        l10n.isTurkish
+                                            ? 'Bildirim gönderilemedi: $e'
+                                            : 'Notification failed: $e',
+                                      ),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
                               }
                             },
                             icon: const Icon(Icons.notifications_active_outlined, size: 18),
@@ -1279,12 +1303,13 @@ class _SpiritualVirtueSheetState extends ConsumerState<_SpiritualVirtueSheet> {
   late String _selectedTab;
 
   static const List<String> _feraciyeClauses = [
-    'اللّٰهُمَّ صَلِّ عَلٰى سَيِّدِنَا مُحَمَّدٍ وَعَلٰى اٰلِ سَيِّدِنَا مُحَمَّدٍ',
-    'صَلَاةً تُنَجّٖينَا بِهَا مِنْ جَمٖيعِ الْاَهْوَالِ وَالْاٰفَاتِ',
-    'وَتَقْضٖي لَنَا بِهَا جَمٖيعَ الْحَاجَاتِ',
-    'وَتُطَهِّرُنَا بِهَا مِنْ جَمٖيعِ السَّيِّئَاتِ',
-    'وَتَرْفَعُنَا بِهَا عِنْدَكَ اَعْلَى الدَّرَجَاتِ',
-    'وَتُبَلِّغُنَا بِهَا اَقْصَى الْغَايَاتِ مِنْ جَمٖيعِ الْخَيْرَاتِ فِي الْحَيَاةِ وَبَعْدَ الْمَمَاتِ',
+    'اللّٰهُمَّ يَا فَارِجَ الْفَرَجِ',
+    'وَيَا مَنْ عِنْدَهُ مَفَاتٖيحُ الْفَرَجِ',
+    'وَيَا اُمَّةَ مُحَمَّدٍ رَحِمَ اللّٰهُ لِمَنْ دَعَا لَنَا بِالْفَرَجِ وَالْعَافِيَةِ',
+    'وَيَا مَنْ بَدٖيعُ السَّمَاوَاتِ وَالْاَرْضِ',
+    'وَيَا مَالِكَ الْمُلْكِ يَا ذَا الْجَلَالِ وَالْاِكْرَامِ',
+    'يَا كَرٖيمُ يَا رَحٖيمُ يَا اللّٰهُ',
+    'بِرَحْمَتِكَ يَا اَرْحَمَ الرَّاحِمٖينَ',
   ];
 
   static const List<String> _selaClauses = [
@@ -1416,21 +1441,26 @@ class _SpiritualVirtueSheetState extends ConsumerState<_SpiritualVirtueSheet> {
             ),
             const SizedBox(height: 14),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Text('✨', style: TextStyle(fontSize: 20)),
-                    const SizedBox(width: 8),
-                    Text(
-                      isTr ? 'Feraciye Duası & Salâ Fazileti' : 'Virtue of Feraciye & Sala',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primaryText,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Text('✨', style: TextStyle(fontSize: 20)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          isTr ? 'Feraciye Duası & Salâ Fazileti' : 'Virtue of Feraciye & Sala',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            color: colors.primaryText,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded),
@@ -1573,7 +1603,7 @@ class _SpiritualVirtueSheetState extends ConsumerState<_SpiritualVirtueSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                '"Allâhümme salli alâ seyyidinâ Muhammedin ve alâ âli seyyidinâ Muhammed. Salâten tüneccînâ bihâ min cemî\'il-ehvâli vel-âfât. Ve takdî lenâ bihâ cemî\'al-hâcât. Ve tutahhirunâ bihâ min cemî\'is-seyyiât. Ve terfe\'unâ bihâ indeke a\'led-derecât. Ve tübelliğunâ bihâ aksal-ğâyât, min cemî\'il-hayrâti fil-hayâti ve ba\'del-memât."',
+                '"Allâhümme yâ fâricel-ferac. Ve yâ men indehû mefâtîhul-ferac. Ve yâ ümmete Muhammed, rahimallâhu li-men de\'â lenâ bil-feraci vel-âfiyeh. Ve yâ men bedî\'us-semâvâti vel-ard. Ve yâ mâlikel-mülk, yâ zel-celâli vel-ikrâm. Yâ Kerîm, yâ Rahîm, yâ Allâh. Bi-rahmetike yâ erhamer-râhimîn."',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
@@ -1593,8 +1623,8 @@ class _SpiritualVirtueSheetState extends ConsumerState<_SpiritualVirtueSheet> {
               const SizedBox(height: 6),
               Text(
                 isTr
-                    ? '"Allah\'ım! Efendimiz Muhammed\'e (s.a.v.) ve Efendimiz Muhammed\'in âline öyle bir salât eyle ki; o salât vesilesiyle bizi bütün korkulardan ve afetlerden kurtarasın, bütün ihtiyaçlarımızı gideresin, bizi bütün günahlardan temizleyesin, katındaki en yüce derecelere yükseltesin ve hayatta iken de öldükten sonra da bütün hayırların en üstün gayelerine ulaştırasın."'
-                    : '"O Allah! Bestow blessings upon our Master Muhammad and his family, a blessing by which You save us from all terrors and calamities, fulfill all our needs, purify us from all evils, and raise us to the highest ranks."',
+                    ? '"Allah\'ım! Ey sıkıntıları açıp ferahlık veren! Ey kurtuluş ve ferahlığın anahtarları katında bulunan! Ey Muhammed (s.a.v.) ümmeti; bize kurtuluş, ferahlık ve âfiyet için dua edene Allah rahmet eylesin! Ey göklerin ve yerin eşsiz yaratıcısı! Ey mülkün gerçek sahibi, ey celâl ve ikram sahibi! Ey Kerîm, ey Rahîm, ey Allah! Rahmetinle (bize merhamet eyle ve feraha kavuştur), ey merhametlilerin en merhametlisi!"'
+                    : '"O Allah! O Reliever of distress and Giver of relief! O You with Whom are the keys of relief! O Ummah of Muhammad (pbuh), may Allah have mercy upon whoever prays for our relief and well-being! O Incomparable Originator of the heavens and the earth! O Sovereign of all dominion, O Possessor of Majesty and Honor! O Most Generous, O Most Merciful, O Allah! By Your mercy, O Most Merciful of the merciful!"',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.5,
@@ -1613,11 +1643,12 @@ class _SpiritualVirtueSheetState extends ConsumerState<_SpiritualVirtueSheet> {
               const SizedBox(height: 6),
               Text(
                 isTr
-                    ? '• "Feraciye", gam ve kederin dağılması, sıkıntıdan kurtuluş ve gönül ferahlığı demektir.\n'
-                      '• İslâmî takvimde mübarek Cuma gecesi, Perşembe günü akşam ezanıyla birlikte başlar. Anadolu irfan geleneğinde ve pek çok tarihi camimizde Perşembe günü akşam namazına 15 dakika kala Cuma gecesini karşılamak, belâ ve musibetlerin def\'i, rızkın bereketi ve duaların kabulü niyetiyle Feraciye (Salât-ı Münciye) okunması asırlık bir âdettir.\n'
-                      '• İbnü\'l-Fâkihânî\'nin "el-Fecrü\'l-Münîr" adlı eserinde naklettiği üzere, salih zatların darlık ve şiddet anlarında bu duaya devam ederek feraha ulaştıkları bildirilmiştir.'
-                    : '• "Feraciye" means relief from distress and opening of doors of mercy.\n'
-                      '• Since the blessed night of Jumu\'ah begins at Maghrib on Thursday, reciting the Feraciye prayer 15 minutes before Thursday Maghrib is a cherished tradition for spiritual protection, acceptance of prayers, and relief from hardships.',
+                    ? '• "Feraciye" (Ferec Duası), gam ve kederin dağılması, darlıktan kurtuluş ve gönül ferahlığı niyetiyle okunan asırlık bir yakarış ve münâcâttır.\n'
+                      '• İslâmî takvimde mübarek Cuma gecesi, Perşembe günü akşam ezanıyla birlikte başlar. Anadolu irfan geleneğinde (başta Şanlıurfa, Mardin ve pek çok tarihi camimizde) Perşembe günü akşam namazına 15 dakika kala Cuma gecesini karşılamak, belâ ve musibetlerin def\'i, rızkın bereketi ve ümmet-i Muhammed\'in selâmeti niyetiyle Feraciye Duası okunması köklü bir âdettir.\n'
+                      '• Peygamber Efendimiz (s.a.v.) hadis-i şeriflerinde: "Allah\'tan fazlını (lütfunu ve ferahlığı) isteyin; çünkü Allah kendisinden istenilmesini sever. İbadetin en faziletlisi de (sabırla) ferahlığı (fereci) beklemektir." (Tirmizî, Daavât, 116) buyurmuştur.'
+                    : '• "Feraciye" (Prayer of Relief) is a cherished supplication recited for relief from distress, removal of hardships, and spiritual serenity.\n'
+                      '• Since the blessed night of Jumu\'ah begins at Maghrib on Thursday, reciting the Feraciye prayer 15 minutes before Thursday Maghrib is a centuries-old Anatolian tradition seeking divine mercy, protection, and well-being for the Ummah.\n'
+                      '• The Prophet (pbuh) said: "Ask Allah of His bounty, for Allah loves to be asked, and the most virtuous act of worship is awaiting relief with patience." (Tirmidhi, Da\'awat, 116).',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.55,

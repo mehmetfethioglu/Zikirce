@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import '../../../../core/database/zikir_seed_data.dart';
 import '../../../../core/localization/app_localizations.dart';
-import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/sound_pool_service.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
@@ -18,6 +17,7 @@ import '../../../settings/providers/settings_provider.dart';
 import '../../providers/zikir_providers.dart';
 import '../widgets/circular_counter_painter.dart';
 import '../widgets/add_edit_zikir_sheet.dart';
+import '../widgets/zikir_selection_sheet.dart';
 import '../widgets/zikir_share_card_widget.dart';
 import '../widgets/zikir_share_preview_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
@@ -86,15 +86,8 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
   }
 
   void _flushCurrentZikir() {
-    Future.microtask(() {
-      try {
-        if (!mounted) return;
-        final currentZikir = ref.read(currentZikirProvider);
-        if (currentZikir != null) {
-          ref.read(zikirCounterNotifierProvider(currentZikir.id).notifier).flushPending();
-          CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
-        }
-      } catch (_) {}
+    Future.microtask(() async {
+      await _flushCurrentZikirAsync();
     });
   }
 
@@ -109,7 +102,9 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     Future.microtask(() {
       try {
         CloudSyncEngine.instance.read(isZikirFocusModeProvider.notifier)?.state = false;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterScreen] reset focus mode error: $e');
+      }
     });
     super.dispose();
   }
@@ -313,173 +308,27 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     );
   }
 
-  void _showSwitchZikirSheet() {
-    final zikirListAsync = ref.watch(zikirListStreamProvider);
-    final colors = context.colors;
-    final isFocusMode = ref.read(isZikirFocusModeProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark || isFocusMode;
-    final currentZikirId = ref.read(selectedZikirIdProvider);
-    final arabicFont = ref.read(arabicFontFamilyProvider);
-    final isBoldArabic = ref.read(isBoldArabicProvider);
+  Future<void> _flushCurrentZikirAsync() async {
+    try {
+      if (!mounted) return;
+      final currentZikir = ref.read(currentZikirProvider);
+      if (currentZikir != null) {
+        await ref
+            .read(zikirCounterNotifierProvider(currentZikir.id).notifier)
+            .flushPending();
+        CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
+      }
+    } catch (e) {
+      debugPrint('[ZikirCounterScreen] _flushCurrentZikirAsync error: $e');
+    }
+  }
 
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.65,
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1F1A17) : colors.bottomSheetBg,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: SafeArea(
-            top: false,
-            bottom: true,
-            child: Column(
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: colors.accent.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      context.l10n.isTurkish ? 'Zikir Seçin' : 'Select Dhikr',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: colors.primaryText,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      color: colors.secondaryTextAlt,
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: zikirListAsync.when(
-                    data: (rawZikirs) {
-                      final zikirs = ZikirSeedData.sortBySeedOrder(rawZikirs);
-                      return ListView.separated(
-                      physics: const BouncingScrollPhysics(),
-                      itemCount: zikirs.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (ctx, idx) {
-                        final z = zikirs[idx];
-                        final isSelected = z.id == currentZikirId;
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: isSelected ? colors.accent.withValues(alpha: 0.12) : colors.cardBackground,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isSelected ? colors.accent : colors.borderStroke,
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                            leading: Container(
-                              width: 38,
-                              height: 38,
-                              decoration: BoxDecoration(
-                                color: isSelected ? colors.accent : colors.headerBackground,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${idx + 1}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected ? Colors.white : colors.primaryText,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              z.name,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: colors.primaryText,
-                                fontSize: 15,
-                              ),
-                            ),
-                            subtitle: z.arabic != null && z.arabic!.isNotEmpty
-                                ? Text(
-                                    QuranWordHighlighter.formatArabicTextForFont(z.arabic!, arabicFont),
-                                    textDirection: TextDirection.rtl,
-                                    style: TextStyle(
-                                      fontFamily: arabicFont,
-                                      fontSize: 16,
-                                      fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                                      color: colors.secondaryTextAlt,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  )
-                                : null,
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
-                                  decoration: BoxDecoration(
-                                    color: colors.headerBackground,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: colors.borderStroke.withValues(alpha: 0.6)),
-                                  ),
-                                  child: Text(
-                                    _formatThousands(z.totalCount),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: colors.primaryText,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                                if (z.currentCount > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${z.currentCount}/${z.target}',
-                                    style: TextStyle(fontSize: 10, color: colors.secondaryTextAlt),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            onTap: () {
-                              ref.read(selectedZikirIdProvider.notifier).select(z.id);
-                              Navigator.of(ctx).pop();
-                            },
-                          ),
-                        );
-                      },
-                    );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (_, __) => const Text('Yüklenemedi'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  Future<void> _showSwitchZikirSheet() async {
+    await _flushCurrentZikirAsync();
+    if (!mounted) return;
+    await ZikirSelectionSheet.show(
+      context,
+      onBeforeSelectZikir: _flushCurrentZikirAsync,
     );
   }
 
@@ -980,14 +829,15 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
 
                         // Right Edit Pencil Button (42x42 round button)
                         InkWell(
-                          onTap: () {
-                            AddEditZikirSheet.show(
+                          onTap: () async {
+                            await _flushCurrentZikirAsync();
+                            if (!context.mounted) return;
+                            await AddEditZikirSheet.show(
                               context,
                               zikir: currentZikir,
-                              onSave: (comp) async {
-                                final db = ref.read(databaseProvider);
-                                await (db.update(db.zikirs)..where((t) => t.id.equals(currentZikir.id))).write(comp);
-                              },
+                              onSave: (comp) => ref
+                                  .read(zikirCrudProvider)
+                                  .updateZikir(currentZikir.id, comp),
                             );
                           },
                           borderRadius: BorderRadius.circular(21),
@@ -1122,11 +972,5 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
         ),
       ),
     );
-  }
-
-  String _formatThousands(int n) {
-    final s = n.toString();
-    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    return s.replaceAllMapped(reg, (Match m) => '${m[1]}.');
   }
 }

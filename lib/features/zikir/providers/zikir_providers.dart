@@ -18,6 +18,7 @@ import '../../gamification/providers/gamification_providers.dart';
 import '../../gamification/services/daily_streak_service.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../dashboard/providers/share_reminder_provider.dart';
+import '../../../../core/database/zikir_seed_data.dart';
 
 // Stream of all dhikrs from DB
 final zikirListStreamProvider = StreamProvider<List<Zikir>>((ref) {
@@ -38,7 +39,8 @@ class SelectedZikirIdNotifier extends StateNotifier<int?> {
   }
 
   String _getPrefKey([String? customSessionId]) {
-    final sid = customSessionId ?? (ref != null ? ref!.read(activeSessionProvider).id : UserSession.defaultSessionId);
+    final sid = customSessionId ??
+        (ref != null ? ref!.read(activeSessionProvider).id : UserSession.defaultSessionId);
     if (sid != UserSession.defaultSessionId) {
       return 'LastSelectedZikirId_$sid';
     }
@@ -53,12 +55,17 @@ class SelectedZikirIdNotifier extends StateNotifier<int?> {
 
   Future<void> _load([String? targetSessionId]) async {
     try {
-      final sid = targetSessionId ?? (ref != null ? ref!.read(activeSessionProvider).id : UserSession.defaultSessionId);
+      final sid = targetSessionId ??
+          (ref != null ? ref!.read(activeSessionProvider).id : UserSession.defaultSessionId);
       final prefs = await SharedPreferences.getInstance();
       final id = PrefUtils.getIntOrNull(prefs, _getPrefKey(sid)) ??
-          (sid == UserSession.defaultSessionId ? PrefUtils.getIntOrNull(prefs, 'LastSelectedZikirId') : null);
+          (sid == UserSession.defaultSessionId
+              ? PrefUtils.getIntOrNull(prefs, 'LastSelectedZikirId')
+              : null);
       state = id;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SelectedZikirIdNotifier] _load error: $e');
+    }
   }
 
   Future<void> select(int id) async {
@@ -66,11 +73,15 @@ class SelectedZikirIdNotifier extends StateNotifier<int?> {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(_prefKey, id);
-      final isDefault = ref != null ? ref!.read(activeSessionProvider).id == UserSession.defaultSessionId : true;
+      final isDefault = ref != null
+          ? ref!.read(activeSessionProvider).id == UserSession.defaultSessionId
+          : true;
       if (isDefault) {
         await prefs.setInt('LastSelectedZikirId', id);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SelectedZikirIdNotifier] select error: $e');
+    }
   }
 
   @override
@@ -79,11 +90,15 @@ class SelectedZikirIdNotifier extends StateNotifier<int?> {
     if (value != null) {
       SharedPreferences.getInstance().then((prefs) {
         prefs.setInt(_prefKey, value);
-        final isDefault = ref != null ? ref!.read(activeSessionProvider).id == UserSession.defaultSessionId : true;
+        final isDefault = ref != null
+            ? ref!.read(activeSessionProvider).id == UserSession.defaultSessionId
+            : true;
         if (isDefault) {
           prefs.setInt('LastSelectedZikirId', value);
         }
-      }).catchError((_) {});
+      }).catchError((Object e) {
+        debugPrint('[SelectedZikirIdNotifier] persist error: $e');
+      });
     }
   }
 }
@@ -154,8 +169,16 @@ class ZikirQuickSettingsNotifier extends StateNotifier<ZikirQuickSettingsState> 
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final sound = PrefUtils.getBoolFromKeys(prefs, [_soundKey, 'vibration_sound_enabled', 'sound_enabled'], true);
-      final vibration = PrefUtils.getBoolFromKeys(prefs, [_vibrationKey, 'vibration_enabled'], true);
+      final sound = PrefUtils.getBoolFromKeys(
+        prefs,
+        [_soundKey, 'vibration_sound_enabled', 'sound_enabled'],
+        true,
+      );
+      final vibration = PrefUtils.getBoolFromKeys(
+        prefs,
+        [_vibrationKey, 'vibration_enabled'],
+        true,
+      );
       final infinite = PrefUtils.getBool(prefs, _infiniteKey, false);
 
       state = state.copyWith(
@@ -163,7 +186,9 @@ class ZikirQuickSettingsNotifier extends StateNotifier<ZikirQuickSettingsState> 
         isVibrationEnabled: vibration,
         isInfiniteMode: infinite,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirQuickSettingsNotifier] _load error: $e');
+    }
   }
 
   Future<void> toggleSound() async {
@@ -172,7 +197,9 @@ class ZikirQuickSettingsNotifier extends StateNotifier<ZikirQuickSettingsState> 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_soundKey, next);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirQuickSettingsNotifier] toggleSound error: $e');
+    }
   }
 
   Future<void> toggleVibration() async {
@@ -181,7 +208,9 @@ class ZikirQuickSettingsNotifier extends StateNotifier<ZikirQuickSettingsState> 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_vibrationKey, next);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirQuickSettingsNotifier] toggleVibration error: $e');
+    }
   }
 
   Future<void> toggleInfiniteMode() async {
@@ -190,7 +219,9 @@ class ZikirQuickSettingsNotifier extends StateNotifier<ZikirQuickSettingsState> 
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_infiniteKey, next);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirQuickSettingsNotifier] toggleInfiniteMode error: $e');
+    }
   }
 }
 
@@ -314,7 +345,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
       _hasSelectionSaved = true;
       try {
         ref.read(selectedZikirIdProvider.notifier).select(zikir.id);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] select active zikir error: $e');
+      }
     }
 
     if (isVibrationEnabled) {
@@ -350,7 +383,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
           ),
         );
         ref.read(gamificationNotifierProvider).addGold(50);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] celebration trigger error: $e');
+      }
 
       try {
         ref.read(shareReminderProvider.notifier).setReminder(
@@ -364,19 +399,24 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
             'arabic': zikir.arabic,
           },
         );
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] shareReminder error: $e');
+      }
 
       _flushPending(0, nextLap, nextTotal);
       try {
         CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] cloud sync trigger error: $e');
+      }
     } else {
       // Infinite mode OR target not reached yet in normal mode
       final nextLap = (isInfinite && state.target > 0)
           ? (nextCount ~/ state.target)
           : state.lap;
-      
-      final bool isLapCompletedInInfinite = isInfinite && state.target > 0 && nextCount > 0 && (nextCount % state.target == 0);
+
+      final bool isLapCompletedInInfinite =
+          isInfinite && state.target > 0 && nextCount > 0 && (nextCount % state.target == 0);
       if (isLapCompletedInInfinite) {
         if (isVibrationEnabled) HapticService.targetReached();
         if (isSoundEnabled) SoundPoolService.playChirp(type: zikir.soundEffect);
@@ -392,7 +432,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
             ),
           );
           ref.read(gamificationNotifierProvider).addGold(50);
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[ZikirCounterNotifier] infinite celebration error: $e');
+        }
 
         try {
           ref.read(shareReminderProvider.notifier).setReminder(
@@ -406,7 +448,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
               'arabic': zikir.arabic,
             },
           );
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('[ZikirCounterNotifier] infinite shareReminder error: $e');
+        }
       }
 
       state = state.copyWith(
@@ -431,12 +475,12 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
     });
   }
 
-  /// Flushes any pending uncommitted dhikr count to the database immediately
-  void flushPending() {
+  /// Flushes any pending uncommitted dhikr count to the database immediately and awaits completion.
+  Future<void> flushPending() async {
     _debounceTimer?.cancel();
     _debounceTimer = null;
     if (_pendingCount > 0) {
-      _flushPending(state.currentCount, state.lap, state.totalCount);
+      await _flushPending(state.currentCount, state.lap, state.totalCount);
     }
   }
 
@@ -457,22 +501,42 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
     }
     try {
       CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirCounterNotifier] exit infinite sync error: $e');
+    }
   }
 
-  void _flushPending(int count, int lap, int total) {
+  Future<void> _flushPending(int count, int lap, int total) async {
     _debounceTimer?.cancel();
     _debounceTimer = null;
     final countToLog = _pendingCount;
     _pendingCount = 0;
 
-    _commitToDb(count, lap, total);
+    await _commitToDb(count, lap, total);
     if (countToLog > 0) {
-      _logZikir(countToLog);
+      await _logZikir(countToLog);
     }
     try {
       CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 3));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirCounterNotifier] flush sync error: $e');
+    }
+  }
+
+  /// Synchronizes in-memory counter state when target, reset, or imported totalCount
+  /// is modified externally while this notifier is active.
+  void syncExternalUpdate({
+    int? currentCount,
+    int? target,
+    int? lap,
+    int? totalCount,
+  }) {
+    state = state.copyWith(
+      currentCount: currentCount,
+      target: target,
+      lap: lap,
+      totalCount: totalCount,
+    );
   }
 
   void reset() {
@@ -484,7 +548,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
     _commitToDb(0, 0, state.totalCount);
     try {
       CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 2));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ZikirCounterNotifier] reset sync error: $e');
+    }
   }
 
   @override
@@ -498,7 +564,9 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
       _logZikir(countToLog);
       try {
         CloudSyncEngine.instance.triggerDebouncedSync(ref, delay: const Duration(seconds: 1));
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] dispose sync error: $e');
+      }
     }
     super.dispose();
   }
@@ -542,11 +610,17 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
         final isDefault = activeSession.id == UserSession.defaultSessionId;
         final sfx = isDefault ? '' : '_${activeSession.id}';
         final claimedKey = 'DailyZikirRewardClaimed_$dateStr$sfx';
-        final alreadyClaimed = prefs.getBool(claimedKey) ?? (isDefault ? prefs.getBool('DailyZikirRewardClaimed_$dateStr') ?? false : false);
+        final alreadyClaimed = prefs.getBool(claimedKey) ??
+            (isDefault ? prefs.getBool('DailyZikirRewardClaimed_$dateStr') ?? false : false);
 
         if (!alreadyClaimed) {
-          final zikirGoal = PrefUtils.getIntFromKeys(prefs, ['DailyZikirGoal$sfx', 'ZikirDailyGoal$sfx', 'DailyZikirGoal', 'ZikirDailyGoal'], 100);
-          final todayLogs = await (db.select(db.zikirLogs)..where((t) => t.dateStr.equals(dateStr))).get();
+          final zikirGoal = PrefUtils.getIntFromKeys(
+            prefs,
+            ['DailyZikirGoal$sfx', 'ZikirDailyGoal$sfx', 'DailyZikirGoal', 'ZikirDailyGoal'],
+            100,
+          );
+          final todayLogs =
+              await (db.select(db.zikirLogs)..where((t) => t.dateStr.equals(dateStr))).get();
           final totalToday = todayLogs.fold<int>(0, (sum, item) => sum + item.count);
           if (totalToday >= zikirGoal) {
             await prefs.setBool(claimedKey, true);
@@ -571,16 +645,22 @@ class ZikirCounterNotifier extends StateNotifier<ZikirCounterState> {
                   'count': totalToday,
                 },
               );
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('[ZikirCounterNotifier] daily shareReminder error: $e');
+            }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] daily goal check error: $e');
+      }
 
       // Sync to Android widgets (Kalp Sağlığı, Zikir Counter, etc.) and refresh daily goals
       WidgetSyncService.syncAll(db);
       try {
         ref.read(badgeRefreshTriggerProvider.notifier).state++;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ZikirCounterNotifier] badge refresh error: $e');
+      }
     } catch (e) {
       debugPrint('[ZikirCounterNotifier] _logZikir error: $e');
     }
@@ -606,4 +686,92 @@ final zikirCounterNotifierProvider = StateNotifierProvider.autoDispose
         createdAt: DateTime.now(),
       );
   return ZikirCounterNotifier(ref, db, zikir);
+});
+
+/// Single-responsibility data/domain service for Dhikr CRUD & Tasbeeh count transfers.
+class ZikirCrudService {
+  final Ref ref;
+  final AppDatabase db;
+
+  const ZikirCrudService(this.ref, this.db);
+
+  Future<int> insertZikir(Insertable<Zikir> comp) {
+    return db.into(db.zikirs).insert(comp);
+  }
+
+  Future<void> updateZikir(int zikirId, Insertable<Zikir> comp) async {
+    await ref.read(zikirCounterNotifierProvider(zikirId).notifier).flushPending();
+    await (db.update(db.zikirs)..where((t) => t.id.equals(zikirId))).write(comp);
+    if (comp is ZikirsCompanion) {
+      ref.read(zikirCounterNotifierProvider(zikirId).notifier).syncExternalUpdate(
+            currentCount: comp.currentCount.present ? comp.currentCount.value : null,
+            target: comp.target.present ? comp.target.value : null,
+            lap: comp.lap.present ? comp.lap.value : null,
+            totalCount: comp.totalCount.present ? comp.totalCount.value : null,
+          );
+    }
+  }
+
+  Future<void> deleteZikir(int zikirId) async {
+    final wasSelected = ref.read(selectedZikirIdProvider) == zikirId;
+    await (db.delete(db.zikirs)..where((t) => t.id.equals(zikirId))).go();
+    if (wasSelected) {
+      final remaining = ZikirSeedData.sortBySeedOrder(
+        await db.select(db.zikirs).get(),
+      );
+      if (remaining.isNotEmpty) {
+        await ref.read(selectedZikirIdProvider.notifier).select(remaining.first.id);
+      }
+    }
+  }
+
+  Future<void> transferZikirCount({
+    required Zikir target,
+    required int amount,
+  }) async {
+    await ref.read(zikirCounterNotifierProvider(target.id).notifier).flushPending();
+    final freshRow = await (db.select(db.zikirs)
+          ..where((t) => t.id.equals(target.id)))
+        .getSingleOrNull();
+    final baseTotal = freshRow?.totalCount ?? target.totalCount;
+    final newTotal = baseTotal + amount;
+
+    await (db.update(db.zikirs)..where((t) => t.id.equals(target.id))).write(
+      ZikirsCompanion(
+        totalCount: Value(newTotal),
+        lastPracticed: Value(DateTime.now()),
+      ),
+    );
+    ref
+        .read(zikirCounterNotifierProvider(target.id).notifier)
+        .syncExternalUpdate(totalCount: newTotal);
+
+    final now = DateTime.now();
+    final dateStr =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    await db.into(db.zikirLogs).insert(
+      ZikirLogsCompanion.insert(
+        zikirId: target.id,
+        count: amount,
+        dateStr: dateStr,
+      ),
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    final allZikirs = await db.select(db.zikirs).get();
+    final zikirsSum = allZikirs.fold<int>(0, (sum, z) => sum + z.totalCount);
+    final curTotalZikir = prefs.getInt('TotalZikir') ?? 0;
+    await prefs.setInt('TotalZikir', max(curTotalZikir, zikirsSum));
+    final curTodayCount = prefs.getInt('TodayZikirCount') ?? 0;
+    await prefs.setInt('TodayZikirCount', curTodayCount + amount);
+
+    await DailyStreakService.recordDailyActivity(db);
+    WidgetSyncService.syncAll(db);
+    ref.read(badgeRefreshTriggerProvider.notifier).state++;
+  }
+}
+
+final zikirCrudProvider = Provider<ZikirCrudService>((ref) {
+  final db = ref.watch(databaseProvider);
+  return ZikirCrudService(ref, db);
 });
