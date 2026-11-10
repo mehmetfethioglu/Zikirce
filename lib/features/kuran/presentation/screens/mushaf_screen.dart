@@ -33,13 +33,10 @@ import '../widgets/tilavet_secdesi_exit_dialog.dart';
 import '../widgets/tilavet_secdesi_guide_sheet.dart';
 import '../../../gamification/services/custom_badge_service.dart';
 import '../widgets/add_custom_quran_badge_sheet.dart';
-import '../widgets/tafseer_bottom_sheet.dart';
 import '../../data/islamic_bookshelf_models.dart';
-import '../../../../core/services/meal_service.dart';
 import '../../../dashboard/providers/share_reminder_provider.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/widgets/tv_focusable.dart';
-import '../widgets/rahle_open_book_spread_widget.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
   final int initialPage;
@@ -76,7 +73,6 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   bool _showDebtReminderBanner = false;
   bool _hideReadBanner = false;
   bool _hasCompletedActiveHatimInSession = false;
-  bool _isRahleSpreadMode = false;
   Timer? _hideReadBannerTimer;
 
   @override
@@ -88,7 +84,6 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             : MushafReadingMode.mushaf);
     _focusNode = FocusNode();
     final isTv = ref.read(isTvModeProvider);
-    _isRahleSpreadMode = isTv;
     final startPage = ref.read(currentMushafPageProvider);
     final targetPage = widget.initialPage > 0 ? widget.initialPage : startPage;
     _startPage = targetPage.clamp(1, 605);
@@ -101,8 +96,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     // Synchronize initial page to current provider and verify screen awake
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(CloudSyncEngine.instance.pullAndMerge(ref, isBackground: true));
-      ref.read(currentMushafPageProvider.notifier).state =
-          targetPage.clamp(1, 605);
+      final clampedInitial = targetPage.clamp(1, 605);
+      ref.read(currentMushafPageProvider.notifier).state = clampedInitial;
+      unawaited(_saveIndependentMushafPage(clampedInitial));
       if (ref.read(settingsProvider).isKeepScreenAwakeEnabled || isTv) {
         ScreenAwakeService.setKeepAwake(true);
       }
@@ -138,12 +134,21 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     super.dispose();
   }
 
+  Future<void> _saveIndependentMushafPage(int page) async {
+    final safePage = page.clamp(1, 605);
+    unawaited(
+      ref.read(islamicBookshelfProvider.notifier).syncMushafPage(safePage),
+    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('mushaf_independent_last_page', safePage);
+    } catch (_) {}
+  }
+
   void _jumpToMushafPage(int targetPage) {
     final target = targetPage.clamp(1, 605);
     ref.read(currentMushafPageProvider.notifier).state = target;
-    unawaited(
-      ref.read(islamicBookshelfProvider.notifier).syncMushafPage(target),
-    );
+    unawaited(_saveIndependentMushafPage(target));
     if (_pageController.hasClients) {
       _pageController.jumpToPage(target - 1);
     }
@@ -151,15 +156,10 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   void _goToNextPage() {
     final currentPage = ref.read(currentMushafPageProvider);
-    final isWideRahle = _isRahleSpreadMode &&
-        MediaQuery.of(context).size.width >= 760;
-    final step = isWideRahle ? 2 : 1;
     if (currentPage < 605) {
-      final next = (currentPage + step).clamp(1, 605);
+      final next = (currentPage + 1).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = next;
-      unawaited(
-        ref.read(islamicBookshelfProvider.notifier).syncMushafPage(next),
-      );
+      unawaited(_saveIndependentMushafPage(next));
       if (_pageController.hasClients) {
         _pageController.animateToPage(
           next - 1,
@@ -172,15 +172,10 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   void _goToPreviousPage() {
     final currentPage = ref.read(currentMushafPageProvider);
-    final isWideRahle = _isRahleSpreadMode &&
-        MediaQuery.of(context).size.width >= 760;
-    final step = isWideRahle ? 2 : 1;
     if (currentPage > 1) {
-      final prev = (currentPage - step).clamp(1, 605);
+      final prev = (currentPage - 1).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = prev;
-      unawaited(
-        ref.read(islamicBookshelfProvider.notifier).syncMushafPage(prev),
-      );
+      unawaited(_saveIndependentMushafPage(prev));
       if (_pageController.hasClients) {
         _pageController.animateToPage(
           prev - 1,
@@ -268,6 +263,14 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   Future<void> _handleExit() async {
     final currentPage = ref.read(currentMushafPageProvider);
+
+    if (ref.read(isTvModeProvider)) {
+      await _saveIndependentMushafPage(currentPage);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      return;
+    }
 
     if (widget.activeHatim != null) {
       if (_hasCompletedActiveHatimInSession) {
@@ -921,6 +924,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
       child: Scaffold(
         backgroundColor: scaffoldBg,
         appBar: AppBar(
+          toolbarHeight: ref.watch(isTvModeProvider) ? 46 : kToolbarHeight,
           backgroundColor: scaffoldBg,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -949,37 +953,75 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 Text('Kur’ân-ı Kerîm', style: TextStyle(color: titleColor)),
           ),
           actions: [
-            if (MediaQuery.of(context).size.width >= 760 ||
-                ref.watch(isTvModeProvider))
-              IconButton(
-                icon: Icon(
-                  _isRahleSpreadMode
-                      ? Icons.import_contacts_rounded
-                      : Icons.crop_portrait_rounded,
-                  color: _isRahleSpreadMode ? goldColor : iconColor,
-                ),
-                tooltip: _isRahleSpreadMode
-                    ? 'Tek Sayfa Görünümüne Geç'
-                    : 'Rahlede Açık Çift Sayfa Görünümü (TV)',
+            if (ref.watch(isTvModeProvider))
+              TextButton.icon(
                 onPressed: () {
                   HapticService.selectionClick();
-                  setState(() => _isRahleSpreadMode = !_isRahleSpreadMode);
+                  setState(() {
+                    if (_readingMode == MushafReadingMode.mushaf) {
+                      _readingMode = MushafReadingMode.ayatAndMeal;
+                    } else if (_readingMode == MushafReadingMode.ayatAndMeal) {
+                      _readingMode = MushafReadingMode.mealOnly;
+                    } else {
+                      _readingMode = MushafReadingMode.mushaf;
+                    }
+                  });
+                },
+                icon: Icon(
+                  _readingMode == MushafReadingMode.mushaf
+                      ? Icons.auto_stories_rounded
+                      : (_readingMode == MushafReadingMode.ayatAndMeal
+                          ? Icons.view_headline_rounded
+                          : Icons.subject_rounded),
+                  size: 18,
+                  color: goldColor,
+                ),
+                label: Text(
+                  _readingMode == MushafReadingMode.mushaf
+                      ? 'Görünüm: Mushaf'
+                      : (_readingMode == MushafReadingMode.ayatAndMeal
+                          ? 'Görünüm: Âyet + Meâl'
+                          : 'Görünüm: Meâl'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: titleColor,
+                  ),
+                ),
+              ),
+            if (ref.watch(isTvModeProvider))
+              TextButton.icon(
+                onPressed: () => _showReadingSettingsSheet(context, isDark),
+                icon: Icon(
+                  Icons.text_fields_rounded,
+                  size: 18,
+                  color: goldColor,
+                ),
+                label: Text(
+                  'Hat & Boyut (${ref.watch(quranFontSizeProvider).toInt()}pt)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: titleColor,
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                icon: Icon(Icons.text_fields_rounded, color: goldColor),
+                tooltip: 'Yazı Boyutu & Meâl Ayarları',
+                onPressed: () => _showReadingSettingsSheet(context, isDark),
+              ),
+            if (!ref.watch(isTvModeProvider))
+              IconButton(
+                icon: Icon(Icons.search_rounded, color: iconColor),
+                tooltip: 'Âyet Ara',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const QuranSearchScreen()),
+                  );
                 },
               ),
-            IconButton(
-              icon: Icon(Icons.text_fields_rounded, color: goldColor),
-              tooltip: 'Yazı Boyutu, Meâl & Tefsir Ayarları',
-              onPressed: () => _showReadingSettingsSheet(context, isDark),
-            ),
-            IconButton(
-              icon: Icon(Icons.search_rounded, color: iconColor),
-              tooltip: 'Âyet Ara',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const QuranSearchScreen()),
-                );
-              },
-            ),
             IconButton(
               icon: Icon(Icons.menu_book_rounded, color: goldColor),
               tooltip: 'Fihrist & Cüzler',
@@ -1003,65 +1045,67 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               onPressed: () => _showJumpToPageDialog(context, isDark),
             ),
           ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(44),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Container(
-                height: 36,
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF181C22)
-                      : const Color(0xFFF1EAE0),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: goldColor.withValues(alpha: 0.28),
+          bottom: ref.watch(isTvModeProvider)
+              ? null
+              : PreferredSize(
+                  preferredSize: const Size.fromHeight(44),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF181C22)
+                            : const Color(0xFFF1EAE0),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: goldColor.withValues(alpha: 0.28),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          _buildReadingModeChip(
+                            mode: MushafReadingMode.mushaf,
+                            label: 'Mushaf',
+                            icon: Icons.auto_stories_rounded,
+                            isDark: isDark,
+                            goldColor: goldColor,
+                            titleColor: titleColor,
+                            subtitleColor: subtitleColor,
+                          ),
+                          _buildReadingModeChip(
+                            mode: MushafReadingMode.ayatAndMeal,
+                            label: 'Âyet + Meâl',
+                            icon: Icons.view_headline_rounded,
+                            isDark: isDark,
+                            goldColor: goldColor,
+                            titleColor: titleColor,
+                            subtitleColor: subtitleColor,
+                          ),
+                          _buildReadingModeChip(
+                            mode: MushafReadingMode.mealOnly,
+                            label: 'Meâl',
+                            icon: Icons.subject_rounded,
+                            isDark: isDark,
+                            goldColor: goldColor,
+                            titleColor: titleColor,
+                            subtitleColor: subtitleColor,
+                          ),
+                          _buildReadingModeChip(
+                            mode: MushafReadingMode.tafseer,
+                            label: 'Tefsir',
+                            icon: Icons.library_books_rounded,
+                            isDark: isDark,
+                            goldColor: goldColor,
+                            titleColor: titleColor,
+                            subtitleColor: subtitleColor,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    _buildReadingModeChip(
-                      mode: MushafReadingMode.mushaf,
-                      label: 'Mushaf',
-                      icon: Icons.auto_stories_rounded,
-                      isDark: isDark,
-                      goldColor: goldColor,
-                      titleColor: titleColor,
-                      subtitleColor: subtitleColor,
-                    ),
-                    _buildReadingModeChip(
-                      mode: MushafReadingMode.ayatAndMeal,
-                      label: 'Âyet + Meâl',
-                      icon: Icons.view_headline_rounded,
-                      isDark: isDark,
-                      goldColor: goldColor,
-                      titleColor: titleColor,
-                      subtitleColor: subtitleColor,
-                    ),
-                    _buildReadingModeChip(
-                      mode: MushafReadingMode.mealOnly,
-                      label: 'Meâl',
-                      icon: Icons.subject_rounded,
-                      isDark: isDark,
-                      goldColor: goldColor,
-                      titleColor: titleColor,
-                      subtitleColor: subtitleColor,
-                    ),
-                    _buildReadingModeChip(
-                      mode: MushafReadingMode.tafseer,
-                      label: 'Tefsir',
-                      icon: Icons.library_books_rounded,
-                      isDark: isDark,
-                      goldColor: goldColor,
-                      titleColor: titleColor,
-                      subtitleColor: subtitleColor,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ),
         body: TvRemoteNumberJumpWrapper(
           maxPage: 605,
@@ -1081,22 +1125,47 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     event.logicalKey == LogicalKeyboardKey.pageUp) {
                   _goToPreviousPage();
                   return KeyEventResult.handled;
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                  final primaryScroll =
+                      PrimaryScrollController.maybeOf(context);
+                  if (primaryScroll != null && primaryScroll.hasClients) {
+                    final pos = primaryScroll.position;
+                    if (pos.maxScrollExtent > 2.0 &&
+                        pos.pixels < pos.maxScrollExtent - 1.0) {
+                      final target = (pos.pixels + 220.0)
+                          .clamp(0.0, pos.maxScrollExtent);
+                      primaryScroll.animateTo(
+                        target,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                      );
+                      return KeyEventResult.handled;
+                    }
+                  }
+                } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                  final primaryScroll =
+                      PrimaryScrollController.maybeOf(context);
+                  if (primaryScroll != null &&
+                      primaryScroll.hasClients &&
+                      primaryScroll.offset > 2.0) {
+                    final pos = primaryScroll.position;
+                    final target =
+                        (pos.pixels - 220.0).clamp(0.0, pos.maxScrollExtent);
+                    primaryScroll.animateTo(
+                      target,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                    );
+                    return KeyEventResult.handled;
+                  }
                 }
               }
               return KeyEventResult.ignored;
             },
             child: Stack(
               children: [
-                if (_isRahleSpreadMode &&
-                    MediaQuery.of(context).size.width >= 760)
-                  _buildTwoPageMushafRahleSpread(
-                    currentPage: currentPage,
-                    isDark: isDark,
-                    goldColor: goldColor,
-                  )
-                else
-                  // 605 PageView (RTL Swiping for Quran reading)
-                  PageView.builder(
+                // 605 PageView (RTL Swiping for Quran reading)
+                PageView.builder(
                 controller: _pageController,
                 reverse: true, // Right-to-Left standard for Arabic Mushaf
                 itemCount: 605,
@@ -1106,9 +1175,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     _hideReadBanner = false;
                   }
                   ref.read(currentMushafPageProvider.notifier).state = newPage;
-                  unawaited(
-                    ref.read(islamicBookshelfProvider.notifier).syncMushafPage(newPage),
-                  );
+                  unawaited(_saveIndependentMushafPage(newPage));
                   if (TilavetSecdesiData.isSecdePage(newPage)) {
                     _encounteredSecdePages.add(newPage);
                     if (_lastBannerPage != newPage) {
@@ -1162,6 +1229,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
 
               if (_showDebtReminderBanner &&
+                  !ref.watch(isTvModeProvider) &&
                   TilavetSecdesiData.getSecdeForPage(currentPage) == null &&
                   ref.watch(tilavetSecdesiDebtProvider) > 0)
                 Positioned(
@@ -1243,7 +1311,11 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
               // Floating "Sureyi Okudum" Action Button (at the end of the surah)
               // Hatim ve Mukabele modlarında genel hedef hatim tamamlamak olduğu için sûre okundu butonu gösterilmez
-              if (widget.activeHatim == null && effectiveSurah != null && isSurahEnd && (!isMarkedAsRead || !_hideReadBanner))
+              if (!ref.watch(isTvModeProvider) &&
+                  widget.activeHatim == null &&
+                  effectiveSurah != null &&
+                  isSurahEnd &&
+                  (!isMarkedAsRead || !_hideReadBanner))
                 Positioned(
                   left: 20,
                   right: 20,
@@ -1462,119 +1534,6 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     );
   }
 
-  Widget _buildTwoPageMushafRahleSpread({
-    required int currentPage,
-    required bool isDark,
-    required Color goldColor,
-  }) {
-    final rightPage =
-        currentPage.isOdd ? currentPage : (currentPage - 1).clamp(1, 605);
-    final leftPage = (rightPage + 1).clamp(1, 605);
-    final hasSecondLeaf = leftPage > rightPage && leftPage <= 605;
-
-    final rightAsync = ref.watch(quranPageDataProvider(rightPage));
-    final leftAsync =
-        hasSecondLeaf ? ref.watch(quranPageDataProvider(leftPage)) : null;
-
-    final leftWidget = hasSecondLeaf && leftAsync != null
-        ? leftAsync.when(
-            data: (data) => MushafPageWidget(
-              pageData: data,
-              isMealOnlyMode: _readingMode == MushafReadingMode.mealOnly,
-              readingMode: _readingMode,
-            ),
-            loading: () => Center(
-              child: CircularProgressIndicator(color: goldColor),
-            ),
-            error: (err, _) => Center(
-              child: Text(
-                'Sayfa yüklenemedi: $err',
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
-          )
-        : const SizedBox.shrink();
-
-    final rightWidget = rightAsync.when(
-      data: (data) => MushafPageWidget(
-        pageData: data,
-        isMealOnlyMode: _readingMode == MushafReadingMode.mealOnly,
-        readingMode: _readingMode,
-      ),
-      loading: () => Center(
-        child: CircularProgressIndicator(color: goldColor),
-      ),
-      error: (err, _) => Center(
-        child: Text(
-          'Sayfa yüklenemedi: $err',
-          style: const TextStyle(color: Colors.red),
-        ),
-      ),
-    );
-
-    final paperColor = isDark ? const Color(0xFF151920) : const Color(0xFFFDF8EE);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(24, 6, 24, 14),
-      decoration: BoxDecoration(
-        color: paperColor,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(
-          color: goldColor.withValues(alpha: 0.45),
-          width: 2.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.55 : 0.16),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            PhysicalBookSpreadTurnTransition(
-              spreadKey: 'mushaf_spread_${rightPage}_$leftPage',
-              leftLeaf: leftWidget,
-              rightLeaf: rightWidget,
-              paperColor: paperColor,
-              accentColor: goldColor,
-              isRtl: true,
-              turnDirection: 1,
-              spineGap: 18.0,
-            ),
-            // Rahle Orta Cilt / Sırt Gölgesi
-            Center(
-              child: IgnorePointer(
-                child: Container(
-                  width: 18,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isDark
-                          ? [
-                              Colors.black.withValues(alpha: 0.35),
-                              goldColor.withValues(alpha: 0.35),
-                              Colors.black.withValues(alpha: 0.35),
-                            ]
-                          : [
-                              const Color(0xFFD6C5A9).withValues(alpha: 0.45),
-                              const Color(0xFF8C6B3F).withValues(alpha: 0.55),
-                              const Color(0xFFD6C5A9).withValues(alpha: 0.45),
-                            ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildReadingModeChip({
     required MushafReadingMode mode,
     required String label,
@@ -1641,287 +1600,13 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   }
 
   void _showReadingSettingsSheet(BuildContext context, bool isDark) {
-    final bgColor = isDark ? const Color(0xFF15191F) : const Color(0xFFFDFBF7);
-    final cardBg = isDark ? const Color(0xFF1E242C) : const Color(0xFFF5EFE2);
-    final textColor = isDark ? Colors.white : const Color(0xFF1E2B27);
-    final subColor = isDark ? const Color(0xFF9EA6B2) : const Color(0xFF6B5848);
-    final accentColor = isDark ? AppColors.gold400 : const Color(0xFFA64B2A);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: bgColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-      ),
-      builder: (ctx) {
-        return Consumer(
-          builder: (ctx, sheetRef, _) {
-            final arSize = sheetRef.watch(quranFontSizeProvider);
-            final kuranFonts = sheetRef.watch(kuranFontSettingsProvider);
-            final activeMealId = sheetRef.watch(activeMealSourceProvider);
-            final activeMealInfo = MealService.getSourceInfo(activeMealId);
-            final isComparing = sheetRef.watch(isMealComparisonEnabledProvider);
-            final showTranslit = sheetRef.watch(showTransliterationProvider);
-
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: subColor.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Icon(Icons.tune_rounded, color: accentColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Okuma, Meâl & Tefsir Ayarları',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: textColor,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () {
-                            Navigator.of(ctx).pop();
-                            TafseerLibraryManagerSheet.show(
-                              context,
-                              onOpenTafseerReader: () {
-                                if (mounted) {
-                                  setState(() => _readingMode = MushafReadingMode.tafseer);
-                                }
-                              },
-                            );
-                          },
-                          icon: Icon(
-                            Icons.cloud_download_outlined,
-                            size: 16,
-                            color: accentColor,
-                          ),
-                          label: Text(
-                            'Tefsir Kütüphanesi',
-                            style: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: accentColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Arapça Hat Boyutu
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                'Arapça Hat Boyutu',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontWeight: FontWeight.w700,
-                                  color: textColor,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                '${arSize.toInt()} pt',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontWeight: FontWeight.w700,
-                                  color: accentColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Slider(
-                            value: arSize.clamp(20.0, 42.0),
-                            min: 20.0,
-                            max: 42.0,
-                            activeColor: accentColor,
-                            onChanged: (val) {
-                              sheetRef
-                                  .read(quranFontSizeProvider.notifier)
-                                  .setFontSize(val);
-                            },
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                'Türkçe Meâl & Tefsir Yazı Boyutu',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontWeight: FontWeight.w700,
-                                  color: textColor,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                '${kuranFonts.mealFontSize.toInt()} pt',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontWeight: FontWeight.w700,
-                                  color: accentColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Slider(
-                            value: kuranFonts.mealFontSize.clamp(13.0, 26.0),
-                            min: 13.0,
-                            max: 26.0,
-                            activeColor: accentColor,
-                            onChanged: (val) {
-                              sheetRef
-                                  .read(kuranFontSettingsProvider.notifier)
-                                  .setMealFontSize(val);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Meâl Karşılaştırma ve Transkripsiyon Anahtarları
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Column(
-                        children: [
-                          SwitchListTile.adaptive(
-                            contentPadding: EdgeInsets.zero,
-                            activeThumbColor: accentColor,
-                            title: Text(
-                              'Meâl Karşılaştırma Modu',
-                              style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: textColor,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Diyanet, Elmalılı ve Çantay meâllerini alt alta karşılaştır',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 11.5,
-                                color: subColor,
-                              ),
-                            ),
-                            value: isComparing,
-                            onChanged: (val) {
-                              sheetRef
-                                  .read(isMealComparisonEnabledProvider.notifier)
-                                  .state = val;
-                            },
-                          ),
-                          SwitchListTile.adaptive(
-                            contentPadding: EdgeInsets.zero,
-                            activeThumbColor: accentColor,
-                            title: Text(
-                              'Türkçe Okunuş (Transkripsiyon)',
-                              style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: textColor,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Âyetlerin altında Latin harfli okunuş rehberini göster',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 11.5,
-                                color: subColor,
-                              ),
-                            ),
-                            value: showTranslit,
-                            onChanged: (val) {
-                              sheetRef
-                                  .read(showTransliterationProvider.notifier)
-                                  .toggle(val);
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Aktif Meâl Seçimi Özeti
-                    ListTile(
-                      tileColor: cardBg,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      leading: Icon(Icons.auto_stories_rounded, color: accentColor),
-                      title: Text(
-                        'Varsayılan Meâl: ${activeMealInfo.title}',
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: textColor,
-                        ),
-                      ),
-                      subtitle: Text(
-                        'Değiştirmek veya tefsir indirmek için dokunun',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 11.5,
-                          color: subColor,
-                        ),
-                      ),
-                      trailing: Icon(
-                        Icons.chevron_right_rounded,
-                        color: subColor,
-                      ),
-                      onTap: () {
-                        Navigator.of(ctx).pop();
-                        TafseerLibraryManagerSheet.show(
-                          context,
-                          onOpenTafseerReader: () {
-                            if (mounted) {
-                              setState(
-                                  () => _readingMode = MushafReadingMode.tafseer);
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
+    QuranReadingSettingsModal.show(
+      context,
+      isDark: isDark,
+      onOpenTafseerReader: () {
+        if (mounted) {
+          setState(() => _readingMode = MushafReadingMode.tafseer);
+        }
       },
     );
   }

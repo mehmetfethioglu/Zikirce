@@ -525,8 +525,8 @@ class QuranTrackingArrowPainter extends CustomPainter {
     // @keyframes _slideWord { 0% { right: 0; } to { right: 100%; } }
     final arrowColor =
         isDark ? const Color(0xEBFF3B30) : const Color(0xEBE60000);
-    const halfBase = 5.0;
-    final arrowHeight = size.height.clamp(6.0, 8.0);
+    final arrowHeight = size.height.clamp(6.0, 18.0);
+    final halfBase = (arrowHeight * 0.78).clamp(5.0, 14.0);
 
     // At progress = 0.0, right edge of arrow is at right edge of word (right: 0).
     // At progress = 1.0, right edge of arrow reaches left edge of word (right: 100%).

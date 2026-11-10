@@ -4,7 +4,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/tv_mode_provider.dart';
 import '../../core/theme/app_theme_colors.dart';
-import '../../core/widgets/tv_focusable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/dashboard/presentation/screens/bismillah_dashboard_screen.dart';
@@ -84,13 +83,6 @@ final appRouter = GoRouter(
           builder: (context, state) => const KuranPageScreen(),
         ),
       ],
-    ),
-    GoRoute(
-      path: '/tv-ambient',
-      parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => TvEvMescidiAmbientScreen(
-        onClose: () => Navigator.of(context).maybePop(),
-      ),
     ),
     GoRoute(
       path: '/mushaf',
@@ -212,30 +204,11 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
         path.startsWith('/mushaf') ||
         path.startsWith('/ezber');
 
-    // Android TV / Zikirce TV Mode: 10-Foot Leanback Navigation Rail + Full-Screen Content
+    // Android TV / Zikirce TV Mode: Yalın Tam Ekran Kur'ân-ı Kerîm & Mukabele Arayüzü
     if (isTvMode) {
-      Widget tvContent = child;
-      if (path == '/' || path.isEmpty) {
-        tvContent = const ZikirceTvHubScreen(initialSection: 0);
-      } else if (path.startsWith('/kuran')) {
-        tvContent = const ZikirceTvHubScreen(initialSection: 1);
-      }
-
-      return Scaffold(
-        backgroundColor: const Color(0xFF0A1410),
-        body: Row(
-          children: [
-            if (!hideNavBar)
-              _buildTvSideNavigationRail(
-                context: context,
-                ref: ref,
-                selectedIndex: selectedIndex,
-              ),
-            Expanded(
-              child: tvContent,
-            ),
-          ],
-        ),
+      return const Scaffold(
+        backgroundColor: Color(0xFF0A1410),
+        body: ZikirceTvHubScreen(),
       );
     }
 
@@ -329,195 +302,6 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                 ),
               ),
             ),
-    );
-  }
-
-  Widget _buildTvSideNavigationRail({
-    required BuildContext context,
-    required WidgetRef ref,
-    required int selectedIndex,
-  }) {
-    final colors = context.colors;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      width: 108,
-      decoration: BoxDecoration(
-        color: colors.cardBackground,
-        border: Border(
-          right: BorderSide(
-            color: colors.borderStroke,
-            width: 1.2,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
-            blurRadius: 16,
-            offset: const Offset(4, 0),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        right: false,
-        child: Column(
-          children: [
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: colors.accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: colors.accent.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Image.asset(
-                    'assets/images/zikirce_logo.png',
-                    width: 28,
-                    height: 28,
-                    errorBuilder: (_, __, ___) =>
-                        Icon(Icons.tv_rounded, color: colors.accent, size: 22),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    'ZİKİRCE',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w900,
-                      color: colors.accent,
-                      letterSpacing: 0.9,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Column(
-                  children: [
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.home_rounded,
-                      label: 'Meydan',
-                      isSelected: selectedIndex == 0,
-                      onSelect: () => _onItemTapped(0, context),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.import_contacts_rounded,
-                      label: 'Külliyat',
-                      isSelected: selectedIndex == 4,
-                      onSelect: () => _onItemTapped(4, context),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.record_voice_over_rounded,
-                      label: 'Mukabele',
-                      isSelected: false,
-                      onSelect: () => context.push('/mukabele'),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.fingerprint_rounded,
-                      label: 'Tesbihat',
-                      isSelected: selectedIndex == 1,
-                      onSelect: () => _onItemTapped(1, context),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.access_time_filled_rounded,
-                      label: 'Vakitler',
-                      isSelected: selectedIndex == 3,
-                      onSelect: () => _onItemTapped(3, context),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildTvRailButton(
-                      context: context,
-                      icon: Icons.mosque_rounded,
-                      label: 'Ev Mescidi',
-                      isSelected: false,
-                      onSelect: () => context.push('/tv-ambient'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 12),
-              child: _buildTvRailButton(
-                context: context,
-                icon: Icons.settings_rounded,
-                label: 'Ayarlar',
-                isSelected: false,
-                onSelect: () => context.push('/settings'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTvRailButton({
-    required BuildContext context,
-    required IconData icon,
-    IconData? fallbackIcon,
-    required String label,
-    required bool isSelected,
-    required VoidCallback onSelect,
-  }) {
-    final colors = context.colors;
-    final effectiveIcon = fallbackIcon ?? icon;
-    return TvFocusable(
-      onPressed: onSelect,
-      borderRadius: 16.0,
-      focusScale: 1.05,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? colors.accent.withValues(alpha: 0.16)
-              : colors.pageBackground.withValues(alpha: 0.65),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? colors.accent
-                : colors.borderStroke,
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              effectiveIcon,
-              size: 22,
-              color: isSelected ? colors.accent : colors.secondaryTextAlt,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                color: isSelected ? colors.accent : colors.primaryText,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

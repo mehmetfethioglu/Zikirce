@@ -10,6 +10,7 @@ import '../core/services/cloud_sync_engine.dart';
 import '../core/services/local_notification_service.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
+import '../core/providers/tv_mode_provider.dart';
 import '../core/services/screen_awake_service.dart';
 import '../core/theme/theme_provider.dart';
 import '../features/settings/providers/settings_provider.dart';
@@ -103,27 +104,29 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final now = DateTime.now();
-      final todayStr =
-          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-      if (ref.read(currentDateProvider) != todayStr) {
-        ref.invalidate(currentDateProvider);
-        ref.invalidate(prayerTimingsProvider);
-      } else {
-        final timings = ref.read(prayerTimingsProvider).valueOrNull;
-        if (timings != null) {
-          final city = ref.read(selectedCityProvider);
-          LocalNotificationService.scheduleAllPrayerNotifications(
-            timings,
-            cityOverride: city,
-          );
+      if (!ref.read(isTvModeProvider)) {
+        final now = DateTime.now();
+        final todayStr =
+            '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        if (ref.read(currentDateProvider) != todayStr) {
+          ref.invalidate(currentDateProvider);
+          ref.invalidate(prayerTimingsProvider);
+        } else {
+          final timings = ref.read(prayerTimingsProvider).valueOrNull;
+          if (timings != null) {
+            final city = ref.read(selectedCityProvider);
+            LocalNotificationService.scheduleAllPrayerNotifications(
+              timings,
+              cityOverride: city,
+            );
+          }
         }
+        // Invalidate database streams when resuming so external widget modifications reflect immediately
+        ref.invalidate(kazaPrayersStreamProvider);
+        ref.invalidate(kazaSummaryProvider);
+        ref.invalidate(todayPrayersProvider);
+        ref.invalidate(dailyGoalsStatusProvider);
       }
-      // Invalidate database streams when resuming so external widget modifications reflect immediately
-      ref.invalidate(kazaPrayersStreamProvider);
-      ref.invalidate(kazaSummaryProvider);
-      ref.invalidate(todayPrayersProvider);
-      ref.invalidate(dailyGoalsStatusProvider);
       // Trigger silent cloud check & reconciliation
       CloudSyncEngine.instance.syncOnAppResume(ref);
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {

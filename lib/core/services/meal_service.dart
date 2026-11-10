@@ -485,21 +485,21 @@ class KuranFontSettingsNotifier extends StateNotifier<KuranFontSettings> {
   }
 
   Future<void> setArabicFontSize(double size) async {
-    final clamped = size.clamp(20.0, 42.0);
+    final clamped = size.clamp(18.0, 64.0);
     state = state.copyWith(arabicFontSize: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_arKey, clamped);
   }
 
   Future<void> setMealFontSize(double size) async {
-    final clamped = size.clamp(13.0, 26.0);
+    final clamped = size.clamp(13.0, 36.0);
     state = state.copyWith(mealFontSize: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_mealKey, clamped);
   }
 
   Future<void> setLineHeight(double lh) async {
-    final clamped = lh.clamp(1.35, 2.1);
+    final clamped = lh.clamp(1.25, 2.60);
     state = state.copyWith(lineHeight: clamped);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_lhKey, clamped);

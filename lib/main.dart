@@ -81,44 +81,46 @@ void main(List<String> args) async {
   );
   final db = AppDatabase(null, currentSession.dbFileName);
 
-  await Future.wait([
-    NotificationDbService.initialize(),
-    SoundPoolService.initialize(),
-    LocalNotificationService.initialize(),
-  ]);
+  if (!isTvMode) {
+    await Future.wait([
+      NotificationDbService.initialize(),
+      SoundPoolService.initialize(),
+      LocalNotificationService.initialize(),
+    ]);
 
-  // Execute seamless MAUI data migration if upgrading from .NET MAUI
-  try {
-    await MauiMigrationService.checkAndMigrate(db);
-  } catch (e) {
-    debugPrint('[Main] Migration check notice: $e');
-  }
+    // Execute seamless MAUI data migration if upgrading from .NET MAUI
+    try {
+      await MauiMigrationService.checkAndMigrate(db);
+    } catch (e) {
+      debugPrint('[Main] Migration check notice: $e');
+    }
 
-  // Populate 1:1 MAUI Zikir Database (Hadislerden Zikirler, Esmaül-Hüsna, Dualar)
-  try {
-    await ZikirSeedData.ensureAllDefaultZikirsExist(db);
-  } catch (e) {
-    debugPrint('[Main] ZikirSeedData notice: $e');
-  }
+    // Populate 1:1 MAUI Zikir Database (Hadislerden Zikirler, Esmaül-Hüsna, Dualar)
+    try {
+      await ZikirSeedData.ensureAllDefaultZikirsExist(db);
+    } catch (e) {
+      debugPrint('[Main] ZikirSeedData notice: $e');
+    }
 
-  // Check and advance daily streak on app launch
-  try {
-    await DailyStreakService.checkDailyStreakOnStartup(db);
-  } catch (e) {
-    debugPrint('[Main] DailyStreakService notice: $e');
-  }
+    // Check and advance daily streak on app launch
+    try {
+      await DailyStreakService.checkDailyStreakOnStartup(db);
+    } catch (e) {
+      debugPrint('[Main] DailyStreakService notice: $e');
+    }
 
-  // Initialize and synchronize all 9 Home Screen AppWidgets
-  try {
-    await WidgetSyncService.syncAll(db, sessionId: currentSession.id);
-  } catch (e) {
-    debugPrint('[Main] WidgetSync notice: $e');
+    // Initialize and synchronize all 9 Home Screen AppWidgets
+    try {
+      await WidgetSyncService.syncAll(db, sessionId: currentSession.id);
+    } catch (e) {
+      debugPrint('[Main] WidgetSync notice: $e');
+    }
   }
 
   // Pre-load theme settings and prayer city before runApp to prevent flickering / race conditions
   final savedThemeKey = await ThemeNotifier.loadSavedThemeKey(activeSessionId);
   final savedLightSubTheme = await ThemeNotifier.loadSavedLightSubTheme(activeSessionId);
-  final savedCity = await CityNotifier.loadSavedCity(activeSessionId);
+  final savedCity = isTvMode ? 'İstanbul' : await CityNotifier.loadSavedCity(activeSessionId);
 
   // Close the initial startup DB instance so Riverpod's databaseProvider manages the single active connection
   try {
@@ -140,24 +142,26 @@ void main(List<String> args) async {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         FlutterNativeSplash.remove();
         AudioSyncService.initialize();
-        TafseerService.initialize();
-        if (Platform.isAndroid || Platform.isIOS) {
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
-            await LocalNotificationService.scheduleAllPrayerNotifications(
-              timings,
-              cityOverride: savedCity,
-            );
+        if (!isTvMode) {
+          TafseerService.initialize();
+          if (Platform.isAndroid || Platform.isIOS) {
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              final timings = await PrayerTimesService.getPrayerTimes(city: savedCity);
+              await LocalNotificationService.scheduleAllPrayerNotifications(
+                timings,
+                cityOverride: savedCity,
+              );
 
-            final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
-            final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
-            await LocalNotificationService.scheduleQuranDailyReminder(
-              timeHhmm: quranTime,
-              isEnabled: isQuranReminder,
-            );
-          } catch (e) {
-            debugPrint('[Main] Deferred background tasks notice: $e');
+              final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
+              final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
+              await LocalNotificationService.scheduleQuranDailyReminder(
+                timeHhmm: quranTime,
+                isEnabled: isQuranReminder,
+              );
+            } catch (e) {
+              debugPrint('[Main] Deferred background tasks notice: $e');
+            }
           }
         }
       });

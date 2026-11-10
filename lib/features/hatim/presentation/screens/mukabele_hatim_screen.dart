@@ -11,6 +11,7 @@ import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
+import '../../../../core/services/meal_service.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
@@ -33,7 +34,6 @@ import '../widgets/hatim_duasi_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/widgets/tv_focusable.dart';
-import '../../../kuran/data/islamic_bookshelf_models.dart';
 
 class _MukabeleQueueItemMeta {
   final int verseIndex;
@@ -72,7 +72,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
   int _currentPage = 1;
   bool _isMushafView =
-      false; // default = Ayah List View, user can switch to Mushaf mode
+      true; // default = Mushaf View with word tracking, user can switch to List/Meal mode
   bool _isMealOnlyView = false; // Sadece Meal Okuma modu
   double _playbackSpeed = 1.0;
   final Set<int> _encounteredSecdePages = <int>{};
@@ -441,11 +441,23 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         _pageVerses = pageData.quranAyats;
         _pageMeals = meals;
         _currentVerseIndex = 0;
-        _activeWordOrder = 0;
+        _activeWordOrder = pageData.quranAyats.isNotEmpty ? 1 : 0;
       });
-      ref.read(currentMushafPageProvider.notifier).state = page;
+      if (pageData.quranAyats.isNotEmpty) {
+        final firstVerse = pageData.quranAyats.first;
+        ref
+            .read(kuranAudioNotifierProvider.notifier)
+            .syncExternalState(KuranAudioState(
+              isPlaying: _isPlaying,
+              isLoading: true,
+              currentSurahId: firstVerse.sureId,
+              currentAyahId: firstVerse.ayetId,
+              currentWordOrder: 1,
+              playbackSpeed: _playbackSpeed,
+              playbackProgress: 0.0,
+            ));
+      }
       unawaited(ref.read(mukabeleSyncProvider.notifier).saveProgress(page));
-      unawaited(ref.read(islamicBookshelfProvider.notifier).syncMushafPage(page));
       if (TilavetSecdesiData.isSecdePage(page)) {
         _encounteredSecdePages.add(page);
         if (_lastBannerPage != page) {
@@ -562,6 +574,19 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         _activeWordOrder = meta.isBesmele ? 0 : 1;
       });
     }
+    final activeVerseForSync = _pageVerses[meta.verseIndex];
+    ref
+        .read(kuranAudioNotifierProvider.notifier)
+        .syncExternalState(KuranAudioState(
+          isPlaying: true,
+          isLoading: true,
+          currentSurahId: activeVerseForSync.sureId,
+          currentAyahId: activeVerseForSync.ayetId,
+          currentWordOrder: meta.isBesmele ? 0 : 1,
+          activeWordDurationMs: _activeWordDurationMs,
+          playbackSpeed: _playbackSpeed,
+          playbackProgress: 0.0,
+        ));
 
     try {
       final soundsDir = await AudioDownloadService.getSoundsDirectory();
@@ -1370,6 +1395,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             : null;
     final surahName = currentVerse?.sure?.sureNameTurkish ?? 'Kuran-ı Kerim';
     final juzNo = (_currentPage / 20).ceil().clamp(1, 30);
+    final isTvMode = ref.watch(isTvModeProvider);
 
     return PopScope(
       canPop: false,
@@ -1380,6 +1406,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       child: Scaffold(
         backgroundColor: scaffoldBg,
         appBar: AppBar(
+          toolbarHeight: isTvMode ? 52 : kToolbarHeight,
+          titleSpacing: isTvMode ? 4 : NavigationToolbar.kMiddleSpacing,
           backgroundColor: scaffoldBg,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -1389,73 +1417,258 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             tooltip: 'Geri',
             onPressed: _handleExit,
           ),
-          title: Column(
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('🕌 ', style: TextStyle(fontSize: 16)),
-                  Text(
-                    'Mukabele • $surahName',
-                    style: AppTypography.headingSmall(color: titleColor),
-                  ),
-                ],
+          title: isTvMode
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '🕌 $surahName • Cüz $juzNo • S. $_currentPage/605',
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: goldAccent.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                            color: goldAccent.withValues(alpha: 0.45)),
+                      ),
+                      child: Text(
+                        _isPlayingBesmele
+                            ? 'Besmele-i Şerîf'
+                            : (currentVerse != null
+                                ? '${currentVerse.ayetId}. Âyet • ${_activeWordOrder > 0 ? '$_activeWordOrder. Kelime' : 'Hazır'}'
+                                : 'Sayfa $_currentPage'),
+                        style: TextStyle(
+                          color: goldAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🕌 ', style: TextStyle(fontSize: 16)),
+                        Text(
+                          'Mukabele • $surahName',
+                          style: AppTypography.headingSmall(color: titleColor),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Cüz $juzNo • Sayfa $_currentPage / 605',
+                      style: TextStyle(color: subtitleColor, fontSize: 12),
+                    ),
+                  ],
+                ),
+          actions: [
+            if (isTvMode) ...[
+              // TV Üst Bar Medya Kontrolleri (Alttaki bar yerine üst başlığa taşındı)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.skip_previous_rounded,
+                  color: _isPlayingBesmele
+                      ? titleColor.withValues(alpha: 0.3)
+                      : titleColor,
+                  size: 22,
+                ),
+                tooltip: 'Önceki Âyet (▲)',
+                onPressed: _isPlayingBesmele ? null : _previousAyah,
               ),
-              Text(
-                'Cüz $juzNo • Sayfa $_currentPage / 605',
-                style: TextStyle(color: subtitleColor, fontSize: 12),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  backgroundColor: goldAccent.withValues(alpha: 0.15),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                    side: BorderSide(color: goldAccent.withValues(alpha: 0.55)),
+                  ),
+                ),
+                onPressed: _togglePlayPause,
+                icon: _isBuffering
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          color: goldAccent,
+                          strokeWidth: 2.2,
+                        ),
+                      )
+                    : Icon(
+                        _isPlaying
+                            ? Icons.pause_circle_filled_rounded
+                            : Icons.play_circle_fill_rounded,
+                        color: goldAccent,
+                        size: 22,
+                      ),
+                label: Text(
+                  _isPlaying ? 'Duraklat' : 'Oynat',
+                  style: TextStyle(
+                    color: titleColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.skip_next_rounded,
+                  color: _isPlayingBesmele
+                      ? titleColor.withValues(alpha: 0.3)
+                      : titleColor,
+                  size: 22,
+                ),
+                tooltip: 'Sonraki Âyet (▼)',
+                onPressed: _isPlayingBesmele ? null : _nextAyah,
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(44, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                onPressed: _cyclePlaybackSpeed,
+                child: Text(
+                  '${_playbackSpeed}x',
+                  style: TextStyle(
+                    color: goldAccent,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                onPressed: () {
+                  HapticService.selectionClick();
+                  setState(() {
+                    if (_isMushafView) {
+                      _isMushafView = false;
+                      _isMealOnlyView = false;
+                    } else if (!_isMealOnlyView) {
+                      _isMushafView = false;
+                      _isMealOnlyView = true;
+                    } else {
+                      _isMushafView = true;
+                      _isMealOnlyView = false;
+                    }
+                  });
+                },
+                icon: Icon(
+                  _isMushafView
+                      ? Icons.menu_book_rounded
+                      : (_isMealOnlyView
+                          ? Icons.subject_rounded
+                          : Icons.format_list_bulleted_rounded),
+                  color: goldAccent,
+                  size: 18,
+                ),
+                label: Text(
+                  _isMushafView
+                      ? 'Mushaf'
+                      : (_isMealOnlyView ? 'Meâl' : 'Liste'),
+                  style: TextStyle(
+                    color: titleColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+                onPressed: () =>
+                    QuranReadingSettingsModal.show(context, isDark: isDark),
+                icon: Icon(Icons.text_fields_rounded,
+                    color: goldAccent, size: 18),
+                label: Text(
+                  '${ref.watch(quranFontSizeProvider).toInt()}pt',
+                  style: TextStyle(
+                    color: titleColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.grid_view_rounded, color: titleColor, size: 20),
+                tooltip: 'Cüz ve Sayfa Seç',
+                onPressed: _showJuzPageSelectorSheet,
+              ),
+            ] else ...[
+              // Hat & Yazı Boyutu Ayarları Butonu
+              IconButton(
+                icon: Icon(Icons.text_fields_rounded, color: goldAccent),
+                tooltip: 'Hat, Boyut & Okuma Ayarları',
+                onPressed: () =>
+                    QuranReadingSettingsModal.show(context, isDark: isDark),
+              ),
+              // Sadece Meal Modu Butonu
+              IconButton(
+                icon: Icon(
+                  _isMealOnlyView
+                      ? Icons.auto_stories_rounded
+                      : Icons.subject_rounded,
+                  color: _isMealOnlyView ? goldAccent : titleColor,
+                ),
+                tooltip: _isMealOnlyView
+                    ? 'Arapça + Meal Görünümü'
+                    : 'Sadece Meal Görünümü',
+                onPressed: () {
+                  HapticService.selectionClick();
+                  setState(() {
+                    _isMealOnlyView = !_isMealOnlyView;
+                    if (_isMealOnlyView) {
+                      _isMushafView = false;
+                    }
+                  });
+                },
+              ),
+              // View Mode Switcher Button (Mushaf / List)
+              IconButton(
+                icon: Icon(
+                  _isMushafView
+                      ? Icons.format_list_bulleted_rounded
+                      : Icons.menu_book_rounded,
+                  color: goldAccent,
+                ),
+                tooltip: _isMushafView
+                    ? 'Ayet Listesi Görünümü'
+                    : 'Mushaf Sayfası Görünümü',
+                onPressed: () {
+                  HapticService.selectionClick();
+                  setState(() {
+                    _isMushafView = !_isMushafView;
+                    if (_isMushafView) {
+                      _isMealOnlyView = false;
+                    }
+                  });
+                },
+              ),
+              // Juz / Page Jump Button
+              IconButton(
+                icon: Icon(Icons.grid_view_rounded, color: titleColor),
+                tooltip: 'Cüz ve Sayfa Seç',
+                onPressed: _showJuzPageSelectorSheet,
               ),
             ],
-          ),
-          actions: [
-            // Sadece Meal Modu Butonu
-            IconButton(
-              icon: Icon(
-                _isMealOnlyView
-                    ? Icons.auto_stories_rounded
-                    : Icons.subject_rounded,
-                color: _isMealOnlyView ? goldAccent : titleColor,
-              ),
-              tooltip: _isMealOnlyView
-                  ? 'Arapça + Meal Görünümü'
-                  : 'Sadece Meal Görünümü',
-              onPressed: () {
-                HapticService.selectionClick();
-                setState(() {
-                  _isMealOnlyView = !_isMealOnlyView;
-                  if (_isMealOnlyView) {
-                    _isMushafView = false;
-                  }
-                });
-              },
-            ),
-            // View Mode Switcher Button (Mushaf / List)
-            IconButton(
-              icon: Icon(
-                _isMushafView
-                    ? Icons.format_list_bulleted_rounded
-                    : Icons.menu_book_rounded,
-                color: goldAccent,
-              ),
-              tooltip: _isMushafView
-                  ? 'Ayet Listesi Görünümü'
-                  : 'Mushaf Sayfası Görünümü',
-              onPressed: () {
-                HapticService.selectionClick();
-                setState(() {
-                  _isMushafView = !_isMushafView;
-                  if (_isMushafView) {
-                    _isMealOnlyView = false;
-                  }
-                });
-              },
-            ),
-            // Juz / Page Jump Button
-            IconButton(
-              icon: Icon(Icons.grid_view_rounded, color: titleColor),
-              tooltip: 'Cüz ve Sayfa Seç',
-              onPressed: _showJuzPageSelectorSheet,
-            ),
           ],
         ),
         body: TvRemoteNumberJumpWrapper(
@@ -1502,12 +1715,14 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             children: [
               // MAIN CONTENT: Besmele Bar (üstte, ayetlerin üstünü kapatmaz) + Mushaf / Ayah List View
               Positioned.fill(
-                bottom: 110 + MediaQuery.of(context).padding.bottom, // Space for Bottom Player Bar
+                bottom: isTvMode
+                    ? 0
+                    : (110 + MediaQuery.of(context).padding.bottom),
                 child: _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : Column(
                         children: [
-                          if (_isPlayingBesmele)
+                          if (_isPlayingBesmele && !isTvMode)
                             const BesmelePlaybackBanner(),
                           Expanded(
                             child: _isMushafView
@@ -1523,7 +1738,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 Positioned(
                   left: 20,
                   right: 20,
-                  bottom: 120,
+                  bottom: isTvMode ? 24 : 120,
                   child: AnimatedOpacity(
                     opacity: _isPageTransitioning ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 250),
@@ -1566,11 +1781,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 ),
 
               // Masaüstü & TV İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && _currentPage < 605)
+              if ((isDesktopMushafPlatform || isTvMode) && _currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
-                  bottom: 120,
+                  bottom: isTvMode ? 0 : 120,
                   child: Center(
                     child: DesktopMushafNavButton(
                       icon: Icons.chevron_left_rounded,
@@ -1580,11 +1795,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                     ),
                   ),
                 ),
-              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && _currentPage > 1)
+              if ((isDesktopMushafPlatform || isTvMode) && _currentPage > 1)
                 Positioned(
                   right: 14,
                   top: 0,
-                  bottom: 120,
+                  bottom: isTvMode ? 0 : 120,
                   child: Center(
                     child: DesktopMushafNavButton(
                       icon: Icons.chevron_right_rounded,
@@ -1595,14 +1810,15 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   ),
                 ),
 
-              // FLOATING MUKABELE CONTROL BAR
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 16 + MediaQuery.of(context).padding.bottom,
-                child: _buildMukabeleBottomBar(
-                    bottomBarBg, titleColor, goldAccent, isDark),
-              ),
+              // FLOATING MUKABELE CONTROL BAR (Sadece Mobil / Tablet için; TV'de üst başlıkta yer alır)
+              if (!isTvMode)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16 + MediaQuery.of(context).padding.bottom,
+                  child: _buildMukabeleBottomBar(
+                      bottomBarBg, titleColor, goldAccent, isDark),
+                ),
 
               // TILAVET SECDESI FLOATING BANNER
               if (TilavetSecdesiData.getSecdeForPage(_currentPage) != null &&
@@ -1644,7 +1860,26 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         final pageNum = index + 1;
         final pageAsync = ref.watch(quranPageDataProvider(pageNum));
         return pageAsync.when(
-          data: (data) => MushafPageWidget(pageData: data),
+          data: (data) => MushafPageWidget(
+            pageData: data,
+            isActivePage: pageNum == _currentPage,
+            onWordTap: (surahId, ayahId, wordOrder) {
+              final vIdx = _pageVerses.indexWhere(
+                (v) => v.sureId == surahId && v.ayetId == ayahId,
+              );
+              if (vIdx != -1) {
+                _onWordTapped(vIdx, wordOrder);
+              }
+            },
+            onAyahTapOverride: (surahId, ayahId) {
+              final vIdx = _pageVerses.indexWhere(
+                (v) => v.sureId == surahId && v.ayetId == ayahId,
+              );
+              if (vIdx != -1) {
+                _prepareAndPlayVerse(vIdx);
+              }
+            },
+          ),
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(child: Text('Sayfa yüklenemedi: $e')),
         );
@@ -1657,6 +1892,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     final fontSize = ref.watch(quranFontSizeProvider);
     final lineHeight = ref.watch(quranLineHeightProvider);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
+    final kuranFonts = ref.watch(kuranFontSettingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ListView.builder(
@@ -1767,69 +2003,70 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                         ),
                         const SizedBox(width: 8),
                       ],
-                      InkWell(
-                        onTap: () {
-                          HapticService.selectionClick();
-                          final surahTitle =
-                              verse.sure?.sureNameTurkish ?? '${verse.sureId}. Sûre';
-                          ZikirSharePreviewModal.show(
-                            context: context,
-                            zikirName: '$surahTitle • ${verse.ayetId}. Âyet',
-                            arabicText: _isMealOnlyView
-                                ? null
-                                : QuranWordHighlighter.cleanArabicText(verse.ayetText),
-                            virtue: meal.isNotEmpty ? meal : verse.ayetText,
-                            customSource: '$surahTitle Sûresi, ${verse.ayetId}. Âyet',
-                            category: 'Kur’an',
-                            currentCount: _currentPage,
-                            targetCount: 604,
-                            totalCount: _currentPage,
-                            initialTheme: ZikirShareCardTheme.emeraldSufi,
-                            initialShowCounterStats: false,
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: (isDark
-                                    ? AppColors.gold400
-                                    : const Color(0xFF2D7D76))
-                                .withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
+                      if (!ref.watch(isTvModeProvider))
+                        InkWell(
+                          onTap: () {
+                            HapticService.selectionClick();
+                            final surahTitle =
+                                verse.sure?.sureNameTurkish ?? '${verse.sureId}. Sûre';
+                            ZikirSharePreviewModal.show(
+                              context: context,
+                              zikirName: '$surahTitle • ${verse.ayetId}. Âyet',
+                              arabicText: _isMealOnlyView
+                                  ? null
+                                  : QuranWordHighlighter.cleanArabicText(verse.ayetText),
+                              virtue: meal.isNotEmpty ? meal : verse.ayetText,
+                              customSource: '$surahTitle Sûresi, ${verse.ayetId}. Âyet',
+                              category: 'Kur’an',
+                              currentCount: _currentPage,
+                              targetCount: 604,
+                              totalCount: _currentPage,
+                              initialTheme: ZikirShareCardTheme.emeraldSufi,
+                              initialShowCounterStats: false,
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
                               color: (isDark
                                       ? AppColors.gold400
                                       : const Color(0xFF2D7D76))
-                                  .withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.share_rounded,
-                                size: 13,
-                                color: isDark
-                                    ? AppColors.gold400
-                                    : const Color(0xFF2D7D76),
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: (isDark
+                                        ? AppColors.gold400
+                                        : const Color(0xFF2D7D76))
+                                    .withValues(alpha: 0.35),
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Paylaş',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.share_rounded,
+                                  size: 13,
                                   color: isDark
                                       ? AppColors.gold400
                                       : const Color(0xFF2D7D76),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Paylaş',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark
+                                        ? AppColors.gold400
+                                        : const Color(0xFF2D7D76),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -1865,7 +2102,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   child: Text(
                     meal,
                     style: TextStyle(
-                      fontSize: _isMealOnlyView ? 16.5 : 14.5,
+                      fontSize: _isMealOnlyView
+                          ? (kuranFonts.mealFontSize + 2.0)
+                          : kuranFonts.mealFontSize,
                       height: 1.55,
                       fontWeight: _isMealOnlyView && isActive
                           ? FontWeight.w600

@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/services/meal_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/services/tafseer_service.dart';
@@ -15,6 +16,7 @@ import '../../data/tilavet_secdesi_data.dart';
 import 'tafseer_bottom_sheet.dart';
 import 'tilavet_secdesi_guide_sheet.dart';
 import 'zikirce_ayah_stop_marker.dart';
+import '../../../../core/widgets/tv_focusable.dart';
 
 enum MushafReadingMode {
   mushaf, // Klasik Arapça Mushaf Sayfası
@@ -27,12 +29,18 @@ class MushafPageWidget extends ConsumerStatefulWidget {
   final QuranPageData pageData;
   final bool isMealOnlyMode;
   final MushafReadingMode? readingMode;
+  final bool? isActivePage;
+  final void Function(int surahId, int ayahId, int wordOrder)? onWordTap;
+  final void Function(int surahId, int ayahId)? onAyahTapOverride;
 
   const MushafPageWidget({
     super.key,
     required this.pageData,
     this.isMealOnlyMode = false,
     this.readingMode,
+    this.isActivePage,
+    this.onWordTap,
+    this.onAyahTapOverride,
   });
 
   MushafReadingMode get effectiveMode =>
@@ -45,7 +53,37 @@ class MushafPageWidget extends ConsumerStatefulWidget {
 
 class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
   final List<TapGestureRecognizer> _recognizers = [];
+  final GlobalKey _activeMushafWordKey = GlobalKey();
   static const Set<String> _stopSigns = QuranWordHighlighter.stopSigns;
+
+  void _scrollToActiveMushafWord() {
+    final isActivePage = widget.isActivePage ??
+        (widget.pageData.pageNo == ref.read(currentMushafPageProvider));
+    if (!isActivePage) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _activeMushafWordKey.currentContext;
+      if (ctx == null) return;
+      final renderBox = ctx.findRenderObject() as RenderBox?;
+      if (renderBox == null || !renderBox.hasSize) return;
+
+      final wordOffset = renderBox.localToGlobal(Offset.zero);
+      final wordHeight = renderBox.size.height;
+      final screenHeight = MediaQuery.of(context).size.height;
+      const topSafeZone = 85.0;
+      final bottomSafeZone = screenHeight - 95.0;
+
+      if (wordOffset.dy < topSafeZone ||
+          (wordOffset.dy + wordHeight) > bottomSafeZone) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOutCubic,
+          alignment: 0.35,
+        );
+      }
+    });
+  }
 
   /// Cache of loaded custom/comparative meals for this page
   Map<String, String> _customMealsByKey = {};
@@ -235,6 +273,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     required String fontFamily,
     required GestureRecognizer? recognizer,
     required VoidCallback? onAyahTap,
+    void Function(int wordOrder)? onWordTap,
     required bool highlightDivineWords,
     required bool isDark,
     required bool isAyahPlaying,
@@ -255,6 +294,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     final isArrowTracking = ref.watch(
       settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
     );
+    final isTvMode = ref.watch(isTvModeProvider);
 
     for (int wIdx = 0; wIdx < words.length; wIdx++) {
       final cleanWord = words[wIdx];
@@ -279,6 +319,12 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       final bool isDivine = highlightDivineWords &&
           QuranWordHighlighter.isDivineWord(pureWord);
 
+      final VoidCallback? effectiveTap =
+          onWordTap != null ? () => onWordTap(wordOrder) : onAyahTap;
+      final GestureRecognizer? effectiveRecognizer = onWordTap != null
+          ? _createRecognizer(() => onWordTap(wordOrder))
+          : recognizer;
+
       TextStyle wordStyle;
       if (isWordActive) {
         if (isArrowTracking) {
@@ -302,13 +348,14 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       }
 
       if (pureWord.isNotEmpty) {
-        if (isWordActive && isArrowTracking) {
+        if (isWordActive) {
           spans.add(
             WidgetSpan(
               alignment: PlaceholderAlignment.baseline,
               baseline: TextBaseline.alphabetic,
               child: GestureDetector(
-                onTap: onAyahTap,
+                key: _activeMushafWordKey,
+                onTap: effectiveTap,
                 child: Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.bottomCenter,
@@ -316,21 +363,27 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                     Text(
                       pureWord,
                       textDirection: TextDirection.rtl,
-                      style: wordStyle.copyWith(height: 1.0),
-                    ),
-                    Positioned(
-                      bottom: -7,
-                      left: 0,
-                      right: 0,
-                      child: QuranWordTrackingPointer(
-                        isDark: isDark,
-                        height: 7.5,
-                        durationMs: activeWordDurationMs,
-                        playbackSpeed: playbackSpeed,
-                        isPlaying: isAyahPlaying,
-                        wordIdentity: '${surahId}_${ayahId}_$wordOrder',
+                      style: wordStyle.copyWith(
+                        height: 1.0,
+                        backgroundColor: isArrowTracking
+                            ? Colors.transparent
+                            : emeraldBg,
                       ),
                     ),
+                    if (isArrowTracking)
+                      Positioned(
+                        bottom: isTvMode ? -13 : -8,
+                        left: 0,
+                        right: 0,
+                        child: QuranWordTrackingPointer(
+                          isDark: isDark,
+                          height: isTvMode ? 12.5 : 8.0,
+                          durationMs: activeWordDurationMs,
+                          playbackSpeed: playbackSpeed,
+                          isPlaying: isAyahPlaying,
+                          wordIdentity: '${surahId}_${ayahId}_$wordOrder',
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -341,7 +394,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
             TextSpan(
               text: pureWord,
               style: wordStyle,
-              recognizer: recognizer,
+              recognizer: effectiveRecognizer,
             ),
           );
         }
@@ -358,7 +411,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
               color: waqfColor,
               fontWeight: FontWeight.normal,
             ),
-            recognizer: recognizer,
+            recognizer: effectiveRecognizer,
           ),
         );
       }
@@ -402,13 +455,48 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     ref.listen<String>(activeTafseerSourceProvider, (_, __) {
       _loadPageTafseerData();
     });
+    ref.listen<KuranAudioState>(kuranAudioNotifierProvider, (prev, next) {
+      if (!next.isPlaying && !next.isLoading && next.currentWordOrder <= 0) {
+        return;
+      }
+      if (prev?.currentWordOrder != next.currentWordOrder ||
+          prev?.currentAyahId != next.currentAyahId ||
+          prev?.currentSurahId != next.currentSurahId) {
+        _scrollToActiveMushafWord();
+      }
+    });
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isTvMode = ref.watch(isTvModeProvider);
     final audioState = ref.watch(kuranAudioNotifierProvider);
     final audioNotifier = ref.read(kuranAudioNotifierProvider.notifier);
     final fontFamily = ref.watch(quranFontFamilyProvider);
-    final baseFontSize = ref.watch(quranFontSizeProvider);
-    final lineHeight = ref.watch(quranLineHeightProvider);
+    final rawBaseFontSize = ref.watch(quranFontSizeProvider);
+    final rawLineHeight = ref.watch(quranLineHeightProvider);
+    final totalArabicChars = widget.pageData.quranAyats.fold<int>(
+      0,
+      (sum, a) => sum + a.ayetText.length,
+    );
+    final double userFontScale = (rawBaseFontSize / 34.0).clamp(0.55, 2.2);
+    final double tvOptimalBase = widget.pageData.pageNo <= 2
+        ? 44.0
+        : (totalArabicChars < 380
+            ? 40.0
+            : (totalArabicChars < 480
+                ? 37.0
+                : (totalArabicChars <= 610 ? 34.5 : 32.5)));
+    final double baseFontSize = isTvMode
+        ? (tvOptimalBase * userFontScale).clamp(20.0, 72.0)
+        : rawBaseFontSize;
+    final double userLineScale = (rawLineHeight / 2.0).clamp(0.65, 1.45);
+    final double tvOptimalLineHeight = widget.pageData.pageNo <= 2
+        ? 1.85
+        : (totalArabicChars < 480 ? 1.72 : 1.66);
+    final double lineHeight = isTvMode
+        ? (tvOptimalLineHeight * userLineScale).clamp(1.25, 2.50)
+        : rawLineHeight;
+    final isActivePage = widget.isActivePage ??
+        (widget.pageData.pageNo == ref.watch(currentMushafPageProvider));
     final highlightDivineWords = ref.watch(highlightDivineWordsProvider);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
     final activeMealId = ref.watch(activeMealSourceProvider);
@@ -522,359 +610,429 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                     secondaryTextColor: secondaryTextColor,
                     headerFooterTextColor: headerFooterTextColor,
                   )
-                : SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-                    child: Column(
-                      children: [
-                        // Mushaf Modunda Zarif Çift Çizgili Sahife Çerçevesi
-                        Container(
-                          decoration: mode == MushafReadingMode.mushaf
-                              ? BoxDecoration(
-                                  color: innerSheetBg,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: tezhipGold.withValues(alpha: 0.48),
-                                    width: 1.4,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                          alpha: isDark ? 0.25 : 0.05),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                )
-                              : null,
-                          padding: mode == MushafReadingMode.mushaf
-                              ? const EdgeInsets.fromLTRB(14, 12, 14, 16)
-                              : EdgeInsets.zero,
-                          child: Column(
-                            children: [
-                              // Mushaf sayfasının kendi iç üst bilgi şeridi (Klasik Kitap Serlevhası)
-                              if (mode == MushafReadingMode.mushaf) ...[
-                                Builder(
-                                  builder: (context) {
-                                    final secdeOnPage =
-                                        TilavetSecdesiData.getSecdeForPage(
-                                            widget.pageData.pageNo);
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 7),
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      decoration: BoxDecoration(
-                                        color: tezhipGold.withValues(
-                                            alpha: isDark ? 0.10 : 0.08),
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(
-                                          color: secdeOnPage != null
-                                              ? const Color(0xFFD97706)
-                                                  .withValues(alpha: 0.55)
-                                              : tezhipGold.withValues(
-                                                  alpha: 0.28),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Flexible(
-                                            child: Text(
-                                              topSurahVerseInfo,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontFamily: 'Outfit',
-                                                color: headerFooterTextColor,
-                                                fontSize: 12.0,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                          if (secdeOnPage != null) ...[
-                                            const SizedBox(width: 6),
-                                            ZikirceSecdeInlineBadge(
-                                              isDark: isDark,
-                                              compact: true,
-                                              label:
-                                                  'Secde (${secdeOnPage.sureName} ${secdeOnPage.ayetId})',
-                                              onTap: () =>
-                                                  TilavetSecdesiGuideSheet.show(
-                                                context,
-                                                initialSecdeItem: secdeOnPage,
-                                              ),
-                                            ),
-                                          ],
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            '${widget.pageData.cuzNo}. Cüz • S. ${widget.pageData.pageNo}',
-                                            style: TextStyle(
-                                              fontFamily: 'Outfit',
-                                              color: headerFooterTextColor,
-                                              fontSize: 12.0,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ],
+                : LayoutBuilder(
+                    builder: (context, viewportConstraints) {
+                      final isTvMushafFullFit =
+                          isTvMode && mode == MushafReadingMode.mushaf;
+                      final pageGroupsWidgets = surahGroups.map((group) {
+                        final firstAyat = group.first;
+                        final sureMeta = firstAyat.sure;
 
-                        ...surahGroups.map((group) {
-                          final firstAyat = group.first;
-                          final sureMeta = firstAyat.sure;
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Sûre Başlığı + Sûre Tanıtımı (mealInfo) + Besmele
-                              if (firstAyat.ayetId == 1 && sureMeta != null) ...[
-                                _buildSurahBanner(
-                                  sureMeta,
-                                  isDark,
-                                  fontFamily,
-                                  showMealInfoToggle:
-                                      mode != MushafReadingMode.mushaf,
-                                ),
-                                if (mode != MushafReadingMode.mushaf &&
-                                    (sureMeta.mealInfo ?? '').trim().isNotEmpty &&
-                                    _expandedSurahInfoIds
-                                        .contains(sureMeta.sureId))
-                                  _buildSurahIntroCard(
-                                    sureMeta: sureMeta,
-                                    isDark: isDark,
-                                    tezhipGold: tezhipGold,
-                                    primaryTextColor: primaryTextColor,
-                                    secondaryTextColor: secondaryTextColor,
-                                  ),
-                                if (sureMeta.besmeleVisible &&
-                                    sureMeta.sureId != 1 &&
-                                    sureMeta.sureId != 9)
-                                  mode == MushafReadingMode.mealOnly
-                                      ? Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 8),
-                                          child: Text(
-                                            'Rahmân ve Rahîm olan Allah’ın adıyla',
-                                            textAlign: TextAlign.center,
-                                            style: TextStyle(
-                                              fontSize: 14.5,
-                                              fontWeight: FontWeight.w600,
-                                              fontStyle: FontStyle.italic,
-                                              color: headerFooterTextColor,
-                                            ),
-                                          ),
-                                        )
-                                      : _buildBesmele(isDark, fontFamily),
-                                const SizedBox(height: 8),
-                              ],
-
-                              // 1) SADECE MEÂL MODU: Akıcı Kitap Görünümü (Tahrir Stili)
-                              if (mode == MushafReadingMode.mealOnly &&
-                                  mealLayoutStyle == 'book' &&
-                                  !isComparing)
-                                _buildFlowingBookMealGroup(
-                                  context: context,
-                                  group: group,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Sûre Başlığı + Sûre Tanıtımı (mealInfo) + Besmele
+                            if (firstAyat.ayetId == 1 && sureMeta != null) ...[
+                              _buildSurahBanner(
+                                sureMeta,
+                                isDark,
+                                fontFamily,
+                                showMealInfoToggle:
+                                    mode != MushafReadingMode.mushaf,
+                              ),
+                              if (mode != MushafReadingMode.mushaf &&
+                                  (sureMeta.mealInfo ?? '').trim().isNotEmpty &&
+                                  _expandedSurahInfoIds
+                                      .contains(sureMeta.sureId))
+                                _buildSurahIntroCard(
+                                  sureMeta: sureMeta,
                                   isDark: isDark,
+                                  tezhipGold: tezhipGold,
                                   primaryTextColor: primaryTextColor,
                                   secondaryTextColor: secondaryTextColor,
-                                  headerFooterTextColor: headerFooterTextColor,
-                                  tezhipGold: tezhipGold,
+                                ),
+                              if (sureMeta.besmeleVisible &&
+                                  sureMeta.sureId != 1 &&
+                                  sureMeta.sureId != 9)
+                                mode == MushafReadingMode.mealOnly
+                                    ? Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 8),
+                                        child: Text(
+                                          'Rahmân ve Rahîm olan Allah’ın adıyla',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w600,
+                                            fontStyle: FontStyle.italic,
+                                            color: headerFooterTextColor,
+                                          ),
+                                        ),
+                                      )
+                                    : _buildBesmele(isDark, fontFamily),
+                              const SizedBox(height: 8),
+                            ],
+
+                            // 1) SADECE MEÂL MODU: Akıcı Kitap Görünümü (Tahrir Stili)
+                            if (mode == MushafReadingMode.mealOnly &&
+                                mealLayoutStyle == 'book' &&
+                                !isComparing)
+                              _buildFlowingBookMealGroup(
+                                context: context,
+                                group: group,
+                                isDark: isDark,
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor,
+                                headerFooterTextColor: headerFooterTextColor,
+                                tezhipGold: tezhipGold,
+                                mealFontSize: kuranFonts.mealFontSize,
+                                audioNotifier: audioNotifier,
+                              )
+                            // 2) ÂYET + MEÂL VEYA DETAYLI MEÂL KART MODU
+                            else if (mode != MushafReadingMode.mushaf)
+                              ...group.map((ayat) {
+                                return _buildVerseCardItem(
+                                  context: context,
+                                  ayat: ayat,
+                                  showArabicVerse:
+                                      mode == MushafReadingMode.ayatAndMeal,
+                                  isDark: isDark,
+                                  fontFamily: fontFamily,
+                                  arabicFontSize: baseFontSize,
                                   mealFontSize: kuranFonts.mealFontSize,
+                                  lineHeight: lineHeight,
+                                  isBoldArabic: isBoldArabic,
+                                  highlightDivineWords: highlightDivineWords,
+                                  waqfColor: waqfColor,
+                                  tezhipGold: tezhipGold,
+                                  primaryTextColor: primaryTextColor,
+                                  secondaryTextColor: secondaryTextColor,
+                                  headerFooterTextColor:
+                                      headerFooterTextColor,
+                                  activeMealInfo: activeMealInfo,
+                                  isComparing: isComparing,
+                                  audioState: audioState,
                                   audioNotifier: audioNotifier,
-                                )
-                              // 2) ÂYET + MEÂL VEYA DETAYLI MEÂL KART MODU
-                              else if (mode != MushafReadingMode.mushaf)
-                                ...group.map((ayat) {
-                                  return _buildVerseCardItem(
-                                    context: context,
-                                    ayat: ayat,
-                                    showArabicVerse:
-                                        mode == MushafReadingMode.ayatAndMeal,
-                                    isDark: isDark,
-                                    fontFamily: fontFamily,
-                                    arabicFontSize: baseFontSize,
-                                    mealFontSize: kuranFonts.mealFontSize,
-                                    lineHeight: lineHeight,
-                                    isBoldArabic: isBoldArabic,
-                                    highlightDivineWords: highlightDivineWords,
-                                    waqfColor: waqfColor,
-                                    tezhipGold: tezhipGold,
-                                    primaryTextColor: primaryTextColor,
-                                    secondaryTextColor: secondaryTextColor,
-                                    headerFooterTextColor:
-                                        headerFooterTextColor,
-                                    activeMealInfo: activeMealInfo,
-                                    isComparing: isComparing,
-                                    audioState: audioState,
-                                    audioNotifier: audioNotifier,
-                                  );
-                                })
-                              // 3) KLASİK ARAPÇA MUSHAF MODU
-                              else
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 2, vertical: 4),
-                                  child: Text.rich(
-                                    TextSpan(
-                                      children: group.expand((ayat) {
-                                        final isCurrentAyahPlaying =
-                                            audioState.isPlaying &&
-                                                audioState.currentSurahId ==
-                                                    ayat.sureId &&
-                                                audioState.currentAyahId ==
-                                                    ayat.ayetId;
+                                );
+                              })
+                            // 3) KLASİK ARAPÇA MUSHAF MODU
+                            else
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 2, vertical: 4),
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: group.expand((ayat) {
+                                      final isCurrentAyahPlaying =
+                                          (audioState.isPlaying ||
+                                                  audioState.isLoading ||
+                                                  audioState.currentWordOrder >
+                                                      0) &&
+                                              audioState.currentSurahId ==
+                                                  ayat.sureId &&
+                                              audioState.currentAyahId ==
+                                                  ayat.ayetId;
 
-                                        final meal = widget.pageData.mealAyats
-                                            .cast<MealAyatModel?>()
-                                            .firstWhere(
-                                              (m) =>
-                                                  m?.sureId == ayat.sureId &&
-                                                  m?.ayetId == ayat.ayetId,
-                                              orElse: () => null,
-                                            );
+                                      final meal = widget.pageData.mealAyats
+                                          .cast<MealAyatModel?>()
+                                          .firstWhere(
+                                            (m) =>
+                                                m?.sureId == ayat.sureId &&
+                                                m?.ayetId == ayat.ayetId,
+                                            orElse: () => null,
+                                          );
 
-                                        void voidCallback() =>
-                                            _showAyahActionMenu(
-                                              context,
-                                              ayat,
-                                              meal,
-                                              audioNotifier,
-                                            );
-                                        final recognizer =
-                                            _createRecognizer(voidCallback);
-
-                                        final effectiveFontSize = isShortPage
-                                            ? (baseFontSize + 2.0)
-                                            : baseFontSize;
-
-                                        final secdeItem =
-                                            TilavetSecdesiData.getSecdeForVerse(
-                                          ayat.sureId,
-                                          ayat.ayetId,
+                                      void voidCallback() {
+                                        if (widget.onAyahTapOverride != null) {
+                                          widget.onAyahTapOverride!(
+                                            ayat.sureId,
+                                            ayat.ayetId,
+                                          );
+                                          return;
+                                        }
+                                        _showAyahActionMenu(
+                                          context,
+                                          ayat,
+                                          meal,
+                                          audioNotifier,
                                         );
-                                        final isSecdeAyah = secdeItem != null;
+                                      }
+                                      final recognizer =
+                                          _createRecognizer(voidCallback);
 
-                                        final baseAyatStyle = TextStyle(
-                                          fontFamily: fontFamily,
-                                          fontSize: effectiveFontSize,
-                                          fontWeight: isBoldArabic
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                          color: isCurrentAyahPlaying
-                                              ? (isDark
-                                                  ? const Color(0xFFF6F2EA)
-                                                  : const Color(0xFF1E1A16))
-                                              : primaryTextColor,
-                                          backgroundColor: isCurrentAyahPlaying
-                                              ? (isDark
-                                                  ? const Color(0xFF059669)
-                                                      .withValues(alpha: 0.14)
-                                                  : const Color(0xFF10B981)
-                                                      .withValues(alpha: 0.12))
-                                              : (isSecdeAyah
-                                                  ? (isDark
-                                                      ? const Color(0xFFB45309)
-                                                          .withValues(alpha: 0.16)
-                                                      : const Color(0xFFF59E0B)
-                                                          .withValues(alpha: 0.12))
-                                                  : Colors.transparent),
-                                          height: lineHeight,
-                                          letterSpacing: -0.1,
-                                        );
+                                      final effectiveFontSize = isTvMode
+                                          ? baseFontSize
+                                          : (isShortPage
+                                              ? (baseFontSize + 2.0)
+                                              : baseFontSize);
 
-                                        final textSpans = _buildAyahWordSpans(
-                                          rawText: ayat.ayetText,
-                                          baseStyle: baseAyatStyle,
-                                          waqfColor: isCurrentAyahPlaying
-                                              ? AppColors.gold400
-                                              : waqfColor,
-                                          fontFamily: fontFamily,
-                                          recognizer: recognizer,
-                                          onAyahTap: voidCallback,
-                                          highlightDivineWords:
-                                              highlightDivineWords,
-                                          isDark: isDark,
-                                          isAyahPlaying: isCurrentAyahPlaying,
-                                          activeWordOrder: isCurrentAyahPlaying
-                                              ? audioState.currentWordOrder
-                                              : null,
-                                          activeWordDurationMs:
-                                              audioState.activeWordDurationMs,
-                                          playbackSpeed:
-                                              audioState.playbackSpeed,
-                                          surahId: ayat.sureId,
-                                          ayahId: ayat.ayetId,
-                                        );
+                                      final secdeItem =
+                                          TilavetSecdesiData.getSecdeForVerse(
+                                        ayat.sureId,
+                                        ayat.ayetId,
+                                      );
+                                      final isSecdeAyah = secdeItem != null;
 
-                                        return [
-                                          ...textSpans,
-                                          const TextSpan(text: '\u200F '),
+                                      final isArrowTrackingMode = ref.watch(
+                                        settingsProvider.select((s) =>
+                                            s.wordTrackingMode == 'arrow'),
+                                      );
+
+                                      final baseAyatStyle = TextStyle(
+                                        fontFamily: fontFamily,
+                                        fontSize: effectiveFontSize,
+                                        fontWeight: isBoldArabic
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: isCurrentAyahPlaying
+                                            ? (isDark
+                                                ? const Color(0xFFF6F2EA)
+                                                : const Color(0xFF1E1A16))
+                                            : primaryTextColor,
+                                        backgroundColor: (isCurrentAyahPlaying &&
+                                                !isArrowTrackingMode)
+                                            ? (isDark
+                                                ? const Color(0xFF059669)
+                                                    .withValues(alpha: 0.14)
+                                                : const Color(0xFF10B981)
+                                                    .withValues(alpha: 0.12))
+                                            : (isSecdeAyah
+                                                ? (isDark
+                                                    ? const Color(0xFFB45309)
+                                                        .withValues(alpha: 0.16)
+                                                    : const Color(0xFFF59E0B)
+                                                        .withValues(alpha: 0.12))
+                                                : Colors.transparent),
+                                        height: lineHeight,
+                                        letterSpacing: -0.1,
+                                      );
+
+                                      final textSpans = _buildAyahWordSpans(
+                                        rawText: ayat.ayetText,
+                                        baseStyle: baseAyatStyle,
+                                        waqfColor: isCurrentAyahPlaying
+                                            ? AppColors.gold400
+                                            : waqfColor,
+                                        fontFamily: fontFamily,
+                                        recognizer: recognizer,
+                                        onAyahTap: voidCallback,
+                                        onWordTap: widget.onWordTap != null
+                                            ? (wordOrder) => widget.onWordTap!(
+                                                  ayat.sureId,
+                                                  ayat.ayetId,
+                                                  wordOrder,
+                                                )
+                                            : null,
+                                        highlightDivineWords:
+                                            highlightDivineWords,
+                                        isDark: isDark,
+                                        isAyahPlaying: isCurrentAyahPlaying,
+                                        activeWordOrder: isCurrentAyahPlaying
+                                            ? audioState.currentWordOrder
+                                            : null,
+                                        activeWordDurationMs:
+                                            audioState.activeWordDurationMs,
+                                        playbackSpeed:
+                                            audioState.playbackSpeed,
+                                        surahId: ayat.sureId,
+                                        ayahId: ayat.ayetId,
+                                      );
+
+                                      return [
+                                        ...textSpans,
+                                        const TextSpan(text: '\u200F '),
+                                        WidgetSpan(
+                                          alignment:
+                                              PlaceholderAlignment.middle,
+                                          child: GestureDetector(
+                                            onTap: voidCallback,
+                                            child: ZikirceAyahStopMarker(
+                                              number: ayat.ayetNumber,
+                                              isDark: isDark,
+                                              isHighlight:
+                                                  isCurrentAyahPlaying,
+                                              isSecde: isSecdeAyah,
+                                              fontFamily: fontFamily,
+                                              size: isTvMode
+                                                  ? (effectiveFontSize * 1.05)
+                                                      .clamp(24.0, 48.0)
+                                                  : (effectiveFontSize * 1.15)
+                                                      .clamp(24.0, 48.0),
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSecdeAyah)
                                           WidgetSpan(
                                             alignment:
                                                 PlaceholderAlignment.middle,
-                                            child: GestureDetector(
-                                              onTap: voidCallback,
-                                              child: ZikirceAyahStopMarker(
-                                                number: ayat.ayetNumber,
-                                                isDark: isDark,
-                                                isHighlight:
-                                                    isCurrentAyahPlaying,
-                                                isSecde: isSecdeAyah,
-                                                fontFamily: fontFamily,
-                                                size:
-                                                    (effectiveFontSize * 1.15)
-                                                        .clamp(24.0, 42.0),
+                                            child: ZikirceSecdeInlineBadge(
+                                              isDark: isDark,
+                                              compact: true,
+                                              label: 'سَجْدَة • Secde',
+                                              onTap: () =>
+                                                  TilavetSecdesiGuideSheet
+                                                      .show(
+                                                context,
+                                                initialSecdeItem: secdeItem,
                                               ),
                                             ),
                                           ),
-                                          if (isSecdeAyah)
-                                            WidgetSpan(
-                                              alignment:
-                                                  PlaceholderAlignment.middle,
-                                              child: ZikirceSecdeInlineBadge(
-                                                isDark: isDark,
-                                                compact: true,
-                                                label: 'سَجْدَة • Secde',
-                                                onTap: () =>
-                                                    TilavetSecdesiGuideSheet
-                                                        .show(
-                                                  context,
-                                                  initialSecdeItem: secdeItem,
-                                                ),
-                                              ),
-                                            ),
-                                          const TextSpan(text: ' \u200F'),
-                                        ];
-                                      }).toList(),
-                                    ),
-                                    textAlign: isShortPage
-                                        ? TextAlign.center
-                                        : TextAlign.justify,
-                                    textDirection: TextDirection.rtl,
+                                        const TextSpan(text: ' \u200F'),
+                                      ];
+                                    }).toList(),
                                   ),
+                                  textAlign: isShortPage
+                                      ? TextAlign.center
+                                      : TextAlign.justify,
+                                  textDirection: TextDirection.rtl,
                                 ),
-                              const SizedBox(height: 12),
-                            ],
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
+                              ),
+                            const SizedBox(height: 6),
+                          ],
+                        );
+                      }).toList();
 
-                  const SizedBox(height: 86),
-                ],
-              ),
-            ),
+                      final secdeOnPage = TilavetSecdesiData.getSecdeForPage(
+                        widget.pageData.pageNo,
+                      );
+                      final mushafHeaderBar = Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: isTvMode ? 5 : 7,
+                        ),
+                        margin: EdgeInsets.only(bottom: isTvMode ? 6 : 10),
+                        decoration: BoxDecoration(
+                          color: tezhipGold.withValues(
+                            alpha: isDark ? 0.10 : 0.08,
+                          ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: secdeOnPage != null
+                                ? const Color(0xFFD97706)
+                                    .withValues(alpha: 0.55)
+                                : tezhipGold.withValues(alpha: 0.28),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                topSurahVerseInfo,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  color: headerFooterTextColor,
+                                  fontSize: 12.0,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (secdeOnPage != null) ...[
+                              const SizedBox(width: 6),
+                              ZikirceSecdeInlineBadge(
+                                isDark: isDark,
+                                compact: true,
+                                label:
+                                    'Secde (${secdeOnPage.sureName} ${secdeOnPage.ayetId})',
+                                onTap: () => TilavetSecdesiGuideSheet.show(
+                                  context,
+                                  initialSecdeItem: secdeOnPage,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 8),
+                            Text(
+                              '${widget.pageData.cuzNo}. Cüz • S. ${widget.pageData.pageNo}',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                color: headerFooterTextColor,
+                                fontSize: 12.0,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      final minSheetHeight = (viewportConstraints.maxHeight -
+                              (isTvMode ? 10.0 : 24.0))
+                          .clamp(180.0, double.infinity);
+                      final minInnerContentHeight =
+                          (minSheetHeight - (isTvMode ? 54.0 : 68.0))
+                              .clamp(120.0, double.infinity);
+
+                      return SingleChildScrollView(
+                        primary: isActivePage,
+                        physics: const BouncingScrollPhysics(),
+                        padding: isTvMushafFullFit
+                            ? const EdgeInsets.fromLTRB(12, 4, 12, 6)
+                            : const EdgeInsets.fromLTRB(12, 8, 12, 16),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: double.infinity,
+                              constraints: mode == MushafReadingMode.mushaf
+                                  ? BoxConstraints(minHeight: minSheetHeight)
+                                  : null,
+                              decoration: mode == MushafReadingMode.mushaf
+                                  ? BoxDecoration(
+                                      color: innerSheetBg,
+                                      borderRadius: BorderRadius.circular(
+                                          isTvMode ? 18 : 20),
+                                      border: Border.all(
+                                        color:
+                                            tezhipGold.withValues(alpha: 0.48),
+                                        width: isTvMode ? 1.6 : 1.4,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                              alpha: isDark ? 0.25 : 0.05),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                              padding: mode == MushafReadingMode.mushaf
+                                  ? EdgeInsets.fromLTRB(
+                                      isTvMode ? 22 : 14,
+                                      isTvMode ? 10 : 12,
+                                      isTvMode ? 22 : 14,
+                                      isTvMode ? 12 : 16,
+                                    )
+                                  : EdgeInsets.zero,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (mode == MushafReadingMode.mushaf)
+                                    mushafHeaderBar,
+                                  if (mode == MushafReadingMode.mushaf)
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        minHeight: minInnerContentHeight,
+                                      ),
+                                      child: Center(
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: pageGroupsWidgets,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    ...pageGroupsWidgets,
+                                ],
+                              ),
+                            ),
+                            if (!isTvMode) const SizedBox(height: 86),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
           ),
 
-          // Alt Sayfa Numarası Şeridi
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          // Alt Sayfa Numarası Şeridi (TV'de üst başlık ve Mushaf başlığı zaten sayfa bilgisini gösterir)
+          if (!isTvMode)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF15191F) : const Color(0xFFF3ECE0),
               border: Border(
@@ -2704,6 +2862,861 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// TV Kumandası (D-Pad) ve Dokunmatik Uyumlu Gelişmiş Hat, Boyut ve Okuma Ayarları Modalı
+class QuranReadingSettingsModal {
+  static Future<void> show(
+    BuildContext context, {
+    required bool isDark,
+    VoidCallback? onOpenTafseerReader,
+  }) async {
+    final bgColor = isDark ? const Color(0xFF15191F) : const Color(0xFFFDFBF7);
+    final cardBg = isDark ? const Color(0xFF1E242C) : const Color(0xFFF5EFE2);
+    final textColor = isDark ? Colors.white : const Color(0xFF1E2B27);
+    final subColor = isDark ? const Color(0xFF9EA6B2) : const Color(0xFF6B5848);
+    final accentColor = isDark ? AppColors.gold400 : const Color(0xFF1E6F5C);
+    final goldBorder = isDark ? const Color(0xFFC5A358) : const Color(0xFFA67C2E);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Consumer(
+          builder: (ctx, sheetRef, _) {
+            final isTv = sheetRef.watch(isTvModeProvider);
+            final arSize = sheetRef.watch(quranFontSizeProvider);
+            final fontFamily = sheetRef.watch(quranFontFamilyProvider);
+            final lineHeight = sheetRef.watch(quranLineHeightProvider);
+            final isBoldArabic = sheetRef.watch(isBoldArabicProvider);
+            final highlightDivine = sheetRef.watch(highlightDivineWordsProvider);
+            final kuranFonts = sheetRef.watch(kuranFontSettingsProvider);
+            final activeMealId = sheetRef.watch(activeMealSourceProvider);
+            final activeMealInfo = MealService.getSourceInfo(activeMealId);
+            final isComparing = sheetRef.watch(isMealComparisonEnabledProvider);
+            final showTranslit = sheetRef.watch(showTransliterationProvider);
+
+            void setArabicSize(double newSize) {
+              final clamped = newSize.clamp(20.0, 64.0);
+              sheetRef.read(quranFontSizeProvider.notifier).setFontSize(clamped);
+              sheetRef
+                  .read(kuranFontSettingsProvider.notifier)
+                  .setArabicFontSize(clamped);
+            }
+
+            void setArabicLineHeight(double newLh) {
+              final clamped = newLh.clamp(1.3, 2.5);
+              sheetRef
+                  .read(quranLineHeightProvider.notifier)
+                  .setLineHeight(clamped);
+              sheetRef
+                  .read(kuranFontSettingsProvider.notifier)
+                  .setLineHeight(clamped);
+            }
+
+            const presets = <({String label, double size, String subtitle})>[
+              (label: 'Tam Ekran', size: 34.0, subtitle: '34 pt • Dengeli'),
+              (label: 'Büyük Hat', size: 40.0, subtitle: '40 pt • Rahat'),
+              (label: 'Çok Büyük', size: 48.0, subtitle: '48 pt • Geniş'),
+              (label: 'Dev TV', size: 56.0, subtitle: '56 pt • Uzak Mesafe'),
+            ];
+
+            const fontFamilies = <({String id, String title, String subtitle})>[
+              (
+                id: 'AmasyaAbay',
+                title: 'Amasya Abay',
+                subtitle: 'Diyanet Nesih Hattı'
+              ),
+              (
+                id: 'mushaf',
+                title: 'Klasik Mushaf',
+                subtitle: 'Medine Mushaf Hattı'
+              ),
+              (
+                id: 'mushaf_bold',
+                title: 'Kalın Mushaf',
+                subtitle: 'TV İçin Tok Hat'
+              ),
+            ];
+
+            return Dialog(
+              backgroundColor: bgColor,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: isTv ? 56 : 16,
+                vertical: isTv ? 22 : 24,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: goldBorder.withValues(alpha: 0.55),
+                  width: 1.5,
+                ),
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 780),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 18, 22, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Üst Başlık & Sıfırla / Kapat Butonları
+                      Row(
+                        children: [
+                          Icon(Icons.text_fields_rounded,
+                              color: accentColor, size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Kur’ân-ı Kerîm Hat, Boyut & Görünüm Ayarları',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: isTv ? 19 : 17,
+                                fontWeight: FontWeight.w900,
+                                color: textColor,
+                              ),
+                            ),
+                          ),
+                          TvFocusable(
+                            borderRadius: 12,
+                            onPressed: () {
+                              setArabicSize(34.0);
+                              setArabicLineHeight(2.0);
+                              sheetRef
+                                  .read(quranFontFamilyProvider.notifier)
+                                  .setFont('AmasyaAbay');
+                              sheetRef
+                                  .read(kuranFontSettingsProvider.notifier)
+                                  .setMealFontSize(18.0);
+                              if (isBoldArabic) {
+                                sheetRef
+                                    .read(userSettingsProvider.notifier)
+                                    .toggleBoldArabic(false);
+                              }
+                            },
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            child: Text(
+                              '↺ Varsayılan',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: accentColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TvFocusable(
+                            borderRadius: 12,
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            child: Text(
+                              '✕ Kapat',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: subColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Canlı Önizleme Kutusu (Arapça Hat + Türkçe Meâl)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF101317)
+                              : const Color(0xFFFBF7EE),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: goldBorder.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ﴿١﴾',
+                              textAlign: TextAlign.center,
+                              textDirection: TextDirection.rtl,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: fontFamily,
+                                fontSize: arSize.clamp(22.0, 48.0),
+                                fontWeight: isBoldArabic
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                height: (lineHeight * 0.75).clamp(1.2, 1.8),
+                                color: highlightDivine
+                                    ? (isDark
+                                        ? const Color(0xFFFFD56B)
+                                        : const Color(0xFF1E2B27))
+                                    : textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Rahmân ve Rahîm olan Allah’ın adıyla. (${arSize.toInt()} pt • $fontFamily)',
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize:
+                                    kuranFonts.mealFontSize.clamp(13.0, 22.0),
+                                color: subColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Kaydırılabilir Ayar Gövdesi
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // 1. Hızlı Boyut Şablonları (Kumanda ile Tek Tuşla Seçim)
+                              Text(
+                                'Hızlı Hat Boyutu Seçimi',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: subColor,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  for (int i = 0; i < presets.length; i++) ...[
+                                    if (i > 0) const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TvFocusable(
+                                        autofocus: i == 0,
+                                        borderRadius: 14,
+                                        onPressed: () =>
+                                            setArabicSize(presets[i].size),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 10, horizontal: 8),
+                                          decoration: BoxDecoration(
+                                            color: (arSize - presets[i].size)
+                                                        .abs() <
+                                                    1.5
+                                                ? accentColor
+                                                : cardBg,
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            border: Border.all(
+                                              color: (arSize - presets[i].size)
+                                                          .abs() <
+                                                      1.5
+                                                  ? goldBorder
+                                                  : Colors.transparent,
+                                              width: 1.4,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Text(
+                                                presets[i].label,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: (arSize -
+                                                                  presets[i]
+                                                                      .size)
+                                                              .abs() <
+                                                          1.5
+                                                      ? (isDark
+                                                          ? Colors.black
+                                                          : Colors.white)
+                                                      : textColor,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                presets[i].subtitle,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: (arSize -
+                                                                  presets[i]
+                                                                      .size)
+                                                              .abs() <
+                                                          1.5
+                                                      ? (isDark
+                                                          ? Colors.black87
+                                                          : Colors.white70)
+                                                      : subColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+
+                              // 2. Hassas Arapça Hat Boyutu (- / + Kumanda Butonları & Slider)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Arapça Hat Boyutu: ${arSize.toInt()} pt',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w800,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                        ),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () =>
+                                              setArabicSize(arSize - 2.0),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 14, vertical: 7),
+                                            decoration: BoxDecoration(
+                                              color: bgColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                  color: goldBorder.withValues(
+                                                      alpha: 0.45)),
+                                            ),
+                                            child: Text(
+                                              '− Küçült',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () =>
+                                              setArabicSize(arSize + 2.0),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 14, vertical: 7),
+                                            decoration: BoxDecoration(
+                                              color: accentColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              '+ Büyüt',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w900,
+                                                color: isDark
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (!isTv)
+                                      Slider(
+                                        value: arSize.clamp(20.0, 64.0),
+                                        min: 20.0,
+                                        max: 64.0,
+                                        activeColor: accentColor,
+                                        onChanged: setArabicSize,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 3. Arapça Yazı Tipi (Font Family) Seçimi
+                              Text(
+                                'Arapça Hat Yazı Tipi (Kaligrafi)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: subColor,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  for (int i = 0;
+                                      i < fontFamilies.length;
+                                      i++) ...[
+                                    if (i > 0) const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TvFocusable(
+                                        borderRadius: 14,
+                                        onPressed: () {
+                                          sheetRef
+                                              .read(quranFontFamilyProvider
+                                                  .notifier)
+                                              .setFont(
+                                                  fontFamilies[i].id);
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 10, horizontal: 10),
+                                          decoration: BoxDecoration(
+                                            color: fontFamily ==
+                                                    fontFamilies[i].id
+                                                ? accentColor
+                                                : cardBg,
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            border: Border.all(
+                                              color: fontFamily ==
+                                                      fontFamilies[i].id
+                                                  ? goldBorder
+                                                  : Colors.transparent,
+                                              width: 1.4,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              Text(
+                                                fontFamilies[i].title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 13.5,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: fontFamily ==
+                                                          fontFamilies[i].id
+                                                      ? (isDark
+                                                          ? Colors.black
+                                                          : Colors.white)
+                                                      : textColor,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                fontFamilies[i].subtitle,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: fontFamily ==
+                                                          fontFamilies[i].id
+                                                      ? (isDark
+                                                          ? Colors.black87
+                                                          : Colors.white70)
+                                                      : subColor,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 4. Satır Aralığı, Kalın Hat & Türkçe Meâl Boyutu
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: cardBg,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Column(
+                                  children: [
+                                    // Satır Aralığı
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Satır Aralığı: ${lineHeight.toStringAsFixed(1)}x',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                        ),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () => setArabicLineHeight(
+                                              lineHeight - 0.1),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: bgColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                  color: goldBorder.withValues(
+                                                      alpha: 0.45)),
+                                            ),
+                                            child: Text(
+                                              '− Daralt',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () => setArabicLineHeight(
+                                              lineHeight + 0.1),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: bgColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                  color: goldBorder.withValues(
+                                                      alpha: 0.45)),
+                                            ),
+                                            child: Text(
+                                              '+ Genişlet',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    // Türkçe Meâl Boyutu
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Türkçe Meâl Yazı Boyutu: ${kuranFonts.mealFontSize.toInt()} pt',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: textColor,
+                                            ),
+                                          ),
+                                        ),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () {
+                                            sheetRef
+                                                .read(kuranFontSettingsProvider
+                                                    .notifier)
+                                                .setMealFontSize(
+                                                    kuranFonts.mealFontSize -
+                                                        1.0);
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: bgColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                  color: goldBorder.withValues(
+                                                      alpha: 0.45)),
+                                            ),
+                                            child: Text(
+                                              '− Küçült',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        TvFocusable(
+                                          borderRadius: 10,
+                                          onPressed: () {
+                                            sheetRef
+                                                .read(kuranFontSettingsProvider
+                                                    .notifier)
+                                                .setMealFontSize(
+                                                    kuranFonts.mealFontSize +
+                                                        1.0);
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: bgColor,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                  color: goldBorder.withValues(
+                                                      alpha: 0.45)),
+                                            ),
+                                            child: Text(
+                                              '+ Büyüt',
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // 5. Kalın Hat, Lafzatullah, Meâl Karşılaştırma ve Okunuş Anahtarları
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TvFocusable(
+                                      borderRadius: 14,
+                                      onPressed: () {
+                                        sheetRef
+                                            .read(userSettingsProvider.notifier)
+                                            .toggleBoldArabic(!isBoldArabic);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: isBoldArabic
+                                              ? accentColor
+                                              : cardBg,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Text(
+                                          isBoldArabic
+                                              ? '✓ Kalın Arapça Hat: Açık'
+                                              : 'Kalın Arapça Hat: Kapalı',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: isBoldArabic
+                                                ? (isDark
+                                                    ? Colors.black
+                                                    : Colors.white)
+                                                : textColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TvFocusable(
+                                      borderRadius: 14,
+                                      onPressed: () {
+                                        sheetRef
+                                            .read(highlightDivineWordsProvider
+                                                .notifier)
+                                            .toggle();
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: highlightDivine
+                                              ? accentColor
+                                              : cardBg,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Text(
+                                          highlightDivine
+                                              ? '✓ Lafzatullah Vurgusu: Açık'
+                                              : 'Lafzatullah Vurgusu: Kapalı',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: highlightDivine
+                                                ? (isDark
+                                                    ? Colors.black
+                                                    : Colors.white)
+                                                : textColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TvFocusable(
+                                      borderRadius: 14,
+                                      onPressed: () {
+                                        sheetRef
+                                            .read(
+                                                isMealComparisonEnabledProvider
+                                                    .notifier)
+                                            .state = !isComparing;
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color:
+                                              isComparing ? accentColor : cardBg,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Text(
+                                          isComparing
+                                              ? '✓ Meâl Karşılaştırma: Açık'
+                                              : 'Meâl Karşılaştırma: Kapalı',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: isComparing
+                                                ? (isDark
+                                                    ? Colors.black
+                                                    : Colors.white)
+                                                : textColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TvFocusable(
+                                      borderRadius: 14,
+                                      onPressed: () {
+                                        sheetRef
+                                            .read(showTransliterationProvider
+                                                .notifier)
+                                            .toggle(!showTranslit);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: showTranslit
+                                              ? accentColor
+                                              : cardBg,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Text(
+                                          showTranslit
+                                              ? '✓ Türkçe Okunuş: Açık'
+                                              : 'Türkçe Okunuş: Kapalı',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: showTranslit
+                                                ? (isDark
+                                                    ? Colors.black
+                                                    : Colors.white)
+                                                : textColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (!isTv && onOpenTafseerReader != null) ...[
+                                const SizedBox(height: 10),
+                                ListTile(
+                                  tileColor: cardBg,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  leading: Icon(Icons.auto_stories_rounded,
+                                      color: accentColor),
+                                  title: Text(
+                                    'Varsayılan Meâl: ${activeMealInfo.title}',
+                                    style: TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    'Değiştirmek veya tefsir indirmek için dokunun',
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 11.5,
+                                      color: subColor,
+                                    ),
+                                  ),
+                                  trailing: Icon(
+                                    Icons.chevron_right_rounded,
+                                    color: subColor,
+                                  ),
+                                  onTap: () {
+                                    Navigator.of(ctx).pop();
+                                    TafseerLibraryManagerSheet.show(
+                                      context,
+                                      onOpenTafseerReader: onOpenTafseerReader,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -1,29 +1,27 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/services/google_drive_backup_service.dart';
 import '../../../../core/services/google_oauth_sheet.dart';
-import '../../../../core/services/prayer_times_service.dart';
 import '../../../../core/session/session_providers.dart';
 import '../../../../core/session/user_session.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/theme/theme_provider.dart';
 import '../../../../core/utils/hijri_calendar.dart';
 import '../../../../core/widgets/tv_focusable.dart';
-import '../../../kuran/data/islamic_bookshelf_models.dart';
-import '../../../namaz_vakitleri/presentation/widgets/city_selection_sheet.dart';
-import '../../../namaz_vakitleri/providers/prayer_providers.dart';
+import '../../../kuran/providers/kuran_providers.dart';
 
-/// Android TV / Google TV 10-Foot UI Ana Meydanı,
-/// Zikirce Özgün Tema Paleti (Zümrüt Yeşili, Klasik Krem, Kahve Gece),
-/// %100 Kumanda (D-Pad) Uyumlu Şehir/Google/Tema Kontrolü ve 40 Eserlik Külliyat Rahle Kitaplığı.
+/// Android TV / Google TV Yalın 10-Foot UI Ana Ekranı.
+/// Yalnızca Sesli & Kelime Takipli Mukabele ve Kur'ân-ı Kerîm (Rahle & Mushaf)
+/// okuma modüllerini içerir; Zikirce tasarım diline (%100 Zümrüt Yeşili,
+/// Klasik Krem ve Kahve Gece paleti + Selçuklu yıldızı dokusu) sadıktır.
 class ZikirceTvHubScreen extends ConsumerStatefulWidget {
   final int initialSection;
 
@@ -37,26 +35,39 @@ class ZikirceTvHubScreen extends ConsumerStatefulWidget {
 }
 
 class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
-  late int _activeSection;
-  int _selectedCategoryFilter = 0; // 0: Tümü, 1: Kur'ân & Meâl, 2: Tefsir, 3: Hadis, 4: Risale-i Nur
+  final FocusNode _mukabeleHeroFocusNode = FocusNode(debugLabel: 'MukabeleHero');
+  final FocusNode _mushafHeroFocusNode = FocusNode(debugLabel: 'MushafHero');
   bool _isGoogleSignedIn = false;
   String _googleUserEmail = '';
+
+  static const List<int> _juzStartPages = <int>[
+    1, 22, 42, 62, 82, 102, 122, 142, 162, 182,
+    202, 222, 242, 262, 282, 302, 322, 342, 362, 382,
+    402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _activeSection = widget.initialSection.clamp(0, 2);
     _refreshGoogleAuthState();
+    _loadIndependentMushafProgress();
+  }
+
+  Future<void> _loadIndependentMushafProgress() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedPage = prefs.getInt('mushaf_independent_last_page');
+      if (savedPage != null && savedPage >= 1 && savedPage <= 605 && mounted) {
+        ref.read(currentMushafPageProvider.notifier).state = savedPage;
+      }
+    } catch (_) {}
   }
 
   @override
-  void didUpdateWidget(covariant ZikirceTvHubScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialSection != widget.initialSection) {
-      setState(() {
-        _activeSection = widget.initialSection.clamp(0, 2);
-      });
-    }
+  void dispose() {
+    _mukabeleHeroFocusNode.dispose();
+    _mushafHeroFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshGoogleAuthState() async {
@@ -100,17 +111,6 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
     }
   }
 
-  void _openCitySelectorModal() {
-    showModalBottomSheet<void>(
-      context: context,
-      useRootNavigator: true,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const CitySelectionSheet(),
-    );
-  }
-
   void _cycleZikirceTheme() {
     final currentKey = ref.read(themeNotifierProvider);
     final String nextKey;
@@ -136,91 +136,342 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
     }
   }
 
-  IslamicShelfBook _resolveLastReadBook(List<IslamicShelfBook> books) {
-    if (books.isEmpty) {
-      return IslamicBookshelfCatalog.defaultBooks().first;
-    }
-    final nonMushaf = books.where((b) => b.id != 'book_mushaf').toList();
-    final pool = nonMushaf.isNotEmpty ? nonMushaf : books;
+  void _openJuzActionModal(int juzNumber, int startPage) {
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    IslamicShelfBook? bestByTime;
-    for (final b in pool) {
-      if (b.lastReadAtMs > 0) {
-        if (bestByTime == null || b.lastReadAtMs > bestByTime.lastReadAtMs) {
-          bestByTime = b;
-        }
-      }
-    }
-    if (bestByTime != null) return bestByTime;
-
-    for (final b in pool) {
-      if (b.hasStartedReading && b.currentPage > 1) {
-        return b;
-      }
-    }
-
-    return pool.firstWhere(
-      (b) => b.id == 'book_rn_sozler' || b.id == 'book_tafseer_kuranyolu',
-      orElse: () => pool.first,
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: colors.cardBackground,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+            side: BorderSide(color: colors.accent.withValues(alpha: 0.45), width: 1.5),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(26),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colors.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '$juzNumber. CÜZ • SAYFA $startPage',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: colors.accent,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      TvFocusable(
+                        borderRadius: 12,
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        child: Text(
+                          '✕ Kapat',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: colors.secondaryTextAlt,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    '$juzNumber. Cüzü Nasıl Açmak İstersiniz?',
+                    style: TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                      color: colors.primaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sesli kelime takipli mukabele dinleyebilir veya tam ekran Mushaf görünümünde okuyabilirsiniz.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: colors.secondaryTextAlt,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  TvFocusable(
+                    autofocus: true,
+                    borderRadius: 18,
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      ref.read(mukabeleSyncProvider.notifier).saveProgress(startPage);
+                      context.push('/mukabele?page=$startPage&juz=$juzNumber');
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? const [Color(0xFF2B231C), Color(0xFF1F1914)]
+                              : [
+                                  colors.accent,
+                                  Color.lerp(colors.accent, const Color(0xFF0E382C), 0.45)!,
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: const Color(0xFFD4AF37).withValues(alpha: 0.65),
+                          width: 1.4,
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.play_circle_fill_rounded, color: Color(0xFFD4AF37), size: 28),
+                          SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sesli & Kelime Takipli Mukabele Başlat',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFFDF8EE),
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Ok ile kelime takibi ve sesli tilâvet',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: Color(0xFFFFD56B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFD4AF37), size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TvFocusable(
+                    borderRadius: 18,
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      ref.read(currentMushafPageProvider.notifier).state = startPage;
+                      try {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setInt('mushaf_independent_last_page', startPage);
+                      } catch (_) {}
+                      if (mounted) {
+                        context.push('/mushaf?page=$startPage');
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: colors.pageBackground,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: colors.accent.withValues(alpha: 0.45),
+                          width: 1.4,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.auto_stories_rounded, color: colors.accent, size: 26),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Tam Ekran Kur’ân-ı Kerîm Oku (Mushaf & Meâl)',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: colors.primaryText,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'TV ekranına özel büyük Mushaf hattı ve Türkçe meâl',
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: colors.secondaryTextAlt,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios_rounded, color: colors.accent, size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
-  List<IslamicShelfBook> _filterBooks(List<IslamicShelfBook> allBooks) {
-    switch (_selectedCategoryFilter) {
-      case 1:
-        return allBooks
-            .where((b) =>
-                b.category == IslamicBookCategory.quran ||
-                b.category == IslamicBookCategory.meal)
-            .toList();
-      case 2:
-        return allBooks
-            .where((b) => b.category == IslamicBookCategory.tafseer)
-            .toList();
-      case 3:
-        return allBooks
-            .where((b) => b.category == IslamicBookCategory.hadith)
-            .toList();
-      case 4:
-        return allBooks
-            .where((b) => b.category == IslamicBookCategory.risale)
-            .toList();
-      default:
-        return allBooks;
-    }
-  }
+  void _openSurahSelectorDialog() {
+    final colors = context.colors;
+    const surahs = SurahDataProvider.surahs;
 
-  void _openFullScreenEvMescidi() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => TvEvMescidiAmbientScreen(
-          onClose: () => Navigator.of(context).maybePop(),
-        ),
-      ),
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: colors.cardBackground,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 42, vertical: 28),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+            side: BorderSide(color: colors.borderStroke, width: 1.4),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.menu_book_rounded, color: colors.accent, size: 24),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Sûre Fihristi (114 Sûre-i Celîle)',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: colors.primaryText,
+                      ),
+                    ),
+                    const Spacer(),
+                    TvFocusable(
+                      borderRadius: 12,
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      child: Text(
+                        '✕ Kapat',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: colors.secondaryTextAlt,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 2.8,
+                    ),
+                    itemCount: surahs.length,
+                    itemBuilder: (context, index) {
+                      final surah = surahs[index];
+                      return TvFocusable(
+                        autofocus: index == 0,
+                        borderRadius: 16,
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          _openJuzActionModal(surah.juzNumber, surah.startPage);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: colors.pageBackground,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: colors.borderStroke),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: colors.accent.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${surah.id}',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    color: colors.accent,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      surah.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: colors.primaryText,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Sayfa ${surah.startPage} • ${surah.ayetSayisi} Âyet',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: colors.secondaryTextAlt,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-  }
-
-  void _openBookInRahle(IslamicShelfBook book) {
-    if (book.id == 'book_mushaf') {
-      context.push('/mushaf?page=${book.currentPage}');
-    } else {
-      context.push('/kulliyat?bookId=${book.id}');
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_activeSection == 2) {
-      return TvEvMescidiAmbientScreen(
-        onClose: () => setState(() => _activeSection = 0),
-      );
-    }
-
     final colors = context.colors;
     final themeKey = ref.watch(themeNotifierProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final city = ref.watch(selectedCityProvider);
-    final nextPrayer = ref.watch(nextPrayerInfoProvider);
     final syncState = ref.watch(cloudSyncProvider);
 
     return Scaffold(
@@ -239,7 +490,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
           ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 18, 28, 20),
+              padding: const EdgeInsets.fromLTRB(32, 20, 32, 22),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -247,18 +498,14 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                     colors: colors,
                     isDark: isDark,
                     themeKey: themeKey,
-                    city: city,
-                    nextPrayer: nextPrayer,
                     syncState: syncState,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 22),
                   Expanded(
-                    child: _activeSection == 0
-                        ? _buildMainHubSection(colors: colors, isDark: isDark)
-                        : _buildKulliyatLibrarySection(
-                            colors: colors,
-                            isDark: isDark,
-                          ),
+                    child: _buildSimplifiedTvBody(
+                      colors: colors,
+                      isDark: isDark,
+                    ),
                   ),
                 ],
               ),
@@ -273,8 +520,6 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
     required AppThemeColors colors,
     required bool isDark,
     required String themeKey,
-    required String city,
-    required NextPrayerInfo? nextPrayer,
     required CloudSyncState syncState,
   }) {
     final isSyncing = syncState.status == CloudSyncStatus.checking ||
@@ -290,11 +535,11 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
           : 'Bulut Bağlı';
       cloudButtonLabel = '☁️ $shortMail • Eşitle';
     } else {
-      cloudButtonLabel = '☁️ Google ile Giriş Yap';
+      cloudButtonLabel = '☁️ Google ile Eşitle';
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(22),
@@ -312,7 +557,6 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
       ),
       child: Row(
         children: [
-          // Sol: Zikirce Özgün Logo + Besmele-i Şerif & Hicri Tarih
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -324,7 +568,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
               width: 30,
               height: 30,
               errorBuilder: (_, __, ___) => Icon(
-                Icons.mosque_rounded,
+                Icons.menu_book_rounded,
                 size: 26,
                 color: colors.accent,
               ),
@@ -339,15 +583,15 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                 Row(
                   children: [
                     Text(
-                      'Zikirce',
+                      'Zikirce TV',
                       style: TextStyle(
-                        fontSize: 19,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
                         color: colors.primaryText,
                         letterSpacing: -0.3,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Flexible(
                       child: Text(
                         'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ',
@@ -355,7 +599,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Amiri',
-                          fontSize: 17,
+                          fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: colors.accent,
                         ),
@@ -365,11 +609,11 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${hijri.format()} • Cihazlar Arası Bulut Senkronizasyonlu Rahle & Mukabele',
+                  '${hijri.format()} • Tam Ekran Kur’ân-ı Kerîm Okuma & Kelime Takipli Sesli Mukabele',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: colors.secondaryTextAlt,
                   ),
@@ -379,11 +623,10 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
           ),
           const SizedBox(width: 12),
 
-          // Sağ: %100 Kumanda (D-Pad) Odaklanabilir Kontrol Butonları
-          // 1. Şehir Seçimi Butonu (81 İl)
+          // 1. Sûre Fihristi Butonu (114 Sûre)
           TvFocusable(
             borderRadius: 14,
-            onPressed: _openCitySelectorModal,
+            onPressed: _openSurahSelectorDialog,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
@@ -397,24 +640,18 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.location_on_rounded,
+                    Icons.menu_book_rounded,
                     size: 17,
                     color: colors.accent,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    city,
+                    '114 Sûre Fihristi',
                     style: TextStyle(
-                      fontSize: 13.5,
+                      fontSize: 13,
                       fontWeight: FontWeight.w800,
                       color: colors.primaryText,
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: colors.secondaryTextAlt,
                   ),
                 ],
               ),
@@ -484,174 +721,43 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
     );
   }
 
-  Widget _buildMainHubSection({
+  Widget _buildSimplifiedTvBody({
     required AppThemeColors colors,
     required bool isDark,
   }) {
     final mukabeleSync = ref.watch(mukabeleSyncProvider);
-    final books = ref.watch(islamicBookshelfProvider);
-    final lastBook = _resolveLastReadBook(books);
-    final city = ref.watch(selectedCityProvider);
-    final timingsAsync = ref.watch(prayerTimingsProvider);
-    final nextPrayer = ref.watch(nextPrayerInfoProvider);
-    final timings = timingsAsync.valueOrNull ??
-        PrayerTimesService.calculateOfflinePrayerTimes(city, DateTime.now());
-
-    final spreadStart = lastBook.currentPage;
-    final spreadEnd = (spreadStart + 1).clamp(1, lastBook.totalPages);
+    final currentMushafPage = ref.watch(currentMushafPageProvider);
+    final effectiveMushafPage = currentMushafPage.clamp(1, 605);
+    final mushafJuz = (((effectiveMushafPage - 1) ~/ 20) + 1).clamp(1, 30);
+    final mushafProgressPercent =
+        ((effectiveMushafPage / 605.0) * 100).round().clamp(1, 100);
+    final mukabeleProgressPercent =
+        ((mukabeleSync.lastPage / 605.0) * 100).round().clamp(1, 100);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ÜST HERO SATIRI: 2 Ferah ve Derinlikli Zikirce Ana Kartı
+        // ÜST HERO SATIRI: Sadece 2 Ana Modül (Sesli Mukabele & Kur'ân-ı Kerîm Rahle Okuma)
         Expanded(
-          flex: 62,
+          flex: 65,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // SOL HERO KART: Rahlede Açık Kitap (3B Açık Rahle Görselli Külliyat Okuma Kartı)
+              // SOL HERO KART: Sesli & Kelime Takipli Mukabele (Zikirce Zümrüt & Altın İmza Kartı)
               Expanded(
-                flex: 11,
+                flex: 10,
                 child: TvFocusable(
+                  focusNode: _mukabeleHeroFocusNode,
                   autofocus: true,
-                  borderRadius: 26,
-                  onPressed: () => _openBookInRahle(lastBook),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: colors.cardBackground,
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(
-                        color: colors.accent.withValues(alpha: 0.45),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: isDark ? 0.35 : 0.08),
-                          blurRadius: 24,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.accent.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                    color: colors.accent.withValues(alpha: 0.4),
-                                  ),
-                                ),
-                                child: Text(
-                                  '📖 RAHLEDE ÇİFT SAYFA OKUMA (OK)',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: colors.accent,
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                lastBook.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w900,
-                                  color: colors.primaryText,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                lastBook.author,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: colors.secondaryTextAlt,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Sayfa $spreadStart–$spreadEnd / ${lastBook.totalPages} • %${lastBook.progressPercent} Tamamlandı',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.accent,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(999),
-                                child: LinearProgressIndicator(
-                                  value: (lastBook.progressPercent / 100.0)
-                                      .clamp(0.04, 1.0),
-                                  minHeight: 7,
-                                  backgroundColor:
-                                      colors.borderStroke.withValues(alpha: 0.5),
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    colors.accent,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Fiziki 3B sayfa çevirme animasyonu ve kaydırmasız çift yaprak rahle görünümü.',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: colors.secondaryTextAlt,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 18),
-                        // Sağ Taraf: 3 Boyutlu Açık Rahle ve Kitap Minyatürü
-                        SizedBox(
-                          width: 175,
-                          height: 185,
-                          child: _MiniRahleSpreadIllustration(
-                            book: lastBook,
-                            spreadStart: spreadStart,
-                            spreadEnd: spreadEnd,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 20),
-
-              // SAĞ HERO KART: Kelime Takipli Mukabele & Hatim (Zikirce Zümrüt & Altın Kartı)
-              Expanded(
-                flex: 9,
-                child: TvFocusable(
-                  borderRadius: 26,
-                  onPressed: () {
-                    context.push('/mukabele?page=${mukabeleSync.lastPage}');
+                  borderRadius: 28,
+                  onPressed: () async {
+                    await context.push('/mukabele?page=${mukabeleSync.lastPage}');
+                    if (mounted) {
+                      _mukabeleHeroFocusNode.requestFocus();
+                    }
                   },
                   child: Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
@@ -667,16 +773,16 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                                     colors.accent, const Color(0xFF0E382C), 0.45)!,
                               ],
                       ),
-                      borderRadius: BorderRadius.circular(26),
+                      borderRadius: BorderRadius.circular(28),
                       border: Border.all(
-                        color: const Color(0xFFD4AF37).withValues(alpha: 0.55),
-                        width: 1.5,
+                        color: const Color(0xFFD4AF37).withValues(alpha: 0.65),
+                        width: 1.8,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: colors.accent
-                              .withValues(alpha: isDark ? 0.25 : 0.22),
-                          blurRadius: 24,
+                              .withValues(alpha: isDark ? 0.28 : 0.24),
+                          blurRadius: 26,
                           offset: const Offset(0, 10),
                         ),
                       ],
@@ -688,8 +794,8 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
+                                horizontal: 14,
+                                vertical: 7,
                               ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFD4AF37),
@@ -698,9 +804,10 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                               child: const Text(
                                 '▶️ SESLİ MUKABELE & HATİM (OK)',
                                 style: TextStyle(
-                                  fontSize: 11.5,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w900,
                                   color: Color(0xFF1A1512),
+                                  letterSpacing: 0.3,
                                 ),
                               ),
                             ),
@@ -708,38 +815,51 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                             const Icon(
                               Icons.graphic_eq_rounded,
                               color: Color(0xFFD4AF37),
-                              size: 28,
+                              size: 32,
                             ),
                           ],
                         ),
                         const Spacer(),
                         const Text(
-                          'Kelime Takipli Mukabele',
+                          'Kelime Takipli Sesli Mukabele',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 23,
+                            fontSize: 26,
                             fontWeight: FontWeight.w900,
                             color: Color(0xFFFDF8EE),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Cüz ${mukabeleSync.lastJuz} • Sayfa ${mukabeleSync.lastPage} / 605',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFFFFD56B),
+                            letterSpacing: -0.4,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Telefonda veya tablette kaldığınız sayfadan sesli kelime vurgusuyla devam edin.',
+                          'Cüz ${mukabeleSync.lastJuz} • Sayfa ${mukabeleSync.lastPage} / 605 • %$mukabeleProgressPercent',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFFFFD56B),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: LinearProgressIndicator(
+                            value: (mukabeleSync.lastPage / 605.0).clamp(0.03, 1.0),
+                            minHeight: 8,
+                            backgroundColor: Colors.white.withValues(alpha: 0.18),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFFD4AF37),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Diyanet “Ok ile Takip” kelime vurgusu ve sesli tilâvet ile kaldığınız sayfadan devam edin.',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 13,
-                            color: const Color(0xFFFDF8EE).withValues(alpha: 0.85),
+                            fontSize: 13.5,
+                            color: const Color(0xFFFDF8EE).withValues(alpha: 0.88),
                           ),
                         ),
                       ],
@@ -747,185 +867,124 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
+              const SizedBox(width: 22),
 
-        // ALT SATIR: Günün Namaz Vakitleri Şeridi + 40 Eserlik Külliyat Kitaplığına Geçiş Kartı
-        Expanded(
-          flex: 38,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Sol Alt: Günün Namaz Vakitleri & Canlı Geri Sayım (Tıklanınca Tam Ekran Ev Mescidi Açılır)
+              // SAĞ HERO KART: Rahlede Kur'ân-ı Kerîm Okuma (Çift Sayfa Mushaf & Meâl)
               Expanded(
-                flex: 13,
+                flex: 10,
                 child: TvFocusable(
-                  borderRadius: 24,
-                  onPressed: _openFullScreenEvMescidi,
+                  focusNode: _mushafHeroFocusNode,
+                  borderRadius: 28,
+                  onPressed: () async {
+                    await context.push('/mushaf?page=$effectiveMushafPage');
+                    if (mounted) {
+                      _mushafHeroFocusNode.requestFocus();
+                    }
+                  },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 22,
-                      vertical: 16,
-                    ),
+                    padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
                       color: colors.cardBackground,
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(28),
                       border: Border.all(
-                        color: colors.borderStroke,
-                        width: 1.2,
+                        color: colors.accent.withValues(alpha: 0.5),
+                        width: 1.8,
                       ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black
-                              .withValues(alpha: isDark ? 0.25 : 0.05),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.mosque_rounded,
-                              size: 19,
-                              color: colors.accent,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$city Namaz Vakitleri',
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w800,
-                                color: colors.primaryText,
-                              ),
-                            ),
-                            const Spacer(),
-                            if (nextPrayer != null)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.accent.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  '${nextPrayer.name} Vaktine Kalan: ${nextPrayer.formattedRemaining}',
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w800,
-                                    color: colors.accent,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const Spacer(),
-                        Row(
-                          children: [
-                            for (final slot in <({String name, String time, int idx})>[
-                              (name: 'İmsak', time: timings.fajr, idx: 0),
-                              (name: 'Güneş', time: timings.sunrise, idx: 1),
-                              (name: 'Öğle', time: timings.dhuhr, idx: 2),
-                              (name: 'İkindi', time: timings.asr, idx: 3),
-                              (name: 'Akşam', time: timings.maghrib, idx: 4),
-                              (name: 'Yatsı', time: timings.isha, idx: 5),
-                            ]) ...[
-                              if (slot.idx > 0) const SizedBox(width: 10),
-                              Expanded(
-                                child: _ZikircePrayerPillSlot(
-                                  label: slot.name,
-                                  time: slot.time,
-                                  isActive:
-                                      nextPrayer?.activePrayerIndex == slot.idx,
-                                  colors: colors,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 18),
-
-              // Sağ Alt: 40 Eserlik Külliyat Kitaplığına Geçiş Kartı (3B Cilt Sırtları ile)
-              Expanded(
-                flex: 7,
-                child: TvFocusable(
-                  borderRadius: 24,
-                  onPressed: () => setState(() => _activeSection = 1),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.cardBackground,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(
-                        color: colors.borderStroke,
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black
-                              .withValues(alpha: isDark ? 0.25 : 0.05),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
+                              .withValues(alpha: isDark ? 0.35 : 0.08),
+                          blurRadius: 26,
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
                     child: Row(
                       children: [
                         Expanded(
+                          flex: 6,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.accent.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: colors.accent.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                                child: Text(
+                                  '📖 KUR’ÂN-I KERÎM OKUMA (OK)',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: colors.accent,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
                               Text(
-                                '📚 40 Eserlik Külliyat',
+                                'Kur’ân-ı Kerîm Mushaf & Meâl',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 17,
+                                  fontSize: 25,
                                   fontWeight: FontWeight.w900,
                                   color: colors.primaryText,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Kur’ân, Meâl, Tefsir, Kütüb-i Sitte ve Risale-i Nur Rahle Kitaplığı',
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  color: colors.secondaryTextAlt,
+                                  letterSpacing: -0.4,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'Kitaplığı Aç (OK) →',
+                                'Cüz $mushafJuz • Sayfa $effectiveMushafPage / 605 • %$mushafProgressPercent',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 18.5,
+                                  fontWeight: FontWeight.w900,
                                   color: colors.accent,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: LinearProgressIndicator(
+                                  value: (effectiveMushafPage / 605.0).clamp(0.03, 1.0),
+                                  minHeight: 8,
+                                  backgroundColor:
+                                      colors.borderStroke.withValues(alpha: 0.5),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    colors.accent,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'TV ekranını dolduran büyük Mushaf hattı, gelişmiş yazı boyutu ayarı ve Türkçe meâl.',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  color: colors.secondaryTextAlt,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        // 3B Kitap Sırtları İllüstrasyonu
-                        const _MiniBookshelfSpinesWidget(),
+                        const SizedBox(width: 18),
+                        SizedBox(
+                          width: 150,
+                          height: 185,
+                          child: _MiniMushafSinglePageIllustration(
+                            pageNo: effectiveMushafPage,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -934,267 +993,129 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
             ],
           ),
         ),
-      ],
-    );
-  }
+        const SizedBox(height: 20),
 
-  Widget _buildKulliyatLibrarySection({
-    required AppThemeColors colors,
-    required bool isDark,
-  }) {
-    final allBooks = ref.watch(islamicBookshelfProvider);
-    final filteredBooks = _filterBooks(allBooks);
-
-    const filterLabels = <String>[
-      'Tümü (40)',
-      'Kur’ân & Meâl',
-      'Tefsirler (6.236 Âyet)',
-      'Kütüb-i Sitte & Hadis',
-      'Risale-i Nur Külliyatı',
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Üst Kategori Filtre Çipleri + Ana Meydana Dön Butonu
-        SizedBox(
-          height: 44,
-          child: Row(
-            children: [
-              TvFocusable(
-                borderRadius: 999,
-                onPressed: () => setState(() => _activeSection = 0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: colors.cardBackground,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: colors.borderStroke),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.arrow_back_rounded,
-                        size: 16,
-                        color: colors.accent,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Ana Meydan',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: colors.primaryText,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: filterLabels.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final isSelected = _selectedCategoryFilter == index;
-                    return TvFocusable(
-                      autofocus: index == 0,
-                      borderRadius: 999,
-                      onPressed: () {
-                        setState(() => _selectedCategoryFilter = index);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 9,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? colors.accent
-                              : colors.cardBackground,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: isSelected
-                                ? colors.accent
-                                : colors.borderStroke,
-                          ),
-                        ),
-                        child: Text(
-                          filterLabels[index],
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: isSelected
-                                ? Colors.white
-                                : colors.primaryText,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // 4 Sütunlu 3B Cilt Görünümlü Külliyat Kitaplığı Izgarası
+        // ALT SATIR: 1–30. Cüz Hızlı Seçim Şeridi (Kumanda ile Doğrudan Cüze Geçiş)
         Expanded(
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              mainAxisSpacing: 14,
-              crossAxisSpacing: 14,
-              childAspectRatio: 1.65,
+          flex: 35,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(22, 16, 22, 16),
+            decoration: BoxDecoration(
+              color: colors.cardBackground,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: colors.borderStroke,
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            itemCount: filteredBooks.length,
-            itemBuilder: (context, index) {
-              final book = filteredBooks[index];
-              final palette = book.palette;
-              return TvFocusable(
-                borderRadius: 20,
-                onPressed: () => _openBookInRahle(book),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: colors.cardBackground,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: colors.borderStroke,
-                      width: 1.2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.auto_stories_rounded,
+                      size: 19,
+                      color: colors.accent,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black
-                            .withValues(alpha: isDark ? 0.25 : 0.05),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Hızlı Cüz Seçimi (1 – 30. Cüz)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: colors.primaryText,
                       ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      // Sol: 3B Klasik Tahrirli Kitap Cildi Minyatürü
-                      Container(
-                        width: 52,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              palette.primaryLeather,
-                              palette.secondaryLeather,
-                            ],
-                          ),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(6),
-                            bottomLeft: Radius.circular(6),
-                            topRight: Radius.circular(12),
-                            bottomRight: Radius.circular(12),
-                          ),
-                          border: Border.all(
-                            color: palette.goldAccent.withValues(alpha: 0.65),
-                            width: 1.1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.25),
-                              blurRadius: 6,
-                              offset: const Offset(3, 2),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.auto_stories_rounded,
-                              size: 18,
-                              color: palette.goldAccent,
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              width: 28,
-                              height: 1.5,
-                              color: palette.goldAccent.withValues(alpha: 0.6),
-                            ),
-                          ],
-                        ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '◀ / ▶ Kumanda ile Cüz Seçin • OK ile Mukabele veya Mushaf Açın',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: colors.secondaryTextAlt,
                       ),
-                      const SizedBox(width: 12),
-                      // Sağ: Kitap Bilgileri ve İlerleme
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: colors.accent.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                'Rahlede Çift Sayfa',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: 30,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final juzNo = index + 1;
+                      final startPage = _juzStartPages[index];
+                      final isCurrentJuz = mukabeleSync.lastJuz == juzNo;
+
+                      return TvFocusable(
+                        borderRadius: 18,
+                        onPressed: () => _openJuzActionModal(juzNo, startPage),
+                        child: Container(
+                          width: 132,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isCurrentJuz
+                                ? colors.accent
+                                : colors.pageBackground,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: isCurrentJuz
+                                  ? const Color(0xFFD4AF37)
+                                  : colors.borderStroke,
+                              width: isCurrentJuz ? 1.8 : 1.1,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '$juzNo. Cüz',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.accent,
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w900,
+                                  color: isCurrentJuz
+                                      ? Colors.white
+                                      : colors.primaryText,
                                 ),
                               ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              book.shortTitle.isNotEmpty
-                                  ? book.shortTitle
-                                  : book.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w900,
-                                color: colors.primaryText,
+                              const SizedBox(height: 4),
+                              Text(
+                                isCurrentJuz
+                                    ? 'Kaldığınız Cüz'
+                                    : 'Sayfa $startPage',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: isCurrentJuz
+                                      ? const Color(0xFFFFD56B)
+                                      : colors.secondaryTextAlt,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              book.author,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: colors.secondaryTextAlt,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Sayfa ${book.currentPage}/${book.totalPages} • %${book.progressPercent}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                color: colors.accent,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ],
@@ -1202,88 +1123,34 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
   }
 }
 
-class _ZikircePrayerPillSlot extends StatelessWidget {
-  final String label;
-  final String time;
-  final bool isActive;
-  final AppThemeColors colors;
+/// Sağ Hero Kart içinde yer alan Tek Sayfa Tam Ekran Mushaf-ı Şerîf Minyatür İllüstrasyonu
+class _MiniMushafSinglePageIllustration extends StatelessWidget {
+  final int pageNo;
 
-  const _ZikircePrayerPillSlot({
-    required this.label,
-    required this.time,
-    required this.isActive,
-    required this.colors,
+  const _MiniMushafSinglePageIllustration({
+    required this.pageNo,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-      decoration: BoxDecoration(
-        color: isActive ? colors.accent : colors.pageBackground,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isActive ? colors.accent : colors.borderStroke,
-          width: isActive ? 1.5 : 1.0,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isActive ? Colors.white.withValues(alpha: 0.9) : colors.secondaryTextAlt,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            time,
-            style: TextStyle(
-              fontSize: 16.5,
-              fontWeight: FontWeight.w900,
-              color: isActive ? Colors.white : colors.primaryText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+    const primaryLeather = Color(0xFF144533);
+    const secondaryLeather = Color(0xFF0B291E);
+    const goldAccent = Color(0xFFD4AF37);
 
-/// Sol Hero Kart içinde yer alan 3B Açık Kitap & Rahle Minyatür İllüstrasyonu
-class _MiniRahleSpreadIllustration extends StatelessWidget {
-  final IslamicShelfBook book;
-  final int spreadStart;
-  final int spreadEnd;
-
-  const _MiniRahleSpreadIllustration({
-    required this.book,
-    required this.spreadStart,
-    required this.spreadEnd,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = book.palette;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            palette.primaryLeather,
-            palette.secondaryLeather,
+            primaryLeather,
+            secondaryLeather,
           ],
         ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: palette.goldAccent.withValues(alpha: 0.75),
+          color: goldAccent.withValues(alpha: 0.75),
           width: 1.5,
         ),
         boxShadow: [
@@ -1295,150 +1162,60 @@ class _MiniRahleSpreadIllustration extends StatelessWidget {
         ],
       ),
       child: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: const Color(0xFFF6EFE0),
           borderRadius: BorderRadius.circular(11),
+          border: Border.all(
+            color: goldAccent.withValues(alpha: 0.55),
+            width: 1.0,
+          ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Sol minyatür yaprak
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: palette.goldAccent.withValues(alpha: 0.28),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  for (int i = 0; i < 6; i++) ...[
-                    Container(
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 4),
-                      width: i == 5 ? 36 : double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2C1E18).withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ],
-                  const Spacer(),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Text(
-                      '$spreadStart',
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF5A4638),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Orta Cilt Sırtı
             Container(
-              width: 6,
-              margin: const EdgeInsets.symmetric(horizontal: 5),
+              height: 14,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.black.withValues(alpha: 0.08),
-                    Colors.black.withValues(alpha: 0.32),
-                    Colors.black.withValues(alpha: 0.08),
-                  ],
+                color: goldAccent.withValues(alpha: 0.26),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'سُورَةُ الْبَقَرَةِ',
+                style: TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF5A4638),
                 ),
               ),
             ),
-            // Sağ minyatür yaprak
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: palette.goldAccent.withValues(alpha: 0.28),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  for (int i = 0; i < 6; i++) ...[
-                    Container(
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 4),
-                      width: i == 5 ? 32 : double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2C1E18).withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ],
-                  const Spacer(),
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Text(
-                      '$spreadEnd',
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF5A4638),
-                      ),
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 8),
+            for (int i = 0; i < 7; i++) ...[
+              Container(
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2C1E18).withValues(alpha: 0.38),
+                  borderRadius: BorderRadius.circular(2.5),
+                ),
+              ),
+            ],
+            const Spacer(),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Text(
+                'Sayfa $pageNo',
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF5A4638),
+                ),
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Külliyat Kartı Sağ Tarafında 4 Adet 3B Klasik Cilt Sırtı Gösteren Bileşen
-class _MiniBookshelfSpinesWidget extends StatelessWidget {
-  const _MiniBookshelfSpinesWidget();
-
-  @override
-  Widget build(BuildContext context) {
-    const spines = <Color>[
-      Color(0xFF144533),
-      Color(0xFF6B1D1D),
-      Color(0xFF1E3557),
-      Color(0xFF4A2E1B),
-    ];
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        for (int i = 0; i < spines.length; i++)
-          Container(
-            width: 16,
-            height: 68.0 - (i.isEven ? 0 : 6),
-            margin: const EdgeInsets.only(left: 4),
-            decoration: BoxDecoration(
-              color: spines[i],
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: const Color(0xFFD4AF37).withValues(alpha: 0.65),
-                width: 1,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 4,
-                  offset: const Offset(1, 2),
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
@@ -1499,391 +1276,5 @@ class _ZikirceSeljukBackgroundPainter extends CustomPainter {
   bool shouldRepaint(covariant _ZikirceSeljukBackgroundPainter oldDelegate) {
     return oldDelegate.accentColor != accentColor ||
         oldDelegate.isDark != isDark;
-  }
-}
-
-/// TV'yi salon mescidine dönüştüren, OLED ekran yanması (burn-in) korumalı
-/// Tam Ekran Ambient Vakit & Ezan Panosu.
-class TvEvMescidiAmbientScreen extends ConsumerStatefulWidget {
-  final VoidCallback? onClose;
-
-  const TvEvMescidiAmbientScreen({
-    super.key,
-    this.onClose,
-  });
-
-  @override
-  ConsumerState<TvEvMescidiAmbientScreen> createState() =>
-      _TvEvMescidiAmbientScreenState();
-}
-
-class _TvEvMescidiAmbientScreenState
-    extends ConsumerState<TvEvMescidiAmbientScreen> {
-  late final FocusNode _ambientFocusNode;
-  Timer? _oledShiftTimer;
-  int _oledStep = 0;
-  int _wisdomIndex = 0;
-
-  static const List<Offset> _oledOffsets = <Offset>[
-    Offset(0, 0),
-    Offset(3, -2),
-    Offset(-4, 2),
-    Offset(4, 3),
-    Offset(-3, -3),
-  ];
-
-  static const List<({String arabic, String turkish, String source})>
-      _dailyWisdoms = [
-    (
-      arabic: 'أَلَا بِذِكْرِ اللَّهِ تَطْمَئِنُّ الْقُلُوبُ',
-      turkish: '“Biliniz ki kalpler ancak Allah’ı zikretmekle huzur bulur.”',
-      source: 'Ra’d Sûresi, 28. Âyet-i Kerîme',
-    ),
-    (
-      arabic: 'إِنَّ الصَّلَاةَ كَانَتْ عَلَى الْمُؤْمِينَ كِتَابًا مَوْقُوتًا',
-      turkish: '“Şüphesiz namaz, müminler üzerine vakitleri belirlenmiş bir farzdır.”',
-      source: 'Nisâ Sûresi, 103. Âyet-i Kerîme',
-    ),
-    (
-      arabic: 'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
-      turkish: '“Sizin en hayırlınız Kur’ân’ı öğrenen ve öğreteninizdir.”',
-      source: 'Sahîh-i Buhârî, Fedâilü’l-Kur’ân 21',
-    ),
-    (
-      arabic: 'الدُّعَاءُ مُخُّ الْعِبَادَةِ',
-      turkish: '“Dua ibadetin özüdür.”',
-      source: 'Tirmizî, Deavât 1',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _ambientFocusNode = FocusNode(debugLabel: 'TvEvMescidiAmbientFocus');
-    _oledShiftTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      if (mounted) {
-        setState(() {
-          _oledStep = (_oledStep + 1) % _oledOffsets.length;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _oledShiftTimer?.cancel();
-    _ambientFocusNode.dispose();
-    super.dispose();
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    final key = event.logicalKey;
-
-    if (key == LogicalKeyboardKey.arrowRight) {
-      setState(() {
-        _wisdomIndex = (_wisdomIndex + 1) % _dailyWisdoms.length;
-      });
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      setState(() {
-        _wisdomIndex =
-            (_wisdomIndex - 1 + _dailyWisdoms.length) % _dailyWisdoms.length;
-      });
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
-      if (widget.onClose != null) {
-        widget.onClose!();
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final city = ref.watch(selectedCityProvider);
-    final timingsAsync = ref.watch(prayerTimingsProvider);
-    final nextPrayer = ref.watch(nextPrayerInfoProvider);
-    final nowAsync = ref.watch(timeTickerStreamProvider);
-    final now = nowAsync.valueOrNull ?? DateTime.now();
-
-    final timings = timingsAsync.valueOrNull ??
-        PrayerTimesService.calculateOfflinePrayerTimes(city, now);
-    final hijri = HijriDate.fromGregorian(now);
-    final shift = _oledOffsets[_oledStep];
-    final wisdom = _dailyWisdoms[_wisdomIndex];
-
-    final timeStr =
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
-
-    final prayerItems = <({String label, String time, int idx})>[
-      (label: 'İmsak', time: timings.fajr, idx: 0),
-      (label: 'Güneş', time: timings.sunrise, idx: 1),
-      (label: 'Öğle', time: timings.dhuhr, idx: 2),
-      (label: 'İkindi', time: timings.asr, idx: 3),
-      (label: 'Akşam', time: timings.maghrib, idx: 4),
-      (label: 'Yatsı', time: timings.isha, idx: 5),
-    ];
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF14110E),
-      body: Focus(
-        focusNode: _ambientFocusNode,
-        autofocus: true,
-        onKeyEvent: _handleKeyEvent,
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment.center,
-              radius: 1.2,
-              colors: [
-                Color(0xFF231E19),
-                Color(0xFF16120F),
-                Color(0xFF0E0B09),
-              ],
-            ),
-          ),
-          child: SafeArea(
-            child: Transform.translate(
-              offset: shift,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(36, 24, 36, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Üst Bilgi & Kapatma Şeridi
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.mosque_rounded,
-                          color: Color(0xFFD4A574),
-                          size: 26,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'ZİKİRCE EV MESCİDİ • ${city.toUpperCase()}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.1,
-                            color: Color(0xFFD4A574),
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${hijri.format()} • ${now.day}.${now.month.toString().padLeft(2, '0')}.${now.year}',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFE8DDD0),
-                          ),
-                        ),
-                        if (widget.onClose != null) ...[
-                          const SizedBox(width: 18),
-                          TvFocusable(
-                            onPressed: widget.onClose,
-                            borderRadius: 12,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
-                            ),
-                            child: const Text(
-                              '✕ Meydana Dön',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFFDF8EE),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const Spacer(),
-                    // Dev Dijital Saat ve Sıradaki Vakte Kalan Süre
-                    Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            timeStr,
-                            style: const TextStyle(
-                              fontSize: 68,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2.5,
-                              color: Color(0xFFE8DDD0),
-                            ),
-                          ),
-                          if (nextPrayer != null) ...[
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 22,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFD4A574)
-                                    .withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: const Color(0xFFD4A574)
-                                      .withValues(alpha: 0.55),
-                                ),
-                              ),
-                              child: Text(
-                                '${nextPrayer.nextPrayerNameWithSuffix}: ${nextPrayer.formattedRemaining}',
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFFD4A574),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const Spacer(),
-                    // 6 Vaktin Yan Yana Işıltılı Kartları
-                    Row(
-                      children: [
-                        for (int i = 0; i < prayerItems.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 12),
-                          Expanded(
-                            child: _AmbientPrayerSlotCard(
-                              label: prayerItems[i].label,
-                              time: prayerItems[i].time,
-                              isActive:
-                                  nextPrayer?.activePrayerIndex ==
-                                  prayerItems[i].idx,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    // Günün Âyet-i Kerîmesi / Hadis-i Şerîfi (Sol/Sağ ok ile değiştirilebilir)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 16,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF241F1B).withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color:
-                              const Color(0xFFD4A574).withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            wisdom.arabic,
-                            textDirection: TextDirection.rtl,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontFamily: 'AmasyaAbay',
-                              fontSize: 24,
-                              color: Color(0xFFD4A574),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            wisdom.turkish,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFE8DDD0),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${wisdom.source}  •  [◀ / ▶ Hikmet Değiştir]',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Color(0xFFA89888),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AmbientPrayerSlotCard extends StatelessWidget {
-  final String label;
-  final String time;
-  final bool isActive;
-
-  const _AmbientPrayerSlotCard({
-    required this.label,
-    required this.time,
-    required this.isActive,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
-      decoration: BoxDecoration(
-        gradient: isActive
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF236B56),
-                  Color(0xFF17493A),
-                ],
-              )
-            : null,
-        color: isActive ? null : const Color(0xFF241F1B),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isActive
-              ? const Color(0xFFD4A574)
-              : const Color(0xFFD4A574).withValues(alpha: 0.32),
-          width: isActive ? 2.0 : 1.1,
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: isActive
-                  ? const Color(0xFFFDF8EE)
-                  : const Color(0xFFD4A574),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            time,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFFFDF8EE),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
