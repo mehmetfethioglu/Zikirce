@@ -1,6 +1,8 @@
-name: Zamera iOS Cloud Build & TestFlight Ready
+name: Zamera iOS Cloud Build, TestFlight & App Store Connect
 
 on:
+  push:
+    branches: [ zamera-release ]
   workflow_dispatch:
     inputs:
       enable_video_module:
@@ -78,3 +80,194 @@ jobs:
           name: zamera-ios-signed-ipa
           path: app/build/ios/ipa/Zamera.ipa
           retention-days: 14
+
+  sync-appstore-connect:
+    name: Sync v0.1.3 (Build 4) Release Notes & Attach Build in App Store Connect
+    needs: build-ios
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ secrets.APP_STORE_KEY_ID != '' && secrets.APP_STORE_ISSUER_ID != '' && secrets.APP_STORE_PRIVATE_KEY != '' }}
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+    steps:
+      - name: Install PyJWT, Cryptography & Requests
+        run: pip install pyjwt cryptography requests
+
+      - name: Update App Store Version 0.1.3, Set TR/EN Notes & Attach Build 4
+        run: |
+          python3 - << 'EOF'
+          import os, sys, time, jwt, requests
+
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+
+          def make_headers():
+              now = int(time.time())
+              payload = {
+                  "iss": issuer_id,
+                  "iat": now - 30,
+                  "exp": now + 1100,
+                  "aud": "appstoreconnect-v1",
+              }
+              token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"})
+              return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          VERSION_STR = "0.1.3"
+          BUILD_NUM = "4"
+
+          r = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.zamera", headers=make_headers())
+          r.raise_for_status()
+          apps = r.json().get("data", [])
+          if not apps:
+              print("ℹ️ App com.akarworks.zamera not yet found via apps endpoint.")
+              sys.exit(0)
+          app_id = apps[0]["id"]
+          print(f"✅ Found App ID: {app_id}")
+
+          r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
+          r.raise_for_status()
+          versions = r.json().get("data", [])
+          target_version_id = None
+          editable_version = None
+
+          for v in versions:
+              v_str = v["attributes"]["versionString"]
+              v_state = v["attributes"]["appStoreState"]
+              print(f"  Existing version: {v_str} (state: {v_state}, id: {v['id']})")
+              if v_str == VERSION_STR:
+                  target_version_id = v["id"]
+                  break
+              if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "INVALID_BINARY"):
+                  editable_version = v
+
+          if not target_version_id and editable_version:
+              target_version_id = editable_version["id"]
+              up = requests.patch(
+                  f"{BASE}/appStoreVersions/{target_version_id}",
+                  headers=make_headers(),
+                  json={"data": {"type": "appStoreVersions", "id": target_version_id, "attributes": {"versionString": VERSION_STR}}},
+              )
+              print("🔄 Update versionString status:", up.status_code)
+
+          if not target_version_id:
+              cr = requests.post(
+                  f"{BASE}/appStoreVersions",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersions",
+                          "attributes": {"platform": "IOS", "versionString": VERSION_STR, "releaseType": "AFTER_APPROVAL"},
+                          "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+                      }
+                  },
+              )
+              if cr.status_code in (200, 201):
+                  target_version_id = cr.json()["data"]["id"]
+                  print("➕ Created App Store Version:", VERSION_STR)
+              else:
+                  print("ℹ️ Could not create new App Store Version:", cr.status_code, cr.text[:300])
+
+          whats_new_tr = (
+              "Zamera v0.1.3 Yenilikleri:\n"
+              "• Gerçek DSLR Pozlama (PASM): Pro moduna sarsıntısız P / Tv / Sv / M pozlama önceliği, 1/3-EV DSLR durakları (ISO 50..12800, 30\"..1/8000s), canlı [-3..+3] EV pozometre, AEB ±2 / zamanlayıcı sürücü modları ve AEL/AFL kilidi eklendi.\n"
+              "• Sinema Video Deneyimi: Etkileşimli Sinema HUD (4K/1080P, 24/25/30/60p FPS, 180° açı kilidi, 10-bit profil, tek dokunuş LUT BYPASS), canlı A · B · A↔B Rack Focus, yayın seviyesi (-60..0 dB) ses göstergesi ve kırmızı REC Tally çerçevesi eklendi.\n"
+              "• Sanat Modu 1:1 Gerçek Renk: Canlı vizörde sRGB/Gamma 2.2 ton haritalama, 14-bit RAW kareden 24-yama ColorChecker D50 kalibrasyonu, canlı CIE L*a*b* / ΔE00 renk ölçer ve TrueColor ↔ OEM karşılaştırma denetçisi eklendi.\n"
+              "• Ergonomi & Performans: Tek-IPC video telemetrisi, kayıt sırasında optik lens geçişi ve çakışmasız 2 katmanlı radyal ayar yayı."
+          )
+          whats_new_en = (
+              "What's New in Zamera v0.1.3:\n"
+              "• True DSLR Exposure (PASM): Added bumpless P / Tv / Sv / M exposure priority, 1/3-EV DSLR stops (ISO 50..12800, 30\"..1/8000s), live [-3..+3] EV light meter, AEB ±2 / self-timer drive modes, and AEL/AFL lock to Pro mode.\n"
+              "• Cinema Video Experience: Interactive Cinema HUD (4K/1080P, 24/25/30/60p FPS, 180° shutter lock, 10-bit profile, 1-tap LUT BYPASS), live A · B · A↔B Rack Focus, broadcast (-60..0 dB) Peak+RMS audio meter, and crimson REC Tally frame.\n"
+              "• Art Mode 1:1 True-Color: Live sRGB/Gamma 2.2 viewfinder tone mapping, direct 14-bit RAW 24-patch ColorChecker D50 calibration, live CIE L*a*b* / ΔE00 spot colorimeter, and TrueColor vs OEM pixel inspector.\n"
+              "• Ergonomics & Performance: Single-IPC video telemetry, active-recording optical lens switching, and overlap-free 2-tier concentric radial settings arc."
+          )
+
+          if target_version_id:
+              loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
+              if loc_r.status_code == 200:
+                  for loc in loc_r.json().get("data", []):
+                      locale = loc["attributes"]["locale"]
+                      loc_id = loc["id"]
+                      text = whats_new_tr if locale.startswith("tr") else whats_new_en
+                      pr = requests.patch(
+                          f"{BASE}/appStoreVersionLocalizations/{loc_id}",
+                          headers=make_headers(),
+                          json={"data": {"type": "appStoreVersionLocalizations", "id": loc_id, "attributes": {"whatsNew": text}}},
+                      )
+                      print(f"📝 Updated localization '{locale}': status {pr.status_code} (note: first release ignores whatsNew if 409, which is normal)")
+
+          build_id = None
+          for attempt in range(28):
+              br = requests.get(
+                  f"{BASE}/builds?filter[app]={app_id}&filter[version]={BUILD_NUM}&sort=-uploadedDate&limit=5",
+                  headers=make_headers(),
+              )
+              if br.status_code == 200 and br.json().get("data"):
+                  b = br.json()["data"][0]
+                  state = b["attributes"].get("processingState")
+                  print(f"📦 Build {BUILD_NUM} found (id: {b['id']}, state: {state})")
+                  if state == "VALID":
+                      build_id = b["id"]
+                      break
+                  elif state in ("FAILED", "INVALID"):
+                      print(f"⚠️ Build {BUILD_NUM} state is {state}")
+                      break
+              else:
+                  print(f"⏳ Attempt {attempt+1}/28: Build {BUILD_NUM} processing on Apple TestFlight, waiting 25s...")
+              time.sleep(25)
+
+          if build_id:
+              requests.patch(
+                  f"{BASE}/builds/{build_id}",
+                  headers=make_headers(),
+                  json={"data": {"type": "builds", "id": build_id, "attributes": {"usesNonExemptEncryption": False}}},
+              )
+              print(f"✅ Export compliance set (usesNonExemptEncryption=False) for Build {BUILD_NUM} ({build_id})")
+              if target_version_id:
+                  att = requests.patch(
+                      f"{BASE}/appStoreVersions/{target_version_id}/relationships/build",
+                      headers=make_headers(),
+                      json={"data": {"type": "builds", "id": build_id}},
+                  )
+                  print(f"🔗 Attached Build {BUILD_NUM} to Version {VERSION_STR}: status {att.status_code}")
+                  sub_create = requests.post(
+                      f"{BASE}/reviewSubmissions",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "reviewSubmissions",
+                              "attributes": {"platform": "IOS"},
+                              "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+                          }
+                      },
+                  )
+                  if sub_create.status_code in (200, 201):
+                      sub_id = sub_create.json()["data"]["id"]
+                      requests.post(
+                          f"{BASE}/reviewSubmissionItems",
+                          headers=make_headers(),
+                          json={
+                              "data": {
+                                  "type": "reviewSubmissionItems",
+                                  "relationships": {
+                                      "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub_id}},
+                                      "appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}},
+                                  },
+                              }
+                          },
+                      )
+                      confirm = requests.patch(
+                          f"{BASE}/reviewSubmissions/{sub_id}",
+                          headers=make_headers(),
+                          json={"data": {"type": "reviewSubmissions", "id": sub_id, "attributes": {"submitted": True}}},
+                      )
+                      print("🚀 Review submission attempt status:", confirm.status_code, confirm.text[:300])
+                  else:
+                      print("ℹ️ Review submission info:", sub_create.status_code, sub_create.text[:300])
+          else:
+              print(f"ℹ️ Build {BUILD_NUM} is uploaded and continuing Apple TestFlight background processing.")
+          EOF

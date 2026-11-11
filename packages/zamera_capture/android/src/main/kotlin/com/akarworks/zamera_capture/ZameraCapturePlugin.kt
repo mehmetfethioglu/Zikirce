@@ -14,6 +14,7 @@ import android.graphics.Rect
 import android.hardware.camera2.*
 import android.hardware.camera2.params.ColorSpaceTransform
 import android.hardware.camera2.params.DynamicRangeProfiles
+import android.hardware.camera2.params.LensShadingMap
 import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.RggbChannelVector
@@ -50,6 +51,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.ln
+import kotlin.math.log10
 import kotlin.math.roundToInt
 
 /**
@@ -83,9 +86,18 @@ class ZameraCapturePlugin :
     private val ispWorkerCount = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
     private val ispWorkerPool = Executors.newFixedThreadPool(ispWorkerCount)
 
-    // Managed warm ML Kit SelfieSegmenter instance (eliminates ~250ms per-shot TFLite model reload and closes cleanly on detach)
+    // Managed warm ML Kit SelfieSegmenter & Bundled LiteRT/TFLite Multiclass + 3D Depth + U²-NetP Matting Interpreters
     @Volatile
     private var selfieSegmenterInstance: com.google.mlkit.vision.segmentation.Segmenter? = null
+    private val multiclassModelLock = Any()
+    private val depthModelLock = Any()
+    private val u2netModelLock = Any()
+    @Volatile
+    private var multiclassInterpreterInstance: org.tensorflow.lite.Interpreter? = null
+    @Volatile
+    private var depthInterpreterInstance: org.tensorflow.lite.Interpreter? = null
+    @Volatile
+    private var u2netInterpreterInstance: org.tensorflow.lite.Interpreter? = null
 
     private fun getOrCreateSelfieSegmenter(): com.google.mlkit.vision.segmentation.Segmenter {
         selfieSegmenterInstance?.let { return it }
@@ -95,6 +107,73 @@ class ZameraCapturePlugin :
                 .setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
                 .build()
             return Segmentation.getClient(options).also { selfieSegmenterInstance = it }
+        }
+    }
+
+    private fun loadAssetModelBuffer(assetName: String): ByteBuffer {
+        return try {
+            appContext.assets.openFd(assetName).use { afd ->
+                java.io.FileInputStream(afd.fileDescriptor).channel.use { ch ->
+                    ch.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, afd.startOffset, afd.declaredLength)
+                }
+            }
+        } catch (_: Throwable) {
+            val bytes = appContext.assets.open(assetName).use { it.readBytes() }
+            ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).apply {
+                put(bytes)
+                rewind()
+            }
+        }
+    }
+
+    private fun getOrCreateMulticlassInterpreter(): org.tensorflow.lite.Interpreter? {
+        multiclassInterpreterInstance?.let { return it }
+        synchronized(multiclassModelLock) {
+            multiclassInterpreterInstance?.let { return it }
+            return try {
+                val opts = org.tensorflow.lite.Interpreter.Options()
+                    .setNumThreads(4)
+                    .setUseXNNPACK(true)
+                org.tensorflow.lite.Interpreter(loadAssetModelBuffer("selfie_multiclass_256x256.tflite"), opts)
+                    .also { multiclassInterpreterInstance = it }
+            } catch (t: Throwable) {
+                android.util.Log.e("ZameraPortrait", "SelfieMulticlass init failed: ${t.message}", t)
+                null
+            }
+        }
+    }
+
+    private fun getOrCreateDepthInterpreter(): org.tensorflow.lite.Interpreter? {
+        depthInterpreterInstance?.let { return it }
+        synchronized(depthModelLock) {
+            depthInterpreterInstance?.let { return it }
+            return try {
+                val opts = org.tensorflow.lite.Interpreter.Options()
+                    .setNumThreads(4)
+                    .setUseXNNPACK(true)
+                org.tensorflow.lite.Interpreter(loadAssetModelBuffer("depth_anything_v2_small.tflite"), opts)
+                    .also { depthInterpreterInstance = it }
+            } catch (t: Throwable) {
+                android.util.Log.e("ZameraPortrait", "DepthAnythingV2 init failed: ${t.message}", t)
+                null
+            }
+        }
+    }
+
+    private fun getOrCreateU2NetInterpreter(): org.tensorflow.lite.Interpreter? {
+        u2netInterpreterInstance?.let { return it }
+        synchronized(u2netModelLock) {
+            u2netInterpreterInstance?.let { return it }
+            return try {
+                val opts = org.tensorflow.lite.Interpreter.Options()
+                    .setNumThreads(2)
+                    .setUseXNNPACK(true)
+                org.tensorflow.lite.Interpreter(loadAssetModelBuffer("u2netp.tflite"), opts)
+                    .also { u2netInterpreterInstance = it }
+            } catch (t: Throwable) {
+                android.util.Log.e("ZameraPortrait", "U2NetP init failed: ${t.message}", t)
+                null
+            }
         }
     }
 
@@ -150,6 +229,32 @@ class ZameraCapturePlugin :
     private var latestLiveFalseColorGrid16x12: List<Int> = emptyList()
     @Volatile
     private var latestMeanSceneLumaNorm: Double = 0.42
+    @Volatile
+    private var latestLiveCenterSrgb: List<Int> = listOf(119, 119, 119)
+    @Volatile
+    private var latestLiveCenterLabD50: List<Double> = listOf(50.0, 0.0, 0.0)
+
+    // Photo DSLR PASM & AE/AF Lock State
+    @Volatile
+    private var photoManualIso: Boolean = false
+    @Volatile
+    private var photoManualShutter: Boolean = false
+    @Volatile
+    private var photoAeAfLocked: Boolean = false
+    @Volatile
+    private var photoActiveIso: Double = 100.0
+    @Volatile
+    private var photoActiveShutterNs: Long = 8_000_000L
+    @Volatile
+    private var photoIsoMin: Int = 50
+    @Volatile
+    private var photoIsoMax: Int = 3200
+    @Volatile
+    private var photoExpNsMin: Long = 50_000L
+    @Volatile
+    private var photoExpNsMax: Long = 1_000_000_000L
+    @Volatile
+    private var photoEvCompensation: Double = 0.0
 
     // Faz 3 Pro Video Engine State (WP-3.1 .. WP-3.5)
     @Volatile
@@ -204,16 +309,26 @@ class ZameraCapturePlugin :
     private var audioMeterActive: Boolean = false
     private var audioMeterThread: Thread? = null
     private var audioRecordMonitor: android.media.AudioRecord? = null
+    @Volatile
+    private var videoAeAfLocked: Boolean = false
+    @Volatile
+    private var videoPreferredAudioDeviceId: String? = null
+    @Volatile
+    private var fallbackSmoothedAudioPower: Double = 0.0
+
+    private val portraitSessionCache = PortraitSessionCache(maxEntries = 1)
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         appContext = flutterPluginBinding.applicationContext
         textureRegistry = flutterPluginBinding.textureRegistry
-        // Pre-warm ML Kit SelfieSegmenter in background so the first Portrait capture has zero cold-start latency
+        // Pre-warm MediaPipe Selfie Multiclass + ML Kit SelfieSegmenter + DepthAnythingV2 in background
         rustIspExecutor.execute {
             try {
+                getOrCreateMulticlassInterpreter()
                 getOrCreateSelfieSegmenter()
+                getOrCreateDepthInterpreter()
             } catch (e: Throwable) {
-                android.util.Log.w("ZameraCapture", "SelfieSegmenter pre-warm warning: ${e.message}")
+                android.util.Log.w("ZameraCapture", "Portrait AI pre-warm warning: ${e.message}")
             }
         }
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, "com.akarworks.zamera/capture_probe")
@@ -244,6 +359,9 @@ class ZameraCapturePlugin :
     private fun wakeAndKeepScreenOn(act: Activity) {
         try {
             act.runOnUiThread {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    act.window?.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                     act.setShowWhenLocked(true)
                     act.setTurnScreenOn(true)
@@ -379,6 +497,10 @@ class ZameraCapturePlugin :
             "updateVideoControls" -> {
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
                 updateVideoControls(args, result)
+            }
+            "setVideoFocusAndMeteringPoint" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                setVideoFocusAndMeteringPoint(args, result)
             }
             "startVideoRecording" -> {
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
@@ -520,6 +642,16 @@ class ZameraCapturePlugin :
             val minFocusDist = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0.0f
             val isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
             val expRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+            photoIsoMin = isoRange?.lower ?: 50
+            photoIsoMax = isoRange?.upper ?: 3200
+            photoExpNsMin = expRange?.lower ?: 50_000L
+            photoExpNsMax = expRange?.upper ?: 1_000_000_000L
+            photoManualIso = false
+            photoManualShutter = false
+            photoAeAfLocked = false
+            photoEvCompensation = 0.0
+            photoActiveIso = 100.0.coerceIn(photoIsoMin.toDouble(), photoIsoMax.toDouble())
+            photoActiveShutterNs = 8_000_000L.coerceIn(photoExpNsMin, photoExpNsMax)
 
             val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
             val previewSize = map?.getOutputSizes(android.graphics.SurfaceTexture::class.java)
@@ -601,6 +733,17 @@ class ZameraCapturePlugin :
                                 // Lock zoom ratio to 1.0x to prevent OEM automatic macro/crop switching (Faz 2A)
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                     builder.set(CaptureRequest.CONTROL_ZOOM_RATIO, 1.0f)
+                                }
+                                val shadingModes = chars.get(CameraCharacteristics.SHADING_AVAILABLE_MODES)
+                                if (shadingModes != null && shadingModes.contains(CameraMetadata.SHADING_MODE_HIGH_QUALITY)) {
+                                    builder.set(CaptureRequest.SHADING_MODE, CameraMetadata.SHADING_MODE_HIGH_QUALITY)
+                                }
+                                val lsmModes = chars.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES)
+                                if (lsmModes != null && lsmModes.contains(CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)) {
+                                    builder.set(
+                                        CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,
+                                        CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON
+                                    )
                                 }
                                 previewRequestBuilder = builder
 
@@ -761,7 +904,11 @@ class ZameraCapturePlugin :
         }
 
         val iso = physRes.get(CaptureResult.SENSOR_SENSITIVITY)
+            ?: logicalRes.get(CaptureResult.SENSOR_SENSITIVITY)
+            ?: (if (!videoSessionActive && (photoManualIso || photoManualShutter)) photoActiveIso.roundToInt() else null)
         val expNs = physRes.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+            ?: logicalRes.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+            ?: (if (!videoSessionActive && (photoManualIso || photoManualShutter)) photoActiveShutterNs else null)
         val focusDiopters = physRes.get(CaptureResult.LENS_FOCUS_DISTANCE)
         val wbGains = physRes.get(CaptureResult.COLOR_CORRECTION_GAINS)
         val neutralPt = physRes.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)
@@ -824,6 +971,10 @@ class ZameraCapturePlugin :
             5500.0
         }
 
+        val meanLumaNorm = latestMeanSceneLumaNorm.coerceIn(0.005, 1.0)
+        val meteredEvDelta = (ln(meanLumaNorm.coerceAtLeast(0.005) / 0.42) / ln(2.0)).coerceIn(-3.0, 3.0)
+        val currentAeAfLocked = if (videoSessionActive) videoAeAfLocked else photoAeAfLocked
+
         return mapOf(
             "cameraId" to (activePhysicalCameraId ?: activeCameraId),
             "iso" to iso,
@@ -832,6 +983,8 @@ class ZameraCapturePlugin :
             "aperture" to aperture?.toDouble(),
             "focalLengthMm" to focalLength?.toDouble(),
             "solvedCctKelvin" to liveCctKelvin,
+            "meteredEvDelta" to meteredEvDelta,
+            "aeAfLocked" to currentAeAfLocked,
             "wbGains" to if (wbGains != null) listOf(
                 wbGains.red.toDouble(),
                 wbGains.greenEven.toDouble(),
@@ -851,8 +1004,32 @@ class ZameraCapturePlugin :
             "liveFocusPeakingScore" to latestLiveFocusPeakingScore,
             "livePeakingGrid16x12" to latestLivePeakingGrid16x12,
             "liveFalseColorGrid16x12" to latestLiveFalseColorGrid16x12,
+            "liveCenterSrgb" to latestLiveCenterSrgb,
+            "liveCenterLabD50" to latestLiveCenterLabD50,
             "ndFilterRecommendation" to videoNdRecommendation
         )
+    }
+
+    private fun srgb8ToLabD50Native(r: Int, g: Int, b: Int): List<Double> {
+        fun eotf(code: Int): Double {
+            val c = code.coerceIn(0, 255) / 255.0
+            return if (c <= 0.04045) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        val lr = eotf(r)
+        val lg = eotf(g)
+        val lb = eotf(b)
+        // sRGB linear -> XYZ D65 -> Bradford D65->D50
+        val x50 = 0.4360747 * lr + 0.3850649 * lg + 0.1430804 * lb
+        val y50 = 0.2225045 * lr + 0.7168786 * lg + 0.0606169 * lb
+        val z50 = 0.0139322 * lr + 0.0971045 * lg + 0.7141733 * lb
+
+        val eps = 216.0 / 24389.0
+        val kap = 24389.0 / 27.0
+        fun f(t: Double): Double = if (t > eps) Math.cbrt(t) else (kap * t + 16.0) / 116.0
+        val fx = f((x50 / 0.96422).coerceAtLeast(0.0))
+        val fy = f((y50 / 1.00000).coerceAtLeast(0.0))
+        val fz = f((z50 / 0.82521).coerceAtLeast(0.0))
+        return listOf(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
     }
 
     /**
@@ -978,9 +1155,135 @@ class ZameraCapturePlugin :
             }
         }
 
+        // Sample central 8x8 YUV_420_888 region for live center sRGB & CIE L*a*b* (D50) colorimeter
+        try {
+            if (img.planes.size >= 3) {
+                val uPlane = img.planes[1]
+                val vPlane = img.planes[2]
+                val uBuf = uPlane.buffer
+                val vBuf = vPlane.buffer
+                val uRowStride = uPlane.rowStride
+                val uPixStride = uPlane.pixelStride
+                val vRowStride = vPlane.rowStride
+                val vPixStride = vPlane.pixelStride
+                val cx0 = (sw / 2 - 4).coerceAtLeast(0)
+                val cx1 = (sw / 2 + 4).coerceAtMost(sw)
+                val cy0 = (sh / 2 - 4).coerceAtLeast(0)
+                val cy1 = (sh / 2 + 4).coerceAtMost(sh)
+                var sumY = 0.0
+                var sumU = 0.0
+                var sumV = 0.0
+                var cCnt = 0
+                for (cy in cy0 until cy1) {
+                    val uvY = cy / 2
+                    for (cx in cx0 until cx1) {
+                        val uvX = cx / 2
+                        val yIdx = cy * rowStride + cx * pixelStride
+                        val uIdx = uvY * uRowStride + uvX * uPixStride
+                        val vIdx = uvY * vRowStride + uvX * vPixStride
+                        if (yIdx < yBuf.limit() && uIdx < uBuf.limit() && vIdx < vBuf.limit()) {
+                            sumY += (yBuf.get(yIdx).toInt() and 0xFF).toDouble()
+                            sumU += (uBuf.get(uIdx).toInt() and 0xFF).toDouble()
+                            sumV += (vBuf.get(vIdx).toInt() and 0xFF).toDouble()
+                            cCnt++
+                        }
+                    }
+                }
+                if (cCnt > 0) {
+                    val ym = sumY / cCnt
+                    val um = sumU / cCnt - 128.0
+                    val vm = sumV / cCnt - 128.0
+                    val sr = (ym + 1.402 * vm).roundToInt().coerceIn(0, 255)
+                    val sg = (ym - 0.344136 * um - 0.714136 * vm).roundToInt().coerceIn(0, 255)
+                    val sb = (ym + 1.772 * um).roundToInt().coerceIn(0, 255)
+                    latestLiveCenterSrgb = listOf(sr, sg, sb)
+                    latestLiveCenterLabD50 = srgb8ToLabD50Native(sr, sg, sb)
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "Center YUV sample warning: ${e.message}")
+        }
+
         // WP-3.2 Software Auto-ISO PI Controller (active when 180° shutter angle is locked and manualIso is false)
-        if (videoSessionActive && videoLockShutterAngle && !videoManualIso) {
+        if (videoSessionActive && videoLockShutterAngle && !videoManualIso && !videoAeAfLocked) {
             applySoftwareAutoIsoStep(meanLumaNorm)
+        } else if (!videoSessionActive && !photoAeAfLocked && (photoManualIso != photoManualShutter)) {
+            applyPhotoPasmExposureStep(meanLumaNorm)
+        }
+    }
+
+    private val photoPreviewCaptureCallback = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(
+            session: CameraCaptureSession,
+            request: CaptureRequest,
+            res: TotalCaptureResult
+        ) {
+            lastTotalCaptureResult = res
+            if (yuvAnalysisReader == null && !videoSessionActive) {
+                val surf = previewSurface
+                if (surf != null) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastYuvAnalysisMs >= 160L) {
+                        lastYuvAnalysisMs = now
+                        samplePreviewSurfaceViaPixelCopy(surf)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * DSLR Semi-Automatic Exposure Controller for Tv (Shutter Priority -> Auto-ISO)
+     * and Sv (ISO Sensitivity Priority -> Auto-Shutter) driven by live YUV scene luma + EV bias.
+     */
+    private fun applyPhotoPasmExposureStep(measuredLuma: Double) {
+        val builder = previewRequestBuilder ?: return
+        val session = captureSession ?: return
+        if (photoAeAfLocked) return
+        try {
+            val targetLuma = (0.42 * Math.pow(2.0, photoEvCompensation.coerceIn(-3.0, 3.0))).coerceIn(0.06, 0.88)
+            val meas = measuredLuma.coerceIn(0.005, 1.0)
+            val evError = (ln(targetLuma / meas) / ln(2.0)).coerceIn(-4.0, 4.0)
+            if (kotlin.math.abs(evError) < 0.06) return
+            val dampedStepEv = (evError * 0.45).coerceIn(-1.25, 1.25)
+            val ratio = Math.pow(2.0, dampedStepEv)
+
+            if (!photoManualIso && photoManualShutter) {
+                // Tv (Shutter Priority): fixed shutter, smooth software Auto-ISO within sensor sensitivity range
+                val minI = photoIsoMin.toDouble().coerceAtLeast(10.0)
+                val maxI = photoIsoMax.toDouble().coerceAtLeast(minI)
+                val curIso = photoActiveIso.coerceIn(minI, maxI)
+                val nextIso = (curIso * ratio).coerceIn(minI, maxI)
+                if (kotlin.math.abs(nextIso - curIso) >= 1.5) {
+                    photoActiveIso = nextIso
+                    val fixedShutter = photoActiveShutterNs.coerceIn(photoExpNsMin, photoExpNsMax)
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, fixedShutter)
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, nextIso.roundToInt().coerceIn(photoIsoMin, photoIsoMax))
+                    session.setRepeatingRequest(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
+                }
+            } else if (photoManualIso && !photoManualShutter) {
+                // Sv (Sensitivity Priority): fixed ISO, smooth software Auto-Shutter within sensor expRange
+                val minExp = photoExpNsMin.coerceAtLeast(10_000L)
+                val maxExp = photoExpNsMax.coerceAtMost(500_000_000L).coerceAtLeast(minExp)
+                val curExp = photoActiveShutterNs.coerceIn(minExp, maxExp).toDouble()
+                val nextExp = (curExp * ratio).coerceIn(minExp.toDouble(), maxExp.toDouble())
+                val nextExpLong = nextExp.toLong().coerceIn(minExp, maxExp)
+                if (nextExpLong != photoActiveShutterNs &&
+                    kotlin.math.abs(nextExp - curExp) / curExp.coerceAtLeast(1.0) >= 0.02
+                ) {
+                    photoActiveShutterNs = nextExpLong
+                    val fixedIso = photoActiveIso.roundToInt().coerceIn(photoIsoMin, photoIsoMax)
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, fixedIso)
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, nextExpLong)
+                    session.setRepeatingRequest(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "applyPhotoPasmExposureStep warning: ${e.message}")
         }
     }
 
@@ -1011,6 +1314,7 @@ class ZameraCapturePlugin :
                         var totalSamples = 0
                         var totalZebra = 0
                         var totalZebra70 = 0
+                        var totalLumaSum = 0L
                         var totalGradSum = 0.0
                         for (sy in 1 until sh - 1) {
                             val rowOff = sy * sw
@@ -1019,6 +1323,7 @@ class ZameraCapturePlugin :
                                 val yVal = (((p shr 16) and 0xFF) * 77 + ((p shr 8) and 0xFF) * 150 + (p and 0xFF) * 29) shr 8
                                 histBins[(yVal shr 3).coerceIn(0, 31)]++
                                 histBins64[(yVal shr 2).coerceIn(0, 63)]++
+                                totalLumaSum += yVal
                                 totalSamples++
                                 val pL = pixels[rowOff + sx - 1]
                                 val pR = pixels[rowOff + sx + 1]
@@ -1070,6 +1375,33 @@ class ZameraCapturePlugin :
                                     else -> 5
                                 }
                             }
+                            var cR = 0
+                            var cG = 0
+                            var cB = 0
+                            var cN = 0
+                            for (cy in (sh / 2 - 4).coerceAtLeast(0) until (sh / 2 + 4).coerceAtMost(sh)) {
+                                for (cx in (sw / 2 - 4).coerceAtLeast(0) until (sw / 2 + 4).coerceAtMost(sw)) {
+                                    val px = pixels[cy * sw + cx]
+                                    cR += (px shr 16) and 0xFF
+                                    cG += (px shr 8) and 0xFF
+                                    cB += px and 0xFF
+                                    cN++
+                                }
+                            }
+                            if (cN > 0) {
+                                val sr = (cR / cN).coerceIn(0, 255)
+                                val sg = (cG / cN).coerceIn(0, 255)
+                                val sb = (cB / cN).coerceIn(0, 255)
+                                latestLiveCenterSrgb = listOf(sr, sg, sb)
+                                latestLiveCenterLabD50 = srgb8ToLabD50Native(sr, sg, sb)
+                            }
+                            val meanLumaNorm = ((totalLumaSum.toDouble() / totalSamples) / 255.0).coerceIn(0.005, 1.0)
+                            latestMeanSceneLumaNorm = meanLumaNorm
+                            if (videoSessionActive && videoLockShutterAngle && !videoManualIso && !videoAeAfLocked) {
+                                applySoftwareAutoIsoStep(meanLumaNorm)
+                            } else if (!videoSessionActive && !photoAeAfLocked && (photoManualIso != photoManualShutter)) {
+                                applyPhotoPasmExposureStep(meanLumaNorm)
+                            }
                         }
                     }
                 } catch (e: Throwable) {
@@ -1081,6 +1413,38 @@ class ZameraCapturePlugin :
         } catch (e: Throwable) {
             android.util.Log.w("ZameraCapture", "PixelCopy request warning: ${e.message}")
         }
+    }
+
+    private fun buildSpotMeteringRegion(
+        chars: CameraCharacteristics,
+        builder: CaptureRequest.Builder,
+        normX: Float,
+        normY: Float
+    ): MeteringRectangle? {
+        val sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return null
+        if (sensorRect.width() < 64 || sensorRect.height() < 64) return null
+        val clampedX = normX.coerceIn(0.05f, 0.95f)
+        val clampedY = normY.coerceIn(0.05f, 0.95f)
+        // Rotate normalized portrait UI coordinates (clampedX, clampedY) into physical sensor array orientation
+        val (sensorNormX, sensorNormY) = when ((activeSensorOrientation % 360 + 360) % 360) {
+            90 -> Pair(clampedY, 1.0f - clampedX)
+            270 -> Pair(1.0f - clampedY, 1.0f - clampedX)
+            180 -> Pair(1.0f - clampedX, 1.0f - clampedY)
+            else -> Pair(clampedX, clampedY)
+        }
+        val baseRect = builder.get(CaptureRequest.SCALER_CROP_REGION) ?: sensorRect
+        val cx = (baseRect.left + sensorNormX * baseRect.width()).toInt()
+        val cy = (baseRect.top + sensorNormY * baseRect.height()).toInt()
+        val halfW = (baseRect.width() * 0.075f).toInt().coerceAtLeast(32)
+        val halfH = (baseRect.height() * 0.075f).toInt().coerceAtLeast(32)
+        val left = (cx - halfW).coerceAtLeast(sensorRect.left)
+        val top = (cy - halfH).coerceAtLeast(sensorRect.top)
+        val right = (cx + halfW).coerceAtMost(sensorRect.right).coerceAtLeast(left + 1)
+        val bottom = (cy + halfH).coerceAtMost(sensorRect.bottom).coerceAtLeast(top + 1)
+        return MeteringRectangle(
+            Rect(left, top, right, bottom),
+            MeteringRectangle.METERING_WEIGHT_MAX - 1
+        )
     }
 
     private fun setFocusAndMeteringPoint(args: Map<String, Any?>, result: Result) {
@@ -1096,73 +1460,102 @@ class ZameraCapturePlugin :
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val charsId = activePhysicalCameraId ?: activeCameraId
             val chars = manager.getCameraCharacteristics(charsId)
-            val sensorRect = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-            if (sensorRect == null) {
+            val normX = ((args["x"] as? Number)?.toFloat() ?: 0.5f)
+            val normY = ((args["y"] as? Number)?.toFloat() ?: 0.5f)
+            val lockAeAf = args["lockAeAf"] as? Boolean ?: false
+            val region = buildSpotMeteringRegion(chars, builder, normX, normY)
+            if (region == null) {
                 result.success(false)
                 return
             }
 
-            val normX = ((args["x"] as? Number)?.toFloat() ?: 0.5f).coerceIn(0.05f, 0.95f)
-            val normY = ((args["y"] as? Number)?.toFloat() ?: 0.5f).coerceIn(0.05f, 0.95f)
-
-            // Rotate normalized portrait UI coordinates (normX, normY) into physical sensor array orientation
-            val (sensorNormX, sensorNormY) = when ((activeSensorOrientation % 360 + 360) % 360) {
-                90 -> Pair(normY, 1.0f - normX)
-                270 -> Pair(1.0f - normY, 1.0f - normX)
-                180 -> Pair(1.0f - normX, 1.0f - normY)
-                else -> Pair(normX, normY)
-            }
-
-            val cx = (sensorRect.left + sensorNormX * sensorRect.width()).toInt()
-            val cy = (sensorRect.top + sensorNormY * sensorRect.height()).toInt()
-            val halfW = (sensorRect.width() * 0.075f).toInt().coerceAtLeast(32)
-            val halfH = (sensorRect.height() * 0.075f).toInt().coerceAtLeast(32)
-
-            val region = MeteringRectangle(
-                Rect(
-                    (cx - halfW).coerceAtLeast(sensorRect.left),
-                    (cy - halfH).coerceAtLeast(sensorRect.top),
-                    (cx + halfW).coerceAtMost(sensorRect.right),
-                    (cy + halfH).coerceAtMost(sensorRect.bottom)
-                ),
-                MeteringRectangle.METERING_WEIGHT_MAX - 1
-            )
-
+            photoAeAfLocked = lockAeAf
             val maxAf = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
             val maxAe = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
             val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0.0f
+            val isManualFocus = builder.get(CaptureRequest.CONTROL_AF_MODE) == CaptureRequest.CONTROL_AF_MODE_OFF
             if (maxAf > 0 && minFocus > 0.0f) {
                 builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
-                if (builder.get(CaptureRequest.CONTROL_AF_MODE) != CaptureRequest.CONTROL_AF_MODE_OFF) {
+                if (!isManualFocus) {
                     builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
                 }
             }
             if (maxAe > 0) {
                 builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
             }
+            builder.set(CaptureRequest.CONTROL_AE_LOCK, lockAeAf)
 
-            val captureCallback = object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureCompleted(
-                    session: CameraCaptureSession,
-                    request: CaptureRequest,
-                    res: TotalCaptureResult
-                ) {
-                    lastTotalCaptureResult = res
-                }
-            }
-
-            session.setRepeatingRequest(builder.build(), captureCallback, backgroundHandler)
+            session.setRepeatingRequest(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
 
             // Trigger active AF sweep if variable focus is enabled and not locked in manual focus
-            if (maxAf > 0 && minFocus > 0.0f && builder.get(CaptureRequest.CONTROL_AF_MODE) != CaptureRequest.CONTROL_AF_MODE_OFF) {
+            if (maxAf > 0 && minFocus > 0.0f && !isManualFocus) {
                 builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
-                session.capture(builder.build(), captureCallback, backgroundHandler)
+                session.capture(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
                 builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
             }
 
             result.success(true)
         } catch (e: Exception) {
             result.error("TAP_FOCUS_ERR", e.message, null)
+        }
+    }
+
+    private fun setVideoFocusAndMeteringPoint(args: Map<String, Any?>, result: Result) {
+        activeFocusPullRunnable?.let { backgroundHandler?.removeCallbacks(it) }
+        activeFocusPullRunnable = null
+        val builder = previewRequestBuilder
+        val session = captureSession
+        if (builder == null || session == null || !videoSessionActive) {
+            result.success(false)
+            return
+        }
+        try {
+            val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val charsId = activePhysicalCameraId ?: activeCameraId
+            val chars = manager.getCameraCharacteristics(charsId)
+            val normX = ((args["x"] as? Number)?.toFloat() ?: 0.5f)
+            val normY = ((args["y"] as? Number)?.toFloat() ?: 0.5f)
+            val lockAeAf = args["lockAeAf"] as? Boolean ?: false
+            val region = buildSpotMeteringRegion(chars, builder, normX, normY)
+            if (region == null) {
+                result.success(false)
+                return
+            }
+
+            videoAeAfLocked = lockAeAf
+            val maxAf = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0
+            val maxAe = chars.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0
+            val minFocus = chars.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0.0f
+            val isManualFocus = builder.get(CaptureRequest.CONTROL_AF_MODE) == CaptureRequest.CONTROL_AF_MODE_OFF
+
+            if (maxAf > 0 && minFocus > 0.0f) {
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
+                if (!isManualFocus) {
+                    builder.set(
+                        CaptureRequest.CONTROL_AF_MODE,
+                        if (lockAeAf) CaptureRequest.CONTROL_AF_MODE_AUTO else CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                    )
+                }
+            }
+            if (maxAe > 0) {
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
+            }
+            builder.set(CaptureRequest.CONTROL_AE_LOCK, lockAeAf)
+
+            session.setRepeatingRequest(builder.build(), videoCaptureCallback, backgroundHandler)
+
+            if (maxAf > 0 && minFocus > 0.0f && !isManualFocus) {
+                builder.set(
+                    CaptureRequest.CONTROL_AF_TRIGGER,
+                    if (lockAeAf) CameraMetadata.CONTROL_AF_TRIGGER_START else CameraMetadata.CONTROL_AF_TRIGGER_CANCEL
+                )
+                session.capture(builder.build(), videoCaptureCallback, backgroundHandler)
+                builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
+            }
+
+            result.success(true)
+        } catch (e: Exception) {
+            result.error("VIDEO_TAP_FOCUS_ERR", e.message, null)
         }
     }
 
@@ -1206,23 +1599,119 @@ class ZameraCapturePlugin :
             }
 
             val manualExposure = args["manualExposure"] as? Boolean ?: false
-            if (manualExposure) {
-                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                val reqIso = (args["iso"] as? Number)?.toInt() ?: 100
-                val clampedIso = if (isoRange != null) reqIso.coerceIn(isoRange.lower, isoRange.upper) else reqIso
-                val reqShutterNs = (args["exposureTimeNs"] as? Number)?.toLong() ?: 8_000_000L
-                val clampedShutter = if (expRange != null) reqShutterNs.coerceIn(expRange.lower, expRange.upper) else reqShutterNs
-                builder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso)
-                builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedShutter)
-            } else {
-                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
-                val evComp = (args["evCompensation"] as? Number)?.toDouble() ?: 0.0
-                val compRange = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
-                val compStep = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)
-                if (compRange != null && compStep != null && compStep.toDouble() > 0.0) {
-                    val steps = (evComp / compStep.toDouble()).roundToInt()
-                        .coerceIn(compRange.lower, compRange.upper)
-                    builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps)
+            val manualIso = args["manualIso"] as? Boolean ?: manualExposure
+            val manualShutter = args["manualShutter"] as? Boolean ?: manualExposure
+            val aeAfLocked = args["aeAfLocked"] as? Boolean ?: false
+            val artworkLinearMode = args["artworkLinearMode"] as? Boolean ?: false
+            val rawEvComp = (args["evCompensation"] as? Number)?.toDouble() ?: 0.0
+            // In Sanat Mode (artworkLinearMode) with 0 EV override, apply +0.35 EV AE bias for optimal linear pigment SNR without clipping
+            val evComp = if (artworkLinearMode && kotlin.math.abs(rawEvComp) < 0.05) 0.35 else rawEvComp
+
+            photoIsoMin = isoRange?.lower ?: 50
+            photoIsoMax = isoRange?.upper ?: 3200
+            photoExpNsMin = expRange?.lower ?: 50_000L
+            photoExpNsMax = expRange?.upper ?: 1_000_000_000L
+            val prevWasAutoAe = builder.get(CaptureRequest.CONTROL_AE_MODE) == CaptureRequest.CONTROL_AE_MODE_ON
+            photoManualIso = manualIso
+            photoManualShutter = manualShutter
+            photoAeAfLocked = aeAfLocked
+            photoEvCompensation = evComp.coerceIn(-3.0, 3.0)
+
+            val reqIso = (args["iso"] as? Number)?.toInt() ?: 100
+            val clampedIso = if (isoRange != null) reqIso.coerceIn(isoRange.lower, isoRange.upper) else reqIso
+            val reqShutterNs = (args["exposureTimeNs"] as? Number)?.toLong() ?: 8_000_000L
+            val clampedShutter = if (expRange != null) reqShutterNs.coerceIn(expRange.lower, expRange.upper) else reqShutterNs
+
+            when {
+                !manualIso && !manualShutter -> {
+                    // P (Program AE): Hardware AE + EV compensation + optional AE lock
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, aeAfLocked)
+                    val compRange = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
+                    val compStep = chars.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)
+                    if (compRange != null && compStep != null && compStep.toDouble() > 0.0) {
+                        val steps = (evComp / compStep.toDouble()).roundToInt()
+                            .coerceIn(compRange.lower, compRange.upper)
+                        builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, steps)
+                    }
+                    lastTotalCaptureResult?.get(CaptureResult.SENSOR_SENSITIVITY)?.let {
+                        photoActiveIso = it.toDouble().coerceIn(photoIsoMin.toDouble(), photoIsoMax.toDouble())
+                    }
+                    lastTotalCaptureResult?.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let {
+                        photoActiveShutterNs = it.coerceIn(photoExpNsMin, photoExpNsMax)
+                    }
+                }
+                !manualIso && manualShutter -> {
+                    // Tv (Shutter Priority): Fixed shutter speed, dynamic software Auto-ISO
+                    if (prevWasAutoAe) {
+                        lastTotalCaptureResult?.get(CaptureResult.SENSOR_SENSITIVITY)?.let {
+                            photoActiveIso = it.toDouble().coerceIn(photoIsoMin.toDouble(), photoIsoMax.toDouble())
+                        }
+                    }
+                    photoActiveShutterNs = clampedShutter
+                    val autoIsoSeed = photoActiveIso.roundToInt().coerceIn(photoIsoMin, photoIsoMax)
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedShutter)
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, autoIsoSeed)
+                }
+                manualIso && !manualShutter -> {
+                    // Sv (Sensitivity Priority): Fixed ISO, dynamic software Auto-Shutter
+                    if (prevWasAutoAe) {
+                        lastTotalCaptureResult?.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let {
+                            photoActiveShutterNs = it.coerceIn(photoExpNsMin, photoExpNsMax)
+                        }
+                    }
+                    photoActiveIso = clampedIso.toDouble()
+                    val autoShutterSeed = photoActiveShutterNs.coerceIn(photoExpNsMin, photoExpNsMax)
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso)
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, autoShutterSeed)
+                }
+                else -> {
+                    // M (Full Manual): Both ISO and Shutter fixed
+                    photoActiveIso = clampedIso.toDouble()
+                    photoActiveShutterNs = clampedShutter
+                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    builder.set(CaptureRequest.CONTROL_AE_LOCK, false)
+                    builder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso)
+                    builder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedShutter)
+                }
+            }
+
+            // Sanat Mode 1:1 True-Color live preview tonemap & lens shading
+            val shadingModes = chars.get(CameraCharacteristics.SHADING_AVAILABLE_MODES)
+            if (shadingModes != null && shadingModes.contains(CameraMetadata.SHADING_MODE_HIGH_QUALITY)) {
+                builder.set(CaptureRequest.SHADING_MODE, CameraMetadata.SHADING_MODE_HIGH_QUALITY)
+            }
+            val lsmModes = chars.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES)
+            if (lsmModes != null && lsmModes.contains(CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)) {
+                builder.set(
+                    CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,
+                    CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON
+                )
+            }
+            val tonemapModes = chars.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)
+            if (artworkLinearMode && tonemapModes != null) {
+                when {
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                        tonemapModes.contains(CameraMetadata.TONEMAP_MODE_PRESET_CURVE) -> {
+                        builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_PRESET_CURVE)
+                        builder.set(CaptureRequest.TONEMAP_PRESET_CURVE, CameraMetadata.TONEMAP_PRESET_CURVE_SRGB)
+                    }
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                        tonemapModes.contains(CameraMetadata.TONEMAP_MODE_GAMMA_VALUE) -> {
+                        builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_GAMMA_VALUE)
+                        builder.set(CaptureRequest.TONEMAP_GAMMA, 2.2f)
+                    }
+                }
+            } else if (tonemapModes != null) {
+                when {
+                    tonemapModes.contains(CaptureRequest.TONEMAP_MODE_HIGH_QUALITY) ->
+                        builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY)
+                    tonemapModes.contains(CaptureRequest.TONEMAP_MODE_FAST) ->
+                        builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_FAST)
                 }
             }
 
@@ -1240,20 +1729,35 @@ class ZameraCapturePlugin :
                 val normFocus = (args["focusDistance"] as? Number)?.toFloat() ?: 0.5f
                 val focusDiopters = (normFocus.coerceIn(0.0f, 1.0f)) * effectiveMinFocus
                 builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, focusDiopters)
+            } else if (aeAfLocked && minFocus > 0.0f) {
+                if (builder.get(CaptureRequest.CONTROL_AF_MODE) != CaptureRequest.CONTROL_AF_MODE_AUTO) {
+                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+                    session.capture(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
+                }
             } else {
+                if (builder.get(CaptureRequest.CONTROL_AF_MODE) == CaptureRequest.CONTROL_AF_MODE_AUTO) {
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
+                    session.capture(builder.build(), photoPreviewCaptureCallback, backgroundHandler)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
+                }
                 builder.set(
                     CaptureRequest.CONTROL_AF_MODE,
                     CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
                 )
             }
 
-            val artworkLinearMode = args["artworkLinearMode"] as? Boolean ?: false
             val manualWb = args["manualWb"] as? Boolean ?: false
             val kelvin = (args["kelvin"] as? Number)?.toFloat()
             val tint = (args["tint"] as? Number)?.toFloat() ?: 0.0f
             val rggb = args["rggbGains"] as? List<*>
+            val customWbGains = (args["customWbGains"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
+            val customCamToXyz = (args["camToXyzD50"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
+            val hasCustomWb = customWbGains != null && customWbGains.size >= 3
+            val hasCustomCcm = customCamToXyz != null && customCamToXyz.size == 9
 
-            if (!artworkLinearMode && manualWb) {
+            if (hasCustomWb || hasCustomCcm || manualWb) {
                 val cm1 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1))
                     ?: floatArrayOf(0.8125f, -0.2734f, -0.1094f, -0.4375f, 1.3281f, 0.0859f, -0.0312f, 0.2578f, 0.4297f)
                 val cm2 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2))
@@ -1263,14 +1767,67 @@ class ZameraCapturePlugin :
                 val fm2 = extractMatrix3x3(chars.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2))
                     ?: floatArrayOf(0.6016f, -0.0391f, 0.3984f, 0.2734f, 0.4688f, 0.2500f, 0.0547f, -0.6562f, 1.4219f)
 
-                val dngWb = if (kelvin != null) {
+                val dngWb = if (manualWb && kelvin != null) {
                     ZameraRustBridge.computeDngKelvinWb(kelvin, tint, cm1, cm2, fm1, fm2)
                 } else {
                     null
                 }
 
                 builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
-                if (dngWb != null) {
+                if (hasCustomWb || hasCustomCcm) {
+                    val d50ToSrgb = floatArrayOf(
+                        3.1338561f, -1.6168667f, -0.4906146f,
+                        -0.9787684f, 1.9161415f, 0.0334540f,
+                        0.0719453f, -0.2289914f, 1.4052427f
+                    )
+                    val xyzMat = if (hasCustomCcm) customCamToXyz!!.toFloatArray() else fm1
+                    val camToSrgb = FloatArray(9)
+                    for (r in 0 until 3) {
+                        for (c in 0 until 3) {
+                            camToSrgb[r * 3 + c] =
+                                d50ToSrgb[r * 3] * xyzMat[c] +
+                                d50ToSrgb[r * 3 + 1] * xyzMat[3 + c] +
+                                d50ToSrgb[r * 3 + 2] * xyzMat[6 + c]
+                        }
+                    }
+                    val gainsVec = when {
+                        hasCustomWb -> {
+                            val gRef = customWbGains!![1].coerceAtLeast(1e-4f)
+                            RggbChannelVector(
+                                (customWbGains[0] / gRef).coerceIn(0.25f, 8.0f),
+                                1.0f,
+                                1.0f,
+                                (customWbGains[2] / gRef).coerceIn(0.25f, 8.0f)
+                            )
+                        }
+                        dngWb != null -> RggbChannelVector(dngWb.first[0], dngWb.first[1], dngWb.first[2], dngWb.first[3])
+                        else -> {
+                            val np = lastTotalCaptureResult?.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)
+                            if (np != null && np.size >= 3) {
+                                val nr = np[0].toFloat().coerceAtLeast(1e-4f)
+                                val ng = np[1].toFloat().coerceAtLeast(1e-4f)
+                                val nb = np[2].toFloat().coerceAtLeast(1e-4f)
+                                RggbChannelVector(
+                                    (ng / nr).coerceIn(0.25f, 8.0f),
+                                    1.0f,
+                                    1.0f,
+                                    (ng / nb).coerceIn(0.25f, 8.0f)
+                                )
+                            } else {
+                                RggbChannelVector(1.85f, 1.0f, 1.0f, 1.55f)
+                            }
+                        }
+                    }
+                    builder.set(
+                        CaptureRequest.COLOR_CORRECTION_MODE,
+                        CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
+                    )
+                    builder.set(
+                        CaptureRequest.COLOR_CORRECTION_TRANSFORM,
+                        floatArrayToColorSpaceTransform(camToSrgb)
+                    )
+                    builder.set(CaptureRequest.COLOR_CORRECTION_GAINS, gainsVec)
+                } else if (dngWb != null) {
                     builder.set(
                         CaptureRequest.COLOR_CORRECTION_MODE,
                         CaptureRequest.COLOR_CORRECTION_MODE_TRANSFORM_MATRIX
@@ -1305,7 +1862,14 @@ class ZameraCapturePlugin :
                 }
             } else {
                 builder.set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_AUTO)
-                builder.set(CaptureRequest.COLOR_CORRECTION_MODE, CaptureRequest.COLOR_CORRECTION_MODE_FAST)
+                builder.set(
+                    CaptureRequest.COLOR_CORRECTION_MODE,
+                    if (artworkLinearMode) {
+                        CaptureRequest.COLOR_CORRECTION_MODE_HIGH_QUALITY
+                    } else {
+                        CaptureRequest.COLOR_CORRECTION_MODE_FAST
+                    }
+                )
             }
 
             val monoMode = args["monoMode"] as? Boolean ?: false
@@ -1318,15 +1882,7 @@ class ZameraCapturePlugin :
 
             session.setRepeatingRequest(
                 builder.build(),
-                object : CameraCaptureSession.CaptureCallback() {
-                    override fun onCaptureCompleted(
-                        session: CameraCaptureSession,
-                        request: CaptureRequest,
-                        res: TotalCaptureResult
-                    ) {
-                        lastTotalCaptureResult = res
-                    }
-                },
+                photoPreviewCaptureCallback,
                 backgroundHandler
             )
             result.success(true)
@@ -1407,13 +1963,19 @@ class ZameraCapturePlugin :
             val baseName = if (bracketTag != null) "ZAMERA_${timestamp}_${bracketTag}" else "ZAMERA_${timestamp}"
             val outDir = File(appContext.filesDir, "captures").apply { mkdirs() }
             val oemJpegFile = File(outDir, "${baseName}_OEM.jpg")
-            val trueColorJpegFile = File(outDir, "${baseName}_TRUECOLOR.jpg")
+            val isPortraitMode = args["isPortraitMode"] as? Boolean ?: false
+            val isArtworkMode = args["isArtworkMode"] as? Boolean ?: true
+            val losslessPng = args["losslessPng"] as? Boolean ?: false
+            val exportPng = isArtworkMode && !isPortraitMode && losslessPng
+            val trueColorExt = if (exportPng) "png" else "jpg"
+            val trueColorMime = if (exportPng) "image/png" else "image/jpeg"
+            val trueColorJpegFile = File(outDir, "${baseName}_TRUECOLOR.${trueColorExt}")
             val dngFile = File(outDir, "${baseName}.dng")
 
             val captureBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
             captureBuilder.addTarget(jpegReader.surface)
             // Fast ZSL-grade hardware JPEG & noise/edge settings to eliminate multi-frame HAL stalls
-            captureBuilder.set(CaptureRequest.JPEG_QUALITY, 95.toByte())
+            captureBuilder.set(CaptureRequest.JPEG_QUALITY, (if (isArtworkMode) 100 else 95).toByte())
             captureBuilder.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_FAST)
             captureBuilder.set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_FAST)
             val reqZoom = ((args["zoomRatio"] as? Number)?.toFloat() ?: 1.0f).coerceIn(1.0f, 10.0f)
@@ -1425,7 +1987,6 @@ class ZameraCapturePlugin :
             }
             captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, activeSensorOrientation)
 
-            val isPortraitMode = args["isPortraitMode"] as? Boolean ?: false
             val portraitAperture = ((args["portraitAperture"] as? Number)?.toFloat() ?: 2.8f).coerceIn(1.4f, 16.0f)
             val portraitLighting = ((args["portraitLighting"] as? Number)?.toInt() ?: 0).coerceIn(0, 9)
             val portraitLightIntensity = ((args["portraitLightIntensity"] as? Number)?.toFloat() ?: 0.80f).coerceIn(0.0f, 1.0f)
@@ -1433,10 +1994,15 @@ class ZameraCapturePlugin :
             val focusPointX = ((args["focusPointX"] as? Number)?.toFloat() ?: 0.5f).coerceIn(0.08f, 0.92f)
             val focusPointY = ((args["focusPointY"] as? Number)?.toFloat() ?: 0.45f).coerceIn(0.08f, 0.92f)
             val captureRaw = !isPortraitMode && (args["captureRaw"] as? Boolean ?: true) && rawImageReader != null
-            val isArtworkMode = args["isArtworkMode"] as? Boolean ?: true
             val useDisplayP3 = args["useDisplayP3"] as? Boolean ?: false
             val fullResolution = args["fullResolution"] as? Boolean ?: true
             val normalizeExposure = args["normalizeExposure"] as? Boolean ?: true
+            val artworkExposureMode = if (!normalizeExposure) {
+                0
+            } else {
+                ((args["artworkExposureMode"] as? Number)?.toInt() ?: 2).coerceIn(0, 2)
+            }
+            val calibrateColorChecker = args["calibrateColorChecker"] as? Boolean ?: false
             val applyPerspectiveWarp = args["applyPerspectiveWarp"] as? Boolean ?: false
             val perspectiveCornersNorm = (args["perspectiveCornersNorm"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
             val customWbGains = (args["wbGains"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
@@ -1465,6 +2031,9 @@ class ZameraCapturePlugin :
                             CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,
                             prev.get(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION)
                         )
+                        prev.get(CaptureRequest.CONTROL_AE_LOCK)?.let {
+                            captureBuilder.set(CaptureRequest.CONTROL_AE_LOCK, it)
+                        }
                     }
                 }
                 val afMode = prev.get(CaptureRequest.CONTROL_AF_MODE) ?: CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
@@ -1485,11 +2054,36 @@ class ZameraCapturePlugin :
                     captureBuilder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, prev.get(CaptureRequest.COLOR_CORRECTION_TRANSFORM))
                     captureBuilder.set(CaptureRequest.COLOR_CORRECTION_GAINS, prev.get(CaptureRequest.COLOR_CORRECTION_GAINS))
                 }
+                prev.get(CaptureRequest.TONEMAP_MODE)?.let { tm ->
+                    captureBuilder.set(CaptureRequest.TONEMAP_MODE, tm)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && tm == CameraMetadata.TONEMAP_MODE_PRESET_CURVE) {
+                        prev.get(CaptureRequest.TONEMAP_PRESET_CURVE)?.let { pc ->
+                            captureBuilder.set(CaptureRequest.TONEMAP_PRESET_CURVE, pc)
+                        }
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && tm == CameraMetadata.TONEMAP_MODE_GAMMA_VALUE) {
+                        prev.get(CaptureRequest.TONEMAP_GAMMA)?.let { g ->
+                            captureBuilder.set(CaptureRequest.TONEMAP_GAMMA, g)
+                        }
+                    }
+                }
             }
 
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val charsId = activePhysicalCameraId ?: activeCameraId
             val physChars = manager.getCameraCharacteristics(charsId)
+            val shadingModes = physChars.get(CameraCharacteristics.SHADING_AVAILABLE_MODES)
+            if (shadingModes != null && shadingModes.contains(CameraMetadata.SHADING_MODE_HIGH_QUALITY)) {
+                captureBuilder.set(CaptureRequest.SHADING_MODE, CameraMetadata.SHADING_MODE_HIGH_QUALITY)
+            }
+            val lsmModes = physChars.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES)
+            if (lsmModes != null && lsmModes.contains(CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)) {
+                captureBuilder.set(
+                    CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE,
+                    CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON
+                )
+            }
+            val capturedSensorOrientation = physChars.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: activeSensorOrientation
+            val capturedCameraId = charsId
 
             val lock = Any()
             var capturedJpegBytes: ByteArray? = null
@@ -1531,7 +2125,7 @@ class ZameraCapturePlugin :
                             try {
                                 // 1. Write archival 14-bit DNG with proper EXIF Orientation (Fixes B5!)
                                 DngCreator(physChars, activePhysResult).use { dngCreator ->
-                                    dngCreator.setOrientation(exifOrientationFromDegrees(activeSensorOrientation))
+                                    dngCreator.setOrientation(exifOrientationFromDegrees(capturedSensorOrientation))
                                     FileOutputStream(dngFile).use { fos ->
                                         dngCreator.writeImage(fos, rawImg)
                                     }
@@ -1623,14 +2217,92 @@ class ZameraCapturePlugin :
 
                                 val hasCustomMatrix = customCamToXyz != null && customCamToXyz.size == 9
                                 val primaryFm1OrCustom = if (hasCustomMatrix) customCamToXyz!!.toFloatArray() else fm1
+                                val rggbShading4x48 = if (!lensShadingApplied) {
+                                    extractLensShading4x48(activePhysResult)
+                                } else {
+                                    null
+                                }
+                                val ffArray = if (flatFieldGrid != null && flatFieldGrid.size == 48) {
+                                    flatFieldGrid.toFloatArray()
+                                } else {
+                                    null
+                                }
 
                                 val plane = rawImg.planes[0]
                                 val rawBuffer = plane.buffer
                                 rawBuffer.rewind()
 
+                                val isFrontCam = physChars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                                var activeWbGains = wbGains
+                                var activeHasCustomMatrix = hasCustomMatrix
+                                var activeFm1OrCustom = primaryFm1OrCustom
+                                var liveCalibrationResultMap: Map<String, Any>? = null
+
+                                if (calibrateColorChecker) {
+                                    val uiCorners = if (perspectiveCornersNorm != null && perspectiveCornersNorm.size == 8) {
+                                        perspectiveCornersNorm.toFloatArray()
+                                    } else {
+                                        floatArrayOf(0.15f, 0.20f, 0.85f, 0.20f, 0.85f, 0.80f, 0.15f, 0.80f)
+                                    }
+                                    val sensorCorners = FloatArray(8)
+                                    for (ci in 0 until 4) {
+                                        val pt = uiToSensorNorm(
+                                            uiCorners[ci * 2],
+                                            uiCorners[ci * 2 + 1],
+                                            capturedSensorOrientation,
+                                            isFrontCam
+                                        )
+                                        sensorCorners[ci * 2] = pt.first
+                                        sensorCorners[ci * 2 + 1] = pt.second
+                                    }
+                                    val calibOut = ZameraRustBridge.calibrateColorChecker24(
+                                        rawDirectBuffer = rawBuffer,
+                                        width = rawImg.width,
+                                        height = rawImg.height,
+                                        rowStride = plane.rowStride,
+                                        cfaPattern = cfaPattern,
+                                        blackLevel = blackLevel,
+                                        whiteLevel = whiteLevel,
+                                        cornersNorm = sensorCorners,
+                                        flatField8x6 = ffArray,
+                                        rggbShading4x48 = rggbShading4x48
+                                    )
+                                    if (calibOut != null) {
+                                        liveCalibrationResultMap = calibOut.reportMap
+                                        activeWbGains = calibOut.wbGains
+                                        activeFm1OrCustom = calibOut.camToXyzD50Flat
+                                        activeHasCustomMatrix = true
+                                    }
+                                    rawBuffer.rewind()
+                                }
+
+                                val effectiveNeutralForCct = when {
+                                    activeHasCustomMatrix -> null
+                                    customWbGains != null && customWbGains.size >= 3 -> {
+                                        val gRef = customWbGains[1].coerceAtLeast(1e-4f)
+                                        floatArrayOf(
+                                            (gRef / customWbGains[0].coerceAtLeast(1e-4f)).coerceIn(0.05f, 10.0f),
+                                            1.0f,
+                                            (gRef / customWbGains[2].coerceAtLeast(1e-4f)).coerceIn(0.05f, 10.0f)
+                                        )
+                                    }
+                                    else -> asShotNeutral
+                                }
+                                val effectiveExposureMode = if (isArtworkMode) {
+                                    artworkExposureMode
+                                } else {
+                                    if (normalizeExposure) 1 else 0
+                                }
+                                val capturedIso = activePhysResult.get(CaptureResult.SENSOR_SENSITIVITY)
+                                val capturedExpNs = activePhysResult.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+                                val capturedAperture = activePhysResult.get(CaptureResult.LENS_APERTURE)
+                                    ?: physChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()
+                                val capturedFocalMm = activePhysResult.get(CaptureResult.LENS_FOCAL_LENGTH)
+                                    ?: physChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
+
                                 // Fixes B1, B2, B3, B7:
                                 // - In Sanat Mode (`isArtworkMode == true`), develop full-res (4096x3072 -> rotated 3072x4096 12.6 MP)
-                                //   with DNG CCT interpolation (`FM1`/`FM2`) and White-Point Exposure Normalization!
+                                //   with DNG CCT interpolation (`FM1`/`FM2`) and True-Tone Exposure Mode!
                                 // - In Pro Mode (`isArtworkMode == false`), skip redundant Bitmap encoding (`writeTrueColorBitmap = false`)
                                 //   and only compute fast 14-bit RAW telemetry (32-bin histogram, zebra, focus peaking, CCT)!
                                 val devResult = ZameraRustBridge.developRawToTrueColorFile(
@@ -1641,42 +2313,55 @@ class ZameraCapturePlugin :
                                     cfaPattern = cfaPattern,
                                     blackLevel = blackLevel,
                                     whiteLevel = whiteLevel,
-                                    wbGains = wbGains,
-                                    fm1OrCustomMatrix = primaryFm1OrCustom,
-                                    asShotNeutralForCct = if (hasCustomMatrix) null else asShotNeutral,
+                                    wbGains = activeWbGains,
+                                    fm1OrCustomMatrix = activeFm1OrCustom,
+                                    asShotNeutralForCct = effectiveNeutralForCct,
                                     cm1 = cm1,
                                     cm2 = cm2,
                                     fm2 = fm2,
-                                    flatField8x6 = if (flatFieldGrid != null && flatFieldGrid.size == 48) flatFieldGrid.toFloatArray() else null,
+                                    flatField8x6 = ffArray,
+                                    rggbShading4x48 = rggbShading4x48,
                                     useDisplayP3 = useDisplayP3,
-                                    normalizeExposure = normalizeExposure,
-                                    fullResolution = isArtworkMode && fullResolution,
+                                    exposureMode = effectiveExposureMode,
+                                    fullResolution = isArtworkMode && fullResolution && !isFrontCam,
                                     writeTrueColorBitmap = isArtworkMode,
-                                    sensorOrientationDegrees = activeSensorOrientation,
+                                    sensorOrientationDegrees = capturedSensorOrientation,
+                                    isFrontCamera = isFrontCam,
                                     applyPerspectiveWarp = isArtworkMode && applyPerspectiveWarp,
                                     perspectiveCornersNorm = if (perspectiveCornersNorm != null && perspectiveCornersNorm.size == 8) perspectiveCornersNorm.toFloatArray() else null,
+                                    losslessPng = exportPng,
+                                    iso = capturedIso,
+                                    exposureTimeNs = capturedExpNs,
+                                    aperture = capturedAperture,
+                                    focalLengthMm = capturedFocalMm,
                                     outFile = trueColorJpegFile
                                 )
 
-                                val primaryJpegToExport = if (isArtworkMode && trueColorJpegFile.exists()) {
+                                val useTrueColorOut = isArtworkMode && trueColorJpegFile.exists()
+                                val primaryFileToExport = if (useTrueColorOut) {
                                     trueColorJpegFile
                                 } else {
                                     oemJpegFile
                                 }
-                                val suffix = if (isArtworkMode && trueColorJpegFile.exists()) "TRUECOLOR" else "PRO"
+                                val exportExt = if (useTrueColorOut) trueColorExt else "jpg"
+                                val exportMime = if (useTrueColorOut) trueColorMime else "image/jpeg"
+                                val suffix = if (useTrueColorOut) "TRUECOLOR" else "PRO"
                                 mediaStoreJpegUri = saveFileToMediaStoreDcim(
-                                    sourceFile = primaryJpegToExport,
-                                    displayName = "${baseName}_${suffix}.jpg",
-                                    mimeType = "image/jpeg"
+                                    sourceFile = primaryFileToExport,
+                                    displayName = "${baseName}_${suffix}.${exportExt}",
+                                    mimeType = exportMime
                                 )
 
                                 statsMap = mapOf(
                                     "blackLevel" to blackLevel.toList(),
                                     "whiteLevel" to whiteLevel.toDouble(),
                                     "cfaPattern" to cfaPattern,
-                                    "lensShadingApplied" to lensShadingApplied,
-                                    "wbGainsUsed" to wbGains.toList(),
+                                    "lensShadingApplied" to (lensShadingApplied || rggbShading4x48 != null),
+                                    "wbGainsUsed" to activeWbGains.toList(),
                                     "centerLinearCamRgb" to devResult.centerLinearCamRgb,
+                                    "centerLabD50" to devResult.centerLabD50,
+                                    "colorSpaceTag" to (if (useDisplayP3) "Display P3" else "sRGB"),
+                                    "liveCalibrationResult" to liveCalibrationResultMap,
                                     "meanRgb" to devResult.meanRgb,
                                     "highlightClippedRatio" to devResult.highlightClippedRatio,
                                     "gamutClippedRatio" to devResult.gamutClippedRatio,
@@ -1696,7 +2381,7 @@ class ZameraCapturePlugin :
                         } else if (isPortraitMode) {
                             val portraitStartMs = System.currentTimeMillis()
                             val isFrontCam = physChars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-                            applyPortraitBokehAndLighting(
+                            val portraitOutcome = applyPortraitBokehAndLighting(
                                 sourceJpeg = oemJpegFile,
                                 outJpeg = trueColorJpegFile,
                                 aperture = portraitAperture,
@@ -1710,7 +2395,7 @@ class ZameraCapturePlugin :
                             val portraitProcessMs = System.currentTimeMillis() - portraitStartMs
                             android.util.Log.i(
                                 "ZameraPortrait",
-                                "Portrait capture latency: ${portraitProcessMs}ms (target < 1800ms)"
+                                "Portrait capture latency: ${portraitProcessMs}ms (depthActive=${portraitOutcome.depthActive})"
                             )
                             val targetPortrait = if (trueColorJpegFile.exists()) trueColorJpegFile else oemJpegFile
                             mediaStoreJpegUri = saveFileToMediaStoreDcim(
@@ -1722,6 +2407,7 @@ class ZameraCapturePlugin :
                                 "portraitProcessMs" to portraitProcessMs,
                                 "portraitLightingMode" to portraitLighting,
                                 "portraitAperture" to portraitAperture.toDouble(),
+                                "portraitDepthActive" to portraitOutcome.depthActive,
                                 "zebraRatio" to latestLiveZebraRatio,
                                 "focusPeakingScore" to latestLiveFocusPeakingScore,
                                 "rawHistogram32" to latestLiveHistogram32
@@ -1746,7 +2432,7 @@ class ZameraCapturePlugin :
                             put("dngPath", if (dngFile.exists()) dngFile.absolutePath else null)
                             put("mediaStoreJpegUri", mediaStoreJpegUri)
                             put("mediaStoreDngUri", mediaStoreDngUri)
-                            put("cameraId", activePhysicalCameraId ?: activeCameraId)
+                            put("cameraId", capturedCameraId)
                             put("iso", activePhysResult.get(CaptureResult.SENSOR_SENSITIVITY))
                             put("exposureTimeNs", activePhysResult.get(CaptureResult.SENSOR_EXPOSURE_TIME))
                             put("captureDurationMs", System.currentTimeMillis() - timestamp)
@@ -1825,6 +2511,74 @@ class ZameraCapturePlugin :
     }
 
     /**
+     * Extracts and bilinearly resamples Camera2 4-channel RGGB `LensShadingMap` into
+     * `4 x 48` (`8x6` per channel `[R, Gr, Gb, B]`) for `zamera_core` when
+     * `SENSOR_INFO_LENS_SHADING_APPLIED == false`.
+     */
+    private fun extractLensShading4x48(result: CaptureResult): FloatArray? {
+        val lsm: LensShadingMap = try {
+            result.get(CaptureResult.STATISTICS_LENS_SHADING_CORRECTION_MAP)
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "LensShadingMap read warning: ${e.message}")
+            null
+        } ?: return null
+        val cols = lsm.columnCount
+        val rows = lsm.rowCount
+        if (cols < 1 || rows < 1) return null
+        val out = FloatArray(4 * 48)
+        val channels = intArrayOf(
+            RggbChannelVector.RED,
+            RggbChannelVector.GREEN_EVEN,
+            RggbChannelVector.GREEN_ODD,
+            RggbChannelVector.BLUE
+        )
+        for (chIdx in 0 until 4) {
+            val ch = channels[chIdx]
+            val chOffset = chIdx * 48
+            for (gy in 0 until 6) {
+                val fy = if (rows == 1) 0f else (gy.toFloat() / 5.0f) * (rows - 1).toFloat()
+                val y0 = fy.toInt().coerceIn(0, rows - 1)
+                val y1 = (y0 + 1).coerceIn(0, rows - 1)
+                val ty = fy - y0.toFloat()
+                for (gx in 0 until 8) {
+                    val fx = if (cols == 1) 0f else (gx.toFloat() / 7.0f) * (cols - 1).toFloat()
+                    val x0 = fx.toInt().coerceIn(0, cols - 1)
+                    val x1 = (x0 + 1).coerceIn(0, cols - 1)
+                    val tx = fx - x0.toFloat()
+                    val g00 = lsm.getGainFactor(ch, x0, y0)
+                    val g10 = lsm.getGainFactor(ch, x1, y0)
+                    val g01 = lsm.getGainFactor(ch, x0, y1)
+                    val g11 = lsm.getGainFactor(ch, x1, y1)
+                    val top = g00 + (g10 - g00) * tx
+                    val bot = g01 + (g11 - g01) * tx
+                    out[chOffset + gy * 8 + gx] = (top + (bot - top) * ty).coerceIn(1.0f, 8.0f)
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Maps normalized `[0, 1]` upright UI coordinates `(ux, uy)` back into unrotated
+     * `RAW_SENSOR` `[0, 1]` coordinates `(sx, sy)` matching `postRotate` + `postScale`.
+     */
+    private fun uiToSensorNorm(
+        ux: Float,
+        uy: Float,
+        sensorOrientationDegrees: Int,
+        isFrontCamera: Boolean
+    ): Pair<Float, Float> {
+        val rx = (if (isFrontCamera) 1.0f - ux else ux).coerceIn(0.0f, 1.0f)
+        val ry = uy.coerceIn(0.0f, 1.0f)
+        return when ((sensorOrientationDegrees % 360 + 360) % 360) {
+            90 -> Pair(ry, (1.0f - rx).coerceIn(0.0f, 1.0f))
+            180 -> Pair((1.0f - rx).coerceIn(0.0f, 1.0f), (1.0f - ry).coerceIn(0.0f, 1.0f))
+            270 -> Pair((1.0f - ry).coerceIn(0.0f, 1.0f), rx)
+            else -> Pair(rx, ry)
+        }
+    }
+
+    /**
      * O(1)-per-pixel Separable Sliding-Window Box Filter on a 2D float grid (w x h).
      */
     private fun boxFilterFloat(src: FloatArray, w: Int, h: Int, radius: Int): FloatArray {
@@ -1876,21 +2630,613 @@ class ZameraCapturePlugin :
      * 3. Refines the raw mask using He et al.'s Edge-Preserving Joint Guided Filter (`meanA`, `meanB`) so full-resolution
      *    hair strands, beard fibers, and eyeglass frames are cleanly matted with zero halo.
      */
-    private fun computeGuidedAlphaCoefficients(
+    private data class NeuralSegResult(
+        val mask: FloatArray,
+        val maxConf: Float,
+        val usedSubjectSeg: Boolean,
+        val areaRatio: Float
+    )
+
+    private data class MulticlassSegResult(
+        val humanProb: FloatArray,
+        val skinProb: FloatArray,
+        val hairProb: FloatArray,
+        val clothesProb: FloatArray,
+        val accessProb: FloatArray,
+        val maxHumanConf: Float,
+        val humanAreaRatio: Float
+    )
+
+    private data class PortraitMatteResult(
+        val meanA: FloatArray,
+        val meanB: FloatArray,
+        val humanAreaRatio: Float,
+        val depthMap: FloatArray?,
+        val focusDepth: Float
+    )
+
+    /**
+     * Runs a single 256x256 pass of Google's flagship 6-Class `selfie_multiclass_256x256.tflite` (`16.4 MB`)
+     * returning a `[256 * 256 * 6]` array of normalized class probabilities:
+     * `[0: background, 1: hair, 2: body-skin (hands/fingers/arms/neck), 3: face-skin, 4: clothes, 5: accessories (eyeglasses/held phone)]`.
+     */
+    private fun runSingleMulticlassPass(bmp: Bitmap): FloatArray? {
+        val interpreter = getOrCreateMulticlassInterpreter() ?: return null
+        val mw = 256
+        val mh = 256
+        val n = mw * mh
+        val scaled = Bitmap.createScaledBitmap(bmp, mw, mh, true)
+        val px = IntArray(n)
+        scaled.getPixels(px, 0, mw, 0, 0, mw, mh)
+        if (scaled !== bmp) scaled.recycle()
+
+        val inBuf = ByteBuffer.allocateDirect(n * 3 * 4).order(ByteOrder.nativeOrder())
+        val inFloats = FloatArray(n * 3)
+        val inv255 = 1.0f / 255.0f
+        var k = 0
+        for (i in 0 until n) {
+            val c = px[i]
+            inFloats[k++] = ((c shr 16) and 0xFF) * inv255
+            inFloats[k++] = ((c shr 8) and 0xFF) * inv255
+            inFloats[k++] = (c and 0xFF) * inv255
+        }
+        inBuf.asFloatBuffer().put(inFloats)
+        inBuf.rewind()
+
+        val outBuf = ByteBuffer.allocateDirect(n * 6 * 4).order(ByteOrder.nativeOrder())
+        try {
+            synchronized(multiclassModelLock) {
+                interpreter.run(inBuf, outBuf)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("ZameraPortrait", "SelfieMulticlass inference error: ${t.message}", t)
+            return null
+        }
+        outBuf.rewind()
+        val rawOut = FloatArray(n * 6)
+        outBuf.asFloatBuffer().get(rawOut)
+
+        for (i in 0 until n) {
+            val base = i * 6
+            var c0 = rawOut[base]
+            var c1 = rawOut[base + 1]
+            var c2 = rawOut[base + 2]
+            var c3 = rawOut[base + 3]
+            var c4 = rawOut[base + 4]
+            var c5 = rawOut[base + 5]
+            val sum = c0 + c1 + c2 + c3 + c4 + c5
+            val isProb = c0 >= 0f && c1 >= 0f && c2 >= 0f && c3 >= 0f && c4 >= 0f && c5 >= 0f &&
+                sum in 0.96f..1.04f
+            if (!isProb) {
+                var maxV = c0
+                if (c1 > maxV) maxV = c1
+                if (c2 > maxV) maxV = c2
+                if (c3 > maxV) maxV = c3
+                if (c4 > maxV) maxV = c4
+                if (c5 > maxV) maxV = c5
+                c0 = kotlin.math.exp((c0 - maxV).coerceIn(-20f, 0f))
+                c1 = kotlin.math.exp((c1 - maxV).coerceIn(-20f, 0f))
+                c2 = kotlin.math.exp((c2 - maxV).coerceIn(-20f, 0f))
+                c3 = kotlin.math.exp((c3 - maxV).coerceIn(-20f, 0f))
+                c4 = kotlin.math.exp((c4 - maxV).coerceIn(-20f, 0f))
+                c5 = kotlin.math.exp((c5 - maxV).coerceIn(-20f, 0f))
+            }
+            val invSum = 1.0f / (c0 + c1 + c2 + c3 + c4 + c5).coerceAtLeast(1e-6f)
+            rawOut[base] = (c0 * invSum).coerceIn(0f, 1f)
+            rawOut[base + 1] = (c1 * invSum).coerceIn(0f, 1f)
+            rawOut[base + 2] = (c2 * invSum).coerceIn(0f, 1f)
+            rawOut[base + 3] = (c3 * invSum).coerceIn(0f, 1f)
+            rawOut[base + 4] = (c4 * invSum).coerceIn(0f, 1f)
+            rawOut[base + 5] = (c5 * invSum).coerceIn(0f, 1f)
+        }
+        return rawOut
+    }
+
+    /**
+     * Runs 2-Pass Google MediaPipe 6-Class Multiclass Segmentation (`selfie_multiclass_256x256.tflite`):
+     * - Pass 1 (Global 256x256): Extracts full-frame Hair (c1), Body-Skin/Hands/Fingers (c2), Face-Skin (c3),
+     *   Clothes/Sleeves (c4), and Held Accessories/Glasses (c5).
+     * - Pass 2 (High-Resolution Hand/Finger & Head Zoomed ROI 256x256): Crops around the detected skin/hair
+     *   (or full body in medium/wide shots) so spread fingers, thumbs, ears, and held phones receive 2.5x–3.2x
+     *   higher neural spatial resolution in ~110ms total!
+     */
+    private fun runMulticlassSegmentation(srcBmp: Bitmap, segW: Int, segH: Int): MulticlassSegResult? {
+        val t0 = System.currentTimeMillis()
+        val global256 = runSingleMulticlassPass(srcBmp) ?: return null
+        val mw = 256
+        val mh = 256
+        val n = segW * segH
+        val humanProb = FloatArray(n)
+        val skinProb = FloatArray(n)
+        val hairProb = FloatArray(n)
+        val clothesProb = FloatArray(n)
+        val accessProb = FloatArray(n)
+
+        var maxHumanConf = 0f
+        var bodyStrongCount = 0
+        for (y in 0 until segH) {
+            val gy = (y.toFloat() / (segH - 1).coerceAtLeast(1)) * (mh - 1)
+            val y0 = gy.toInt().coerceIn(0, mh - 2)
+            val fy = gy - y0
+            val rowOff = y * segW
+            for (x in 0 until segW) {
+                val gx = (x.toFloat() / (segW - 1).coerceAtLeast(1)) * (mw - 1)
+                val x0 = gx.toInt().coerceIn(0, mw - 2)
+                val fx = gx - x0
+                val w00 = (1f - fx) * (1f - fy)
+                val w10 = fx * (1f - fy)
+                val w01 = (1f - fx) * fy
+                val w11 = fx * fy
+                val b00 = (y0 * mw + x0) * 6
+                val b10 = b00 + 6
+                val b01 = ((y0 + 1) * mw + x0) * 6
+                val b11 = b01 + 6
+
+                val c1 = global256[b00 + 1] * w00 + global256[b10 + 1] * w10 + global256[b01 + 1] * w01 + global256[b11 + 1] * w11
+                val c2 = global256[b00 + 2] * w00 + global256[b10 + 2] * w10 + global256[b01 + 2] * w01 + global256[b11 + 2] * w11
+                val c3 = global256[b00 + 3] * w00 + global256[b10 + 3] * w10 + global256[b01 + 3] * w01 + global256[b11 + 3] * w11
+                val c4 = global256[b00 + 4] * w00 + global256[b10 + 4] * w10 + global256[b01 + 4] * w01 + global256[b11 + 4] * w11
+                val c5 = global256[b00 + 5] * w00 + global256[b10 + 5] * w10 + global256[b01 + 5] * w01 + global256[b11 + 5] * w11
+
+                val idx = rowOff + x
+                val sk = (c2 + c3).coerceIn(0f, 1f)
+                val hm = (c1 + sk + c4).coerceIn(0f, 1f)
+                hairProb[idx] = c1.coerceIn(0f, 1f)
+                skinProb[idx] = sk
+                clothesProb[idx] = c4.coerceIn(0f, 1f)
+                accessProb[idx] = c5.coerceIn(0f, 1f)
+                humanProb[idx] = hm
+                if (hm > maxHumanConf) maxHumanConf = hm
+                if (hm >= 0.48f) bodyStrongCount++
+            }
+        }
+
+        // Pass 2: Zoomed High-Resolution ROI Pass for Hands/Spread Fingers/Head (or Full Body on Medium/Wide Shots)
+        if (maxHumanConf >= 0.45f && bodyStrongCount >= n / 120) {
+            try {
+                val isWideBodyShot = bodyStrongCount < (n * 42) / 100
+                var minRx = segW; var maxRx = 0; var minRy = segH; var maxRy = 0
+                for (y in 0 until segH) {
+                    val row = y * segW
+                    for (x in 0 until segW) {
+                        val i = row + x
+                        val hit = if (isWideBodyShot) {
+                            humanProb[i] >= 0.22f
+                        } else {
+                            skinProb[i] >= 0.14f || hairProb[i] >= 0.24f
+                        }
+                        if (hit) {
+                            if (x < minRx) minRx = x
+                            if (x > maxRx) maxRx = x
+                            if (y < minRy) minRy = y
+                            if (y > maxRy) maxRy = y
+                        }
+                    }
+                }
+                if (maxRx > minRx + 16 && maxRy > minRy + 16) {
+                    val spanW = (maxRx - minRx).coerceAtLeast(24)
+                    val spanH = (maxRy - minRy).coerceAtLeast(24)
+                    val roiX0 = (minRx - (spanW * 0.24f).toInt()).coerceIn(0, segW - 32)
+                    val roiX1 = (maxRx + (spanW * 0.24f).toInt()).coerceIn(roiX0 + 32, segW - 1)
+                    val roiY0 = (minRy - (spanH * 0.18f).toInt()).coerceIn(0, segH - 32)
+                    val roiY1 = (maxRy + (spanH * 0.22f).toInt()).coerceIn(roiY0 + 32, segH - 1)
+                    val rw = roiX1 - roiX0 + 1
+                    val rh = roiY1 - roiY0 + 1
+                    if (rw * rh < (n * 86) / 100) {
+                        val fw = srcBmp.width
+                        val fh = srcBmp.height
+                        val cx0 = (roiX0 * fw / segW).coerceIn(0, fw - 32)
+                        val cy0 = (roiY0 * fh / segH).coerceIn(0, fh - 32)
+                        val cw = (rw * fw / segW).coerceIn(32, fw - cx0)
+                        val ch = (rh * fh / segH).coerceIn(32, fh - cy0)
+                        val cropBmp = Bitmap.createBitmap(srcBmp, cx0, cy0, cw, ch)
+                        val roi256 = runSingleMulticlassPass(cropBmp)
+                        if (cropBmp !== srcBmp) cropBmp.recycle()
+                        if (roi256 != null) {
+                            val marginX = (rw * 0.08f).coerceAtLeast(4f)
+                            val marginY = (rh * 0.08f).coerceAtLeast(4f)
+                            for (y in roiY0..roiY1) {
+                                val ly = (y - roiY0).toFloat() / (rh - 1).coerceAtLeast(1)
+                                val gy = (ly * (mh - 1)).coerceIn(0f, (mh - 1).toFloat())
+                                val y0 = gy.toInt().coerceIn(0, mh - 2)
+                                val fy = gy - y0
+                                val wy = kotlin.math.min((y - roiY0) / marginY, (roiY1 - y) / marginY).coerceIn(0f, 1f)
+                                val rowOff = y * segW
+                                for (x in roiX0..roiX1) {
+                                    val lx = (x - roiX0).toFloat() / (rw - 1).coerceAtLeast(1)
+                                    val gx = (lx * (mw - 1)).coerceIn(0f, (mw - 1).toFloat())
+                                    val x0 = gx.toInt().coerceIn(0, mw - 2)
+                                    val fx = gx - x0
+                                    val wx = kotlin.math.min((x - roiX0) / marginX, (roiX1 - x) / marginX).coerceIn(0f, 1f)
+                                    val wBlend = (wx * wy * 0.85f).coerceIn(0f, 0.85f)
+
+                                    val w00 = (1f - fx) * (1f - fy)
+                                    val w10 = fx * (1f - fy)
+                                    val w01 = (1f - fx) * fy
+                                    val w11 = fx * fy
+                                    val b00 = (y0 * mw + x0) * 6
+                                    val b10 = b00 + 6
+                                    val b01 = ((y0 + 1) * mw + x0) * 6
+                                    val b11 = b01 + 6
+
+                                    val rc1 = roi256[b00 + 1] * w00 + roi256[b10 + 1] * w10 + roi256[b01 + 1] * w01 + roi256[b11 + 1] * w11
+                                    val rc2 = roi256[b00 + 2] * w00 + roi256[b10 + 2] * w10 + roi256[b01 + 2] * w01 + roi256[b11 + 2] * w11
+                                    val rc3 = roi256[b00 + 3] * w00 + roi256[b10 + 3] * w10 + roi256[b01 + 3] * w01 + roi256[b11 + 3] * w11
+                                    val rc4 = roi256[b00 + 4] * w00 + roi256[b10 + 4] * w10 + roi256[b01 + 4] * w01 + roi256[b11 + 4] * w11
+                                    val rc5 = roi256[b00 + 5] * w00 + roi256[b10 + 5] * w10 + roi256[b01 + 5] * w01 + roi256[b11 + 5] * w11
+
+                                    val idx = rowOff + x
+                                    val rSk = (rc2 + rc3).coerceIn(0f, 1f)
+                                    val rHm = (rc1 + rSk + rc4).coerceIn(0f, 1f)
+                                    hairProb[idx] = (hairProb[idx] * (1f - wBlend) + rc1 * wBlend).coerceIn(0f, 1f)
+                                    skinProb[idx] = (skinProb[idx] * (1f - wBlend) + rSk * wBlend).coerceIn(0f, 1f)
+                                    clothesProb[idx] = kotlin.math.max(clothesProb[idx], rc4 * wBlend).coerceIn(0f, 1f)
+                                    accessProb[idx] = (accessProb[idx] * (1f - wBlend) + rc5 * wBlend).coerceIn(0f, 1f)
+                                    humanProb[idx] = (humanProb[idx] * (1f - wBlend) + rHm * wBlend).coerceIn(0f, 1f)
+                                    if (humanProb[idx] > maxHumanConf) maxHumanConf = humanProb[idx]
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                android.util.Log.w("ZameraPortrait", "SelfieMulticlass ROI Pass2 warning: ${t.message}")
+            }
+        }
+
+        var finalStrong = 0
+        for (i in 0 until n) {
+            if (humanProb[i] >= 0.48f) finalStrong++
+        }
+        val areaRatio = finalStrong.toFloat() / n.coerceAtLeast(1).toFloat()
+        android.util.Log.i(
+            "ZameraPortrait",
+            "SelfieMulticlass 6-class ready in ${System.currentTimeMillis() - t0}ms (maxConf=$maxHumanConf, area=$areaRatio)"
+        )
+        return MulticlassSegResult(
+            humanProb = humanProb,
+            skinProb = skinProb,
+            hairProb = hairProb,
+            clothesProb = clothesProb,
+            accessProb = accessProb,
+            maxHumanConf = maxHumanConf,
+            humanAreaRatio = areaRatio
+        )
+    }
+
+    /**
+     * Runs bundled `depth_anything_v2_small.tflite` (`[1, 3, 518, 686]` NCHW -> `[1, 518, 686]` relative inverse depth)
+     * with isotropic edge-replicated letterboxing for vertical/arbitrary aspect ratios, mapping ONLY the active ROI
+     * onto `segW x segH` normalized into `[0.0 .. 1.0]` (`1.0` = closest foreground, `0.0` = far background).
+     */
+    private fun runDepthAnything3dMap(srcBmp: Bitmap, segW: Int, segH: Int): FloatArray? {
+        val t0 = System.currentTimeMillis()
+        val interpreter = getOrCreateDepthInterpreter() ?: return null
+        val dw = 686
+        val dh = 518
+        val planeSize = dw * dh
+        val geom = PortraitOpticalEngine.computeIsotropicLetterbox(srcBmp.width, srcBmp.height, dw, dh)
+
+        val activeBmp = Bitmap.createScaledBitmap(srcBmp, geom.activeW, geom.activeH, true)
+        val activePx = IntArray(geom.activeW * geom.activeH)
+        activeBmp.getPixels(activePx, 0, geom.activeW, 0, 0, geom.activeW, geom.activeH)
+        if (activeBmp !== srcBmp) activeBmp.recycle()
+
+        val inBuf = ByteBuffer.allocateDirect(3 * planeSize * 4).order(ByteOrder.nativeOrder())
+        val chR = FloatArray(planeSize)
+        val chG = FloatArray(planeSize)
+        val chB = FloatArray(planeSize)
+        val inv255 = 1.0f / 255.0f
+        val actW = geom.activeW
+        val actH = geom.activeH
+        val padX = geom.padX
+        val padY = geom.padY
+
+        for (ty in 0 until dh) {
+            val ay = (ty - padY).coerceIn(0, actH - 1)
+            val aRow = ay * actW
+            val tRow = ty * dw
+            for (tx in 0 until dw) {
+                val ax = (tx - padX).coerceIn(0, actW - 1)
+                val c = activePx[aRow + ax]
+                val dstIdx = tRow + tx
+                chR[dstIdx] = (((c shr 16) and 0xFF) * inv255 - 0.485f) / 0.229f
+                chG[dstIdx] = (((c shr 8) and 0xFF) * inv255 - 0.456f) / 0.224f
+                chB[dstIdx] = ((c and 0xFF) * inv255 - 0.406f) / 0.225f
+            }
+        }
+        val fb = inBuf.asFloatBuffer()
+        fb.put(chR)
+        fb.put(chG)
+        fb.put(chB)
+        inBuf.rewind()
+
+        val outBuf = ByteBuffer.allocateDirect(planeSize * 4).order(ByteOrder.nativeOrder())
+        try {
+            synchronized(depthModelLock) {
+                interpreter.run(inBuf, outBuf)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("ZameraPortrait", "DepthAnythingV2 inference error: ${t.message}", t)
+            return null
+        }
+        outBuf.rewind()
+        val rawDepth = FloatArray(planeSize)
+        outBuf.asFloatBuffer().get(rawDepth)
+
+        val out = PortraitOpticalEngine.resampleLetterboxDepthRoi(rawDepth, geom, segW, segH) ?: return null
+        android.util.Log.i(
+            "ZameraPortrait",
+            "DepthAnythingV2 3D map ready in ${System.currentTimeMillis() - t0}ms (activeRoi=${actW}x${actH}, pad=${padX},${padY})"
+        )
+        return out
+    }
+
+    /**
+     * Runs bundled `u2netp.tflite` (`[1, 320, 320, 3]` NHWC -> 7 multi-scale sigmoid saliency outputs `[1, 320, 320, 1]`)
+     * fusing output index `3` (`PartitionedCall:0` -> `d0`) and `0` (`PartitionedCall:1` -> `d1`) as `0.78f * d0 + 0.22f * d1`
+     * WITHOUT low-signal min-max noise inflation.
+     */
+    private fun runSingleU2NetPass(bmp: Bitmap): FloatArray? {
+        val interpreter = getOrCreateU2NetInterpreter() ?: return null
+        val uw = 320
+        val uh = 320
+        val n = uw * uh
+        val scaled = Bitmap.createScaledBitmap(bmp, uw, uh, true)
+        val px = IntArray(n)
+        scaled.getPixels(px, 0, uw, 0, 0, uw, uh)
+        if (scaled !== bmp) scaled.recycle()
+
+        val inBuf = ByteBuffer.allocateDirect(n * 3 * 4).order(ByteOrder.nativeOrder())
+        val inFloats = FloatArray(n * 3)
+        val inv255 = 1.0f / 255.0f
+        var k = 0
+        for (i in 0 until n) {
+            val c = px[i]
+            inFloats[k++] = (((c shr 16) and 0xFF) * inv255 - 0.485f) / 0.229f
+            inFloats[k++] = (((c shr 8) and 0xFF) * inv255 - 0.456f) / 0.224f
+            inFloats[k++] = ((c and 0xFF) * inv255 - 0.406f) / 0.225f
+        }
+        inBuf.asFloatBuffer().put(inFloats)
+        inBuf.rewind()
+
+        val outputs = HashMap<Int, Any>(7)
+        val outBuf0 = ByteBuffer.allocateDirect(n * 4).order(ByteOrder.nativeOrder())
+        val outBuf3 = ByteBuffer.allocateDirect(n * 4).order(ByteOrder.nativeOrder())
+        val scratchOutBuf = ByteBuffer.allocateDirect(n * 4).order(ByteOrder.nativeOrder())
+        for (idx in 0 until 7) {
+            outputs[idx] = when (idx) {
+                0 -> outBuf0
+                3 -> outBuf3
+                else -> scratchOutBuf.duplicate().order(ByteOrder.nativeOrder())
+            }
+        }
+        try {
+            synchronized(u2netModelLock) {
+                interpreter.runForMultipleInputsOutputs(arrayOf<Any>(inBuf), outputs)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("ZameraPortrait", "U2NetP inference error: ${t.message}", t)
+            return null
+        }
+        outBuf0.rewind()
+        outBuf3.rewind()
+        val d1 = FloatArray(n)
+        val d0 = FloatArray(n)
+        outBuf0.asFloatBuffer().get(d1)
+        outBuf3.asFloatBuffer().get(d0)
+
+        return PortraitOpticalEngine.fuseCalibratedU2NetOutputs(d0, d1)
+    }
+
+    /**
+     * Runs U²-NetP full-frame (reusing `cachedGlobal320` if available) and optionally refines a zoomed ROI around
+     * `(focusX, focusY)` when genuine calibrated saliency exists there, returning `(global320, matteSegWxSegH)`.
+     */
+    private fun runU2NetSalientMatting(
         srcBmp: Bitmap,
         segW: Int,
         segH: Int,
         focusX: Float,
         focusY: Float,
-        subjectRadiusRatio: Float
-    ): Triple<FloatArray, FloatArray, Float> {
-        val segBmp = Bitmap.createScaledBitmap(srcBmp, segW, segH, true)
-        val n = segW * segH
-        val mlMask = FloatArray(n)
-        var maxMlConf = 0f
+        cachedGlobal320: FloatArray? = null
+    ): Pair<FloatArray, FloatArray>? {
+        val t0 = System.currentTimeMillis()
+        val uw = 320
+        val uh = 320
+        val global320 = if (cachedGlobal320 != null && cachedGlobal320.size >= uw * uh) {
+            cachedGlobal320
+        } else {
+            runSingleU2NetPass(srcBmp) ?: return null
+        }
+        val out = FloatArray(segW * segH)
+        for (y in 0 until segH) {
+            val gy = (y.toFloat() / (segH - 1).coerceAtLeast(1)) * (uh - 1)
+            val y0 = gy.toInt().coerceIn(0, uh - 2)
+            val fy = gy - y0
+            val rowOff = y * segW
+            for (x in 0 until segW) {
+                val gx = (x.toFloat() / (segW - 1).coerceAtLeast(1)) * (uw - 1)
+                val x0 = gx.toInt().coerceIn(0, uw - 2)
+                val fx = gx - x0
+                out[rowOff + x] = global320[y0 * uw + x0] * (1f - fx) * (1f - fy) +
+                    global320[y0 * uw + x0 + 1] * fx * (1f - fy) +
+                    global320[(y0 + 1) * uw + x0] * (1f - fx) * fy +
+                    global320[(y0 + 1) * uw + x0 + 1] * fx * fy
+            }
+        }
 
-        // 1. ML Kit Neural Person/Portrait Segmentation (Warm cached singleton model, zero reload delay)
-        // CRITICAL FIX: JNI DirectByteBuffer defaults to BIG_ENDIAN; must set ByteOrder.nativeOrder() before reading floats!
+        // Only run zoomed ROI pass if calibrated global saliency confirms a real salient candidate near (focusX, focusY)
+        val probeGx = (focusX.coerceIn(0f, 1f) * (uw - 1)).toInt().coerceIn(0, uw - 1)
+        val probeGy = (focusY.coerceIn(0f, 1f) * (uh - 1)).toInt().coerceIn(0, uh - 1)
+        var localGlobalPeak = 0f
+        for (py in (probeGy - 28).coerceAtLeast(0)..(probeGy + 28).coerceAtMost(uh - 1)) {
+            val rOff = py * uw
+            for (px in (probeGx - 28).coerceAtLeast(0)..(probeGx + 28).coerceAtMost(uw - 1)) {
+                val v = global320[rOff + px]
+                if (v > localGlobalPeak) localGlobalPeak = v
+            }
+        }
+
+        if (localGlobalPeak >= 0.30f) {
+            try {
+                val fw = srcBmp.width
+                val fh = srcBmp.height
+                val roiW = (fw * 0.68f).toInt().coerceIn(64, fw)
+                val roiH = (fh * 0.68f).toInt().coerceIn(64, fh)
+                val cx = (focusX * fw).toInt()
+                val cy = (focusY * fh).toInt()
+                val rx0 = (cx - roiW / 2).coerceIn(0, (fw - roiW).coerceAtLeast(0))
+                val ry0 = (cy - roiH / 2).coerceIn(0, (fh - roiH).coerceAtLeast(0))
+                val crop = Bitmap.createBitmap(srcBmp, rx0, ry0, roiW, roiH)
+                val roi320 = runSingleU2NetPass(crop)
+                if (crop !== srcBmp) crop.recycle()
+                if (roi320 != null) {
+                    val sx0 = (rx0 * segW / fw).coerceIn(0, segW - 1)
+                    val sx1 = ((rx0 + roiW) * segW / fw).coerceIn(sx0 + 1, segW - 1)
+                    val sy0 = (ry0 * segH / fh).coerceIn(0, segH - 1)
+                    val sy1 = ((ry0 + roiH) * segH / fh).coerceIn(sy0 + 1, segH - 1)
+                    val rw = (sx1 - sx0).coerceAtLeast(1)
+                    val rh = (sy1 - sy0).coerceAtLeast(1)
+                    val marginX = (rw * 0.10f).coerceAtLeast(4f)
+                    val marginY = (rh * 0.10f).coerceAtLeast(4f)
+                    for (y in sy0..sy1) {
+                        val ly = (y - sy0).toFloat() / rh
+                        val gy = (ly * (uh - 1)).coerceIn(0f, (uh - 1).toFloat())
+                        val y0 = gy.toInt().coerceIn(0, uh - 2)
+                        val fy = gy - y0
+                        val wy = kotlin.math.min((y - sy0) / marginY, (sy1 - y) / marginY).coerceIn(0f, 1f)
+                        val rowOff = y * segW
+                        for (x in sx0..sx1) {
+                            val lx = (x - sx0).toFloat() / rw
+                            val gx = (lx * (uw - 1)).coerceIn(0f, (uw - 1).toFloat())
+                            val x0 = gx.toInt().coerceIn(0, uw - 2)
+                            val fx = gx - x0
+                            val wx = kotlin.math.min((x - sx0) / marginX, (sx1 - x) / marginX).coerceIn(0f, 1f)
+                            val wBlend = (wx * wy * 0.60f).coerceIn(0f, 0.60f)
+                            val rv = roi320[y0 * uw + x0] * (1f - fx) * (1f - fy) +
+                                roi320[y0 * uw + x0 + 1] * fx * (1f - fy) +
+                                roi320[(y0 + 1) * uw + x0] * (1f - fx) * fy +
+                                roi320[(y0 + 1) * uw + x0 + 1] * fx * fy
+                            out[rowOff + x] = (out[rowOff + x] * (1f - wBlend) + rv * wBlend).coerceIn(0f, 1f)
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                android.util.Log.w("ZameraPortrait", "U2NetP ROI pass warning: ${t.message}")
+            }
+        }
+        android.util.Log.i(
+            "ZameraPortrait",
+            "U2NetP calibrated matte ready in ${System.currentTimeMillis() - t0}ms (peak=$localGlobalPeak)"
+        )
+        return Pair(global320, out)
+    }
+
+    /**
+     * Computes the Focused Subject's 3D Depth Plane (`focusDepth`) and a per-pixel 3D Depth Gate (`depthGate[i] ∈ [0..1]`).
+     */
+    private fun computeSubjectDepthGate(
+        depthMap: FloatArray?,
+        mlMask: FloatArray,
+        u2netMask: FloatArray?,
+        segW: Int,
+        segH: Int,
+        focusX: Float,
+        focusY: Float,
+        hasStrongHuman: Boolean
+    ): Pair<Float, FloatArray> {
+        val n = segW * segH
+        if (depthMap == null) {
+            return Pair(0.70f, FloatArray(n) { 1.0f })
+        }
+        val cx = (focusX * (segW - 1)).roundToInt().coerceIn(0, segW - 1)
+        val cy = (focusY * (segH - 1)).roundToInt().coerceIn(0, segH - 1)
+
+        val depthSamples = FloatArray(4096)
+        var dCount = 0
+        if (hasStrongHuman) {
+            for (y in 0 until segH step 3) {
+                val row = y * segW
+                for (x in 0 until segW step 3) {
+                    val i = row + x
+                    if (mlMask[i] >= 0.78f && dCount < depthSamples.size) {
+                        depthSamples[dCount++] = depthMap[i]
+                    }
+                }
+            }
+        } else if (u2netMask != null) {
+            val rx = (segW * 0.10f).toInt().coerceAtLeast(6)
+            val ry = (segH * 0.10f).toInt().coerceAtLeast(6)
+            for (y in (cy - ry).coerceAtLeast(0)..(cy + ry).coerceAtMost(segH - 1) step 2) {
+                val row = y * segW
+                for (x in (cx - rx).coerceAtLeast(0)..(cx + rx).coerceAtMost(segW - 1) step 2) {
+                    val i = row + x
+                    if (u2netMask[i] >= 0.42f && dCount < depthSamples.size) {
+                        depthSamples[dCount++] = depthMap[i]
+                    }
+                }
+            }
+        }
+
+        val focusDepth: Float
+        val depthSpread: Float
+        if (dCount >= 8) {
+            java.util.Arrays.sort(depthSamples, 0, dCount)
+            focusDepth = depthSamples[(dCount * 65) / 100]
+            val p25 = depthSamples[(dCount * 25) / 100]
+            val p85 = depthSamples[(dCount * 85) / 100]
+            depthSpread = (p85 - p25).coerceIn(0.06f, 0.20f)
+        } else {
+            // Pure 3D surface focus: median depth in compact focus spot around (cx, cy)
+            val spotR = (kotlin.math.min(segW, segH) * 0.04f).toInt().coerceIn(2, 12)
+            var spotCnt = 0
+            for (y in (cy - spotR).coerceAtLeast(0)..(cy + spotR).coerceAtMost(segH - 1)) {
+                val row = y * segW
+                for (x in (cx - spotR).coerceAtLeast(0)..(cx + spotR).coerceAtMost(segW - 1)) {
+                    if (spotCnt < depthSamples.size) {
+                        depthSamples[spotCnt++] = depthMap[row + x]
+                    }
+                }
+            }
+            if (spotCnt > 0) {
+                java.util.Arrays.sort(depthSamples, 0, spotCnt)
+                focusDepth = depthSamples[spotCnt / 2].coerceIn(0.0f, 1.0f)
+            } else {
+                focusDepth = depthMap[cy * segW + cx].coerceIn(0.0f, 1.0f)
+            }
+            depthSpread = 0.10f
+        }
+
+        val gate = FloatArray(n)
+        val rearPass = focusDepth - 1.05f * depthSpread
+        val rearStop = focusDepth - 1.85f * depthSpread
+        val invRearBand = 1.0f / (rearPass - rearStop).coerceAtLeast(0.04f)
+        for (i in 0 until n) {
+            val d = depthMap[i]
+            val g = if (d >= rearPass) {
+                1.0f
+            } else {
+                ((d - rearStop) * invRearBand).coerceIn(0f, 1f)
+            }
+            gate[i] = g * g * (3.0f - 2.0f * g)
+        }
+        return Pair(focusDepth, gate)
+    }
+
+    private fun runNeuralPortraitSegmentation(
+        srcBmp: Bitmap,
+        segBmp: Bitmap,
+        segW: Int,
+        segH: Int,
+        focusX: Float,
+        focusY: Float
+    ): NeuralSegResult {
+        val n = segW * segH
+        val selfieMask = FloatArray(n)
+        var maxSelfieConf = 0f
+
+        // Pass 1: Global Full-Frame ML Kit SelfieSegmenter on 512x682
         try {
             val inputImage = InputImage.fromBitmap(segBmp, 0)
             val mask = Tasks.await(
@@ -1914,28 +3260,598 @@ class ZameraCapturePlugin :
                         val gx = (x.toFloat() / (segW - 1).coerceAtLeast(1)) * (mw - 1)
                         val x0 = gx.toInt().coerceIn(0, mw - 2)
                         val fx = gx - x0
-                        val c00 = rawMask[y0 * mw + x0]
-                        val c10 = rawMask[y0 * mw + x0 + 1]
-                        val c01 = rawMask[(y0 + 1) * mw + x0]
-                        val c11 = rawMask[(y0 + 1) * mw + x0 + 1]
-                        val c = (c00 * (1f - fx) * (1f - fy) +
-                            c10 * fx * (1f - fy) +
-                            c01 * (1f - fx) * fy +
-                            c11 * fx * fy)
+                        val c = rawMask[y0 * mw + x0] * (1f - fx) * (1f - fy) +
+                            rawMask[y0 * mw + x0 + 1] * fx * (1f - fy) +
+                            rawMask[(y0 + 1) * mw + x0] * (1f - fx) * fy +
+                            rawMask[(y0 + 1) * mw + x0 + 1] * fx * fy
                         val validC = if (c.isNaN()) 0f else c.coerceIn(0f, 1f)
-                        mlMask[y * segW + x] = validC
-                        if (validC > maxMlConf) maxMlConf = validC
+                        selfieMask[y * segW + x] = validC
+                        if (validC > maxSelfieConf) maxSelfieConf = validC
                     }
                 }
             }
-            android.util.Log.i("ZameraPortrait", "MLKit SelfieSegmenter maxMlConf=$maxMlConf on ${segW}x${segH}")
+            android.util.Log.i("ZameraPortrait", "MLKit SelfieSegmenter Pass1 maxSelfieConf=$maxSelfieConf on ${segW}x${segH}")
         } catch (t: Throwable) {
-            android.util.Log.e("ZameraPortrait", "MLKit SelfieSegmenter error: ${t.message}", t)
+            android.util.Log.e("ZameraPortrait", "MLKit SelfieSegmenter Pass1 error: ${t.message}", t)
         }
+
+        // Locate human candidate bounding box (using 0.30 threshold so distant/lying humans in wide shots are also localized for Pass 2!)
+        var minHx = segW
+        var maxHx = 0
+        var minHy = segH
+        var maxHy = 0
+        val locateThresh = if (maxSelfieConf >= 0.60f) 0.45f else 0.28f
+        for (y in 0 until segH) {
+            val row = y * segW
+            for (x in 0 until segW) {
+                if (selfieMask[row + x] >= locateThresh) {
+                    if (x < minHx) minHx = x
+                    if (x > maxHx) maxHx = x
+                    if (y < minHy) minHy = y
+                    if (y > maxHy) maxHy = y
+                }
+            }
+        }
+        if (maxSelfieConf < 0.28f || maxHx <= minHx || maxHy <= minHy) {
+            return NeuralSegResult(selfieMask, 0f, false, 0f)
+        }
+
+        // Pass 2: High-Resolution Zoomed-In ROI Neural Pass around Head, Ears, Shoulders & Raised Hands/Fingers
+        // Also boosts distant human portraits (like a person lying on a couch across the room) to full 384x384 neural resolution!
+        var usedRoiPass = false
+        try {
+            val bodyW = (maxHx - minHx).coerceAtLeast(24)
+            val bodyH = (maxHy - minHy).coerceAtLeast(24)
+            val roiX0 = (minHx - (bodyW * 0.35f).toInt()).coerceIn(0, segW - 32)
+            val roiX1 = (maxHx + (bodyW * 0.35f).toInt()).coerceIn(roiX0 + 32, segW - 1)
+            val roiY0 = (minHy - (bodyH * 0.16f).toInt()).coerceIn(0, segH - 32)
+            val roiY1 = (minHy + (bodyH * 0.88f).toInt()).coerceIn(roiY0 + 32, segH - 1)
+            val roiW = roiX1 - roiX0 + 1
+            val roiH = roiY1 - roiY0 + 1
+
+            if (roiW * roiH < (n * 88) / 100) {
+                val fullW = srcBmp.width
+                val fullH = srcBmp.height
+                val cropX = (roiX0 * fullW / segW).coerceIn(0, fullW - 32)
+                val cropY = (roiY0 * fullH / segH).coerceIn(0, fullH - 32)
+                val cropW = (roiW * fullW / segW).coerceIn(32, fullW - cropX)
+                val cropH = (roiH * fullH / segH).coerceIn(32, fullH - cropY)
+                val cropBmp = Bitmap.createBitmap(srcBmp, cropX, cropY, cropW, cropH)
+                val roiScaled = Bitmap.createScaledBitmap(cropBmp, 384, 384, true)
+                if (roiScaled !== cropBmp) cropBmp.recycle()
+
+                val roiMask = Tasks.await(
+                    getOrCreateSelfieSegmenter().process(InputImage.fromBitmap(roiScaled, 0)),
+                    1800,
+                    java.util.concurrent.TimeUnit.MILLISECONDS
+                )
+                roiScaled.recycle()
+                if (roiMask != null) {
+                    val mw = roiMask.width
+                    val mh = roiMask.height
+                    val buf = roiMask.buffer
+                    buf.order(ByteOrder.nativeOrder())
+                    buf.rewind()
+                    val rawRoi = FloatArray(mw * mh)
+                    buf.asFloatBuffer().get(rawRoi)
+                    var maxRoiConf = 0f
+                    var roiCoreCount = 0
+                    for (v in rawRoi) {
+                        if (!v.isNaN()) {
+                            if (v > maxRoiConf) maxRoiConf = v
+                            if (v >= 0.78f) roiCoreCount++
+                        }
+                    }
+                    // Only merge Pass 2 if the zoomed ROI confirms a genuine high-confidence human core (rejects non-human objects like laptops!)
+                    if (maxRoiConf >= 0.78f && roiCoreCount >= (mw * mh) / 45) {
+                        val marginX = (roiW * 0.08f).coerceAtLeast(4f)
+                        val marginY = (roiH * 0.08f).coerceAtLeast(4f)
+                        for (y in roiY0..roiY1) {
+                            val ly = (y - roiY0).toFloat() / (roiH - 1).coerceAtLeast(1)
+                            val gy = ly * (mh - 1)
+                            val y0 = gy.toInt().coerceIn(0, mh - 2)
+                            val fy = gy - y0
+                            val wy = kotlin.math.min((y - roiY0) / marginY, (roiY1 - y) / marginY).coerceIn(0f, 1f)
+                            val rowOff = y * segW
+                            for (x in roiX0..roiX1) {
+                                val lx = (x - roiX0).toFloat() / (roiW - 1).coerceAtLeast(1)
+                                val gx = lx * (mw - 1)
+                                val x0 = gx.toInt().coerceIn(0, mw - 2)
+                                val fx = gx - x0
+                                val wx = kotlin.math.min((x - roiX0) / marginX, (roiX1 - x) / marginX).coerceIn(0f, 1f)
+                                val wBlend = (wx * wy).coerceIn(0f, 1f)
+                                val rc = (rawRoi[y0 * mw + x0] * (1f - fx) * (1f - fy) +
+                                    rawRoi[y0 * mw + x0 + 1] * fx * (1f - fy) +
+                                    rawRoi[(y0 + 1) * mw + x0] * (1f - fx) * fy +
+                                    rawRoi[(y0 + 1) * mw + x0 + 1] * fx * fy).let { if (it.isNaN()) 0f else it.coerceIn(0f, 1f) }
+                                val gc = selfieMask[rowOff + x]
+                                val merged = if (rc > gc) {
+                                    gc + (rc - gc) * wBlend
+                                } else {
+                                    gc * (1f - 0.80f * wBlend) + rc * (0.80f * wBlend)
+                                }
+                                val mv = merged.coerceIn(0f, 1f)
+                                selfieMask[rowOff + x] = mv
+                                if (mv > maxSelfieConf) maxSelfieConf = mv
+                            }
+                        }
+                        usedRoiPass = true
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            android.util.Log.w("ZameraPortrait", "MLKit ROI Pass2 warning: ${t.message}")
+        }
+
+        var selfieStrong = 0
+        var selfieCore = 0
+        for (i in 0 until n) {
+            val sc = selfieMask[i]
+            if (sc >= 0.50f) {
+                selfieStrong++
+                if (sc >= 0.74f) selfieCore++
+            }
+        }
+        val selfieAreaRatio = selfieStrong.toFloat() / n.coerceAtLeast(1).toFloat()
+        val selfieCoreRatio = selfieCore.toFloat() / selfieStrong.coerceAtLeast(1).toFloat()
+        val hasValidSelfie = maxSelfieConf > 0.74f && selfieAreaRatio >= 0.008f && selfieCoreRatio >= 0.36f
+        if (!hasValidSelfie) {
+            return NeuralSegResult(selfieMask, 0f, false, 0f)
+        }
+        return NeuralSegResult(selfieMask, maxSelfieConf, usedRoiPass, selfieAreaRatio)
+    }
+
+    /**
+     * Suppresses secondary background bystanders (e.g. a second person sitting on a couch behind the main portrait subject)
+     * by identifying the primary tallest/focused head lobe and cutting along strong clothing/background edges separating
+     * the primary foreground person from any smaller lower head lobe in the background.
+     */
+    private fun isolatePrimaryHumanSubject(
+        mlMask: FloatArray,
+        luma255: FloatArray,
+        chA: FloatArray,
+        chB: FloatArray,
+        segW: Int,
+        segH: Int,
+        focusX: Float
+    ) {
+        var minHx = segW; var maxHx = 0; var minHy = segH; var maxHy = 0
+        for (y in 0 until segH) {
+            val row = y * segW
+            for (x in 0 until segW) {
+                if (mlMask[row + x] >= 0.52f) {
+                    if (x < minHx) minHx = x
+                    if (x > maxHx) maxHx = x
+                    if (y < minHy) minHy = y
+                    if (y > maxHy) maxHy = y
+                }
+            }
+        }
+        val bodyW = maxHx - minHx
+        val bodyH = maxHy - minHy
+        if (bodyW < segW / 3 || bodyH < segH / 3) return
+
+        // Compute topmost human pixel y for each column x
+        val colTopY = IntArray(segW) { segH }
+        for (x in minHx..maxHx) {
+            for (y in minHy..maxHy) {
+                if (mlMask[y * segW + x] >= 0.58f) {
+                    colTopY[x] = y
+                    break
+                }
+            }
+        }
+        // Locate primary head column (highest head near center/focus)
+        var primX = (minHx + maxHx) / 2
+        var primTopY = segH
+        val fxPx = (focusX * segW).toInt().coerceIn(minHx, maxHx)
+        for (x in minHx..maxHx) {
+            val score = colTopY[x] + (kotlin.math.abs(x - fxPx) * 0.15f).toInt()
+            if (score < primTopY) {
+                primTopY = score
+                primX = x
+            }
+        }
+        val actualPrimTop = colTopY[primX]
+
+        // Check if there is a secondary background person lobe to the left separated by a neck/shoulder valley
+        var leftValleyX = -1
+        var maxValleyY = actualPrimTop
+        var foundLeftSecHead = false
+        for (x in (primX - 12) downTo (minHx + 16)) {
+            val ty = colTopY[x]
+            if (!foundLeftSecHead) {
+                if (ty > maxValleyY) {
+                    maxValleyY = ty
+                    leftValleyX = x
+                } else if (leftValleyX > 0 && maxValleyY - actualPrimTop >= (segH * 0.14f).toInt() && maxValleyY - ty >= 10) {
+                    // Check that the secondary head lobe is wide enough (>= 34px) to be a person's head, not a raised finger!
+                    var lobeWidth = 0
+                    for (kx in x downTo minHx) {
+                        if (colTopY[kx] < maxValleyY - 4) lobeWidth++ else break
+                    }
+                    if (lobeWidth >= 32 && ty - actualPrimTop >= (segH * 0.10f).toInt()) {
+                        foundLeftSecHead = true
+                    }
+                }
+            }
+        }
+        if (foundLeftSecHead && leftValleyX > minHx + segW / 9) {
+            var cutX = leftValleyX
+            for (y in actualPrimTop..maxHy) {
+                val row = y * segW
+                if (y >= maxValleyY - 6) {
+                    var bestEdgeX = cutX
+                    var bestEdgeScore = -1f
+                    val searchL = (cutX - 8).coerceAtLeast(minHx + 4)
+                    val searchR = (cutX + 8).coerceAtMost(primX - 10)
+                    for (x in searchL..searchR) {
+                        val i = row + x
+                        val edge = kotlin.math.abs(luma255[i + 1] - luma255[i - 1]) +
+                            1.3f * kotlin.math.abs(chA[i + 1] - chA[i - 1]) +
+                            1.1f * kotlin.math.abs(chB[i + 1] - chB[i - 1]) -
+                            0.9f * kotlin.math.abs(x - cutX)
+                        if (edge > bestEdgeScore) {
+                            bestEdgeScore = edge
+                            bestEdgeX = x
+                        }
+                    }
+                    cutX = bestEdgeX
+                }
+                for (x in 0 until cutX) {
+                    val atten = ((x - (cutX - 6)).toFloat() / 6.0f).coerceIn(0f, 1f)
+                    mlMask[row + x] *= atten
+                }
+            }
+        }
+    }
+
+    /**
+     * Checks whether a human mask contains a secondary background bystander head lobe separated by a neck/shoulder valley.
+     * Used by Smart Selective Orchestration so `Depth-Anything-V2` is only invoked on human portraits when a background
+     * bystander needs 3D depth rejection!
+     */
+    private fun hasSecondaryBystanderLobe(mask: FloatArray, segW: Int, segH: Int, focusX: Float): Boolean {
+        var minHx = segW; var maxHx = 0; var minHy = segH; var maxHy = 0
+        for (y in 0 until segH) {
+            val row = y * segW
+            for (x in 0 until segW) {
+                if (mask[row + x] >= 0.52f) {
+                    if (x < minHx) minHx = x
+                    if (x > maxHx) maxHx = x
+                    if (y < minHy) minHy = y
+                    if (y > maxHy) maxHy = y
+                }
+            }
+        }
+        if (maxHx - minHx < segW / 3 || maxHy - minHy < segH / 3) return false
+        val colTopY = IntArray(segW) { segH }
+        for (x in minHx..maxHx) {
+            for (y in minHy..maxHy) {
+                if (mask[y * segW + x] >= 0.58f) {
+                    colTopY[x] = y
+                    break
+                }
+            }
+        }
+        var primX = (minHx + maxHx) / 2
+        var primTopY = segH
+        val fxPx = (focusX * segW).toInt().coerceIn(minHx, maxHx)
+        for (x in minHx..maxHx) {
+            val score = colTopY[x] + (kotlin.math.abs(x - fxPx) * 0.15f).toInt()
+            if (score < primTopY) {
+                primTopY = score
+                primX = x
+            }
+        }
+        val actualPrimTop = colTopY[primX]
+        var leftValleyX = -1
+        var maxValleyY = actualPrimTop
+        for (x in (primX - 12) downTo (minHx + 16)) {
+            val ty = colTopY[x]
+            if (ty > maxValleyY) {
+                maxValleyY = ty
+                leftValleyX = x
+            } else if (leftValleyX > 0 && maxValleyY - actualPrimTop >= (segH * 0.14f).toInt() && maxValleyY - ty >= 10) {
+                var lobeWidth = 0
+                for (kx in x downTo minHx) {
+                    if (colTopY[kx] < maxValleyY - 4) lobeWidth++ else break
+                }
+                if (lobeWidth >= 32 && ty - actualPrimTop >= (segH * 0.10f).toInt()) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private fun refineNeuralSubjectMask(
+        mlMask: FloatArray,
+        multiclass: MulticlassSegResult?,
+        depthGate: FloatArray,
+        pixels: IntArray,
+        luma255: FloatArray,
+        chA: FloatArray,
+        chB: FloatArray,
+        segW: Int,
+        segH: Int,
+        focusX: Float
+    ): FloatArray {
+        val n = segW * segH
+        val combinedHuman = FloatArray(n)
+        val humanBodySeed = FloatArray(n)
+        val sureSkinSeed = FloatArray(n)
+        val sureSkinL = FloatArray(n)
+        val sureSkinA = FloatArray(n)
+        val sureSkinB = FloatArray(n)
+
+        for (i in 0 until n) {
+            val s = mlMask[i]
+            val mcH = multiclass?.humanProb?.get(i) ?: s
+            val sk = multiclass?.skinProb?.get(i) ?: 0f
+            val cl = multiclass?.clothesProb?.get(i) ?: 0f
+            val hr = multiclass?.hairProb?.get(i) ?: 0f
+            // Prioritize 6-Class MediaPipe Selfie Multiclass (`16.4 MB`) while preserving high-confidence SelfieSegmenter core
+            val hProb = if (multiclass != null) {
+                kotlin.math.max(mcH, (0.68f * mcH + 0.32f * s))
+            } else {
+                s
+            }
+            combinedHuman[i] = hProb
+            if (sk + cl + hr >= 0.42f || hProb >= 0.65f) {
+                humanBodySeed[i] = 1.0f
+            }
+            val p = pixels[i]
+            val r = ((p shr 16) and 0xFF).toFloat()
+            val g = ((p shr 8) and 0xFF).toFloat()
+            val b = (p and 0xFF).toFloat()
+            val isSkinChrom = r > g + 4f && g > 0.50f * r && g > b - 10f &&
+                chA[i] > 5.5f && chB[i] > 3.5f && luma255[i] in 40f..246f
+            val wSk = if (isSkinChrom) {
+                val sp = if (multiclass != null) kotlin.math.max(sk, s * 0.65f) else s
+                ((sp - 0.35f) / 0.45f).coerceIn(0f, 1f)
+            } else 0f
+            sureSkinSeed[i] = wSk
+            sureSkinL[i] = luma255[i] * wSk
+            sureSkinA[i] = chA[i] * wSk
+            sureSkinB[i] = chB[i] * wSk
+        }
+
+        isolatePrimaryHumanSubject(combinedHuman, luma255, chA, chB, segW, segH, focusX)
+
+        // Proximity gate for Class 5 (Held Accessories: Phone held in hand, Eyeglasses) so independent floor objects are rejected
+        val nearHumanBody = boxFilterFloat(humanBodySeed, segW, segH, (segW / 18).coerceIn(18, 30))
+        // Local hand/face skin color model for razor-sharp spread fingers and inter-finger V-webbing suppression
+        val skinRad = (segW / 34).coerceIn(10, 16)
+        val locSkinW = boxFilterFloat(sureSkinSeed, segW, segH, skinRad)
+        val locSkinL = boxFilterFloat(sureSkinL, segW, segH, skinRad)
+        val locSkinA = boxFilterFloat(sureSkinA, segW, segH, skinRad)
+        val locSkinB = boxFilterFloat(sureSkinB, segW, segH, skinRad)
+
+        val rawAlpha = FloatArray(n)
+        var minHx = segW
+        var maxHx = 0
+        var minHy = segH
+        var maxHy = 0
+        for (y in 0 until segH) {
+            val row = y * segW
+            for (x in 0 until segW) {
+                val idx = row + x
+                if (combinedHuman[idx] * depthGate[idx] >= 0.42f) {
+                    if (x < minHx) minHx = x
+                    if (x > maxHx) maxHx = x
+                    if (y < minHy) minHy = y
+                    if (y > maxHy) maxHy = y
+                }
+            }
+        }
+        val bodyW = (maxHx - minHx).coerceAtLeast(16)
+        val bodyH = (maxHy - minHy).coerceAtLeast(16)
+        val anatLeft = (minHx - (bodyW * 0.36f).toInt()).coerceAtLeast(0)
+        val anatRight = (maxHx + (bodyW * 0.36f).toInt()).coerceAtMost(segW - 1)
+        val anatTop = (minHy - (bodyH * 0.12f).toInt()).coerceAtLeast(0)
+        val anatBottom = (maxHy + (bodyH * 0.34f).toInt()).coerceAtMost(segH - 1)
+
+        // Compute local sure-FG and sure-BG color statistics strictly for non-skin/non-clothes concave pocket cleanup
+        val wFgSeed = FloatArray(n)
+        val wBgSeed = FloatArray(n)
+        val fgSeedL = FloatArray(n)
+        val fgSeedA = FloatArray(n)
+        val fgSeedB = FloatArray(n)
+        val bgSeedL = FloatArray(n)
+        val bgSeedA = FloatArray(n)
+        val bgSeedB = FloatArray(n)
+        for (i in 0 until n) {
+            val m = combinedHuman[i] * depthGate[i]
+            val wf = ((m - 0.76f) / 0.24f).coerceIn(0f, 1f).let { it * it }
+            val wb = ((0.22f - m) / 0.22f).coerceIn(0f, 1f).let { it * it }
+            wFgSeed[i] = wf
+            wBgSeed[i] = wb
+            fgSeedL[i] = luma255[i] * wf
+            fgSeedA[i] = chA[i] * wf
+            fgSeedB[i] = chB[i] * wf
+            bgSeedL[i] = luma255[i] * wb
+            bgSeedA[i] = chA[i] * wb
+            bgSeedB[i] = chB[i] * wb
+        }
+        val rad = (segW / 24).coerceIn(10, 22)
+        val locFgW = boxFilterFloat(wFgSeed, segW, segH, rad)
+        val locFgL = boxFilterFloat(fgSeedL, segW, segH, rad)
+        val locFgA = boxFilterFloat(fgSeedA, segW, segH, rad)
+        val locFgB = boxFilterFloat(fgSeedB, segW, segH, rad)
+        val locBgW = boxFilterFloat(wBgSeed, segW, segH, rad)
+        val locBgL = boxFilterFloat(bgSeedL, segW, segH, rad)
+        val locBgA = boxFilterFloat(bgSeedA, segW, segH, rad)
+        val locBgB = boxFilterFloat(bgSeedB, segW, segH, rad)
+        val bgPresence = boxFilterFloat(wBgSeed, segW, segH, (segW / 54).coerceIn(5, 10))
+
+        for (y in 0 until segH) {
+            val row = y * segW
+            for (x in 0 until segW) {
+                val i = row + x
+                val dg = depthGate[i]
+                val hProb = combinedHuman[i]
+                val skinP = multiclass?.skinProb?.get(i) ?: 0f
+                val hairP = multiclass?.hairProb?.get(i) ?: 0f
+                val clothesP = multiclass?.clothesProb?.get(i) ?: 0f
+                val rawAccessP = multiclass?.accessProb?.get(i) ?: 0f
+                // Keep Class 5 (held phone / eyeglasses) sharp when attached to hands/face/clothes
+                val validAccessP = rawAccessP * ((nearHumanBody[i] / 0.10f).coerceIn(0f, 1f))
+
+                val p = pixels[i]
+                val r = ((p shr 16) and 0xFF).toFloat()
+                val g = ((p shr 8) and 0xFF).toFloat()
+                val b = (p and 0xFF).toFloat()
+                val inAnat = x in anatLeft..anatRight && y in anatTop..anatBottom
+                // Require g > 0.50f * r and neural skin support so dark red/amber tea glasses on the floor are never mistaken for skin!
+                val isSkinChrom = inAnat && dg >= 0.50f && r > g + 4f && g > 0.50f * r && g > b - 10f &&
+                    chA[i] > 5.5f && chB[i] > 3.8f && luma255[i] in 40f..246f
+                val isSkinLike = isSkinChrom && (skinP >= 0.05f || (multiclass == null && hProb >= 0.14f))
+
+                val m = (kotlin.math.max(hProb, validAccessP) * dg).coerceIn(0f, 1f)
+
+                var subjAlpha = when {
+                    clothesP >= 0.34f || validAccessP >= 0.36f -> {
+                        // Lock sweater sleeves, vest, eyeglasses, and held phone at full sharpness
+                        ((kotlin.math.max(m, kotlin.math.max(clothesP, validAccessP)) - 0.24f) / 0.28f).coerceIn(0f, 1f)
+                    }
+                    isSkinLike -> {
+                        ((kotlin.math.max(m, skinP) - 0.12f) / 0.28f).coerceIn(0f, 1f)
+                    }
+                    else -> {
+                        ((m - 0.44f) / 0.30f).coerceIn(0f, 1f)
+                    }
+                }
+
+                // Hand/Finger & Inter-Finger V-Gap Precision Filter:
+                // Near skin regions (hands/fingers), boost true skin-colored finger pixels and crush non-skin V-gap webbing!
+                val skW = locSkinW[i]
+                if (skW > 0.025f && clothesP < 0.32f && hairP < 0.32f && validAccessP < 0.32f) {
+                    val sl = locSkinL[i] / skW
+                    val sa = locSkinA[i] / skW
+                    val sb = locSkinB[i] / skW
+                    val dLocalSkin = 0.45f * kotlin.math.abs(luma255[i] - sl) +
+                        1.55f * kotlin.math.abs(chA[i] - sa) +
+                        1.35f * kotlin.math.abs(chB[i] - sb)
+                    if (isSkinChrom && dLocalSkin < 14.5f && (skinP >= 0.06f || hProb >= 0.15f)) {
+                        // True finger/thumb pixel: lock fingertip and finger edges sharp!
+                        val fingerBoost = ((15.5f - dLocalSkin) / 8.0f).coerceIn(0f, 1f)
+                        subjAlpha = kotlin.math.max(subjAlpha, (0.82f + 0.18f * fingerBoost) * dg)
+                    } else if ((!isSkinChrom || dLocalSkin > 16.5f) && skinP < 0.72f) {
+                        // Background wall/curtain visible inside the V-gap between spread fingers: suppress webbing!
+                        val webAtten = if (!isSkinChrom) {
+                            0.04f
+                        } else {
+                            ((16.5f / dLocalSkin.coerceAtLeast(16.5f)).let { it * it } * 0.15f).coerceIn(0.02f, 0.25f)
+                        }
+                        subjAlpha *= webAtten
+                    }
+                }
+
+                // Clean non-skin, non-clothes background leaks in concave pockets (e.g. wall/pillow next to ear/neck)
+                val fw = locFgW[i]
+                val bw = locBgW[i]
+                if (!isSkinLike && clothesP < 0.38f && hairP < 0.45f && validAccessP < 0.35f &&
+                    subjAlpha > 0.02f && m < 0.76f && bgPresence[i] > 0.025f && fw > 1e-3f && bw > 1e-3f
+                ) {
+                    val fl = locFgL[i] / fw
+                    val fa = locFgA[i] / fw
+                    val fb = locFgB[i] / fw
+                    val bl = locBgL[i] / bw
+                    val ba = locBgA[i] / bw
+                    val bb = locBgB[i] / bw
+
+                    val dFg = 0.55f * kotlin.math.abs(luma255[i] - fl) +
+                        1.35f * kotlin.math.abs(chA[i] - fa) +
+                        1.15f * kotlin.math.abs(chB[i] - fb)
+                    val dBg = 0.55f * kotlin.math.abs(luma255[i] - bl) +
+                        1.35f * kotlin.math.abs(chA[i] - ba) +
+                        1.15f * kotlin.math.abs(chB[i] - bb)
+
+                    if (dBg < 15.5f && dFg > 1.85f * dBg + 12.0f) {
+                        val pocketAtten = (dBg / 15.5f).coerceIn(0.02f, 1.0f)
+                        subjAlpha *= pocketAtten
+                    }
+                }
+                rawAlpha[i] = (subjAlpha * dg).coerceIn(0f, 1f)
+            }
+        }
+
+        // Connected Skin-Extremity Geodesic Recovery (Recovers spread fingertips & thumbs strictly on neural skin candidates!)
+        val skinProtoL = FloatArray(n)
+        val skinProtoA = FloatArray(n)
+        val skinProtoB = FloatArray(n)
+        for (i in 0 until n) {
+            skinProtoL[i] = luma255[i]
+            skinProtoA[i] = chA[i]
+            skinProtoB[i] = chB[i]
+        }
+        repeat(6) {
+            for (y in (anatTop + 1) until anatBottom) {
+                val row = y * segW
+                for (x in (anatLeft + 1) until anatRight) {
+                    val i = row + x
+                    if (rawAlpha[i] >= 0.92f || depthGate[i] < 0.58f) continue
+                    val skinP = multiclass?.skinProb?.get(i) ?: combinedHuman[i]
+                    if (skinP < 0.04f) continue
+                    val p = pixels[i]
+                    val r = ((p shr 16) and 0xFF).toFloat()
+                    val g = ((p shr 8) and 0xFF).toFloat()
+                    if (r <= g + 5f || g <= 0.52f * r || chA[i] <= 6.5f || chB[i] <= 4.5f || luma255[i] !in 45f..244f) continue
+                    val bw = locBgW[i]
+                    val dBg = if (bw > 1e-3f) {
+                        0.55f * kotlin.math.abs(luma255[i] - locBgL[i] / bw) +
+                            1.35f * kotlin.math.abs(chA[i] - locBgA[i] / bw) +
+                            1.15f * kotlin.math.abs(chB[i] - locBgB[i] / bw)
+                    } else 30f
+                    if (dBg < 14.0f) continue
+
+                    val neighbors = intArrayOf(i - 1, i + 1, i - segW, i + segW)
+                    for (nb in neighbors) {
+                        if (rawAlpha[nb] >= 0.72f) {
+                            val dSkin = 0.50f * kotlin.math.abs(luma255[i] - skinProtoL[nb]) +
+                                1.45f * kotlin.math.abs(chA[i] - skinProtoA[nb]) +
+                                1.25f * kotlin.math.abs(chB[i] - skinProtoB[nb])
+                            val edgeJump = kotlin.math.abs(luma255[i] - luma255[nb]) +
+                                1.4f * kotlin.math.abs(chA[i] - chA[nb])
+                            if (dSkin < 13.0f && edgeJump < 19.0f && dBg > 1.75f * dSkin + 9.0f) {
+                                val cand = (rawAlpha[nb] * 0.96f * depthGate[i]).coerceIn(0f, 1f)
+                                if (cand > rawAlpha[i]) {
+                                    rawAlpha[i] = cand
+                                    skinProtoL[i] = 0.7f * skinProtoL[nb] + 0.3f * luma255[i]
+                                    skinProtoA[i] = 0.7f * skinProtoA[nb] + 0.3f * chA[i]
+                                    skinProtoB[i] = 0.7f * skinProtoB[nb] + 0.3f * chB[i]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return rawAlpha
+    }
+
+    private data class PortraitRenderOutcome(
+        val wroteOutput: Boolean,
+        val depthActive: Boolean,
+        val focusDepth: Float
+    )
+
+    private fun computeGuidedAlphaCoefficients(
+        srcBmp: Bitmap,
+        segW: Int,
+        segH: Int,
+        focusX: Float,
+        focusY: Float,
+        subjectRadiusRatio: Float,
+        cacheSourceFile: File? = null,
+        isFrontCamera: Boolean = false
+    ): PortraitMatteResult {
+        val segBmp = Bitmap.createScaledBitmap(srcBmp, segW, segH, true)
+        val n = segW * segH
 
         val pixels = IntArray(n)
         segBmp.getPixels(pixels, 0, segW, 0, 0, segW, segH)
-        segBmp.recycle()
 
         val lumaNorm = FloatArray(n)
         val luma255 = FloatArray(n)
@@ -1953,168 +3869,189 @@ class ZameraCapturePlugin :
             chB[i] = 0.5f * (r + g) - b
         }
 
-        val rawAlpha = FloatArray(n)
-
-        // Count strong human pixels and locate anatomical bounding box [minHx..maxHx, minHy..maxHy]
-        var strongHumanPixels = 0
-        var minHx = segW
-        var maxHx = 0
-        var minHy = segH
-        var maxHy = 0
-        for (y in 0 until segH) {
-            val row = y * segW
-            for (x in 0 until segW) {
-                if (mlMask[row + x] >= 0.48f) {
-                    strongHumanPixels++
-                    if (x < minHx) minHx = x
-                    if (x > maxHx) maxHx = x
-                    if (y < minHy) minHy = y
-                    if (y > maxHy) maxHy = y
-                }
-            }
+        val cachedEntry = if (cacheSourceFile != null && cacheSourceFile.exists()) {
+            portraitSessionCache.get(
+                sourceJpegPath = cacheSourceFile.absolutePath,
+                lastModified = cacheSourceFile.lastModified(),
+                fileLength = cacheSourceFile.length(),
+                isFrontCamera = isFrontCamera
+            )?.takeIf { it.segW == segW && it.segH == segH }
+        } else {
+            null
         }
-        val humanAreaRatio = strongHumanPixels.toFloat() / n.coerceAtLeast(1).toFloat()
-        val hasStrongMlSubject = maxMlConf > 0.55f && humanAreaRatio >= 0.012f
 
-        if (hasStrongMlSubject) {
-            val bodyW = (maxHx - minHx).coerceAtLeast(12)
-            val bodyH = (maxHy - minHy).coerceAtLeast(12)
-            val anatLeft = (minHx - (bodyW * 0.35f).toInt()).coerceAtLeast(0)
-            val anatRight = (maxHx + (bodyW * 0.35f).toInt()).coerceAtMost(segW - 1)
-            val anatTop = (minHy - (bodyH * 0.12f).toInt()).coerceAtLeast(0)
-            val anatBottom = (maxHy + (bodyH * 0.32f).toInt()).coerceAtMost(segH - 1)
-            val lapLeft = (minHx - (bodyW * 0.15f).toInt()).coerceAtLeast(0)
-            val lapRight = (maxHx + (bodyW * 0.15f).toInt()).coerceAtMost(segW - 1)
-            val lapTop = (minHy + (bodyH * 0.50f).toInt()).coerceAtMost(segH - 1)
-            val lapBottom = (maxHy + (bodyH * 0.22f).toInt()).coerceAtMost(segH - 1)
+        val neuralRes: NeuralSegResult
+        val multiclassRes: MulticlassSegResult?
+        val depthMap: FloatArray?
+        val u2netMask: FloatArray?
+        var globalU2Net320: FloatArray?
 
-            // 3D Optical Focal Plane weight for wide/room environmental portraits (humanAreaRatio < 0.22f)
-            val envFocalWeight = ((0.22f - humanAreaRatio) / 0.15f).coerceIn(0f, 1f)
-            val contactY = maxHy.toFloat()
-
-            for (y in 0 until segH) {
-                val row = y * segW
-                // Smooth 3D Optical Focal Plane band around the subject's floor/table contact plane (y ≈ contactY)
-                // Prevents harsh cut-in-half appearance when a person sits on the floor or behind a coffee table!
-                val focalPlaneAlpha = if (envFocalWeight > 0.01f) {
-                    val dyNorm = if (y <= contactY) {
-                        (y - contactY) / (segH * 0.11f).coerceAtLeast(1f)
-                    } else {
-                        (y - contactY) / (segH * 0.36f).coerceAtLeast(1f)
-                    }
-                    val band = kotlin.math.exp((-dyNorm * dyNorm).toDouble()).toFloat() * 0.65f
-                    val fgFloor = if (y > contactY) 0.24f else 0f
-                    kotlin.math.max(band, fgFloor) * envFocalWeight
-                } else {
-                    0f
-                }
-
-                for (x in 0 until segW) {
-                    val i = row + x
-                    val m = mlMask[i]
-                    val inLapZone = x in lapLeft..lapRight && y in lapTop..lapBottom
-                    val inAnatZone = x in anatLeft..anatRight && y in anatTop..anatBottom
-                    val subjAlpha = when {
-                        inLapZone -> ((m - 0.06f) / 0.28f).coerceIn(0f, 1f)
-                        inAnatZone -> ((m - 0.15f) / 0.36f).coerceIn(0f, 1f)
-                        else -> ((m - 0.30f) / 0.38f).coerceIn(0f, 1f)
-                    }
-                    rawAlpha[i] = kotlin.math.max(subjAlpha, focalPlaneAlpha)
-                }
+        if (cachedEntry != null) {
+            segBmp.recycle()
+            neuralRes = NeuralSegResult(
+                mask = cachedEntry.mlSelfieMask ?: FloatArray(n),
+                maxConf = cachedEntry.mlMaxConf,
+                usedSubjectSeg = false,
+                areaRatio = cachedEntry.mlAreaRatio
+            )
+            multiclassRes = if (
+                cachedEntry.humanProb != null &&
+                cachedEntry.skinProb != null &&
+                cachedEntry.hairProb != null &&
+                cachedEntry.clothesProb != null &&
+                cachedEntry.accessProb != null
+            ) {
+                MulticlassSegResult(
+                    humanProb = cachedEntry.humanProb,
+                    skinProb = cachedEntry.skinProb,
+                    hairProb = cachedEntry.hairProb,
+                    clothesProb = cachedEntry.clothesProb,
+                    accessProb = cachedEntry.accessProb,
+                    maxHumanConf = cachedEntry.maxHumanConf,
+                    humanAreaRatio = cachedEntry.humanAreaRatio
+                )
+            } else {
+                null
             }
+            depthMap = cachedEntry.depthMap
+            globalU2Net320 = cachedEntry.globalU2Net320
 
-            // 1B. Narrow Eyeglass / Facial Interior Hole-Fill ONLY:
-            // Only bridge small internal dips (width <= segW / 8, where mlMask stays >= 0.32f) such as eyeglass lenses,
-            // NEVER bridging across background wall gaps between a raised arm and head or couch cushions!
-            val maxGlassSpan = (segW / 8).coerceAtLeast(10)
-            for (y in 0 until segH) {
-                val row = y * segW
-                var x = 0
-                while (x < segW) {
-                    if (rawAlpha[row + x] >= 0.88f) {
-                        var nextStrong = -1
-                        var minMlInGap = 1.0f
-                        val limit = (x + maxGlassSpan).coerceAtMost(segW - 1)
-                        for (k in (x + 1)..limit) {
-                            val mk = mlMask[row + k]
-                            if (mk < minMlInGap) minMlInGap = mk
-                            if (rawAlpha[row + k] >= 0.88f) {
-                                nextStrong = k
-                                break
-                            }
-                        }
-                        if (nextStrong > x + 1 && minMlInGap >= 0.32f) {
-                            for (k in (x + 1) until nextStrong) {
-                                if (rawAlpha[row + k] < 0.95f) rawAlpha[row + k] = 0.95f
-                            }
-                            x = nextStrong
-                            continue
-                        }
+            val hasStrongMc = multiclassRes != null && multiclassRes.maxHumanConf >= 0.68f && multiclassRes.humanAreaRatio >= 0.008f
+            val hasStrongHu = hasStrongMc || (neuralRes.maxConf > 0.72f && neuralRes.areaRatio >= 0.008f)
+            if (!hasStrongHu) {
+                val u2Res = runU2NetSalientMatting(
+                    srcBmp = srcBmp,
+                    segW = segW,
+                    segH = segH,
+                    focusX = focusX,
+                    focusY = focusY,
+                    cachedGlobal320 = globalU2Net320
+                )
+                if (u2Res != null) {
+                    globalU2Net320 = u2Res.first
+                    u2netMask = u2Res.second
+                    if (cachedEntry.globalU2Net320 == null && cacheSourceFile != null) {
+                        portraitSessionCache.put(cachedEntry.copy(globalU2Net320 = globalU2Net320))
                     }
-                    x++
+                } else {
+                    u2netMask = null
                 }
+            } else {
+                u2netMask = null
             }
         } else {
-            // 2. Non-human object fallback (ONLY when no human is present in the frame!):
-            val cx = (focusX * segW).toInt().coerceIn(segW / 5, segW * 4 / 5)
-            val cy = (focusY * segH).toInt().coerceIn(segH / 5, segH * 4 / 5)
-
-            var bgL = 0f
-            var bgA = 0f
-            var bgB = 0f
-            var bgCount = 0
-            val borderW = (segW * 0.07f).toInt().coerceAtLeast(4)
-            val borderH = (segH * 0.07f).toInt().coerceAtLeast(4)
-            for (y in 0 until segH step 2) {
-                for (x in 0 until segW step 2) {
-                    if (x < borderW || x >= segW - borderW || y < borderH) {
-                        val idx = y * segW + x
-                        bgL += luma255[idx]
-                        bgA += chA[idx]
-                        bgB += chB[idx]
-                        bgCount++
-                    }
-                }
+            // Parallel Orchestration on ispWorkerPool:
+            // DepthAnythingV2 runs concurrently for BOTH human AND object portraits alongside SelfieMulticlass + MLKit!
+            val depthFuture = ispWorkerPool.submit<FloatArray?> {
+                runDepthAnything3dMap(srcBmp, segW, segH)
             }
-            if (bgCount > 0) {
-                bgL /= bgCount
-                bgA /= bgCount
-                bgB /= bgCount
+            val multiclassFuture = ispWorkerPool.submit<MulticlassSegResult?> {
+                runMulticlassSegmentation(srcBmp, segW, segH)
+            }
+            neuralRes = try {
+                runNeuralPortraitSegmentation(srcBmp, segBmp, segW, segH, focusX, focusY)
+            } finally {
+                segBmp.recycle()
+            }
+            multiclassRes = try {
+                multiclassFuture.get(3500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (t: Throwable) {
+                android.util.Log.w("ZameraPortrait", "Multiclass future warning: ${t.message}")
+                null
             }
 
-            val baseRadiusPx = kotlin.math.min(segW, segH) * (subjectRadiusRatio.coerceIn(0.24f, 0.42f) * 0.95f)
-            val coreRadiusPx = baseRadiusPx * 0.65f
-            val outerRadiusPx = baseRadiusPx * 1.25f
+            val hasStrongMc = multiclassRes != null && multiclassRes.maxHumanConf >= 0.68f && multiclassRes.humanAreaRatio >= 0.008f
+            val hasStrongHu = hasStrongMc || (neuralRes.maxConf > 0.72f && neuralRes.areaRatio >= 0.008f)
 
-            for (y in 0 until segH) {
-                val dy = (y - cy).toFloat() * 0.85f
-                for (x in 0 until segW) {
-                    val dx = (x - cx).toFloat()
-                    val i = y * segW + x
-                    val dist = kotlin.math.sqrt(dx * dx + dy * dy)
-                    if (dist <= coreRadiusPx) {
-                        rawAlpha[i] = 1.0f
-                    } else if (dist >= outerRadiusPx) {
-                        rawAlpha[i] = 0.0f
-                    } else {
-                        val radialT = 1.0f - ((dist - coreRadiusPx) / (outerRadiusPx - coreRadiusPx)).coerceIn(0f, 1f)
-                        val dBg = 0.7f * kotlin.math.abs(luma255[i] - bgL) +
-                            kotlin.math.abs(chA[i] - bgA) +
-                            kotlin.math.abs(chB[i] - bgB)
-                        val bgDiffBoost = (dBg / 45.0f).coerceIn(0f, 1f)
-                        val combined = (radialT * 0.75f + bgDiffBoost * 0.25f * radialT).coerceIn(0f, 1f)
-                        rawAlpha[i] = combined * combined * (3.0f - 2.0f * combined)
-                    }
-                }
+            if (!hasStrongHu) {
+                val u2Res = runU2NetSalientMatting(srcBmp, segW, segH, focusX, focusY)
+                globalU2Net320 = u2Res?.first
+                u2netMask = u2Res?.second
+            } else {
+                globalU2Net320 = null
+                u2netMask = null
+            }
+
+            depthMap = try {
+                depthFuture.get(4500, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (t: Throwable) {
+                android.util.Log.w("ZameraPortrait", "DepthAnythingV2 future warning: ${t.message}")
+                null
+            }
+
+            if (cacheSourceFile != null && cacheSourceFile.exists()) {
+                portraitSessionCache.put(
+                    PortraitSessionCache.Entry(
+                        sourceJpegPath = cacheSourceFile.absolutePath,
+                        lastModified = cacheSourceFile.lastModified(),
+                        fileLength = cacheSourceFile.length(),
+                        isFrontCamera = isFrontCamera,
+                        segW = segW,
+                        segH = segH,
+                        depthMap = depthMap,
+                        mlSelfieMask = neuralRes.mask,
+                        mlMaxConf = neuralRes.maxConf,
+                        mlAreaRatio = neuralRes.areaRatio,
+                        humanProb = multiclassRes?.humanProb,
+                        skinProb = multiclassRes?.skinProb,
+                        hairProb = multiclassRes?.hairProb,
+                        clothesProb = multiclassRes?.clothesProb,
+                        accessProb = multiclassRes?.accessProb,
+                        maxHumanConf = multiclassRes?.maxHumanConf ?: 0f,
+                        humanAreaRatio = multiclassRes?.humanAreaRatio ?: 0f,
+                        globalU2Net320 = globalU2Net320
+                    )
+                )
             }
         }
 
-        // 3. Zero-Bleed Soft Optical Guided Filter:
-        // Clamp 'ai' tightly to [-0.08..0.08] with eps = 0.04f so dark background objects (like a black floor baseboard
-        // behind dark hair) NEVER bleed into the foreground mask as dark spikes, and bright clothing (like white pants
-        // below a black cardigan) is NEVER erased by luminance inversion!
-        val gfRadius = 4
-        val eps = 0.040f
+        val hasStrongMulticlass = multiclassRes != null && multiclassRes.maxHumanConf >= 0.68f && multiclassRes.humanAreaRatio >= 0.008f
+        val hasStrongNeural = hasStrongMulticlass || (neuralRes.maxConf > 0.72f && neuralRes.areaRatio >= 0.008f)
+        val primaryMaskForCheck = multiclassRes?.humanProb ?: neuralRes.mask
+
+        val (focusDepth, depthGate) = computeSubjectDepthGate(
+            depthMap = depthMap,
+            mlMask = primaryMaskForCheck,
+            u2netMask = u2netMask,
+            segW = segW,
+            segH = segH,
+            focusX = focusX,
+            focusY = focusY,
+            hasStrongHuman = hasStrongNeural
+        )
+
+        val rawAlpha = if (hasStrongNeural) {
+            refineNeuralSubjectMask(
+                mlMask = neuralRes.mask,
+                multiclass = multiclassRes,
+                depthGate = depthGate,
+                pixels = pixels,
+                luma255 = luma255,
+                chA = chA,
+                chB = chB,
+                segW = segW,
+                segH = segH,
+                focusX = focusX
+            )
+        } else {
+            PortraitOpticalEngine.extractFocusedObjectMatte(
+                u2netProb = u2netMask,
+                depthMap = depthMap,
+                focusDepth = focusDepth,
+                luma255 = luma255,
+                chA = chA,
+                chB = chB,
+                segW = segW,
+                segH = segH,
+                focusX = focusX,
+                focusY = focusY
+            )
+        }
+
+        // Sub-Finger Edge-Preserving Joint Guided Filter at 512x682 resolution:
+        // gfRadius = 2 (5x5 window — narrower than a single 5px finger!) with eps = 0.0035f and slope 'ai' in [-0.68..0.68]
+        val gfRadius = 2
+        val eps = 0.0035f
         val ii = FloatArray(n)
         val ip = FloatArray(n)
         for (i in 0 until n) {
@@ -2130,15 +4067,28 @@ class ZameraCapturePlugin :
         val a = FloatArray(n)
         val b = FloatArray(n)
         for (i in 0 until n) {
-            val varI = (corrI[i] - meanI[i] * meanI[i]).coerceAtLeast(0f)
-            val covIp = corrIp[i] - meanI[i] * meanP[i]
-            val ai = (covIp / (varI + eps)).coerceIn(-0.08f, 0.08f)
-            a[i] = ai
-            b[i] = meanP[i] - ai * meanI[i]
+            val mp = meanP[i]
+            if (mp <= 0.02f || mp >= 0.98f) {
+                a[i] = 0f
+                b[i] = if (mp >= 0.98f) 1.0f else 0.0f
+            } else {
+                val varI = (corrI[i] - meanI[i] * meanI[i]).coerceAtLeast(0f)
+                val covIp = corrIp[i] - meanI[i] * mp
+                val ai = (covIp / (varI + eps)).coerceIn(-0.68f, 0.68f)
+                a[i] = ai
+                b[i] = mp - ai * meanI[i]
+            }
         }
-        val meanA = boxFilterFloat(a, segW, segH, gfRadius + 1)
-        val meanB = boxFilterFloat(b, segW, segH, gfRadius + 1)
-        return Triple(meanA, meanB, if (hasStrongMlSubject) humanAreaRatio else 0.25f)
+        val meanA = boxFilterFloat(a, segW, segH, gfRadius)
+        val meanB = boxFilterFloat(b, segW, segH, gfRadius)
+        val effArea = multiclassRes?.humanAreaRatio?.takeIf { it >= 0.01f } ?: neuralRes.areaRatio
+        return PortraitMatteResult(
+            meanA = meanA,
+            meanB = meanB,
+            humanAreaRatio = if (hasStrongNeural) effArea.coerceAtLeast(0.16f) else 0.24f,
+            depthMap = depthMap,
+            focusDepth = focusDepth
+        )
     }
 
     private fun applyPortraitBokehAndLighting(
@@ -2152,23 +4102,25 @@ class ZameraCapturePlugin :
         focusY: Float,
         isFrontCamera: Boolean = false,
         allowDepthInversionOnBgTap: Boolean = false
-    ) {
-        try {
+    ): PortraitRenderOutcome {
+        return try {
             val exif = ExifInterface(sourceJpeg.absolutePath)
             val orientAttr = exif.getAttributeInt(
                 ExifInterface.TAG_ORIENTATION,
                 ExifInterface.ORIENTATION_NORMAL
             )
-            // Decode with inSampleSize = 2 when > 2600px so memory stays low while preserving crisp detail
+            // Decode at full 12.6MP resolution (4096x3072 -> inSampleSize = 1); only subsample 50MP+ (>= 4200px)
             val boundsOpts = android.graphics.BitmapFactory.Options().apply {
                 inJustDecodeBounds = true
             }
             android.graphics.BitmapFactory.decodeFile(sourceJpeg.absolutePath, boundsOpts)
             val decodeOpts = android.graphics.BitmapFactory.Options().apply {
-                inSampleSize = if (kotlin.math.max(boundsOpts.outWidth, boundsOpts.outHeight) > 2600) 2 else 1
+                inSampleSize = if (kotlin.math.max(boundsOpts.outWidth, boundsOpts.outHeight) > 4200) 2 else 1
                 inPreferredConfig = Bitmap.Config.ARGB_8888
             }
-            var srcBmp = android.graphics.BitmapFactory.decodeFile(sourceJpeg.absolutePath, decodeOpts) ?: return
+            var srcBmp = android.graphics.BitmapFactory.decodeFile(sourceJpeg.absolutePath, decodeOpts)
+                ?: return PortraitRenderOutcome(wroteOutput = false, depthActive = false, focusDepth = 0.70f)
+
             val rotDeg = when (orientAttr) {
                 ExifInterface.ORIENTATION_ROTATE_90 -> 90f
                 ExifInterface.ORIENTATION_ROTATE_180 -> 180f
@@ -2178,7 +4130,6 @@ class ZameraCapturePlugin :
             if (rotDeg != 0f || isFrontCamera) {
                 val m = Matrix().apply {
                     if (rotDeg != 0f) postRotate(rotDeg)
-                    // Match Xiaomi stock camera & live preview mirror orientation on front selfie camera
                     if (isFrontCamera) postScale(-1f, 1f)
                 }
                 val transformed = Bitmap.createBitmap(srcBmp, 0, 0, srcBmp.width, srcBmp.height, m, true)
@@ -2188,25 +4139,28 @@ class ZameraCapturePlugin :
 
             val w = srcBmp.width
             val h = srcBmp.height
-            val segW = 288
-            val segH = (288 * h / w.coerceAtLeast(1)).coerceIn(200, 420)
+            val segW = 512
+            val segH = (512 * h / w.coerceAtLeast(1)).coerceIn(360, 768)
 
-            // 1. Compute Fast Joint Guided Filter Alpha Matting Coefficients (meanA, meanB, humanAreaRatio)
-            val (meanA, meanB, humanAreaRatio) = computeGuidedAlphaCoefficients(
+            // 1. Compute Joint Guided Filter Alpha Matting Coefficients + 3D Depth Map (backed by LRU=1 PortraitSessionCache)
+            val (meanA, meanB, _, depthMap, focusDepth) = computeGuidedAlphaCoefficients(
                 srcBmp = srcBmp,
                 segW = segW,
                 segH = segH,
                 focusX = focusX,
                 focusY = focusY,
-                subjectRadiusRatio = subjectRadiusRatio
+                subjectRadiusRatio = subjectRadiusRatio,
+                cacheSourceFile = sourceJpeg,
+                isFrontCamera = isFrontCamera
             )
 
             val totalPx = w * h
             val srcPixels = IntArray(totalPx)
             srcBmp.getPixels(srcPixels, 0, w, 0, 0, w, h)
+            srcBmp.recycle()
 
-            // Check if user tapped on background during Post-Capture Refocus to invert focus plane (Xiaomi Refocus!)
-            var invertFocusPlane = false
+            // 2. Post-Capture 3D Rack-Focus: if user taps background in editor, shift optical focal plane to tapped 3D depth
+            var tappedBackgroundPlane = false
             if (allowDepthInversionOnBgTap) {
                 val tapX = (focusX * (w - 1)).toInt().coerceIn(0, w - 1)
                 val tapY = (focusY * (h - 1)).toInt().coerceIn(0, h - 1)
@@ -2217,326 +4171,128 @@ class ZameraCapturePlugin :
                     0.587f * ((tapSp shr 8) and 0xFF) +
                     0.114f * (tapSp and 0xFF)) / 255.0f
                 val tapAlpha = (meanA[tapGy * segW + tapGx] * tapLum + meanB[tapGy * segW + tapGx]).coerceIn(0f, 1f)
-                invertFocusPlane = tapAlpha < 0.32f
+                tappedBackgroundPlane = tapAlpha < 0.30f
             }
 
-            // 2. Halo-Free Normalized Background-Only Gaussian Bokeh at 1/3 Scale (2.25x faster with zero quality loss)
-            val bw = (w / 3).coerceAtLeast(64)
-            val bh = (h / 3).coerceAtLeast(64)
-            val bn = bw * bh
-            var bgR = FloatArray(bn)
-            var bgG = FloatArray(bn)
-            var bgB = FloatArray(bn)
-            var bgW = FloatArray(bn)
+            val effectiveFocusDepth: Float
+            val cocMap: FloatArray
+            val activeMeanA: FloatArray?
+            val activeMeanB: FloatArray?
+            val activeFgAlpha: FloatArray?
 
-            for (by in 0 until bh) {
-                val sy = (by * 3).coerceAtMost(h - 1)
-                val gy = (by.toFloat() / (bh - 1).coerceAtLeast(1)) * (segH - 1)
-                val y0 = gy.toInt().coerceIn(0, segH - 2)
-                val fy = gy - y0
-                val srcRow = sy * w
-                val bRow = by * bw
-                for (bx in 0 until bw) {
-                    val sx = (bx * 3).coerceAtMost(w - 1)
-                    val gx = (bx.toFloat() / (bw - 1).coerceAtLeast(1)) * (segW - 1)
-                    val x0 = gx.toInt().coerceIn(0, segW - 2)
-                    val fx = gx - x0
-
-                    val sp = srcPixels[srcRow + sx]
-                    val r = ((sp shr 16) and 0xFF).toFloat()
-                    val g = ((sp shr 8) and 0xFF).toFloat()
-                    val b = (sp and 0xFF).toFloat()
-                    val lumNorm = (0.299f * r + 0.587f * g + 0.114f * b) / 255.0f
-
-                    val aVal = meanA[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                        meanA[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                        meanA[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                        meanA[(y0 + 1) * segW + x0 + 1] * fx * fy
-                    val bVal = meanB[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                        meanB[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                        meanB[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                        meanB[(y0 + 1) * segW + x0 + 1] * fx * fy
-
-                    val baseFg = (aVal * lumNorm + bVal).coerceIn(0f, 1f)
-                    val fg = if (invertFocusPlane) (1.0f - baseFg) else baseFg
-                    // Strictly exclude core human subject pixels (fg > 0.72f) from bleeding into background bokeh
-                    val wBg = if (fg > 0.72f) {
-                        0.001f
-                    } else {
-                        val t = (1.0f - fg / 0.72f).coerceIn(0f, 1f)
-                        (t * t).coerceAtLeast(0.001f)
-                    }
-
-                    val bi = bRow + bx
-                    bgR[bi] = r * wBg
-                    bgG[bi] = g * wBg
-                    bgB[bi] = b * wBg
-                    bgW[bi] = wBg
+            if (depthMap != null) {
+                if (tappedBackgroundPlane) {
+                    val tapGx = (focusX * (segW - 1)).toInt().coerceIn(0, segW - 1)
+                    val tapGy = (focusY * (segH - 1)).toInt().coerceIn(0, segH - 1)
+                    effectiveFocusDepth = depthMap[tapGy * segW + tapGx].coerceIn(0f, 1f)
+                    cocMap = PortraitOpticalEngine.computeCoCMap(
+                        depthMap = depthMap,
+                        focusDepth = effectiveFocusDepth,
+                        aperture = aperture,
+                        fgAlpha = null,
+                        width = segW,
+                        height = segH
+                    )
+                    activeMeanA = null
+                    activeMeanB = null
+                    activeFgAlpha = null
+                } else {
+                    effectiveFocusDepth = focusDepth
+                    // Unmasked 3D CoC map; full-resolution Guided Filter (meanA, meanB) applies (1 - fgAlpha) at 12.6MP precision
+                    cocMap = PortraitOpticalEngine.computeCoCMap(
+                        depthMap = depthMap,
+                        focusDepth = effectiveFocusDepth,
+                        aperture = aperture,
+                        fgAlpha = null,
+                        width = segW,
+                        height = segH
+                    )
+                    activeMeanA = meanA
+                    activeMeanB = meanB
+                    activeFgAlpha = null
                 }
-            }
-
-            // 3-pass separable box cascade at 1/3 scale scaled by Optical Subject Magnification (Circle of Confusion):
-            // Close-up portraits (humanAreaRatio >= 0.24) get deeper bokeh (gaussRadius ~ 7-9 at 1/3 scale);
-            // Wide room portraits (humanAreaRatio ~ 0.05-0.10) get authentic 35mm f/1.8 optical defocus (gaussRadius ~ 3-4)
-            // so room objects (curtains, cushions, tea glasses) retain realistic optical form instead of turning into white fog!
-            val blurStrength = ((16.0f - aperture.coerceIn(1.4f, 16.0f)) / 14.6f).coerceIn(0.08f, 1.0f)
-            val resScale = (kotlin.math.min(bw, bh).toFloat() / 500.0f).coerceIn(0.75f, 1.25f)
-            val magScale = kotlin.math.sqrt((humanAreaRatio / 0.24f).toDouble()).toFloat().coerceIn(0.42f, 1.0f)
-            val gaussRadius = ((1.8f + blurStrength * 6.8f) * resScale * magScale).toInt().coerceIn(2, 10)
-            repeat(3) {
-                bgR = boxFilterFloat(bgR, bw, bh, gaussRadius)
-                bgG = boxFilterFloat(bgG, bw, bh, gaussRadius)
-                bgB = boxFilterFloat(bgB, bw, bh, gaussRadius)
-                bgW = boxFilterFloat(bgW, bw, bh, gaussRadius)
-            }
-            for (i in 0 until bn) {
-                val invW = 1.0f / bgW[i].coerceAtLeast(1e-4f)
-                bgR[i] = (bgR[i] * invW).coerceIn(0f, 255f)
-                bgG[i] = (bgG[i] * invW).coerceIn(0f, 255f)
-                bgB[i] = (bgB[i] * invW).coerceIn(0f, 255f)
-            }
-
-            val intensity = lightIntensity.coerceIn(0.15f, 1.0f)
-            val isMono = lightingMode == 4 || lightingMode == 5 || lightingMode == 7
-            val isHighKey = lightingMode == 5
-            val isStage = lightingMode == 3 || lightingMode == 4
-            val isBlinds = lightingMode == 6 || lightingMode == 7
-            val isGoldenHour = lightingMode == 8
-            val isPrismCinema = lightingMode == 9
-            val cx = w * focusX
-            val cy = h * focusY
-            val minDim = kotlin.math.min(w, h).toFloat().coerceAtLeast(1f)
-            val invMaxDist = 1.0f / (minDim * 0.55f)
-            val blindFreq = (2.0 * Math.PI / (minDim * 0.072)).toFloat()
-            val cos28 = 0.8829f
-            val sin28 = 0.4695f
-
-            // Precompute 256-entry Leica Silver-Gelatin Filmic S-Curve LUT for Monochrome Portrait modes
-            val monoLut = FloatArray(256)
-            if (isMono) {
-                for (v in 0..255) {
-                    val xNorm = v / 255.0f
-                    if (isHighKey) {
-                        val lifted = Math.pow(xNorm.toDouble(), 0.72).toFloat()
-                        val sCurve = lifted * lifted * (3.0f - 2.0f * lifted)
-                        monoLut[v] = ((0.35f * lifted + 0.65f * sCurve) * 250.0f + 5.0f).coerceIn(0f, 255f)
-                    } else {
-                        // Deep velvety D-max toe + smooth silver highlight shoulder
-                        val s = xNorm * xNorm * (3.0f - 2.0f * xNorm)
-                        val filmic = (0.28f * xNorm + 0.72f * s)
-                        val contrast = ((filmic - 0.48f) * (1.16f + 0.14f * intensity) + 0.48f).coerceIn(0f, 1f)
-                        monoLut[v] = (contrast * 255.0f).coerceIn(0f, 255f)
+            } else {
+                effectiveFocusDepth = focusDepth
+                val segFg = FloatArray(segW * segH)
+                for (gy in 0 until segH) {
+                    val sy = (gy * (h - 1) / (segH - 1).coerceAtLeast(1)).coerceIn(0, h - 1)
+                    val sRow = sy * w
+                    val gRow = gy * segW
+                    for (gx in 0 until segW) {
+                        val sx = (gx * (w - 1) / (segW - 1).coerceAtLeast(1)).coerceIn(0, w - 1)
+                        val sp = srcPixels[sRow + sx]
+                        val lum = (0.299f * ((sp shr 16) and 0xFF) +
+                            0.587f * ((sp shr 8) and 0xFF) +
+                            0.114f * (sp and 0xFF)) / 255.0f
+                        val idx = gRow + gx
+                        val cleanFg = PortraitOpticalEngine.smoothstep(
+                            0.24f,
+                            0.78f,
+                            (meanA[idx] * lum + meanB[idx]).coerceIn(0f, 1f)
+                        )
+                        segFg[idx] = if (tappedBackgroundPlane) (1.0f - cleanFg) else cleanFg
                     }
                 }
+                cocMap = PortraitOpticalEngine.computeCoCMap(
+                    depthMap = null,
+                    focusDepth = effectiveFocusDepth,
+                    aperture = aperture,
+                    fgAlpha = segFg,
+                    width = segW,
+                    height = segH
+                )
+                activeMeanA = null
+                activeMeanB = null
+                activeFgAlpha = segFg
             }
 
-            val finalBgR = bgR
-            val finalBgG = bgG
-            val finalBgB = bgB
+            // 3. Render Linear-sRGB Circular-Disc Bokeh (L0 -> B1 -> B2 -> B3) + OCP PortraitLightingRegistry
+            val renderedPixels = PortraitOpticalEngine.renderLinearDiscBokeh(
+                srcPixels = srcPixels,
+                width = w,
+                height = h,
+                cocMap = cocMap,
+                fgAlphaMap = activeFgAlpha,
+                mapW = segW,
+                mapH = segH,
+                aperture = aperture,
+                lightingMode = lightingMode,
+                lightIntensity = lightIntensity,
+                focusX = focusX,
+                focusY = focusY,
+                meanA = activeMeanA,
+                meanB = activeMeanB,
+                invertFocusPlane = false,
+                rowExecutor = this::parallelForRows
+            )
 
-            // 3. Multi-Core Parallel Full-Resolution Guided Matting + Color Decontamination + Studio/Gobo/Monochrome Grade
-            parallelForRows(h) { startY, endY ->
-                for (y in startY until endY) {
-                    val gy = (y.toFloat() / (h - 1).coerceAtLeast(1)) * (segH - 1)
-                    val y0 = gy.toInt().coerceIn(0, segH - 2)
-                    val fy = gy - y0
-
-                    val byCoord = (y / 3.0f).coerceIn(0f, (bh - 1).toFloat())
-                    val by0 = byCoord.toInt().coerceIn(0, bh - 2)
-                    val bfy = byCoord - by0
-
-                    val rowOffset = y * w
-                    val dy = y - cy
-
-                    for (x in 0 until w) {
-                        val gx = (x.toFloat() / (w - 1).coerceAtLeast(1)) * (segW - 1)
-                        val x0 = gx.toInt().coerceIn(0, segW - 2)
-                        val fx = gx - x0
-
-                        val bxCoord = (x / 3.0f).coerceIn(0f, (bw - 1).toFloat())
-                        val bx0 = bxCoord.toInt().coerceIn(0, bw - 2)
-                        val bfx = bxCoord - bx0
-
-                        val idx = rowOffset + x
-                        val sp = srcPixels[idx]
-                        var sr = ((sp shr 16) and 0xFF).toFloat()
-                        var sg = ((sp shr 8) and 0xFF).toFloat()
-                        var sb = (sp and 0xFF).toFloat()
-                        val lumNorm = (0.299f * sr + 0.587f * sg + 0.114f * sb) / 255.0f
-
-                        // Evaluate Guided Filter at full resolution
-                        val aVal = meanA[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                            meanA[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                            meanA[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                            meanA[(y0 + 1) * segW + x0 + 1] * fx * fy
-                        val bVal = meanB[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                            meanB[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                            meanB[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                            meanB[(y0 + 1) * segW + x0 + 1] * fx * fy
-
-                        val rawFg = (aVal * lumNorm + bVal).coerceIn(0f, 1f)
-                        // Gentle optical smoothstep without steep binary clipping so hair/cloth/table transitions stay organic
-                        val subjectFg = rawFg * rawFg * (3.0f - 2.0f * rawFg)
-                        val fg = if (invertFocusPlane) (1.0f - subjectFg) else subjectFg
-                        val bg = 1.0f - fg
-
-                        // Bilinearly sample halo-free normalized background bokeh
-                        val b00 = by0 * bw + bx0
-                        val b10 = b00 + 1
-                        val b01 = b00 + bw
-                        val b11 = b01 + 1
-                        val w00 = (1f - bfx) * (1f - bfy)
-                        val w10 = bfx * (1f - bfy)
-                        val w01 = (1f - bfx) * bfy
-                        val w11 = bfx * bfy
-
-                        var br = finalBgR[b00] * w00 + finalBgR[b10] * w10 + finalBgR[b01] * w01 + finalBgR[b11] * w11
-                        var bgCh = finalBgG[b00] * w00 + finalBgG[b10] * w10 + finalBgG[b01] * w01 + finalBgG[b11] * w11
-                        var bb = finalBgB[b00] * w00 + finalBgB[b10] * w10 + finalBgB[b01] * w01 + finalBgB[b11] * w11
-
-                        // Boundary Color Decontamination ONLY for solid Studio Stage / High-Key backdrops (modes 3, 4, 5)
-                        // Never apply on natural bokeh (modes 0, 1, 2, 6, 7, 8, 9), where it causes a visible contour ring on walls!
-                        if ((isStage || isHighKey) && fg > 0.15f && fg < 0.85f) {
-                            val deconStrength = 0.35f * (1.0f - fg)
-                            val invFg = 1.0f / fg.coerceAtLeast(0.30f)
-                            val targetR = ((sr - br * (1f - fg)) * invFg).coerceIn(sr - 20f, sr + 20f).coerceIn(0f, 255f)
-                            val targetG = ((sg - bgCh * (1f - fg)) * invFg).coerceIn(sg - 20f, sg + 20f).coerceIn(0f, 255f)
-                            val targetB = ((sb - bb * (1f - fg)) * invFg).coerceIn(sb - 20f, sb + 20f).coerceIn(0f, 255f)
-                            sr = sr * (1f - deconStrength) + targetR * deconStrength
-                            sg = sg * (1f - deconStrength) + targetG * deconStrength
-                            sb = sb * (1f - deconStrength) + targetB * deconStrength
-                        }
-
-                        val edgeRim = fg * bg * 4.0f // Peaks at 1.0 along the subject's silhouette contour!
-
-                        // Apply Studio / Gobo / Cinema relighting to separated foreground & background
-                        if (lightingMode == 1) {
-                            // STUDIO LIGHT: Warm facial/subject fill lift + softly dimmed bokeh background
-                            sr = (sr * (1.0f + 0.14f * intensity)).coerceAtMost(255f)
-                            sg = (sg * (1.0f + 0.13f * intensity)).coerceAtMost(255f)
-                            sb = (sb * (1.0f + 0.11f * intensity)).coerceAtMost(255f)
-                            val bgDim = 1.0f - 0.25f * intensity
-                            br *= bgDim; bgCh *= bgDim; bb *= bgDim
-                        } else if (lightingMode == 2) {
-                            // CONTOUR LIGHT: Sculpted center highlight + dramatic edge contour shadow
-                            val dx = x - cx
-                            val radialNorm = (kotlin.math.sqrt(dx * dx + dy * dy) * invMaxDist).coerceIn(0f, 1.3f)
-                            val contourSculpt = (1.15f - 0.34f * radialNorm * intensity).coerceIn(0.66f, 1.17f)
-                            sr = (sr * contourSculpt).coerceIn(0f, 255f)
-                            sg = (sg * contourSculpt).coerceIn(0f, 255f)
-                            sb = (sb * contourSculpt).coerceIn(0f, 255f)
-                            val bgDim = 1.0f - 0.46f * intensity
-                            br *= bgDim; bgCh *= bgDim; bb *= bgDim
-                        } else if (isStage) {
-                            // STAGE LIGHT (3) & STAGE MONO (4): Pitch-black separated studio background!
-                            val stageKeep = (1.0f - 0.97f * intensity).coerceIn(0.0f, 0.22f)
-                            br *= stageKeep; bgCh *= stageKeep; bb *= stageKeep
-                            sr = ((sr - 128f) * 1.12f + 130f).coerceIn(0f, 255f)
-                            sg = ((sg - 128f) * 1.12f + 130f).coerceIn(0f, 255f)
-                            sb = ((sb - 128f) * 1.12f + 130f).coerceIn(0f, 255f)
-                        } else if (isHighKey) {
-                            // HIGH-KEY MONO (5): Pure Alabaster White separated studio background!
-                            val whiteMix = (0.96f * intensity).coerceIn(0.5f, 0.98f)
-                            br = br * (1f - whiteMix) + 249f * whiteMix
-                            bgCh = bgCh * (1f - whiteMix) + 249f * whiteMix
-                            bb = bb * (1f - whiteMix) + 251f * whiteMix
-                        } else if (isBlinds) {
-                            // VENETIAN BLINDS GOBO (6 = PANJUR GÖLGESİ, 7 = PANJUR MONO):
-                            // Angled 28° window-blind light slats with 3D depth parallax on the subject!
-                            val proj = (x - cx) * sin28 + (y - cy) * cos28 + fg * (minDim * 0.022f)
-                            val wave = kotlin.math.cos((proj * blindFreq).toDouble()).toFloat()
-                            val slatLit = ((wave + 0.18f) * 1.65f).coerceIn(0f, 1f)
-                            val smoothSlat = slatLit * slatLit * (3.0f - 2.0f * slatLit)
-                            val shadowDepth = (0.68f * intensity).coerceIn(0.20f, 0.78f)
-                            val fgGain = (1.0f - shadowDepth) + shadowDepth * (0.30f + 0.88f * smoothSlat)
-                            // Warm golden window sunlight on lit slats
-                            sr = (sr * fgGain * (1.0f + 0.12f * smoothSlat * intensity)).coerceIn(0f, 255f)
-                            sg = (sg * fgGain * (1.0f + 0.05f * smoothSlat * intensity)).coerceIn(0f, 255f)
-                            sb = (sb * fgGain * (1.0f - 0.06f * smoothSlat * intensity)).coerceIn(0f, 255f)
-                            // Background receives deeper moody blind shadows
-                            val bgGain = (1.0f - 0.62f * intensity) * (0.25f + 0.75f * smoothSlat)
-                            br *= bgGain; bgCh *= bgGain; bb *= bgGain
-                        } else if (isGoldenHour) {
-                            // GOLDEN HOUR (8 = ALTIN SAAT): Warm 3500K sunset beam + glowing golden contour rim
-                            val dx = (x - cx) / minDim
-                            val dyNorm = (y - cy) / minDim
-                            val sunBeam = (1.0f - ((dx * 0.7f + dyNorm * 0.7f + 0.25f).let { it * it } * 1.4f)).coerceIn(0.2f, 1.0f)
-                            val warmBoost = intensity * sunBeam
-                            sr = (sr * (1.0f + 0.22f * warmBoost) + 38f * edgeRim * intensity).coerceIn(0f, 255f)
-                            sg = (sg * (1.0f + 0.09f * warmBoost) + 22f * edgeRim * intensity).coerceIn(0f, 255f)
-                            sb = (sb * (1.0f - 0.12f * warmBoost) + 4f * edgeRim * intensity).coerceIn(0f, 255f)
-                            br = (br * (1.0f + 0.14f * intensity)).coerceIn(0f, 255f)
-                            bgCh = (bgCh * (1.0f + 0.02f * intensity)).coerceIn(0f, 255f)
-                            bb = (bb * (1.0f - 0.18f * intensity)).coerceIn(0f, 255f)
-                        } else if (isPrismCinema) {
-                            // PRISM & CINEMA (9 = PRİZMA & SİNEMA): Dual-tone Cyan/Amber rim light + spectral prism flare
-                            val side = if (x < cx) -1f else 1f
-                            val cyanRim = if (side < 0f) edgeRim * intensity else 0f
-                            val amberRim = if (side >= 0f) edgeRim * intensity else 0f
-                            val prismWave = (0.5f + 0.5f * kotlin.math.sin(((x + y) * 0.018f).toDouble()).toFloat()) * (1f - fg) * intensity
-                            sr = (sr + 46f * amberRim + 28f * prismWave).coerceIn(0f, 255f)
-                            sg = (sg + 24f * cyanRim + 22f * amberRim + 14f * prismWave).coerceIn(0f, 255f)
-                            sb = (sb + 52f * cyanRim + 36f * prismWave).coerceIn(0f, 255f)
-                            val bgCinema = 1.0f - 0.35f * intensity
-                            br = (br * bgCinema + 18f * prismWave).coerceIn(0f, 255f)
-                            bgCh = (bgCh * bgCinema + 12f * prismWave).coerceIn(0f, 255f)
-                            bb = (bb * (bgCinema + 0.10f * intensity) + 34f * prismWave).coerceIn(0f, 255f)
-                        }
-
-                        // Composite separated Foreground Subject (fg) over Halo-Free Background Bokeh (bg)
-                        var outR = sr * fg + br * bg
-                        var outG = sg * fg + bgCh * bg
-                        var outB = sb * fg + bb * bg
-
-                        // Upgraded Leica M11 Monochrom / Ilford Silver-Gelatin Grade (Stage Mono #4, High-Key Mono #5, Panjur Mono #7)
-                        if (isMono) {
-                            // 1. Panchromatic Red-Orange filter (0.38 R + 0.52 G + 0.10 B) for luminous skin & deep contrast
-                            val fgPanchro = 0.38f * sr + 0.52f * sg + 0.10f * sb
-                            val bgPanchro = 0.38f * br + 0.52f * bgCh + 0.10f * bb
-                            // 2. Local Subject Micro-Contrast / Clarity (unsharp high-frequency detail on focused subject)
-                            val microDetail = (fgPanchro - bgPanchro) * (0.20f * fg * intensity)
-                            val rawMono = (0.38f * outR + 0.52f * outG + 0.10f * outB + microDetail).toInt().coerceIn(0, 255)
-                            val curvedMono = monoLut[rawMono]
-                            // 3. Subtle organic silver-halide midtone film grain
-                            val midWeight = 4.0f * (curvedMono / 255.0f) * (1.0f - curvedMono / 255.0f)
-                            val hash = ((x * 73856093) xor (y * 19349663)) and 0xFF
-                            val grain = ((hash / 127.5f) - 1.0f) * 3.2f * midWeight * intensity
-                            val finalMono = (curvedMono + grain).coerceIn(0f, 255f)
-                            // 4. Subtle Baryta/Platinum silver split-tone (warm highlights, cool deep shadows)
-                            val toneShift = ((finalMono / 255.0f) - 0.5f) * 2.2f
-                            outR = (finalMono + toneShift).coerceIn(0f, 255f)
-                            outG = finalMono
-                            outB = (finalMono - toneShift).coerceIn(0f, 255f)
-                        }
-
-                        val ir = outR.toInt().coerceIn(0, 255)
-                        val ig = outG.toInt().coerceIn(0, 255)
-                        val ib = outB.toInt().coerceIn(0, 255)
-                        srcPixels[idx] = (0xFF shl 24) or (ir shl 16) or (ig shl 8) or ib
-                    }
-                }
-            }
-
-            val outBmp = Bitmap.createBitmap(srcPixels, w, h, Bitmap.Config.ARGB_8888)
+            val outBmp = Bitmap.createBitmap(renderedPixels, w, h, Bitmap.Config.ARGB_8888)
             FileOutputStream(outJpeg).use { fos ->
                 outBmp.compress(Bitmap.CompressFormat.JPEG, 95, fos)
             }
             outBmp.recycle()
-            srcBmp.recycle()
+            PortraitRenderOutcome(
+                wroteOutput = outJpeg.exists(),
+                depthActive = (depthMap != null),
+                focusDepth = effectiveFocusDepth
+            )
         } catch (t: Throwable) {
             android.util.Log.e("ZameraPortrait", "Portrait pipeline error: ${t.message}", t)
+            PortraitRenderOutcome(wroteOutput = false, depthActive = false, focusDepth = 0.70f)
         }
     }
 
     /**
-     * Post-capture interactive Portrait Re-Focus, Aperture (f/1.4..f/16), and Studio Lighting reprocessing.
+     * Post-capture interactive Portrait Re-Focus, Aperture (f/1.4..f/16), Portrait On/Off toggle, and Studio Lighting reprocessing.
      */
     private fun reprocessPortraitPhoto(args: Map<String, Any?>, result: Result) {
         val sourcePath = args["sourceJpegPath"]?.toString()
-        if (sourcePath.isNullOrEmpty() || !File(sourcePath).exists()) {
+        val sourceFile = if (!sourcePath.isNullOrEmpty()) File(sourcePath) else null
+        if (sourceFile == null || !sourceFile.exists()) {
             result.error("NO_SOURCE", "Source JPEG not found for portrait reprocessing", null)
             return
         }
+        val portraitEnabled = (args["portraitEnabled"] as? Boolean) ?: true
         val aperture = (args["aperture"] as? Number)?.toFloat()?.coerceIn(1.4f, 16.0f) ?: 2.8f
         val lightingMode = (args["lightingMode"] as? Number)?.toInt()?.coerceIn(0, 9) ?: 0
         val lightIntensity = (args["lightIntensity"] as? Number)?.toFloat()?.coerceIn(0.15f, 1.0f) ?: 0.80f
@@ -2549,9 +4305,39 @@ class ZameraCapturePlugin :
         rustIspExecutor.execute {
             try {
                 val ts = System.currentTimeMillis()
+                if (!portraitEnabled) {
+                    val cachedDepthActive = portraitSessionCache.get(
+                        sourceJpegPath = sourceFile.absolutePath,
+                        lastModified = sourceFile.lastModified(),
+                        fileLength = sourceFile.length(),
+                        isFrontCamera = isFrontCamera
+                    )?.depthMap != null
+
+                    var mediaUri: String? = null
+                    if (saveToGallery) {
+                        mediaUri = saveFileToMediaStoreDcim(
+                            sourceFile = sourceFile,
+                            displayName = "ZAM_${ts}_PORTRAIT_ORIG.jpg",
+                            mimeType = "image/jpeg"
+                        )
+                    }
+                    mainHandler.post {
+                        result.success(
+                            mapOf(
+                                "jpegPath" to sourceFile.absolutePath,
+                                "reprocessedJpegPath" to sourceFile.absolutePath,
+                                "mediaStoreUri" to mediaUri,
+                                "portraitEnabled" to false,
+                                "portraitDepthActive" to cachedDepthActive
+                            )
+                        )
+                    }
+                    return@execute
+                }
+
                 val outFile = File(appContext.cacheDir, "ZAM_REFOCUS_${ts}.jpg")
-                applyPortraitBokehAndLighting(
-                    sourceJpeg = File(sourcePath),
+                val outcome = applyPortraitBokehAndLighting(
+                    sourceJpeg = sourceFile,
                     outJpeg = outFile,
                     aperture = aperture,
                     lightingMode = lightingMode,
@@ -2562,10 +4348,11 @@ class ZameraCapturePlugin :
                     isFrontCamera = isFrontCamera,
                     allowDepthInversionOnBgTap = true
                 )
+                val finalFile = if (outFile.exists()) outFile else sourceFile
                 var mediaUri: String? = null
-                if (saveToGallery && outFile.exists()) {
+                if (saveToGallery && finalFile.exists()) {
                     mediaUri = saveFileToMediaStoreDcim(
-                        sourceFile = outFile,
+                        sourceFile = finalFile,
                         displayName = "ZAM_${ts}_PORTRAIT_EDIT.jpg",
                         mimeType = "image/jpeg"
                     )
@@ -2573,8 +4360,11 @@ class ZameraCapturePlugin :
                 mainHandler.post {
                     result.success(
                         mapOf(
-                            "jpegPath" to outFile.absolutePath,
-                            "mediaStoreUri" to mediaUri
+                            "jpegPath" to finalFile.absolutePath,
+                            "reprocessedJpegPath" to finalFile.absolutePath,
+                            "mediaStoreUri" to mediaUri,
+                            "portraitEnabled" to true,
+                            "portraitDepthActive" to outcome.depthActive
                         )
                     )
                 }
@@ -2842,6 +4632,11 @@ class ZameraCapturePlugin :
         stopAudioFloatMeterMonitor()
         stopVideoRecordingSilent()
         videoSessionActive = false
+        videoAeAfLocked = false
+        photoAeAfLocked = false
+        photoManualIso = false
+        photoManualShutter = false
+        fallbackSmoothedAudioPower = 0.0
         activeSessionIsTenBitHlg = false
         try {
             captureSession?.close()
@@ -2928,7 +4723,13 @@ class ZameraCapturePlugin :
                 try {
                     val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                     val chars = manager.getCameraCharacteristics(activePhysicalCameraId ?: activeCameraId)
-                    configureVideoPreviewOrRecordSession(cam, chars, null, {}, {})
+                    configureVideoPreviewOrRecordSession(
+                        cam,
+                        chars,
+                        null,
+                        { startAudioFloatMeterMonitor(videoPreferredAudioDeviceId) },
+                        {}
+                    )
                 } catch (e: Throwable) {
                     android.util.Log.w("ZameraCapture", "Emergency resume preview warning: ${e.message}")
                 }
@@ -2973,6 +4774,10 @@ class ZameraCapturePlugin :
                 }
             }
             rec.startRecording()
+            if (rec.recordingState != android.media.AudioRecord.RECORDSTATE_RECORDING) {
+                rec.release()
+                return
+            }
             audioRecordMonitor = rec
             audioMeterActive = true
             audioMeterThread = Thread({
@@ -2983,8 +4788,8 @@ class ZameraCapturePlugin :
                 val rmsRing = FloatArray(chunkLen * ringChunks)
                 var ringWriteChunk = 0
                 var filledChunks = 0
-                while (audioMeterActive) {
-                    try {
+                try {
+                    while (audioMeterActive) {
                         val readCount = rec.read(chunkBuf, 0, chunkLen, android.media.AudioRecord.READ_BLOCKING)
                         if (readCount > 0) {
                             val peakPair = ZameraRustBridge.computeAudioPeakAndRmsDbfs(chunkBuf, readCount)
@@ -2994,10 +4799,15 @@ class ZameraCapturePlugin :
                             val rmsPair = ZameraRustBridge.computeAudioPeakAndRmsDbfs(rmsRing, filledChunks * chunkLen)
                             videoSamplePeakDbfs = peakPair.first.toDouble()
                             videoRmsDbfs = rmsPair.second.toDouble()
+                        } else if (readCount < 0) {
+                            break
                         }
-                    } catch (e: Throwable) {
-                        android.util.Log.w("ZameraCapture", "AudioRecord float read warning: ${e.message}")
-                        break
+                    }
+                } catch (e: Throwable) {
+                    android.util.Log.w("ZameraCapture", "AudioRecord float read warning: ${e.message}")
+                } finally {
+                    if (audioRecordMonitor === rec) {
+                        audioMeterActive = false
                     }
                 }
             }, "ZameraAudioFloatMeter").apply {
@@ -3114,6 +4924,9 @@ class ZameraCapturePlugin :
             videoStabilizationEnabled = args["videoStabilization"] as? Boolean ?: true
             videoLockShutterAngle = true
             videoManualIso = false
+            videoAeAfLocked = false
+            videoPreferredAudioDeviceId = args["audioDeviceId"]?.toString()
+            fallbackSmoothedAudioPower = 0.0
             videoDroppedFrames = 0
             prevVideoSensorTimestampNs = 0L
 
@@ -3203,6 +5016,7 @@ class ZameraCapturePlugin :
                         chars = chars,
                         recorderSurface = null,
                         onReady = {
+                            startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
                             mainHandler.post {
                                 result.success(
                                     mapOf(
@@ -3432,6 +5246,7 @@ class ZameraCapturePlugin :
             }
         }
 
+        builder.set(CaptureRequest.CONTROL_AE_LOCK, videoAeAfLocked)
         if (lockAwb) {
             builder.set(CaptureRequest.CONTROL_AWB_LOCK, true)
         }
@@ -3455,8 +5270,19 @@ class ZameraCapturePlugin :
             if (videoManualIso) {
                 videoActiveIso = ((args["iso"] as? Number)?.toDouble() ?: videoActiveIso).coerceIn(videoIsoMin.toDouble(), videoIsoMax.toDouble())
             }
+            if (args.containsKey("aeAfLocked")) {
+                videoAeAfLocked = args["aeAfLocked"] as? Boolean ?: false
+            }
             videoEvCompensation = ((args["evCompensation"] as? Number)?.toDouble() ?: 0.0).coerceIn(-3.0, 3.0)
             videoProfileName = args["profile"]?.toString() ?: videoProfileName
+
+            val reqAudioId = args["audioDeviceId"]?.toString()
+            if (reqAudioId != null && reqAudioId != videoPreferredAudioDeviceId) {
+                videoPreferredAudioDeviceId = reqAudioId
+                if (!isVideoRecording && videoSessionActive) {
+                    startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
+                }
+            }
 
             val reqZoom = ((args["zoomRatio"] as? Number)?.toFloat() ?: 1.0f).coerceIn(0.5f, 10.0f)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -3473,9 +5299,23 @@ class ZameraCapturePlugin :
                 val focusNorm = ((args["focusDistance"] as? Number)?.toFloat() ?: 0.25f).coerceIn(0.0f, 1.0f)
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
                 builder.set(CaptureRequest.LENS_FOCUS_DISTANCE, focusNorm * minFocus)
+            } else if (videoAeAfLocked && minFocus > 0.0f) {
+                activeFocusPullRunnable?.let { backgroundHandler?.removeCallbacks(it) }
+                activeFocusPullRunnable = null
+                if (builder.get(CaptureRequest.CONTROL_AF_MODE) != CaptureRequest.CONTROL_AF_MODE_AUTO) {
+                    builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+                    session.capture(builder.build(), videoCaptureCallback, backgroundHandler)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
+                }
             } else {
                 activeFocusPullRunnable?.let { backgroundHandler?.removeCallbacks(it) }
                 activeFocusPullRunnable = null
+                if (builder.get(CaptureRequest.CONTROL_AF_MODE) == CaptureRequest.CONTROL_AF_MODE_AUTO) {
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
+                    session.capture(builder.build(), videoCaptureCallback, backgroundHandler)
+                    builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_IDLE)
+                }
                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
             }
 
@@ -3630,6 +5470,14 @@ class ZameraCapturePlugin :
                     }
                 }
             }
+            val reqAudioDeviceId = args["audioDeviceId"]?.toString()
+            if (reqAudioDeviceId != null) {
+                videoPreferredAudioDeviceId = reqAudioDeviceId
+            }
+            // Release standby AudioRecord before MediaRecorder.prepare()/start() to prevent single-client OEM HAL conflicts
+            stopAudioFloatMeterMonitor()
+            fallbackSmoothedAudioPower = 0.0
+
             recorder.setOrientationHint(activeSensorOrientation)
             recorder.prepare()
             mediaRecorder = recorder
@@ -3646,7 +5494,7 @@ class ZameraCapturePlugin :
                         videoDroppedFrames = 0
                         prevVideoSensorTimestampNs = 0L
                         isVideoRecording = true
-                        startAudioFloatMeterMonitor(args["audioDeviceId"]?.toString())
+                        startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
                         mainHandler.post {
                             result.success(
                                 mapOf(
@@ -3660,6 +5508,9 @@ class ZameraCapturePlugin :
                         }
                     } catch (e: Exception) {
                         stopVideoRecordingSilent()
+                        if (videoSessionActive && cameraDevice != null) {
+                            startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
+                        }
                         mainHandler.post {
                             result.error("RECORDER_START_ERR", e.message, null)
                         }
@@ -3667,6 +5518,9 @@ class ZameraCapturePlugin :
                 },
                 onFail = { errMsg ->
                     stopVideoRecordingSilent()
+                    if (videoSessionActive && cameraDevice != null) {
+                        startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
+                    }
                     mainHandler.post {
                         result.error("RECORD_SESSION_ERR", errMsg, null)
                     }
@@ -3674,6 +5528,9 @@ class ZameraCapturePlugin :
             )
         } catch (e: Exception) {
             stopVideoRecordingSilent()
+            if (videoSessionActive && cameraDevice != null) {
+                startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
+            }
             result.error("START_RECORD_ERR", e.message, null)
         }
     }
@@ -3688,7 +5545,7 @@ class ZameraCapturePlugin :
         }
         stopVideoRecordingSilent()
 
-        // Resume clean preview session on the open camera
+        // Resume clean preview session and standby live audio dBFS metering on the open camera
         val cam = cameraDevice
         if (cam != null && videoSessionActive) {
             try {
@@ -3698,6 +5555,7 @@ class ZameraCapturePlugin :
             } catch (e: Throwable) {
                 android.util.Log.w("ZameraCapture", "Resume video preview warning: ${e.message}")
             }
+            startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
         }
 
         if (outFile != null && outFile.exists() && outFile.length() > 0L) {
@@ -3766,6 +5624,12 @@ class ZameraCapturePlugin :
         val wasRecording = isVideoRecording
         val outFile = currentVideoFile
         stopVideoRecordingSilent()
+        stopAudioFloatMeterMonitor()
+        videoSamplePeakDbfs = -96.0
+        videoRmsDbfs = -96.0
+        fallbackSmoothedAudioPower = 0.0
+        videoAeAfLocked = false
+        videoPreferredAudioDeviceId = null
         if (wasRecording && outFile != null && outFile.exists() && outFile.length() > 0L) {
             saveVideoFileToMediaStoreDcim(outFile, outFile.name)
         }
@@ -3862,8 +5726,39 @@ class ZameraCapturePlugin :
 
     private fun extractVideoTelemetry(): Map<String, Any?> {
         if (!isVideoRecording) {
-            videoSamplePeakDbfs = -96.0
-            videoRmsDbfs = -96.0
+            if (!audioMeterActive) {
+                videoSamplePeakDbfs = -96.0
+                videoRmsDbfs = -96.0
+            }
+        } else if (!audioMeterActive || videoSamplePeakDbfs <= -95.5) {
+            // OEM AudioRecord + MediaRecorder concurrency fallback via MediaRecorder.maxAmplitude
+            val amp = try {
+                mediaRecorder?.maxAmplitude ?: 0
+            } catch (_: Throwable) {
+                0
+            }
+            if (amp > 0) {
+                val normPeak = (amp.toDouble() / 32767.0).coerceIn(1e-5, 1.0)
+                val peakDb = (20.0 * log10(normPeak)).coerceIn(-96.0, 0.0)
+                val instPower = (normPeak * normPeak) * 0.5
+                fallbackSmoothedAudioPower = if (fallbackSmoothedAudioPower <= 1e-10) {
+                    instPower
+                } else {
+                    0.60 * fallbackSmoothedAudioPower + 0.40 * instPower
+                }
+                val rmsDb = (10.0 * log10(fallbackSmoothedAudioPower.coerceAtLeast(1e-10)))
+                    .coerceIn(-96.0, peakDb)
+                videoSamplePeakDbfs = peakDb
+                videoRmsDbfs = rmsDb
+            } else if (!audioMeterActive) {
+                fallbackSmoothedAudioPower *= 0.35
+                videoSamplePeakDbfs = -96.0
+                videoRmsDbfs = if (fallbackSmoothedAudioPower > 1e-9) {
+                    (10.0 * log10(fallbackSmoothedAudioPower)).coerceIn(-96.0, 0.0)
+                } else {
+                    -96.0
+                }
+            }
         }
 
         val stat = try {
@@ -3891,6 +5786,8 @@ class ZameraCapturePlugin :
         }
 
         val baseTel = extractLiveTelemetry()
+        val meanLumaNorm = latestMeanSceneLumaNorm.coerceIn(0.005, 1.0)
+        val fallbackMeteredEv = (ln(meanLumaNorm.coerceAtLeast(0.005) / 0.42) / ln(2.0)).coerceIn(-3.0, 3.0)
         return baseTel + mapOf(
             "isRecording" to isVideoRecording,
             "recordedDurationMs" to durMs,
@@ -3904,7 +5801,13 @@ class ZameraCapturePlugin :
             "shutterAngleDeg" to videoShutterAngleDeg,
             "fps" to videoFps,
             "ndFilterRecommendation" to videoNdRecommendation,
-            "activePhysicalLensId" to (activePhysicalCameraId ?: activeCameraId)
+            "activePhysicalLensId" to (activePhysicalCameraId ?: activeCameraId),
+            "liveZebraGrid16x12" to (baseTel["liveZebraGrid16x12"] ?: latestLiveZebraGrid16x12),
+            "livePeakingGrid16x12" to (baseTel["livePeakingGrid16x12"] ?: latestLivePeakingGrid16x12),
+            "liveFocusPeakingScore" to (baseTel["liveFocusPeakingScore"] ?: latestLiveFocusPeakingScore),
+            "solvedCctKelvin" to (baseTel["solvedCctKelvin"] ?: 5500.0),
+            "meteredEvDelta" to (baseTel["meteredEvDelta"] ?: fallbackMeteredEv),
+            "aeAfLocked" to (baseTel["aeAfLocked"] ?: videoAeAfLocked)
         )
     }
 
@@ -4111,6 +6014,7 @@ class ZameraCapturePlugin :
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         stopVideoSessionInternal()
         stopPreviewSession()
+        portraitSessionCache.clear()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
@@ -4129,6 +6033,30 @@ class ZameraCapturePlugin :
         } catch (e: Throwable) {
             android.util.Log.w("ZameraCapture", "SelfieSegmenter close warning: ${e.message}")
         }
+        synchronized(multiclassModelLock) {
+            try {
+                multiclassInterpreterInstance?.close()
+                multiclassInterpreterInstance = null
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "MulticlassInterpreter close warning: ${e.message}")
+            }
+        }
+        synchronized(depthModelLock) {
+            try {
+                depthInterpreterInstance?.close()
+                depthInterpreterInstance = null
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "DepthInterpreter close warning: ${e.message}")
+            }
+        }
+        synchronized(u2netModelLock) {
+            try {
+                u2netInterpreterInstance?.close()
+                u2netInterpreterInstance = null
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "U2NetInterpreter close warning: ${e.message}")
+            }
+        }
         ispWorkerPool.shutdown()
         rustIspExecutor.shutdown()
         cameraSessionExecutor.shutdown()
@@ -4146,6 +6074,7 @@ data class RustRawDevelopOutput(
     val outHeight: Int,
     val meanRgb: List<Double>,
     val centerLinearCamRgb: List<Double>,
+    val centerLabD50: List<Double>,
     val highlightClippedRatio: Double,
     val gamutClippedRatio: Double,
     val exposureNormGain: Double,
@@ -4154,6 +6083,12 @@ data class RustRawDevelopOutput(
     val focusPeakingScore: Double,
     val rawHistogram32: List<Double>,
     val measuredFlatField8x6: List<Double>
+)
+
+data class RustColorCheckerCalibOutput(
+    val wbGains: FloatArray,
+    val camToXyzD50Flat: FloatArray,
+    val reportMap: Map<String, Any>
 )
 
 object ZameraRustBridge {
@@ -4180,9 +6115,20 @@ object ZameraRustBridge {
         cfaPattern: Int,
         paramsBuffer: ByteBuffer,
         useDisplayP3: Int,
-        normalizeExposure: Int,
+        exposureMode: Int,
         outRgbaBuffer: ByteBuffer,
         outStatsBuffer: ByteBuffer
+    ): Int
+
+    @JvmStatic
+    private external fun nativeCalibrateColorChecker24Direct(
+        rawBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        cfaPattern: Int,
+        paramsBuffer: ByteBuffer,
+        outReportBuffer: ByteBuffer
     ): Int
 
     @JvmStatic
@@ -4333,6 +6279,91 @@ object ZameraRustBridge {
         return Pair(gains, mat)
     }
 
+    fun calibrateColorChecker24(
+        rawDirectBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        rowStride: Int,
+        cfaPattern: Int,
+        blackLevel: FloatArray,
+        whiteLevel: Float,
+        cornersNorm: FloatArray,
+        flatField8x6: FloatArray?,
+        rggbShading4x48: FloatArray?
+    ): RustColorCheckerCalibOutput? {
+        if (!loaded || cornersNorm.size < 8) return null
+        val paramFloats = when {
+            rggbShading4x48 != null && rggbShading4x48.size == 192 -> 253
+            flatField8x6 != null && flatField8x6.size == 48 -> 61
+            else -> 13
+        }
+        val paramsBuffer = ByteBuffer.allocateDirect(paramFloats * 4).order(ByteOrder.nativeOrder())
+        val pf = paramsBuffer.asFloatBuffer()
+        pf.put(blackLevel[0])
+        pf.put(blackLevel[1])
+        pf.put(blackLevel[2])
+        pf.put(blackLevel[3])
+        pf.put(whiteLevel)
+        for (i in 0 until 8) pf.put(cornersNorm[i])
+        if (paramFloats >= 61) {
+            if (flatField8x6 != null && flatField8x6.size == 48) {
+                for (i in 0 until 48) pf.put(flatField8x6[i])
+            } else {
+                for (i in 0 until 48) pf.put(0.0f)
+            }
+        }
+        if (paramFloats >= 253 && rggbShading4x48 != null) {
+            for (i in 0 until 192) pf.put(rggbShading4x48[i])
+        }
+
+        val outReportBuffer = ByteBuffer.allocateDirect(63 * 4).order(ByteOrder.nativeOrder())
+        val rc = try {
+            nativeCalibrateColorChecker24Direct(
+                rawDirectBuffer,
+                width,
+                height,
+                rowStride,
+                cfaPattern,
+                paramsBuffer,
+                outReportBuffer
+            )
+        } catch (t: Throwable) {
+            android.util.Log.w("ZameraRustBridge", "nativeCalibrateColorChecker24Direct error: ${t.message}")
+            return null
+        }
+        if (rc != 0) return null
+
+        val rf = outReportBuffer.asFloatBuffer()
+        val wb = floatArrayOf(rf.get(0), rf.get(1), rf.get(2))
+        val ccmFlat = FloatArray(9) { i -> rf.get(3 + i) }
+        val ccmRows = listOf(
+            listOf(ccmFlat[0].toDouble(), ccmFlat[1].toDouble(), ccmFlat[2].toDouble()),
+            listOf(ccmFlat[3].toDouble(), ccmFlat[4].toDouble(), ccmFlat[5].toDouble()),
+            listOf(ccmFlat[6].toDouble(), ccmFlat[7].toDouble(), ccmFlat[8].toDouble())
+        )
+        val meanBefore = rf.get(12).toDouble()
+        val meanAfter = rf.get(13).toDouble()
+        val maxAfter = rf.get(14).toDouble()
+        val patchBefore = List(24) { i -> rf.get(15 + i).toDouble() }
+        val patchAfter = List(24) { i -> rf.get(39 + i).toDouble() }
+
+        val map = mapOf<String, Any>(
+            "wbGains" to wb.map { it.toDouble() },
+            "camToXyzD50" to ccmRows,
+            "meanDeltaEBefore" to meanBefore,
+            "meanDeltaEAfter" to meanAfter,
+            "maxDeltaEAfter" to maxAfter,
+            "patchDeltaEBefore" to patchBefore,
+            "patchDeltaEAfter" to patchAfter,
+            "isMeasuredFromSensor" to true
+        )
+        return RustColorCheckerCalibOutput(
+            wbGains = wb,
+            camToXyzD50Flat = ccmFlat,
+            reportMap = map
+        )
+    }
+
     fun developRawToTrueColorFile(
         rawDirectBuffer: ByteBuffer,
         width: Int,
@@ -4348,13 +6379,20 @@ object ZameraRustBridge {
         cm2: FloatArray,
         fm2: FloatArray,
         flatField8x6: FloatArray?,
+        rggbShading4x48: FloatArray? = null,
         useDisplayP3: Boolean,
-        normalizeExposure: Boolean,
+        exposureMode: Int,
         fullResolution: Boolean,
         writeTrueColorBitmap: Boolean,
         sensorOrientationDegrees: Int,
+        isFrontCamera: Boolean = false,
         applyPerspectiveWarp: Boolean = false,
         perspectiveCornersNorm: FloatArray? = null,
+        losslessPng: Boolean = false,
+        iso: Int? = null,
+        exposureTimeNs: Long? = null,
+        aperture: Float? = null,
+        focalLengthMm: Float? = null,
         outFile: File
     ): RustRawDevelopOutput {
         if (!loaded) {
@@ -4364,6 +6402,7 @@ object ZameraRustBridge {
                 outHeight = 0,
                 meanRgb = listOf(0.0, 0.0, 0.0),
                 centerLinearCamRgb = listOf(0.18, 0.18, 0.18),
+                centerLabD50 = listOf(50.0, 0.0, 0.0),
                 highlightClippedRatio = 0.0,
                 gamutClippedRatio = 0.0,
                 exposureNormGain = 1.0,
@@ -4378,7 +6417,11 @@ object ZameraRustBridge {
         val outW = if (fullResolution && writeTrueColorBitmap) width else width / 2
         val outH = if (fullResolution && writeTrueColorBitmap) height else height / 2
 
-        val paramFloats = if (flatField8x6 != null) 95 else 47
+        val paramFloats = when {
+            rggbShading4x48 != null && rggbShading4x48.size == 192 -> 287
+            flatField8x6 != null && flatField8x6.size == 48 -> 95
+            else -> 47
+        }
         val paramsBuffer = ByteBuffer.allocateDirect(paramFloats * 4).order(ByteOrder.nativeOrder())
         val pf = paramsBuffer.asFloatBuffer()
         pf.put(blackLevel[0])
@@ -4402,12 +6445,19 @@ object ZameraRustBridge {
         for (i in 0 until 9) pf.put(cm1[i])
         for (i in 0 until 9) pf.put(cm2[i])
         for (i in 0 until 9) pf.put(fm2[i])
-        if (flatField8x6 != null) {
-            for (i in 0 until 48) pf.put(flatField8x6[i])
+        if (paramFloats >= 95) {
+            if (flatField8x6 != null && flatField8x6.size == 48) {
+                for (i in 0 until 48) pf.put(flatField8x6[i])
+            } else {
+                for (i in 0 until 48) pf.put(0.0f)
+            }
+        }
+        if (paramFloats >= 287 && rggbShading4x48 != null) {
+            for (i in 0 until 192) pf.put(rggbShading4x48[i])
         }
 
         val outRgbaBuffer = ByteBuffer.allocateDirect(outW * outH * 4)
-        val outStatsBuffer = ByteBuffer.allocateDirect(92 * 4).order(ByteOrder.nativeOrder())
+        val outStatsBuffer = ByteBuffer.allocateDirect(95 * 4).order(ByteOrder.nativeOrder())
 
         val rc = nativeDevelopBayer16Direct(
             rawDirectBuffer,
@@ -4417,7 +6467,7 @@ object ZameraRustBridge {
             cfaPattern,
             paramsBuffer,
             if (useDisplayP3) 1 else 0,
-            if (normalizeExposure) 1 else 0,
+            exposureMode.coerceIn(0, 2),
             outRgbaBuffer,
             outStatsBuffer
         )
@@ -4429,6 +6479,7 @@ object ZameraRustBridge {
                 outHeight = 0,
                 meanRgb = listOf(0.0, 0.0, 0.0),
                 centerLinearCamRgb = listOf(0.18, 0.18, 0.18),
+                centerLabD50 = listOf(50.0, 0.0, 0.0),
                 highlightClippedRatio = 0.0,
                 gamutClippedRatio = 0.0,
                 exposureNormGain = 1.0,
@@ -4457,8 +6508,11 @@ object ZameraRustBridge {
             }
             rawBitmap.copyPixelsFromBuffer(outRgbaBuffer)
 
-            val rotatedBitmap = if (sensorOrientationDegrees != 0) {
-                val matrix = Matrix().apply { postRotate(sensorOrientationDegrees.toFloat()) }
+            val rotatedBitmap = if (sensorOrientationDegrees != 0 || isFrontCamera) {
+                val matrix = Matrix().apply {
+                    if (sensorOrientationDegrees != 0) postRotate(sensorOrientationDegrees.toFloat())
+                    if (isFrontCamera) postScale(-1f, 1f)
+                }
                 val rotated = Bitmap.createBitmap(rawBitmap, 0, 0, outW, outH, matrix, true)
                 if (rotated !== rawBitmap) rawBitmap.recycle()
                 rotated
@@ -4483,7 +6537,21 @@ object ZameraRustBridge {
                 )
                 val polyMatrix = Matrix()
                 if (polyMatrix.setPolyToPoly(srcPts, 0, dstPts, 0, 4)) {
-                    val warped = Bitmap.createBitmap(rotatedBitmap.width, rotatedBitmap.height, rotatedBitmap.config ?: Bitmap.Config.ARGB_8888)
+                    val warped = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && colorSpace != null) {
+                        Bitmap.createBitmap(
+                            rotatedBitmap.width,
+                            rotatedBitmap.height,
+                            Bitmap.Config.ARGB_8888,
+                            false,
+                            colorSpace
+                        )
+                    } else {
+                        Bitmap.createBitmap(
+                            rotatedBitmap.width,
+                            rotatedBitmap.height,
+                            rotatedBitmap.config ?: Bitmap.Config.ARGB_8888
+                        )
+                    }
                     val canvas = android.graphics.Canvas(warped)
                     val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
                     canvas.drawBitmap(rotatedBitmap, polyMatrix, paint)
@@ -4499,9 +6567,50 @@ object ZameraRustBridge {
             finalW = finalBitmap.width
             finalH = finalBitmap.height
             FileOutputStream(outFile).use { fos ->
-                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 96, fos)
+                if (losslessPng) {
+                    finalBitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)
+                } else {
+                    finalBitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos)
+                }
             }
             finalBitmap.recycle()
+
+            if (!losslessPng) {
+                try {
+                    val exif = ExifInterface(outFile.absolutePath)
+                    exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                    // EXIF 2.31 ColorSpace tag: 1 = sRGB, 65535 = Uncalibrated (Display P3 ICC profile embedded)
+                    exif.setAttribute(
+                        ExifInterface.TAG_COLOR_SPACE,
+                        if (useDisplayP3) "65535" else "1"
+                    )
+                    exif.setAttribute(ExifInterface.TAG_MAKE, Build.MANUFACTURER)
+                    exif.setAttribute(ExifInterface.TAG_MODEL, Build.MODEL)
+                    exif.setAttribute(ExifInterface.TAG_SOFTWARE, "Zamera TrueColor ISP (D50)")
+                    exif.setAttribute(ExifInterface.TAG_IMAGE_WIDTH, finalW.toString())
+                    exif.setAttribute(ExifInterface.TAG_IMAGE_LENGTH, finalH.toString())
+                    iso?.let { exif.setAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS, it.toString()) }
+                    exposureTimeNs?.let {
+                        val sec = it.toDouble() / 1_000_000_000.0
+                        exif.setAttribute(
+                            ExifInterface.TAG_EXPOSURE_TIME,
+                            String.format(java.util.Locale.US, "%.6f", sec)
+                        )
+                    }
+                    aperture?.let {
+                        exif.setAttribute(
+                            ExifInterface.TAG_F_NUMBER,
+                            String.format(java.util.Locale.US, "%.2f", it)
+                        )
+                    }
+                    focalLengthMm?.let {
+                        exif.setAttribute(ExifInterface.TAG_FOCAL_LENGTH, "${(it * 100f).roundToInt()}/100")
+                    }
+                    exif.saveAttributes()
+                } catch (e: Throwable) {
+                    android.util.Log.w("ZameraRustBridge", "EXIF write warning: ${e.message}")
+                }
+            }
         }
 
         val sf = outStatsBuffer.asFloatBuffer()
@@ -4519,6 +6628,7 @@ object ZameraRustBridge {
         val peakingScore = sf.get(11).toDouble()
         val hist32 = List(32) { i -> sf.get(12 + i).toDouble() }
         val flatField48 = List(48) { i -> sf.get(44 + i).toDouble() }
+        val centerLab = listOf(sf.get(92).toDouble(), sf.get(93).toDouble(), sf.get(94).toDouble())
 
         return RustRawDevelopOutput(
             rustIspSucceeded = true,
@@ -4526,6 +6636,7 @@ object ZameraRustBridge {
             outHeight = finalH,
             meanRgb = listOf(meanR, meanG, meanB),
             centerLinearCamRgb = listOf(centerR, centerG, centerB),
+            centerLabD50 = centerLab,
             highlightClippedRatio = highlightClip,
             gamutClippedRatio = gamutClip,
             exposureNormGain = expNormGain,

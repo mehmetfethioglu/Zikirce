@@ -1,6 +1,5 @@
-Zamera v0.1.1:
-• Phase 0-3 parity across iOS and Android: Apple Log, ProRes 422 HQ, and 180° locked Pro Video.
-• New Release Notes & Welcome Feature Guide (accessible anytime from Settings).
-• 24-Patch ColorChecker true-color calibration (ΔE00 ≤ 1.0).
-• 14-bit Bayer RAW/DNG, manual exposure controls, AE bracketing, and subject cutout sticker.
-• 100% on-device offline processing with zero tracking.
+Zamera v0.1.3:
+• Pro Mode: Bumpless P/Tv/Sv/M DSLR exposure, 1/3-EV stops (ISO 50..12800, 30"..1/8000s), live [-3..+3] EV light meter, AEB ±2, and AEL/AFL lock.
+• Cinema Video: Interactive 4K/FPS/180°/10-bit HUD, live A↔B Rack Focus, broadcast (-60..0 dB) Peak+RMS audio meter, and crimson REC Tally frame.
+• Art Mode: 1:1 True-Color (sRGB/D50 CCM), 14-bit RAW 24-patch calibration, and live CIE L*a*b* / ΔE00 spot colorimeter.
+• Overlap-free 2-tier concentric radial settings arc.

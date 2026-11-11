@@ -1,6 +1,5 @@
-Zamera v0.1.1:
-• Faz 0-3 tam iOS ve Android eşliği: Apple Log, ProRes 422 HQ ve 180° kilitli Pro Video.
-• Yeni Sürüm Notları ve İlk Açılış Özellikleri rehberi (Ayarlar menüsünden her an erişilebilir).
-• 24-Yama ColorChecker gerçek renk kalibrasyonu (ΔE00 ≤ 1.0).
-• 14-bit Bayer RAW/DNG, manuel pozlama, AE braketleme ve nesne ayırma çıkartması.
-• %100 cihaz içi işleme, sıfır takip güvencesi.
+Zamera v0.1.3:
+• Pro Mod: Sarsıntısız P/Tv/Sv/M DSLR pozlama, 1/3-EV duraklar (ISO 50..12800, 30"..1/8000s), canlı [-3..+3] EV pozometre, AEB ±2 ve AEL/AFL kilidi.
+• Sinema Video: Etkileşimli 4K/FPS/180°/10-bit HUD, canlı A↔B Rack Focus, yayın tipi (-60..0 dB) ses göstergesi ve kırmızı REC Tally çerçevesi.
+• Sanat Modu: 1:1 Gerçek Renk (sRGB/D50 CCM), 14-bit RAW 24-yama kalibrasyon ve canlı CIE L*a*b* / ΔE00 renk ölçer.
+• 2 katmanlı çakışmasız radyal ayar yayı.

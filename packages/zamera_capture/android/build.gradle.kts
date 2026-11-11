@@ -46,6 +46,11 @@ android {
 
     defaultConfig {
         minSdk = 24
+        consumerProguardFiles("consumer-rules.pro")
+    }
+
+    androidResources {
+        noCompress += "tflite"
     }
 
     testOptions {
@@ -74,6 +79,7 @@ kotlin {
 dependencies {
     implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
+    implementation("com.google.ai.edge.litert:litert:1.4.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.mockito:mockito-core:5.0.0")
 }

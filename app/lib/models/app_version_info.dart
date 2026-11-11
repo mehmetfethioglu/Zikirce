@@ -38,11 +38,11 @@ class ReleaseNote {
 
 /// Central repository of Zamera features and version release history.
 class AppVersionInfo {
-  static const String currentVersion = '0.1.1';
-  static const int currentBuildNumber = 2;
+  static const String currentVersion = '0.1.3';
+  static const int currentBuildNumber = 4;
   static const String appName = 'Zamera';
   static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/Zamera/';
-  static const String supportEmail = 'akarworks@gmail.com';
+  static const String supportEmail = 'theakar@windowslive.com';
 
   /// General features presented to users on their first launch or via Settings.
   static const List<FeatureHighlight> generalFeatures = [
@@ -85,6 +85,44 @@ class AppVersionInfo {
 
   /// Changelog history of all releases.
   static const List<ReleaseNote> releaseHistory = [
+    ReleaseNote(
+      version: '0.1.3',
+      buildNumber: 4,
+      releaseDate: '11 Kasım 2026',
+      titleTr: 'Gerçek DSLR Pozlama (PASM) & Sinema Video Deneyimi',
+      titleEn: 'True DSLR Exposure (PASM) & Cinema Video Experience',
+      bulletPointsTr: [
+        'Pro moduna sarsıntısız (Bumpless) P / Tv / Sv / M pozlama önceliği, 1/3-EV DSLR durakları (ISO 50..12800, 30"..1/8000s), canlı [-3..+3] EV pozometre, AEB ±2 / zamanlayıcı sürücü modları ve AEL/AFL kilidi eklendi.',
+        'Video moduna etkileşimli Sinema HUD (4K/1080P, 24/25/30/60p FPS, 180° açı kilidi, 10-bit profil, tek dokunuş LUT BYPASS) ve STBY/REC yayın seviyesi (-60..0 dB) ses göstergesi eklendi.',
+        'Kayıt sırasında kesintisiz çalışan Sinema Hızlı Güvertesi (optik lens geçişi, canlı A · B · A↔B Rack Focus ve hız seçimi) ile ARRI/FX3 kırmızı REC Tally çerçevesi eklendi.',
+        'Video oturumu tek-IPC telemetri ve vizör spot AF/AE dokunuş kancalarıyla optimize edildi; 2 katmanlı eşmerkezli radyal ayar yayı ile buton çakışmaları giderildi.',
+      ],
+      bulletPointsEn: [
+        'Added bumpless P / Tv / Sv / M DSLR exposure priority, 1/3-EV stops (ISO 50..12800, 30"..1/8000s), live [-3..+3] EV light meter, AEB ±2 / self-timer drive modes, and AEL/AFL lock to Pro mode.',
+        'Added interactive Cinema HUD (4K/1080P, 24/25/30/60p FPS, 180° shutter lock, 10-bit profile, 1-tap LUT BYPASS) and broadcast (-60..0 dB) Peak+RMS audio meter in both Standby and Recording.',
+        'Added live Cinema Quick Deck (optical lens switcher, live A · B · A↔B Rack Focus with speed control) and ARRI/FX3 crimson REC Tally frame.',
+        'Optimized Video mode with single-IPC telemetry, active video session spot AF/AE gestures, and an overlap-free 2-tier concentric radial settings arc.',
+      ],
+    ),
+    ReleaseNote(
+      version: '0.1.2',
+      buildNumber: 3,
+      releaseDate: '11 Kasım 2026',
+      titleTr: 'Sanat Modu — 1:1 Gerçek Renk Kalibrasyonu & Canlı Kolorimetre',
+      titleEn: 'Art Mode — 1:1 True-Color Calibration & Live Colorimeter',
+      bulletPointsTr: [
+        'Canlı vizörde üretici S-eğrisi yerine sRGB/Gamma 2.2 ton haritalama, wideColorGamut ekran renk yönetimi ve kalibre edilmiş 3x3 CCM matrisi aktif edildi.',
+        'Rust çekirdeğinde sabit-ton/sabit-parlaklık negatif gamut sıkıştırma, 1:1 Doğal Ton pozlama modu ve 4-kanal RGGB LensShadingMap düzeltmesi eklendi.',
+        '14-bit RAW karesinden doğrudan 24-yama ColorChecker ölçümü, D50 beyaz noktası kısıtlı kalibrasyon ve lens bazlı kalıcı profil saklama eklendi.',
+        'Canlı merkez CIE L*a*b* / #HEX / ΔE00 renk ölçer rozeti, Kayıpsız PNG kaydı ve çekim sonrası TrueColor ↔ Stok Kamera (OEM) A/B piksel denetçisi eklendi.',
+      ],
+      bulletPointsEn: [
+        'Enabled live viewfinder sRGB/Gamma 2.2 tone mapping, wideColorGamut display color management, and real-time calibrated 3x3 CCM preview.',
+        'Added constant-hue/luminance negative gamut compression, 1:1 Natural Tone exposure mode, and 4-channel RGGB LensShadingMap correction in Rust.',
+        'Added direct 14-bit RAW 24-patch ColorChecker extraction, D50 white-preserving calibration, and persistent per-lens profile storage.',
+        'Added live center CIE L*a*b* / #HEX / ΔE00 spot colorimeter, Lossless PNG export, and post-capture TrueColor vs OEM A/B pixel inspector.',
+      ],
+    ),
     ReleaseNote(
       version: '0.1.1',
       buildNumber: 2,

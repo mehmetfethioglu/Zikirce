@@ -57,6 +57,7 @@ class ColorCheckerCalibrationResult {
   final double maxDeltaEAfter;
   final List<double> patchDeltaEBefore;
   final List<double> patchDeltaEAfter;
+  final bool isMeasuredFromSensor;
 
   const ColorCheckerCalibrationResult({
     required this.wbGains,
@@ -66,6 +67,7 @@ class ColorCheckerCalibrationResult {
     required this.maxDeltaEAfter,
     required this.patchDeltaEBefore,
     required this.patchDeltaEAfter,
+    this.isMeasuredFromSensor = false,
   });
 
   List<double> get flattenedCamToXyzD50 => [
@@ -79,6 +81,68 @@ class ColorCheckerCalibrationResult {
         camToXyzD50[2][1],
         camToXyzD50[2][2],
       ];
+
+  factory ColorCheckerCalibrationResult.fromMap(Map<dynamic, dynamic> map) {
+    const fallbackMatrix = <List<double>>[
+      [0.4360747, 0.3850649, 0.1430804],
+      [0.2225045, 0.7168786, 0.0606169],
+      [0.0139322, 0.0971045, 0.7141733],
+    ];
+    final rawMat = map['camToXyzD50'] ?? map['flattenedCamToXyzD50'];
+    List<List<double>> parsedMat = fallbackMatrix;
+    if (rawMat is List && rawMat.isNotEmpty) {
+      if (rawMat.length == 3 && rawMat.first is List) {
+        parsedMat = rawMat
+            .map((row) => (row as List<dynamic>)
+                .map((e) => (e as num).toDouble())
+                .toList(growable: false))
+            .toList(growable: false);
+      } else if (rawMat.length >= 9 && rawMat.first is num) {
+        final f = rawMat.map((e) => (e as num).toDouble()).toList(growable: false);
+        parsedMat = [
+          [f[0], f[1], f[2]],
+          [f[3], f[4], f[5]],
+          [f[6], f[7], f[8]],
+        ];
+      }
+    }
+
+    final wbList = (map['wbGains'] as List<dynamic>?)
+        ?.map((e) => (e as num).toDouble())
+        .toList(growable: false);
+
+    return ColorCheckerCalibrationResult(
+      wbGains: (wbList != null && wbList.length >= 3)
+          ? wbList.sublist(0, 3)
+          : const [1.0, 1.0, 1.0],
+      camToXyzD50: parsedMat,
+      meanDeltaEBefore: (map['meanDeltaEBefore'] as num?)?.toDouble() ?? 0.0,
+      meanDeltaEAfter: (map['meanDeltaEAfter'] as num?)?.toDouble() ?? 0.0,
+      maxDeltaEAfter: (map['maxDeltaEAfter'] as num?)?.toDouble() ?? 0.0,
+      patchDeltaEBefore: (map['patchDeltaEBefore'] as List<dynamic>?)
+              ?.map((e) => (e as num).toDouble())
+              .toList(growable: false) ??
+          List<double>.filled(24, 0.0),
+      patchDeltaEAfter: (map['patchDeltaEAfter'] as List<dynamic>?)
+              ?.map((e) => (e as num).toDouble())
+              .toList(growable: false) ??
+          List<double>.filled(24, 0.0),
+      isMeasuredFromSensor: map['isMeasuredFromSensor'] == true,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'wbGains': wbGains,
+      'camToXyzD50': camToXyzD50,
+      'meanDeltaEBefore': meanDeltaEBefore,
+      'meanDeltaEAfter': meanDeltaEAfter,
+      'maxDeltaEAfter': maxDeltaEAfter,
+      'patchDeltaEBefore': patchDeltaEBefore,
+      'patchDeltaEAfter': patchDeltaEAfter,
+      'isMeasuredFromSensor': isMeasuredFromSensor,
+    };
+  }
 }
 
 /// Active native preview texture session details.
@@ -143,6 +207,7 @@ class CapturePhotoResult {
   final int? outputHeight;
   final bool rustIspActive;
   final bool lensShadingApplied;
+  final bool portraitDepthActive;
   final double? whiteLevel;
   final List<double>? blackLevel;
   final List<double>? wbGainsUsed;
@@ -156,6 +221,9 @@ class CapturePhotoResult {
   final double? focusPeakingScore;
   final List<double>? rawHistogram32;
   final List<double>? measuredFlatField8x6;
+  final ColorCheckerCalibrationResult? liveCalibrationResult;
+  final List<double>? centerLabD50;
+  final String? colorSpaceTag;
 
   const CapturePhotoResult({
     this.jpegPath,
@@ -170,6 +238,7 @@ class CapturePhotoResult {
     this.outputHeight,
     this.rustIspActive = false,
     this.lensShadingApplied = false,
+    this.portraitDepthActive = false,
     this.whiteLevel,
     this.blackLevel,
     this.wbGainsUsed,
@@ -183,6 +252,9 @@ class CapturePhotoResult {
     this.focusPeakingScore,
     this.rawHistogram32,
     this.measuredFlatField8x6,
+    this.liveCalibrationResult,
+    this.centerLabD50,
+    this.colorSpaceTag,
   });
 
   factory CapturePhotoResult.fromMap(Map<dynamic, dynamic> map) {
@@ -199,6 +271,7 @@ class CapturePhotoResult {
       outputHeight: (map['outputHeight'] as num?)?.toInt(),
       rustIspActive: map['rustIspActive'] == true,
       lensShadingApplied: map['lensShadingApplied'] == true,
+      portraitDepthActive: map['portraitDepthActive'] == true,
       whiteLevel: (map['whiteLevel'] as num?)?.toDouble(),
       blackLevel: (map['blackLevel'] as List<dynamic>?)
           ?.map((e) => (e as num).toDouble())
@@ -224,6 +297,15 @@ class CapturePhotoResult {
       measuredFlatField8x6: (map['measuredFlatField8x6'] as List<dynamic>?)
           ?.map((e) => (e as num).toDouble())
           .toList(),
+      liveCalibrationResult: map['liveCalibrationResult'] is Map
+          ? ColorCheckerCalibrationResult.fromMap(
+              map['liveCalibrationResult'] as Map<dynamic, dynamic>,
+            )
+          : null,
+      centerLabD50: (map['centerLabD50'] as List<dynamic>?)
+          ?.map((e) => (e as num).toDouble())
+          .toList(),
+      colorSpaceTag: map['colorSpaceTag']?.toString(),
     );
   }
 }
@@ -446,6 +528,9 @@ class ZameraCapture {
   /// Optical/Digital Zoom Ratio, and DNG-interpolated Kelvin/Tint White Balance.
   static Future<bool> updateManualControls({
     required bool manualExposure,
+    bool? manualIso,
+    bool? manualShutter,
+    bool aeAfLocked = false,
     required double iso,
     required int exposureTimeNs,
     double evCompensation = 0.0,
@@ -458,9 +543,14 @@ class ZameraCapture {
     bool artworkLinearMode = false,
     double zoomRatio = 1.0,
     bool monoMode = false,
+    List<double>? customWbGains,
+    List<double>? camToXyzD50,
   }) async {
     final ok = await _channel.invokeMethod<bool>('updateManualControls', {
       'manualExposure': manualExposure,
+      'manualIso': manualIso ?? manualExposure,
+      'manualShutter': manualShutter ?? manualExposure,
+      'aeAfLocked': aeAfLocked,
       'iso': iso,
       'exposureTimeNs': exposureTimeNs,
       'evCompensation': evCompensation,
@@ -473,6 +563,8 @@ class ZameraCapture {
       'artworkLinearMode': artworkLinearMode,
       'zoomRatio': zoomRatio,
       'monoMode': monoMode,
+      'customWbGains': ?customWbGains,
+      'camToXyzD50': ?camToXyzD50,
     });
     return ok == true;
   }
@@ -481,10 +573,15 @@ class ZameraCapture {
   static Future<bool> setFocusAndMeteringPoint({
     required double x,
     required double y,
+    bool lockAeAf = false,
   }) async {
     final ok = await _channel.invokeMethod<bool>(
       'setFocusAndMeteringPoint',
-      {'x': x, 'y': y},
+      {
+        'x': x,
+        'y': y,
+        'lockAeAf': lockAeAf,
+      },
     );
     return ok == true;
   }
@@ -514,6 +611,9 @@ class ZameraCapture {
     bool useDisplayP3 = false,
     bool fullResolution = true,
     bool normalizeExposure = true,
+    int artworkExposureMode = 2,
+    bool calibrateColorChecker = false,
+    bool losslessPng = false,
     bool applyPerspectiveWarp = false,
     List<double>? perspectiveCornersNorm,
     List<double>? wbGains,
@@ -537,12 +637,14 @@ class ZameraCapture {
         'useDisplayP3': useDisplayP3,
         'fullResolution': fullResolution,
         'normalizeExposure': normalizeExposure,
+        'artworkExposureMode': artworkExposureMode,
+        'calibrateColorChecker': calibrateColorChecker,
+        'losslessPng': losslessPng,
         'applyPerspectiveWarp': applyPerspectiveWarp,
-        if (perspectiveCornersNorm != null)
-          'perspectiveCornersNorm': perspectiveCornersNorm,
-        if (wbGains != null) 'wbGains': wbGains,
-        if (camToXyzD50 != null) 'camToXyzD50': camToXyzD50,
-        if (flatFieldGrid8x6 != null) 'flatFieldGrid8x6': flatFieldGrid8x6,
+        'perspectiveCornersNorm': ?perspectiveCornersNorm,
+        'wbGains': ?wbGains,
+        'camToXyzD50': ?camToXyzD50,
+        'flatFieldGrid8x6': ?flatFieldGrid8x6,
       },
     );
     if (map == null) {
@@ -585,6 +687,7 @@ class ZameraCapture {
     required double focusY,
     bool isFrontCamera = false,
     bool saveToGallery = false,
+    bool portraitEnabled = true,
   }) async {
     final map = await _channel.invokeMapMethod<dynamic, dynamic>(
       'reprocessPortraitPhoto',
@@ -598,6 +701,7 @@ class ZameraCapture {
         'focusY': focusY,
         'isFrontCamera': isFrontCamera,
         'saveToGallery': saveToGallery,
+        'portraitEnabled': portraitEnabled,
       },
     );
     if (map == null) return const {};
@@ -707,28 +811,93 @@ class ZameraCapture {
   }
 
   /// Solves the 24-Patch ColorChecker 3x3 calibration matrix and neutral Gray-Card WB gains
+  /// with D50 white-point (`[0.96422, 1.0, 0.82521]`) constraint and neutral-gray weighting
   /// (exact mirror of `zamera_core::calibrate_colorchecker_24`).
   static ColorCheckerCalibrationResult calibrateColorChecker24(
-    List<List<double>> measuredCamRgb,
-  ) {
+    List<List<double>> measuredCamRgb, {
+    bool isMeasuredFromSensor = false,
+  }) {
     assert(measuredCamRgb.length == 24);
+    const d50White = [0.96422, 1.00000, 0.82521];
+    const mSrgbToXyzD50 = [
+      [0.4360747, 0.3850649, 0.1430804],
+      [0.2225045, 0.7168786, 0.0606169],
+      [0.0139322, 0.0971045, 0.7141733],
+    ];
+
     final refXyz = kColorChecker24Patches
         .map((p) => labD50ToXyz(p.labD50))
         .toList(growable: false);
 
-    final p20 = measuredCamRgb[19];
-    final p22 = measuredCamRgb[21];
-    final rAvg = math.max(1e-6, 0.5 * (p20[0] + p22[0]));
-    final gAvg = math.max(1e-6, 0.5 * (p20[1] + p22[1]));
-    final bAvg = math.max(1e-6, 0.5 * (p20[2] + p22[2]));
+    // Per-patch regression weights: boost neutral gray ramp (patches 19..24 -> indices 18..23)
+    final weights = List<double>.generate(24, (i) {
+      if (i >= 19 && i <= 22) return 4.0;
+      if (i >= 18) return 2.5;
+      return 1.0;
+    });
 
-    final targetY22 = refXyz[21][1];
-    final exposureScale = targetY22 / math.max(1e-6, p22[1]);
-    final wbGains = [
-      (gAvg / rAvg) * exposureScale,
-      1.0 * exposureScale,
-      (gAvg / bAvg) * exposureScale,
+    // Stage 1: Weighted unconstrained sensor->XYZ solve to locate exact D50 white response
+    final rawXxt = [
+      [1e-8, 0.0, 0.0],
+      [0.0, 1e-8, 0.0],
+      [0.0, 0.0, 1e-8],
     ];
+    final rawYxt = [
+      [0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+    ];
+    for (var i = 0; i < 24; i++) {
+      final w = weights[i];
+      final x = measuredCamRgb[i];
+      final y = refXyz[i];
+      for (var r = 0; r < 3; r++) {
+        for (var c = 0; c < 3; c++) {
+          rawXxt[r][c] += w * x[r] * x[c];
+          rawYxt[r][c] += w * y[r] * x[c];
+        }
+      }
+    }
+
+    List<double>? solvedWbGains;
+    final rawXxtInv = _mat3Inverse(rawXxt);
+    if (rawXxtInv != null) {
+      final mRaw = List<List<double>>.generate(3, (r) {
+        return List<double>.generate(3, (c) {
+          return rawYxt[r][0] * rawXxtInv[0][c] +
+              rawYxt[r][1] * rawXxtInv[1][c] +
+              rawYxt[r][2] * rawXxtInv[2][c];
+        });
+      });
+      final mRawInv = _mat3Inverse(mRaw);
+      if (mRawInv != null) {
+        final camWhite = _mat3MulVec3(mRawInv, d50White);
+        if (camWhite[0] > 1e-5 && camWhite[1] > 1e-5 && camWhite[2] > 1e-5) {
+          solvedWbGains = [
+            1.0 / camWhite[0],
+            1.0 / camWhite[1],
+            1.0 / camWhite[2],
+          ];
+        }
+      }
+    }
+
+    final List<double> wbGains;
+    if (solvedWbGains != null) {
+      wbGains = solvedWbGains;
+    } else {
+      final p20 = measuredCamRgb[19];
+      final p22 = measuredCamRgb[21];
+      final rAvg = math.max(1e-6, 0.5 * (p20[0] + p22[0]));
+      final gAvg = math.max(1e-6, 0.5 * (p20[1] + p22[1]));
+      final bAvg = math.max(1e-6, 0.5 * (p20[2] + p22[2]));
+      final exposureScale = refXyz[21][1] / math.max(1e-6, p22[1]);
+      wbGains = [
+        (gAvg / rAvg) * exposureScale,
+        1.0 * exposureScale,
+        (gAvg / bAvg) * exposureScale,
+      ];
+    }
 
     final wbRgb = List<List<double>>.generate(24, (i) {
       return [
@@ -737,12 +906,6 @@ class ZameraCapture {
         measuredCamRgb[i][2] * wbGains[2],
       ];
     });
-
-    const mSrgbToXyzD50 = [
-      [0.4360747, 0.3850649, 0.1430804],
-      [0.2225045, 0.7168786, 0.0606169],
-      [0.0139322, 0.0971045, 0.7141733],
-    ];
 
     final patchDeBefore = <double>[];
     var sumBefore = 0.0;
@@ -754,38 +917,43 @@ class ZameraCapture {
       sumBefore += de;
     }
 
-    final xxt = [
-      [1e-6, 0.0, 0.0],
-      [0.0, 1e-6, 0.0],
-      [0.0, 0.0, 1e-6],
-    ];
-    final yxt = [
-      [0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0],
-      [0.0, 0.0, 0.0],
-    ];
+    // Stage 2: Exact D50 white-point constrained (M * [1,1,1]^T = D50) + neutral-weighted 2x2 least squares per row
+    var a00 = 1e-8;
+    var a01 = 0.0;
+    var a11 = 1e-8;
+    final b0 = [0.0, 0.0, 0.0];
+    final b1 = [0.0, 0.0, 0.0];
 
     for (var i = 0; i < 24; i++) {
-      final x = wbRgb[i];
-      final y = refXyz[i];
-      for (var r = 0; r < 3; r++) {
-        for (var c = 0; c < 3; c++) {
-          xxt[r][c] += x[r] * x[c];
-          yxt[r][c] += y[r] * x[c];
-        }
+      final w = weights[i];
+      final r = wbRgb[i][0];
+      final g = wbRgb[i][1];
+      final b = wbRgb[i][2];
+      final u = r - g;
+      final v = b - g;
+      a00 += w * u * u;
+      a01 += w * u * v;
+      a11 += w * v * v;
+      for (var k = 0; k < 3; k++) {
+        final zk = refXyz[i][k] - d50White[k] * g;
+        b0[k] += w * u * zk;
+        b1[k] += w * v * zk;
       }
     }
 
-    final xxtInv = _mat3Inverse(xxt);
-    final camToXyzD50 = xxtInv == null
-        ? mSrgbToXyzD50
-        : List<List<double>>.generate(3, (r) {
-            return List<double>.generate(3, (c) {
-              return yxt[r][0] * xxtInv[0][c] +
-                  yxt[r][1] * xxtInv[1][c] +
-                  yxt[r][2] * xxtInv[2][c];
-            });
-          });
+    final det2 = a00 * a11 - a01 * a01;
+    final List<List<double>> camToXyzD50;
+    if (det2.abs() > 1e-14) {
+      final invDet2 = 1.0 / det2;
+      camToXyzD50 = List<List<double>>.generate(3, (k) {
+        final m0 = (a11 * b0[k] - a01 * b1[k]) * invDet2;
+        final m2 = (-a01 * b0[k] + a00 * b1[k]) * invDet2;
+        final m1 = d50White[k] - m0 - m2;
+        return [m0, m1, m2];
+      }, growable: false);
+    } else {
+      camToXyzD50 = mSrgbToXyzD50;
+    }
 
     final patchDeAfter = <double>[];
     var sumAfter = 0.0;
@@ -807,7 +975,49 @@ class ZameraCapture {
       maxDeltaEAfter: maxAfter,
       patchDeltaEBefore: patchDeBefore,
       patchDeltaEAfter: patchDeAfter,
+      isMeasuredFromSensor: isMeasuredFromSensor,
     );
+  }
+
+  /// Converts 8-bit sRGB `(r, g, b)` in `[0..255]` to CIE L*a*b* (D50):
+  /// IEC 61966-2-1 sRGB EOTF -> CIE XYZ (D65) -> Bradford D65->D50 -> CIE L*a*b* (D50).
+  static List<double> srgb8ToLabD50(int r, int g, int b) {
+    double eotf(int code) {
+      final c = (code.clamp(0, 255)) / 255.0;
+      return c <= 0.04045
+          ? c / 12.92
+          : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    final lin = [eotf(r), eotf(g), eotf(b)];
+    const mSrgbToXyzD65 = [
+      [0.4124564, 0.3575761, 0.1804375],
+      [0.2126729, 0.7151522, 0.0721750],
+      [0.0193339, 0.1191920, 0.9503041],
+    ];
+    const mBradfordD65ToD50 = [
+      [1.0478112, 0.0228866, -0.0501270],
+      [0.0295424, 0.9904844, -0.0170491],
+      [-0.0092345, 0.0150436, 0.7521316],
+    ];
+    final xyzD65 = _mat3MulVec3(mSrgbToXyzD65, lin);
+    final xyzD50 = _mat3MulVec3(mBradfordD65ToD50, xyzD65);
+    return xyzD50ToLab(xyzD50);
+  }
+
+  /// Finds the nearest official 24-Patch ColorChecker Classic patch using CIEDE2000 (`computeCiede2000`).
+  static ColorCheckerPatch nearestColorCheckerPatch(List<double> labD50) {
+    if (labD50.length < 3) return kColorChecker24Patches.first;
+    var bestPatch = kColorChecker24Patches.first;
+    var bestDe = double.infinity;
+    for (final patch in kColorChecker24Patches) {
+      final de = computeCiede2000(labD50, patch.labD50);
+      if (de < bestDe) {
+        bestDe = de;
+        bestPatch = patch;
+      }
+    }
+    return bestPatch;
   }
 
   /// Generates a realistic simulated uncalibrated camera sensor measurement of the 24 patches

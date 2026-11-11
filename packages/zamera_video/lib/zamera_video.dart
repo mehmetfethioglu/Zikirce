@@ -50,6 +50,23 @@ enum ZameraVideoProfile {
       this == ZameraVideoProfile.zameraFlatSdr ||
       this == ZameraVideoProfile.iosAppleLogHevc10Bit ||
       this == ZameraVideoProfile.iosAppleLogProRes422Hq;
+
+  static const Map<bool, List<ZameraVideoProfile>> _platformRegistry = {
+    true: <ZameraVideoProfile>[
+      ZameraVideoProfile.universalRec709Locked,
+      ZameraVideoProfile.iosAppleLogHevc10Bit,
+      ZameraVideoProfile.iosAppleLogProRes422Hq,
+    ],
+    false: <ZameraVideoProfile>[
+      ZameraVideoProfile.universalRec709Locked,
+      ZameraVideoProfile.androidHlg10Hevc10Bit,
+      ZameraVideoProfile.zameraFlatSdr,
+    ],
+  };
+
+  /// Returns platform-supported recording profiles via OCP registry (`isIOS: true` -> iOS, `false` -> Android).
+  static List<ZameraVideoProfile> supportedForPlatform({required bool isIOS}) =>
+      _platformRegistry[isIOS]!;
 }
 
 /// Built-in and custom 3D LUT monitoring presets (WP-3.3 — zero third-party trademark risk).
@@ -222,6 +239,12 @@ class ZameraVideoTelemetry {
   final double liveZebraRatioHigh;
   final double liveZebraRatioLow;
   final List<int> liveFalseColorGrid16x12;
+  final List<double> liveZebraGrid16x12;
+  final List<double> livePeakingGrid16x12;
+  final double liveFocusPeakingScore;
+  final int solvedCctKelvin;
+  final bool aeAfLocked;
+  final double meteredEvDelta;
 
   const ZameraVideoTelemetry({
     this.isRecording = false,
@@ -243,6 +266,12 @@ class ZameraVideoTelemetry {
     this.liveZebraRatioHigh = 0.0,
     this.liveZebraRatioLow = 0.0,
     this.liveFalseColorGrid16x12 = const [],
+    this.liveZebraGrid16x12 = const [],
+    this.livePeakingGrid16x12 = const [],
+    this.liveFocusPeakingScore = 0.0,
+    this.solvedCctKelvin = 5500,
+    this.aeAfLocked = false,
+    this.meteredEvDelta = 0.0,
   });
 
   /// Formats `recordedDurationMs` as SMPTE timecode `HH:MM:SS:FF`.
@@ -260,6 +289,8 @@ class ZameraVideoTelemetry {
   factory ZameraVideoTelemetry.fromMap(Map<dynamic, dynamic> map) {
     final rawHist = map['liveHistogram64'] ?? map['liveHistogram32'];
     final rawFc = map['liveFalseColorGrid16x12'];
+    final rawZebraGrid = map['liveZebraGrid16x12'];
+    final rawPeakingGrid = map['livePeakingGrid16x12'];
     return ZameraVideoTelemetry(
       isRecording: map['isRecording'] == true,
       recordedDurationMs: (map['recordedDurationMs'] as num?)?.toInt() ?? 0,
@@ -286,15 +317,36 @@ class ZameraVideoTelemetry {
           (map['focusDistanceDiopters'] as num?)?.toDouble() ?? 0.0,
       activePhysicalLensId: map['activePhysicalLensId']?.toString() ?? '2',
       liveHistogram64: (rawHist is List)
-          ? rawHist.map((e) => (e as num).toDouble()).toList()
+          ? rawHist.whereType<num>().map((e) => e.toDouble()).toList()
           : const [],
       liveZebraRatioHigh:
-          (map['liveZebraRatio'] as num?)?.toDouble() ?? 0.0,
+          ((map['liveZebraRatioHigh'] ?? map['liveZebraRatio']) as num?)
+                  ?.toDouble() ??
+              0.0,
       liveZebraRatioLow:
-          (map['liveZebraRatio70'] as num?)?.toDouble() ?? 0.0,
+          ((map['liveZebraRatioLow'] ?? map['liveZebraRatio70']) as num?)
+                  ?.toDouble() ??
+              0.0,
       liveFalseColorGrid16x12: (rawFc is List)
-          ? rawFc.map((e) => (e as num).toInt()).toList()
+          ? rawFc.whereType<num>().map((e) => e.toInt()).toList()
           : const [],
+      liveZebraGrid16x12: (rawZebraGrid is List)
+          ? rawZebraGrid.whereType<num>().map((e) => e.toDouble()).toList()
+          : const [],
+      livePeakingGrid16x12: (rawPeakingGrid is List)
+          ? rawPeakingGrid.whereType<num>().map((e) => e.toDouble()).toList()
+          : const [],
+      liveFocusPeakingScore:
+          ((map['liveFocusPeakingScore'] ?? map['focusPeakingScore']) as num?)
+                  ?.toDouble() ??
+              0.0,
+      solvedCctKelvin:
+          ((map['solvedCctKelvin'] ?? map['cctKelvin']) as num?)?.toInt() ??
+              5500,
+      aeAfLocked: map['aeAfLocked'] == true,
+      meteredEvDelta:
+          ((map['meteredEvDelta'] ?? map['evDelta']) as num?)?.toDouble() ??
+              0.0,
     );
   }
 }
@@ -514,6 +566,17 @@ class ZameraCubeLut3D {
 
 /// Mathematical utilities for WP-3.2 (180° Shutter Angle & Auto-ISO) and WP-3.4 (Audio dBFS).
 class ZameraCinemaMath {
+  /// Standard cinema shutter angles in degrees (including 172.8° anti-flicker and 180° classic).
+  static const List<double> standardShutterAngles = <double>[
+    45.0,
+    90.0,
+    144.0,
+    172.8,
+    180.0,
+    270.0,
+    360.0,
+  ];
+
   /// Computes sensor exposure time in nanoseconds from shutter angle $\theta$ and frame rate $f$:
   /// $t = \frac{\theta}{360 \cdot f} \times 10^9\text{ ns}$
   static int shutterExposureNsFromAngle(double angleDeg, int fps) {
@@ -734,6 +797,7 @@ class ZameraVideo {
     required double tint,
     required double zoomRatio,
     required ZameraVideoProfile profile,
+    bool aeAfLocked = false,
   }) async {
     final ok = await _channel.invokeMethod<bool>('updateVideoControls', {
       'fps': fps,
@@ -749,7 +813,25 @@ class ZameraVideo {
       'tint': tint,
       'zoomRatio': zoomRatio,
       'profile': profile.name,
+      'aeAfLocked': aeAfLocked,
     });
+    return ok == true;
+  }
+
+  /// Sets tap-to-focus and AE spot metering region for the active video session at normalized coordinates `(x, y)` in `[0..1]`.
+  static Future<bool> setVideoFocusAndMeteringPoint({
+    required double x,
+    required double y,
+    bool lockAeAf = false,
+  }) async {
+    final ok = await _channel.invokeMethod<bool>(
+      'setVideoFocusAndMeteringPoint',
+      {
+        'x': x,
+        'y': y,
+        'lockAeAf': lockAeAf,
+      },
+    );
     return ok == true;
   }
 

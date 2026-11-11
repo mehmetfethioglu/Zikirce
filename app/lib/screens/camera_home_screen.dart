@@ -7,11 +7,20 @@ import 'package:zamera_capture/zamera_capture.dart';
 import 'package:zamera_video/zamera_video.dart';
 import '../constants/camera_colors.dart';
 import '../models/active_pro_dial.dart';
+import '../models/dslr_exposure_model.dart';
+import '../models/radial_ring_models.dart';
+import '../models/zamera_preferences.dart';
+import '../services/color_calibration_store.dart';
 import '../services/version_tracking_service.dart';
+import '../services/zamera_settings_store.dart';
 import '../dialogs/release_notes_dialog.dart';
 import '../dialogs/settings_sheet.dart';
 import '../dialogs/capture_inspector_modal.dart';
 import '../dialogs/calibration_probe_sheet.dart';
+import '../widgets/pro_dslr_hud_bar.dart';
+import '../widgets/radial_shutter_feature_arc.dart';
+import '../widgets/truecolor_spot_meter_badge.dart';
+import '../widgets/video_cinema_hud.dart';
 import '../painters/portrait_studio_painter.dart';
 import '../painters/radial_guide_arc_painter.dart';
 import '../painters/manual_focus_hud_painter.dart';
@@ -22,7 +31,15 @@ import '../painters/viewfinder_grid_painter.dart';
 
 class ZameraHomeScreen extends StatefulWidget {
   final VersionTrackingService? versionService;
-  const ZameraHomeScreen({super.key, this.versionService});
+  final ColorCalibrationStore calibrationStore;
+  final ZameraSettingsRepository settingsStore;
+
+  const ZameraHomeScreen({
+    super.key,
+    this.versionService,
+    this.calibrationStore = const ColorCalibrationStore(),
+    this.settingsStore = const SharedPrefsZameraSettingsStore(),
+  });
 
   @override
   State<ZameraHomeScreen> createState() => _ZameraHomeScreenState();
@@ -35,10 +52,23 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   ActiveProDial _activeDial = ActiveProDial.none;
   bool _radialMenuOpen = false;
   double _shutterVerticalDragDy = 0.0;
+  ZameraPreferences _userPrefs = const ZameraPreferences();
 
-  // Continuous unquantized wheel position [0.0 .. 1.0] for 120 FPS butter-smooth radial sensitivity
+  // Continuous unquantized wheel position [0.0 .. 1.0] for 120 FPS butter-smooth radial sensitivity (Ring 0)
   double _continuousWheelNorm = 0.5;
   int _lastHapticTickIndex = -1;
+  // Continuous scroll index [0 .. N-1] for the concentric 4mm middle secondary ring (Ring 1)
+  double _secondaryArcScrollPos = 0.0;
+  int _lastSecondaryHapticIndex = -1;
+  // Continuous scroll index [0 .. M-1] for the outermost mode-feature ring (Ring 2)
+  double _outerFeatureArcScrollPos = 0.0;
+  int _lastOuterFeatureHapticIndex = -1;
+  // Locked concentric ring band for the active gesture so Ring 0, Ring 1, and Ring 2 never cross-mutate
+  RadialRingBand _activeDragRingBand = RadialRingBand.none;
+  // Independent angular offsets for multi-tier radial button arcs when radial menu is open
+  double _menuOuterArcOffsetRad = 0.0;
+  double _menuInnerArcOffsetRad = 0.0;
+  bool _draggingMenuOuterButtonArc = false;
   bool _topDrawerExpanded = false;
   bool _showLiveHistogram = false;
 
@@ -65,7 +95,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   double _zoomFactor = 1.0;
 
   // Portrait Mode State (f/1.4 .. f/16 Aperture + 10 Studio, Monochrome & Gobo Effects + Live Bokeh Portal)
-  double _portraitAperture = 2.0;
+  double _portraitAperture = 2.8;
   int _portraitLightingIndex = 0;
   double _portraitLightIntensity = 0.80;
   double _portraitSubjectRadius = 0.34;
@@ -82,7 +112,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     'PRİZMA & SİNEMA',
   ];
 
-  // Sanat Modu (TrueColor) State — Faz 2.0
+  // Sanat Modu (TrueColor 1:1) State — V2
   final double _simulatedSensorWarmth = 1.45;
   bool _showPerspectiveGrid = false;
   bool _applyPerspectiveWarp = false;
@@ -95,23 +125,32 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   bool _flatFieldEnabled = true;
   bool _useDisplayP3 = false;
   bool _fullResolution = true;
-  bool _normalizeExposure = true;
+  // 2 = 1:1 Doğal Ton (varsayılan), 1 = Kağıt L*94
+  int _artworkExposureMode = 2;
+  bool _showSpotMeter = true;
+  bool _losslessPng = false;
   bool _useMeasuredGrayCardWb = false;
   List<double>? _measuredGrayCardWbGains;
   List<double>? _measuredFlatField8x6;
   late ColorCheckerCalibrationResult _calibrationResult;
 
-  // Pro Fotoğraf State — Faz 2A & 2B
+  // Pro Fotoğraf State — Faz 2A & 2B + DSLR PASM & Drive
+  DslrExposureMode _dslrMode = DslrExposureMode.programP;
+  ProDriveMode _proDriveMode = ProDriveMode.single;
+  int? _selfTimerRemainingSec;
+  Timer? _selfTimerCountdown;
+  bool _aeAfLocked = false;
   bool _manualExposure = false;
   double _evCompensation = 0.0;
   double _iso = 100.0;
+  int _shutterExposureNs = 8000000; // 1/125 sec
   double _shutterDenominator = 125.0; // 1/125 sec
   bool _manualFocus = false;
   double _focusDistance = 0.5;
   bool _manualWb = false;
   double _kelvin = 5500.0;
   double _tint = 0.0;
-  final bool _preferProRaw48Mp = false;
+  bool _preferProRaw48Mp = false;
   bool _showZebra = true;
   bool _showZebra70 = false;
   bool _showFalseColor = false;
@@ -127,6 +166,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   bool _videoStabilization = true;
   ZameraVideoProfile _videoProfile = ZameraVideoProfile.universalRec709Locked;
   ZameraLutPreset _videoLutPreset = ZameraLutPreset.rec709Monitor;
+  bool _videoLutBypass = false;
+  bool _videoFpsTrayOpen = false;
+  bool _videoProfileTrayOpen = false;
   ZameraCubeLut3D? _customCubeLut;
   bool _isVideoRecording = false;
   ZameraVideoTelemetry? _videoTelemetry;
@@ -135,8 +177,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   String _selectedAudioDeviceId = 'default';
   double _focusPullPointA = 0.12; // ~1.5m
   double _focusPullPointB = 0.65; // ~30cm
-  double _focusPullDurationSec = 2.0;
+  int _rackFocusDurationMs = 2000;
+  bool _hasFocusPointA = false;
+  bool _hasFocusPointB = false;
+  bool _isPullingFocus = false;
   bool _focusPullAtB = false;
+  Timer? _rackFocusResetTimer;
 
   @override
   void initState() {
@@ -161,12 +207,86 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       }
     });
     _applyIdealPresetForMode(0, pushToNative: false);
+    _loadStoredPreferences();
     _recomputeCalibration();
+    _loadStoredCalibrationForLens(_selectedCameraId);
     _runDeviceProbe();
     _telemetryTimer = Timer.periodic(
       const Duration(milliseconds: 350),
       (_) => _pollLiveTelemetry(),
     );
+  }
+
+  void _triggerRadialHaptic() {
+    if (_userPrefs.radialHapticFeedback) {
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  Future<void> _loadStoredPreferences() async {
+    try {
+      final loaded = await widget.settingsStore.load();
+      if (!mounted) return;
+      _applyUserPreferences(loaded, persist: false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusBanner = 'Ayarlar varsayılanla başlatıldı ($e)';
+      });
+    }
+  }
+
+  Future<void> _persistUserPreferences(ZameraPreferences nextPrefs) async {
+    try {
+      await widget.settingsStore.save(nextPrefs);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusBanner = 'Ayarlar kaydedilemedi: $e';
+      });
+    }
+  }
+
+  void _applyUserPreferences(
+    ZameraPreferences nextPrefs, {
+    bool persist = true,
+  }) {
+    final bool restartVideo = !_isVideoRecording &&
+        _selectedMode == 3 &&
+        (_videoResolutionHeight != nextPrefs.videoResolution.heightPx ||
+            _videoFps != nextPrefs.defaultVideoFps ||
+            _videoProfile != nextPrefs.defaultVideoProfile ||
+            _videoStabilization != nextPrefs.videoOisEisStabilization);
+
+    setState(() {
+      _userPrefs = nextPrefs;
+      _preferProRaw48Mp = nextPrefs.photoFormat.prefersProRaw48Mp;
+      _losslessPng = nextPrefs.photoFormat.isLosslessPng;
+      _useDisplayP3 = nextPrefs.photoColorSpace.usesDisplayP3;
+      _fullResolution = nextPrefs.fullSensorResolution;
+      _flatFieldEnabled = nextPrefs.applyFlatFieldShading;
+      _showSpotMeter = nextPrefs.showSpotColorMeterInArtMode;
+      _showLiveHistogram = nextPrefs.showLiveHistogramByDefault;
+      if (_selectedMode == 1) {
+        _showZebra = nextPrefs.showOverexposureZebra95;
+        _showZebra70 = nextPrefs.showSkinToneZebra70;
+        _showFocusPeaking = nextPrefs.showFocusPeakingByDefault;
+      }
+      _videoResolutionHeight = nextPrefs.videoResolution.heightPx;
+      _videoFps = nextPrefs.defaultVideoFps;
+      _videoProfile = nextPrefs.defaultVideoProfile;
+      _videoLockShutterAngle = nextPrefs.lock180ShutterAngleByDefault;
+      _videoStabilization = nextPrefs.videoOisEisStabilization;
+    });
+
+    if (persist) {
+      _persistUserPreferences(nextPrefs);
+    }
+    if (restartVideo) {
+      _startOrSwitchVideoCamera(_selectedCameraId, keepZoom: _zoomFactor);
+    } else {
+      _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+    }
   }
 
   /// Applies the optimal default parameters for each camera category when first entered.
@@ -176,19 +296,34 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     _selectedMode = modeIndex;
     _radialMenuOpen = false;
     _activeDial = ActiveProDial.none;
+    _activeDragRingBand = RadialRingBand.none;
+    _outerFeatureArcScrollPos = 0.0;
+    _lastOuterFeatureHapticIndex = -1;
+    _menuOuterArcOffsetRad = 0.0;
+    _menuInnerArcOffsetRad = 0.0;
+    _selfTimerCountdown?.cancel();
+    _selfTimerRemainingSec = null;
+    _aeAfLocked = false;
+    _videoFpsTrayOpen = false;
+    _videoProfileTrayOpen = false;
 
     switch (modeIndex) {
-      case 0: // SANAT — 12.6MP Full-Res TrueColor ΔE00, 8x6 Flat-Field, L*≈94, 1.0x Main Optical
+      case 0: // SANAT — 12.6MP Full-Res TrueColor ΔE00, 1:1 Doğal Ton (mode 2), 8x6 Flat-Field, 1.0x Main Optical
         _zoomFactor = 1.0;
-        _fullResolution = true;
-        _flatFieldEnabled = true;
-        _normalizeExposure = true;
-        _useDisplayP3 = false;
+        _fullResolution = _userPrefs.fullSensorResolution;
+        _flatFieldEnabled = _userPrefs.applyFlatFieldShading;
+        _artworkExposureMode = 2;
+        _showSpotMeter = _userPrefs.showSpotColorMeterInArtMode;
+        _losslessPng = _userPrefs.photoFormat.isLosslessPng;
+        _preferProRaw48Mp = _userPrefs.photoFormat.prefersProRaw48Mp;
+        _useDisplayP3 = _userPrefs.photoColorSpace.usesDisplayP3;
         _showPerspectiveGrid = false;
         _applyPerspectiveWarp = false;
+        _dslrMode = DslrExposureMode.programP;
         _manualExposure = false;
         _evCompensation = 0.0;
         _iso = 100.0;
+        _shutterExposureNs = 8000000;
         _shutterDenominator = 125.0;
         _manualFocus = false;
         _focusDistance = 0.25;
@@ -198,34 +333,42 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         _showZebra = false;
         _showZebra70 = false;
         _showFalseColor = false;
-        _showFocusPeaking = false;
+        _showFocusPeaking = _userPrefs.showFocusPeakingByDefault;
         break;
-      case 1: // PRO — 14-Bit DNG + JPEG, Smart Auto Baseline (ISO 100, 1/125s, 5500K) + Zebra
+      case 1: // PRO — 14-Bit DNG + JPEG, DSLR PASM (P Baseline, ISO 100, 1/125s, 5500K) + Zebra
         _zoomFactor = 1.0;
-        _fullResolution = true;
+        _fullResolution = _userPrefs.fullSensorResolution;
+        _losslessPng = _userPrefs.photoFormat.isLosslessPng;
+        _preferProRaw48Mp = _userPrefs.photoFormat.prefersProRaw48Mp;
+        _useDisplayP3 = _userPrefs.photoColorSpace.usesDisplayP3;
+        _dslrMode = DslrExposureMode.programP;
+        _proDriveMode = ProDriveMode.single;
         _manualExposure = false;
         _evCompensation = 0.0;
         _iso = 100.0;
+        _shutterExposureNs = 8000000;
         _shutterDenominator = 125.0;
         _manualFocus = false;
         _focusDistance = 0.25;
         _manualWb = false;
         _kelvin = 5500.0;
         _tint = 0.0;
-        _showZebra = true;
-        _showZebra70 = false;
+        _showZebra = _userPrefs.showOverexposureZebra95;
+        _showZebra70 = _userPrefs.showSkinToneZebra70;
         _showFalseColor = false;
-        _showFocusPeaking = false;
+        _showFocusPeaking = _userPrefs.showFocusPeakingByDefault;
         break;
-      case 2: // PORTRE — 1.0x Optical, f/2.0 Creamy Bokeh, Doğal Işık (80%), Auto Face/Subject Focus
+      case 2: // PORTRE — 1.0x Optical, f/2.8 Natural iPhone Bokeh, Doğal Işık (80%), Auto Face/Subject Focus
         _zoomFactor = 1.0;
-        _portraitAperture = 2.0;
+        _portraitAperture = 2.8;
         _portraitLightingIndex = 0;
         _portraitLightIntensity = 0.80;
         _portraitSubjectRadius = 0.34;
+        _dslrMode = DslrExposureMode.programP;
         _manualExposure = false;
         _evCompensation = 0.0;
         _iso = 100.0;
+        _shutterExposureNs = 8000000;
         _shutterDenominator = 125.0;
         _manualFocus = false;
         _focusDistance = 0.12;
@@ -238,17 +381,20 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         _showFocusPeaking = false;
         break;
       case 3: // VİDEO — WP-3.6 İdeal Varsayılanlar: 4K 30fps, Rec.709 SDR, 180° (1/60s) + Auto-ISO, OIS+EIS açık
-        _zoomFactor = 1.0;
-        _videoResolutionHeight = 2160;
-        _videoFps = 30;
+        _zoomFactor = _selectedCameraId == '3' ? 0.5 : 1.0;
+        _videoResolutionHeight = _userPrefs.videoResolution.heightPx;
+        _videoFps = _userPrefs.defaultVideoFps;
         _videoShutterAngleDeg = 180.0;
-        _videoLockShutterAngle = true;
-        _videoStabilization = true;
-        _videoProfile = ZameraVideoProfile.universalRec709Locked;
+        _videoLockShutterAngle = _userPrefs.lock180ShutterAngleByDefault;
+        _videoStabilization = _userPrefs.videoOisEisStabilization;
+        _videoProfile = _userPrefs.defaultVideoProfile;
         _videoLutPreset = ZameraLutPreset.rec709Monitor;
+        _videoLutBypass = false;
+        _dslrMode = DslrExposureMode.programP;
         _manualExposure = false;
         _evCompensation = 0.0;
         _iso = 100.0;
+        _shutterExposureNs = 16666667;
         _shutterDenominator = 60.0;
         _manualFocus = false;
         _focusDistance = 0.15;
@@ -265,7 +411,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     if (pushToNative) {
       if (modeIndex == 3) {
         _switchOwnershipToVideoSession(
-          cameraId: _selectedCameraId == '3' ? '2' : _selectedCameraId,
+          cameraId: _selectedCameraId,
+          keepZoom: _zoomFactor,
         );
       } else if (previousMode == 3 ||
           _selectedCameraId == '3' ||
@@ -317,6 +464,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _telemetryTimer?.cancel();
+    _selfTimerCountdown?.cancel();
+    _rackFocusResetTimer?.cancel();
     super.dispose();
   }
 
@@ -360,41 +509,57 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
   }
 
-  void _recomputeCalibration() {
+  ColorCheckerCalibrationResult _computeFactoryReferenceCalibration() {
     final measured = ZameraCapture.simulateUncalibratedSensor24(
       redShift: _simulatedSensorWarmth,
       greenShift: 1.18,
       blueShift: 0.82,
     );
-    _calibrationResult = ZameraCapture.calibrateColorChecker24(measured);
+    return ZameraCapture.calibrateColorChecker24(measured);
+  }
+
+  void _recomputeCalibration() {
+    _calibrationResult = _computeFactoryReferenceCalibration();
+  }
+
+  Future<void> _loadStoredCalibrationForLens(String cameraId) async {
+    final stored = await widget.calibrationStore.loadForLens(cameraId);
+    if (!mounted || cameraId != _selectedCameraId) return;
+    setState(() {
+      _calibrationResult =
+          stored.calibrationResult ?? _computeFactoryReferenceCalibration();
+      _measuredGrayCardWbGains = stored.grayCardWbGains;
+      _useMeasuredGrayCardWb = stored.useGrayCardWb && stored.hasGrayCardWb;
+      _measuredFlatField8x6 = stored.flatField8x6;
+    });
+    _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+  }
+
+  Future<void> _resetCalibrationForActiveLens() async {
+    final lensId = _selectedCameraId;
+    await widget.calibrationStore.resetForLens(lensId);
+    if (!mounted) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _calibrationResult = _computeFactoryReferenceCalibration();
+      _measuredGrayCardWbGains = null;
+      _useMeasuredGrayCardWb = false;
+      _measuredFlatField8x6 = null;
+      _statusBanner =
+          'Lens #$lensId kalibrasyonu fabrika referansına sıfırlandı';
+    });
+    _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
   }
 
   Future<void> _pollLiveTelemetry() async {
     if (!mounted || _previewSession == null || _isCapturing) return;
     try {
-      final tel = await ZameraCapture.getLiveTelemetry();
-      ZameraVideoTelemetry? vidTel;
       if (_selectedMode == 3) {
-        vidTel = await ZameraVideo.getVideoTelemetry();
-      }
-      if (!mounted || tel.isEmpty) return;
-      final rawFace = tel['detectedFaceBox'];
-      Offset? trackedFaceCenter;
-      double? trackedFaceRadius;
-      if (rawFace is List && rawFace.length >= 4) {
-        final fx = (rawFace[0] as num).toDouble().clamp(0.12, 0.88);
-        final fy = (rawFace[1] as num).toDouble().clamp(0.15, 0.78);
-        final fw = (rawFace[2] as num).toDouble().clamp(0.12, 0.65);
-        final fh = (rawFace[3] as num).toDouble().clamp(0.12, 0.65);
-        trackedFaceCenter = Offset(fx, fy);
-        trackedFaceRadius = (math.max(fw, fh) * 0.95).clamp(0.24, 0.48);
-      }
-      bool steppedDownFps = false;
-      setState(() {
-        _liveTelemetry = tel;
-        if (vidTel != null) {
+        final vidTel = await ZameraVideo.getVideoTelemetry();
+        if (!mounted) return;
+        bool steppedDownFps = false;
+        setState(() {
           _videoTelemetry = vidTel;
-          // WP-3.5: Under SEVERE/CRITICAL thermal load, disable Peaking & 3D LUT automatically and step down 60fps -> 30fps
           if (vidTel.thermalLevel == ZameraThermalLevel.severe ||
               vidTel.thermalLevel == ZameraThermalLevel.critical) {
             _showFocusPeaking = false;
@@ -409,7 +574,28 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             _statusBanner =
                 'Kayıt otomatik sonlandırıldı ve DCIM/Zamera\'ya kaydedildi (${vidTel.thermalLevel.badgeText})';
           }
+        });
+        if (steppedDownFps) {
+          _scheduleNativeControlsPush(artworkMode: false);
         }
+        return;
+      }
+
+      final tel = await ZameraCapture.getLiveTelemetry();
+      if (!mounted || tel.isEmpty) return;
+      final rawFace = tel['detectedFaceBox'];
+      Offset? trackedFaceCenter;
+      double? trackedFaceRadius;
+      if (rawFace is List && rawFace.length >= 4) {
+        final fx = (rawFace[0] as num).toDouble().clamp(0.12, 0.88);
+        final fy = (rawFace[1] as num).toDouble().clamp(0.15, 0.78);
+        final fw = (rawFace[2] as num).toDouble().clamp(0.12, 0.65);
+        final fh = (rawFace[3] as num).toDouble().clamp(0.12, 0.65);
+        trackedFaceCenter = Offset(fx, fy);
+        trackedFaceRadius = (math.max(fw, fh) * 0.95).clamp(0.24, 0.48);
+      }
+      setState(() {
+        _liveTelemetry = tel;
         if (trackedFaceCenter != null && _selectedMode == 2) {
           _lastFocusTapNorm = trackedFaceCenter;
           if (trackedFaceRadius != null) {
@@ -417,11 +603,11 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           }
         }
       });
-      if (steppedDownFps) {
-        _scheduleNativeControlsPush(artworkMode: false);
-      }
     } catch (e) {
-      _liveTelemetry['telemetryWarning'] = e.toString();
+      _liveTelemetry = <String, dynamic>{
+        ..._liveTelemetry,
+        'telemetryWarning': e.toString(),
+      };
     }
   }
 
@@ -441,7 +627,135 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
 
   double get _isoMax {
     final range = _activeCameraCap?.isoRange;
-    return (range != null && range.length >= 2) ? range[1].toDouble() : 3200.0;
+    return (range != null && range.length >= 2) ? range[1].toDouble() : 6400.0;
+  }
+
+  int get _shutterMinNs {
+    final range = _activeCameraCap?.exposureTimeRangeNs;
+    if (range != null && range.length >= 2 && range[0] > 0) {
+      return range[0].clamp(25000, 1000000);
+    }
+    return 125000; // 1/8000s
+  }
+
+  int get _shutterMaxNs {
+    final range = _activeCameraCap?.exposureTimeRangeNs;
+    if (range != null && range.length >= 2 && range[1] > _shutterMinNs) {
+      return range[1].clamp(50000000, 30000000000);
+    }
+    return 30000000000; // 30"
+  }
+
+  List<ZameraVideoProfile> get _availableVideoProfiles =>
+      ZameraVideoProfile.supportedForPlatform(isIOS: Platform.isIOS);
+
+  List<CinemaProfileOption> get _cinemaProfileOptions => [
+        for (final p in _availableVideoProfiles)
+          CinemaProfileOption(
+            id: p.name,
+            shortLabel: p.shortLabel,
+            isTenBit: p.isTenBit,
+          ),
+      ];
+
+  String? get _telephotoCameraId {
+    final report = _probeReport;
+    if (report == null) return null;
+    for (final cam in report.cameras) {
+      if (cam.facing == 'BACK' &&
+          cam.cameraId != '2' &&
+          cam.cameraId != '3' &&
+          ((cam.focalLengthsMm.isNotEmpty && cam.focalLengthsMm.first >= 7.8) ||
+              cam.cameraId.toLowerCase().contains('tele'))) {
+        return cam.cameraId;
+      }
+    }
+    return null;
+  }
+
+  List<CinemaLensOption> get _cinemaLensOptions {
+    final teleId = _telephotoCameraId;
+    return <CinemaLensOption>[
+      const CinemaLensOption(id: '0.5', label: '0.5×'),
+      const CinemaLensOption(id: '1.0', label: '1×'),
+      const CinemaLensOption(id: '2.0', label: '2×'),
+      if (teleId != null) const CinemaLensOption(id: '3.0', label: '3× TELE'),
+    ];
+  }
+
+  String get _activeCinemaLensOptionId {
+    if (_zoomFactor < 0.95) return '0.5';
+    if (_zoomFactor >= 2.7 && _telephotoCameraId != null) return '3.0';
+    if (_zoomFactor >= 1.8) return '2.0';
+    return '1.0';
+  }
+
+  void _applyBumplessTransferFromLiveTelemetry() {
+    final liveIsoNum = (_selectedMode == 3
+            ? _videoTelemetry?.activeIso
+            : (_liveTelemetry['iso'] as num?)) ??
+        _lastCaptureResult?.iso;
+    final liveExpNs = (_selectedMode == 3
+            ? _videoTelemetry?.shutterExposureNs
+            : (_liveTelemetry['exposureTimeNs'] as num?)?.toInt()) ??
+        _lastCaptureResult?.exposureTimeNs;
+    final snapped = DslrStopsRegistry.bumplessTransfer(
+      liveIso: liveIsoNum,
+      liveShutterNs: liveExpNs,
+      minIso: _isoMin.round(),
+      maxIso: _isoMax.round(),
+      minNs: _shutterMinNs,
+      maxNs: _shutterMaxNs,
+    );
+    if (!_dslrMode.isIsoManual) {
+      _iso = snapped.iso.toDouble();
+    }
+    if (!_dslrMode.isShutterManual) {
+      _shutterExposureNs = snapped.shutterNs;
+      _shutterDenominator = (1e9 / _shutterExposureNs).clamp(0.033, 8000.0);
+    }
+  }
+
+  void _setDslrExposureMode(DslrExposureMode nextMode) {
+    if (_dslrMode == nextMode) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (nextMode != DslrExposureMode.programP) {
+        _applyBumplessTransferFromLiveTelemetry();
+      }
+      _dslrMode = nextMode;
+      _manualExposure = nextMode != DslrExposureMode.programP;
+      if (_activeDial == ActiveProDial.iso ||
+          _activeDial == ActiveProDial.shutter) {
+        _continuousWheelNorm = _normalizedValueForDial(_activeDial);
+      }
+      _statusBanner = '${nextMode.shortLabel} · ${nextMode.badgeLabelTr}';
+    });
+    _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+  }
+
+  void _toggleAeAfLock() {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _aeAfLocked = !_aeAfLocked;
+      _statusBanner =
+          _aeAfLocked ? 'AE/AF KİLİTLİ (AEL/AFL)' : 'AE/AF KİLİDİ AÇILDI';
+    });
+    final pt = _lastFocusTapNorm ?? const Offset(0.5, 0.44);
+    if (_selectedMode == 3) {
+      ZameraVideo.setVideoFocusAndMeteringPoint(
+        x: pt.dx,
+        y: pt.dy,
+        lockAeAf: _aeAfLocked,
+      );
+    } else if (_previewSession != null) {
+      ZameraCapture.setFocusAndMeteringPoint(
+        x: pt.dx,
+        y: pt.dy,
+        lockAeAf: _aeAfLocked,
+      );
+    }
+    _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
   }
 
   /// Computes the hardware zoom ratio for the currently active physical lens:
@@ -515,6 +829,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         _previewSession = info;
         _statusBanner = null;
       });
+      await _loadStoredCalibrationForLens(cameraId);
       _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
       await _pollLiveTelemetry();
     } catch (e) {
@@ -596,14 +911,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     if (_previewSession == null) return;
     _isPushingControls = true;
     final supportsFocus = _activeCameraCap?.supportsVariableFocus ?? true;
+    final videoManualIso = _dslrMode.isIsoManual || _manualExposure;
     try {
       await ZameraVideo.updateVideoControls(
         fps: _videoFps,
         shutterAngleDeg: _videoShutterAngleDeg,
         lockShutterAngle: _videoLockShutterAngle,
-        manualIso: _manualExposure,
+        manualIso: videoManualIso,
         iso: _iso,
-        evCompensation: !_manualExposure ? _evCompensation : 0.0,
+        evCompensation: !videoManualIso ? _evCompensation : 0.0,
         manualWb: _manualWb,
         kelvin: _kelvin,
         tint: _tint,
@@ -611,16 +927,20 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         focusDistance: _focusDistance,
         zoomRatio: _effectiveHardwareZoomRatio,
         profile: _videoProfile,
+        aeAfLocked: _aeAfLocked,
       );
     } catch (e) {
       if (mounted) {
-        _liveTelemetry['videoControlWarning'] = e.toString();
+        _liveTelemetry = <String, dynamic>{
+          ..._liveTelemetry,
+          'videoControlWarning': e.toString(),
+        };
       }
     } finally {
       _isPushingControls = false;
       if (_pendingControlsPush && mounted) {
         _pendingControlsPush = false;
-        _pushVideoControlsToNative();
+        _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
       }
     }
   }
@@ -699,22 +1019,34 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     HapticFeedback.mediumImpact();
     final fromNorm = _focusPullAtB ? _focusPullPointB : _focusPullPointA;
     final toNorm = _focusPullAtB ? _focusPullPointA : _focusPullPointB;
+    final durSec = _rackFocusDurationMs / 1000.0;
     setState(() {
       _manualFocus = true;
+      _isPullingFocus = true;
       _focusPullAtB = !_focusPullAtB;
       _focusDistance = toNorm;
       _statusBanner =
-          'A↔B Sinema Odak Geçişi (${_focusPullDurationSec.toStringAsFixed(1)}sn)...';
+          'A↔B Sinema Odak Geçişi (${durSec.toStringAsFixed(1)}sn)...';
     });
     try {
       await ZameraVideo.triggerFocusPull(
         fromFocusNorm: fromNorm,
         toFocusNorm: toNorm,
-        durationMs: (_focusPullDurationSec * 1000).round(),
+        durationMs: _rackFocusDurationMs,
+      );
+      _rackFocusResetTimer?.cancel();
+      _rackFocusResetTimer = Timer(
+        Duration(milliseconds: _rackFocusDurationMs),
+        () {
+          if (mounted) {
+            setState(() => _isPullingFocus = false);
+          }
+        },
       );
     } catch (e) {
       if (mounted) {
         setState(() {
+          _isPullingFocus = false;
           _statusBanner = 'Odak geçişi uyarısı: $e';
         });
       }
@@ -770,25 +1102,89 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
   }
 
+  List<double>? _resolveActiveWbGains({required bool isArtworkMode}) {
+    if (isArtworkMode &&
+        _useMeasuredGrayCardWb &&
+        _measuredGrayCardWbGains != null &&
+        _measuredGrayCardWbGains!.length >= 3) {
+      return _measuredGrayCardWbGains;
+    }
+    if (_manualWb) {
+      final rggb = ZameraCapture.kelvinAndTintToRggbGains(_kelvin, _tint);
+      return <double>[rggb[0], rggb[1], rggb[3]];
+    }
+    if (isArtworkMode &&
+        _calibrationResult.isMeasuredFromSensor &&
+        _calibrationResult.wbGains.length >= 3) {
+      return _calibrationResult.wbGains;
+    }
+    return null;
+  }
+
+  List<double>? _resolveActiveCamToXyzD50({required bool isArtworkMode}) {
+    if (isArtworkMode && _calibrationResult.isMeasuredFromSensor) {
+      return _calibrationResult.flattenedCamToXyzD50;
+    }
+    return null;
+  }
+
+  String get _activeArtworkWbBadgeLabel {
+    if (_useMeasuredGrayCardWb && _measuredGrayCardWbGains != null) {
+      return 'GRİ KART';
+    }
+    if (_manualWb) {
+      return '${_kelvin.round()}K';
+    }
+    if (_calibrationResult.isMeasuredFromSensor) {
+      return 'CC24 WB';
+    }
+    return 'DNG';
+  }
+
   Future<void> _pushManualControlsToNative({required bool artworkMode}) async {
     if (_previewSession == null) return;
     _isPushingControls = true;
-    final exposureNs = (1e9 / _shutterDenominator).round();
-    final gains = ZameraCapture.kelvinAndTintToRggbGains(_kelvin, _tint);
+    final isIsoManual = _selectedMode == 1
+        ? _dslrMode.isIsoManual
+        : _manualExposure;
+    final isShutterManual = _selectedMode == 1
+        ? _dslrMode.isShutterManual
+        : _manualExposure;
+    final anyManualExp = isIsoManual || isShutterManual;
+    final exposureNs = _selectedMode == 1
+        ? _shutterExposureNs
+        : (1e9 / _shutterDenominator).round();
+    final activeCustomWb = _resolveActiveWbGains(isArtworkMode: artworkMode);
+    final activeCamMatrix = _resolveActiveCamToXyzD50(
+      isArtworkMode: artworkMode,
+    );
+    final gains = (activeCustomWb != null && activeCustomWb.length >= 3)
+        ? <double>[
+            activeCustomWb[0],
+            activeCustomWb[1],
+            activeCustomWb[1],
+            activeCustomWb[2],
+          ]
+        : ZameraCapture.kelvinAndTintToRggbGains(_kelvin, _tint);
     final supportsFocus = _activeCameraCap?.supportsVariableFocus ?? true;
     try {
       await ZameraCapture.updateManualControls(
-        manualExposure: _manualExposure,
+        manualExposure: anyManualExp,
+        manualIso: isIsoManual,
+        manualShutter: isShutterManual,
+        aeAfLocked: _aeAfLocked,
         iso: _iso,
         exposureTimeNs: exposureNs,
-        evCompensation: !_manualExposure ? _evCompensation : 0.0,
+        evCompensation: !(isIsoManual && isShutterManual) ? _evCompensation : 0.0,
         manualFocus: supportsFocus && _manualFocus,
         focusDistance: _focusDistance,
-        manualWb: _manualWb,
+        manualWb: _manualWb || activeCustomWb != null,
         kelvin: _kelvin,
         tint: _tint,
         rggbGains: gains,
-        artworkLinearMode: artworkMode && !_manualExposure && !_manualWb,
+        customWbGains: activeCustomWb,
+        camToXyzD50: activeCamMatrix,
+        artworkLinearMode: artworkMode,
         zoomRatio: _effectiveHardwareZoomRatio,
         monoMode: _selectedMode == 2 &&
             (_portraitLightingIndex == 4 ||
@@ -797,13 +1193,16 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       );
     } catch (e) {
       if (mounted) {
-        _liveTelemetry['photoControlWarning'] = e.toString();
+        _liveTelemetry = <String, dynamic>{
+          ..._liveTelemetry,
+          'photoControlWarning': e.toString(),
+        };
       }
     } finally {
       _isPushingControls = false;
       if (_pendingControlsPush && mounted) {
         _pendingControlsPush = false;
-        _pushManualControlsToNative(artworkMode: _selectedMode == 0);
+        _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
       }
     }
   }
@@ -811,13 +1210,23 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   void _resetAllProControlsToAuto() {
     HapticFeedback.mediumImpact();
     setState(() {
+      _dslrMode = DslrExposureMode.programP;
+      _aeAfLocked = false;
       _manualExposure = false;
       _evCompensation = 0.0;
       _manualFocus = false;
       _manualWb = false;
       _tint = 0.0;
+      if (_selectedMode == 0 && _useMeasuredGrayCardWb) {
+        _useMeasuredGrayCardWb = false;
+        widget.calibrationStore.saveGrayCardWb(
+          _selectedCameraId,
+          wbGains: _measuredGrayCardWbGains,
+          enabled: false,
+        );
+      }
       _continuousWheelNorm = _normalizedValueForDial(_activeDial);
-      _statusBanner = 'AUTO (AE/AF/AWB)';
+      _statusBanner = 'AUTO (P · AE/AF/AWB)';
     });
     _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
   }
@@ -826,8 +1235,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     TapUpDetails details,
     BoxConstraints constraints,
   ) async {
-    if (_topDrawerExpanded) {
-      setState(() => _topDrawerExpanded = false);
+    if (_topDrawerExpanded || _videoFpsTrayOpen || _videoProfileTrayOpen) {
+      setState(() {
+        _topDrawerExpanded = false;
+        _videoFpsTrayOpen = false;
+        _videoProfileTrayOpen = false;
+      });
       return;
     }
     if ((_activeDial != ActiveProDial.none || _radialMenuOpen) &&
@@ -848,12 +1261,24 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     HapticFeedback.lightImpact();
     setState(() {
       _lastFocusTapNorm = Offset(normX, normY);
+      if (_aeAfLocked) {
+        _aeAfLocked = false;
+      }
     });
     try {
-      await ZameraCapture.setFocusAndMeteringPoint(
-        x: normX,
-        y: normY,
-      );
+      if (_selectedMode == 3) {
+        await ZameraVideo.setVideoFocusAndMeteringPoint(
+          x: normX,
+          y: normY,
+          lockAeAf: false,
+        );
+      } else {
+        await ZameraCapture.setFocusAndMeteringPoint(
+          x: normX,
+          y: normY,
+          lockAeAf: false,
+        );
+      }
     } catch (e) {
       if (mounted) {
         _liveTelemetry['focusTapWarning'] = e.toString();
@@ -861,10 +1286,107 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
   }
 
+  Future<void> _onViewfinderLongPressStart(
+    LongPressStartDetails details,
+    BoxConstraints constraints,
+  ) async {
+    if (_previewSession == null) return;
+    final normX =
+        (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
+    final normY =
+        (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
+    HapticFeedback.heavyImpact();
+    setState(() {
+      _lastFocusTapNorm = Offset(normX, normY);
+      _aeAfLocked = true;
+      _statusBanner = 'AE/AF KİLİTLİ (Dokunarak açın)';
+    });
+    try {
+      if (_selectedMode == 3) {
+        await ZameraVideo.setVideoFocusAndMeteringPoint(
+          x: normX,
+          y: normY,
+          lockAeAf: true,
+        );
+      } else {
+        await ZameraCapture.setFocusAndMeteringPoint(
+          x: normX,
+          y: normY,
+          lockAeAf: true,
+        );
+      }
+      _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+    } catch (e) {
+      if (mounted) {
+        _liveTelemetry['focusTapWarning'] = e.toString();
+      }
+    }
+  }
+
+  Future<void> _triggerProCaptureWithDriveMode({
+    required bool isArtworkMode,
+    required bool isPortraitMode,
+  }) async {
+    if (_selfTimerRemainingSec != null) {
+      _selfTimerCountdown?.cancel();
+      HapticFeedback.selectionClick();
+      setState(() {
+        _selfTimerRemainingSec = null;
+        _statusBanner = 'Zamanlayıcı iptal edildi';
+      });
+      return;
+    }
+
+    if (_selectedMode == 1 && _proDriveMode == ProDriveMode.aeb3) {
+      await _triggerBracketedCapture();
+      return;
+    }
+
+    final timerSec = _selectedMode == 1 ? _proDriveMode.timerSeconds : 0;
+    if (timerSec > 0) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _selfTimerRemainingSec = timerSec;
+        _statusBanner = 'Zamanlayıcı: ${timerSec}sn...';
+      });
+      _selfTimerCountdown?.cancel();
+      _selfTimerCountdown = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        final next = (_selfTimerRemainingSec ?? 1) - 1;
+        if (next <= 0) {
+          timer.cancel();
+          setState(() {
+            _selfTimerRemainingSec = null;
+          });
+          _triggerPhotoCapture(
+            isArtworkMode: isArtworkMode,
+            isPortraitMode: isPortraitMode,
+          );
+        } else {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _selfTimerRemainingSec = next;
+            _statusBanner = 'Zamanlayıcı: ${next}sn...';
+          });
+        }
+      });
+      return;
+    }
+
+    await _triggerPhotoCapture(
+      isArtworkMode: isArtworkMode,
+      isPortraitMode: isPortraitMode,
+    );
+  }
+
   Future<void> _triggerPhotoCapture({
     required bool isArtworkMode,
     bool isPortraitMode = false,
     bool lockGrayCardFromCenter = false,
+    bool calibrateColorChecker = false,
   }) async {
     if (_isCapturing) return;
     HapticFeedback.heavyImpact();
@@ -872,16 +1394,30 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       _isCapturing = true;
       _statusBanner = isPortraitMode
           ? 'Portre f/${_portraitAperture.toStringAsFixed(1)} · ${_kPortraitLightingNames[_portraitLightingIndex]} işleniyor...'
-          : (isArtworkMode
-              ? '14-Bit RAW TrueColor işleniyor...'
-              : 'Pro DNG + JPEG çekiliyor...');
+          : (calibrateColorChecker
+              ? '24-Yama ColorChecker sensörden ölçülüyor...'
+              : (lockGrayCardFromCenter
+                  ? '%18 Gri Kart WB ve 8×6 Flat-Field ölçülüyor...'
+                  : (isArtworkMode
+                      ? '14-Bit RAW 1:1 TrueColor işleniyor...'
+                      : 'Pro DNG + JPEG çekiliyor...')));
     });
     try {
       final cornersFlat = <double>[
         for (final pt in _perspectiveCorners) ...[pt.dx, pt.dy],
       ];
+      final effectiveExposureMode = isArtworkMode ? _artworkExposureMode : 2;
+      final activeWbGains = lockGrayCardFromCenter
+          ? null
+          : _resolveActiveWbGains(isArtworkMode: isArtworkMode);
+      final activeCamMatrix = calibrateColorChecker
+          ? null
+          : _resolveActiveCamToXyzD50(isArtworkMode: isArtworkMode);
+
       final res = await ZameraCapture.capturePhoto(
-        captureRaw: !isPortraitMode,
+        captureRaw: isPortraitMode
+            ? false
+            : (isArtworkMode ? true : _userPrefs.photoFormat.capturesRaw),
         isArtworkMode: isArtworkMode,
         isPortraitMode: isPortraitMode,
         portraitAperture: _portraitAperture,
@@ -891,14 +1427,20 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         focusPointX: _lastFocusTapNorm?.dx ?? 0.5,
         focusPointY: _lastFocusTapNorm?.dy ?? 0.44,
         zoomRatio: _effectiveHardwareZoomRatio,
-        preferProRaw: !isArtworkMode && _preferProRaw48Mp,
+        preferProRaw: !isArtworkMode &&
+            (_preferProRaw48Mp || _userPrefs.photoFormat.prefersProRaw48Mp),
         useDisplayP3: _useDisplayP3,
         fullResolution: _fullResolution,
-        normalizeExposure: _normalizeExposure && !_useMeasuredGrayCardWb,
+        normalizeExposure: isArtworkMode && effectiveExposureMode == 1,
+        artworkExposureMode: effectiveExposureMode,
+        calibrateColorChecker: isArtworkMode && calibrateColorChecker,
+        losslessPng:
+            _losslessPng || (!isPortraitMode && _userPrefs.photoFormat.isLosslessPng),
         applyPerspectiveWarp: isArtworkMode && _applyPerspectiveWarp,
         perspectiveCornersNorm:
             (isArtworkMode && _applyPerspectiveWarp) ? cornersFlat : null,
-        wbGains: _useMeasuredGrayCardWb ? _measuredGrayCardWbGains : null,
+        wbGains: activeWbGains,
+        camToXyzD50: activeCamMatrix,
         flatFieldGrid8x6:
             (_flatFieldEnabled && _measuredFlatField8x6 != null)
                 ? _measuredFlatField8x6
@@ -906,6 +1448,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       );
       if (!mounted) return;
 
+      bool shouldPushLiveControls = false;
       if (lockGrayCardFromCenter) {
         if (res.centerLinearCamRgb != null &&
             res.centerLinearCamRgb!.length >= 3) {
@@ -914,12 +1457,44 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           final cb = res.centerLinearCamRgb![2].clamp(1e-4, 1.0);
           _measuredGrayCardWbGains = [cg / cr, 1.0, cg / cb];
           _useMeasuredGrayCardWb = true;
+          shouldPushLiveControls = true;
+          await widget.calibrationStore.saveGrayCardWb(
+            _selectedCameraId,
+            wbGains: _measuredGrayCardWbGains,
+            enabled: true,
+          );
+        } else if (res.wbGainsUsed != null && res.wbGainsUsed!.length >= 3) {
+          _measuredGrayCardWbGains = [
+            res.wbGainsUsed![0],
+            res.wbGainsUsed![1],
+            res.wbGainsUsed![2],
+          ];
+          _useMeasuredGrayCardWb = true;
+          shouldPushLiveControls = true;
+          await widget.calibrationStore.saveGrayCardWb(
+            _selectedCameraId,
+            wbGains: _measuredGrayCardWbGains,
+            enabled: true,
+          );
         }
         if (res.measuredFlatField8x6 != null &&
             res.measuredFlatField8x6!.length == 48) {
           _measuredFlatField8x6 = res.measuredFlatField8x6;
           _flatFieldEnabled = true;
+          await widget.calibrationStore.saveFlatField8x6(
+            _selectedCameraId,
+            res.measuredFlatField8x6!,
+          );
         }
+      }
+
+      if (calibrateColorChecker && res.liveCalibrationResult != null) {
+        _calibrationResult = res.liveCalibrationResult!;
+        shouldPushLiveControls = true;
+        await widget.calibrationStore.saveCalibrationResult(
+          _selectedCameraId,
+          res.liveCalibrationResult!,
+        );
       }
 
       setState(() {
@@ -928,12 +1503,25 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         final cctStr = res.solvedCctKelvin != null
             ? '${res.solvedCctKelvin!.round()}K'
             : '';
-        _statusBanner = isPortraitMode
-            ? 'Portre f/${_portraitAperture.toStringAsFixed(1)} Kaydedildi'
-            : (lockGrayCardFromCenter
-                ? 'Gri Kart WB Kilitlendi ($cctStr)'
-                : 'Kaydedildi ($cctStr)');
+        if (isPortraitMode) {
+          _statusBanner =
+              'Portre f/${_portraitAperture.toStringAsFixed(1)} Kaydedildi';
+        } else if (calibrateColorChecker && res.liveCalibrationResult != null) {
+          _statusBanner =
+              '24-Yama Kalibre Edildi · ΔE00 Ort = ${res.liveCalibrationResult!.meanDeltaEAfter.toStringAsFixed(2)}';
+        } else if (lockGrayCardFromCenter) {
+          _statusBanner = cctStr.isNotEmpty
+              ? 'Gri Kart WB Kilitlendi ($cctStr)'
+              : 'Gri Kart WB Kilitlendi';
+        } else {
+          _statusBanner =
+              cctStr.isNotEmpty ? 'Kaydedildi ($cctStr)' : 'Kaydedildi';
+        }
       });
+
+      if (shouldPushLiveControls) {
+        _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -998,16 +1586,20 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         : '${meters.toStringAsFixed(1)}m';
   }
 
-  void _setManualFocusPreset(double? normDistance) {
-    HapticFeedback.selectionClick();
+  void _setManualFocusPreset(
+    double? normDistance, {
+    bool syncInnerWheel = false,
+  }) {
+    _triggerRadialHaptic();
     setState(() {
       if (normDistance == null) {
         _manualFocus = false;
       } else {
         _manualFocus = true;
         _focusDistance = normDistance.clamp(0.0, 1.0);
-        if (_activeDial == ActiveProDial.focus) {
-          _continuousWheelNorm = _focusDistance;
+        if (syncInnerWheel && _activeDial == ActiveProDial.focus) {
+          _continuousWheelNorm =
+              _normalizedValueForDial(ActiveProDial.focus);
         }
       }
     });
@@ -1035,17 +1627,32 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       case ActiveProDial.ev:
         return ((_evCompensation + 3.0) / 6.0).clamp(0.0, 1.0);
       case ActiveProDial.iso:
-        if (!_manualExposure) return 0.0;
-        final minL = math.log(_isoMin);
-        final maxL = math.log(_isoMax);
-        final curL = math.log(_iso.clamp(_isoMin, _isoMax));
-        return (0.12 + 0.88 * ((curL - minL) / (maxL - minL))).clamp(0.0, 1.0);
+        final isoManual = _selectedMode == 1
+            ? _dslrMode.isIsoManual
+            : _manualExposure;
+        if (!isoManual) return 0.0;
+        return (0.12 +
+                0.88 *
+                    DslrStopsRegistry.isoToNorm(
+                      _iso,
+                      minIso: _isoMin.round(),
+                      maxIso: _isoMax.round(),
+                    ))
+            .clamp(0.0, 1.0);
       case ActiveProDial.shutter:
-        if (!_manualExposure) return 0.0;
-        final minL = math.log(2.0);
-        final maxL = math.log(4000.0);
-        final curL = math.log(_shutterDenominator.clamp(2.0, 4000.0));
-        return (0.12 + 0.88 * ((curL - minL) / (maxL - minL))).clamp(0.0, 1.0);
+        final shutterManual = _selectedMode == 1
+            ? _dslrMode.isShutterManual
+            : _manualExposure;
+        if (!shutterManual) return 0.0;
+        // High norm = fast shutter (1/8000s), low norm = long exposure (30")
+        final fastNorm =
+            1.0 -
+            DslrStopsRegistry.shutterNsToNorm(
+              _shutterExposureNs,
+              minNs: _shutterMinNs,
+              maxNs: _shutterMaxNs,
+            );
+        return (0.12 + 0.88 * fastNorm).clamp(0.0, 1.0);
       case ActiveProDial.shutterAngle:
         if (!_videoLockShutterAngle) return 0.0;
         return (0.12 + 0.88 * ((_videoShutterAngleDeg - 45.0) / (360.0 - 45.0)))
@@ -1056,13 +1663,11 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         if (_videoFps == 30) return 0.0;
         return 1.0;
       case ActiveProDial.videoProfile:
-        const profiles = [
-          ZameraVideoProfile.universalRec709Locked,
-          ZameraVideoProfile.androidHlg10Hevc10Bit,
-          ZameraVideoProfile.zameraFlatSdr,
-        ];
+        final profiles = _availableVideoProfiles;
         final idx = profiles.indexOf(_videoProfile);
-        return idx < 0 ? 0.0 : (idx / (profiles.length - 1)).clamp(0.0, 1.0);
+        return idx < 0 || profiles.length <= 1
+            ? 0.0
+            : (idx / (profiles.length - 1)).clamp(0.0, 1.0);
       case ActiveProDial.videoLut:
         final presets = ZameraLutPreset.values;
         return (_videoLutPreset.index / (presets.length - 1)).clamp(0.0, 1.0);
@@ -1099,7 +1704,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     final tickIdx = (t * 60).round();
     if (tickIdx != _lastHapticTickIndex) {
       _lastHapticTickIndex = tickIdx;
-      HapticFeedback.selectionClick();
+      _triggerRadialHaptic();
     }
 
     if (dial == ActiveProDial.lens) {
@@ -1130,13 +1735,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
 
     if (dial == ActiveProDial.portraitLight) {
+      // Ring 0 independently adjusts ONLY light intensity (never mutates Ring 1 _portraitLightingIndex or _secondaryArcScrollPos)
       setState(() {
-        if (t < 0.08) {
-          _portraitLightingIndex = 0;
-          _portraitLightIntensity = 0.80;
-        } else {
-          _portraitLightIntensity = ((t - 0.08) / 0.92).clamp(0.0, 1.0);
-        }
+        _portraitLightIntensity = t.clamp(0.0, 1.0);
       });
       _scheduleNativeControlsPush(artworkMode: false);
       return;
@@ -1146,7 +1747,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     setState(() {
       switch (dial) {
         case ActiveProDial.ev:
-          _manualExposure = false;
+          if (_selectedMode == 1 && _dslrMode == DslrExposureMode.manualM) {
+            _dslrMode = DslrExposureMode.programP;
+          }
+          _manualExposure = _selectedMode == 1
+              ? _dslrMode != DslrExposureMode.programP
+              : false;
           if ((t - 0.50).abs() < 0.035) {
             _evCompensation = 0.0;
           } else {
@@ -1155,26 +1761,57 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           break;
         case ActiveProDial.iso:
           if (t < 0.08) {
-            _manualExposure = false;
+            if (_selectedMode == 1) {
+              _dslrMode = _dslrMode.isShutterManual
+                  ? DslrExposureMode.shutterTv
+                  : DslrExposureMode.programP;
+              _manualExposure = _dslrMode != DslrExposureMode.programP;
+            } else {
+              _manualExposure = false;
+            }
           } else {
-            final minL = math.log(_isoMin);
-            final maxL = math.log(_isoMax);
+            if (_selectedMode == 1 && !_dslrMode.isIsoManual) {
+              _applyBumplessTransferFromLiveTelemetry();
+              _dslrMode = _dslrMode.isShutterManual
+                  ? DslrExposureMode.manualM
+                  : DslrExposureMode.isoSv;
+            }
             _manualExposure = true;
             final normScale = ((t - 0.08) / 0.92).clamp(0.0, 1.0);
-            _iso = math.exp(minL + normScale * (maxL - minL))
-                .clamp(_isoMin, _isoMax);
+            _iso = DslrStopsRegistry.isoFromNorm(
+              normScale,
+              minIso: _isoMin.round(),
+              maxIso: _isoMax.round(),
+            ).toDouble();
           }
           break;
         case ActiveProDial.shutter:
           if (t < 0.08) {
-            _manualExposure = false;
+            if (_selectedMode == 1) {
+              _dslrMode = _dslrMode.isIsoManual
+                  ? DslrExposureMode.isoSv
+                  : DslrExposureMode.programP;
+              _manualExposure = _dslrMode != DslrExposureMode.programP;
+            } else {
+              _manualExposure = false;
+            }
           } else {
-            final minL = math.log(2.0);
-            final maxL = math.log(4000.0);
+            if (_selectedMode == 1 && !_dslrMode.isShutterManual) {
+              _applyBumplessTransferFromLiveTelemetry();
+              _dslrMode = _dslrMode.isIsoManual
+                  ? DslrExposureMode.manualM
+                  : DslrExposureMode.shutterTv;
+            }
             _manualExposure = true;
             final normScale = ((t - 0.08) / 0.92).clamp(0.0, 1.0);
-            _shutterDenominator = math.exp(minL + normScale * (maxL - minL))
-                .clamp(2.0, 4000.0);
+            // High normScale = fast shutter (1/8000s), low normScale = long exposure (30")
+            _shutterExposureNs = DslrStopsRegistry.shutterNsFromNorm(
+              1.0 - normScale,
+              minNs: _shutterMinNs,
+              maxNs: _shutterMaxNs,
+            );
+            _shutterDenominator =
+                (1e9 / _shutterExposureNs).clamp(0.033, 8000.0);
           }
           break;
         case ActiveProDial.shutterAngle:
@@ -1206,11 +1843,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           }
           break;
         case ActiveProDial.videoProfile:
-          const profiles = [
-            ZameraVideoProfile.universalRec709Locked,
-            ZameraVideoProfile.androidHlg10Hevc10Bit,
-            ZameraVideoProfile.zameraFlatSdr,
-          ];
+          final profiles = _availableVideoProfiles;
           final idx =
               (t * (profiles.length - 1)).round().clamp(0, profiles.length - 1);
           if (_videoProfile != profiles[idx]) {
@@ -1303,33 +1936,17 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                   ),
                 ),
 
-                // 3. ROTATING iOS RADIAL DOME (Appears when a radial setting button is selected in Photo or Video)
+                // 3. ROTATING iOS RADIAL DOME + INDEPENDENT CONCENTRIC RINGS (Ring 0 + Ring 1 + Outermost Ring 2)
                 if (_activeDial != ActiveProDial.none)
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    height: 315,
+                    height: 356,
                     child: _buildIosFullBottomRadialDome(
                       isArtwork: isArtwork,
-                      width: constraints.maxWidth,
-                    ),
-                  ),
-
-                // 3B. RADIAL TANGENT OPTIONS ARC (when MF, IŞIK, PROFİL or LUT dial is open)
-                // Curved smoothly along the top edge of the rotating radial wheel; rotatable by dragging!
-                if (_activeDial == ActiveProDial.focus ||
-                    _activeDial == ActiveProDial.portraitLight ||
-                    _activeDial == ActiveProDial.videoProfile ||
-                    _activeDial == ActiveProDial.videoLut)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 236,
-                    height: 84,
-                    child: _buildRadialTangentOptionsArc(
-                      width: constraints.maxWidth,
                       isVideo: isVideo,
+                      width: constraints.maxWidth,
                     ),
                   ),
 
@@ -1340,8 +1957,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                   Positioned(
                     left: 0,
                     right: 0,
-                    bottom: 118,
-                    height: 118,
+                    bottom: 144,
+                    height: isVideo ? 168 : 118,
                     child: _buildRadialSettingButtonsArc(
                       width: constraints.maxWidth,
                       isPortrait: isPortrait,
@@ -1410,7 +2027,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Top-Left: In Portrait mode shows iconic iOS `f 2.0` circle; otherwise Histogram/RAW circle
+              // Top-Left: In Portrait mode shows iconic iOS `f 2.8` circle; otherwise Histogram/RAW circle
               if (isPortrait)
                 GestureDetector(
                   onTap: () => _selectRadialSettingDial(ActiveProDial.aperture),
@@ -1497,14 +2114,35 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                 ),
               ),
 
-              // Top-Right: Settings Gear Icon (Release notes, probe, privacy, about)
+              // Top-Right: Settings Gear Icon (Full-screen Zamera Settings, Formats, Probe, Privacy, Support)
               GestureDetector(
                 onTap: () {
-                  HapticFeedback.selectionClick();
+                  _triggerRadialHaptic();
                   SettingsSheet.show(
                     context,
                     onOpenProbe: () => _showCalibrationAndProbeSheet(),
                     onOpenCalibration: () => _showCalibrationAndProbeSheet(),
+                    initialPreferences: _userPrefs,
+                    availableVideoProfiles: _availableVideoProfiles,
+                    onPreferencesChanged: (nextPrefs) {
+                      _applyUserPreferences(nextPrefs, persist: true);
+                    },
+                    onResetPreferences: () async {
+                      try {
+                        await widget.settingsStore.reset();
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() {
+                            _statusBanner = 'Sıfırlama uyarısı: $e';
+                          });
+                        }
+                      }
+                      if (!mounted) return;
+                      _applyUserPreferences(
+                        const ZameraPreferences(),
+                        persist: false,
+                      );
+                    },
                   );
                 },
                 child: Container(
@@ -1569,14 +2207,6 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                           ),
                           const SizedBox(width: 6),
                           _buildQuickTogglePill(
-                            label: 'L*≈94',
-                            active: _normalizeExposure,
-                            onTap: () => setState(
-                              () => _normalizeExposure = !_normalizeExposure,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          _buildQuickTogglePill(
                             label: 'FLAT-FIELD',
                             active: _flatFieldEnabled,
                             onTap: () => setState(
@@ -1629,6 +2259,34 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                                 HapticFeedback.selectionClick();
                                 setState(() {
                                   _videoStabilization = !_videoStabilization;
+                                });
+                                _startOrSwitchVideoCamera(
+                                  _selectedCameraId,
+                                  keepZoom: _zoomFactor,
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 6),
+                            _buildQuickTogglePill(
+                              label: 'SES: ${_audioInputDevices.where((d) => d.id == _selectedAudioDeviceId).firstOrNull?.name ?? "DAHİLİ"}',
+                              active: _selectedAudioDeviceId != 'default',
+                              onTap: () {
+                                if (_isVideoRecording ||
+                                    _audioInputDevices.isEmpty) {
+                                  _selectRadialSettingDial(
+                                    ActiveProDial.videoAudio,
+                                  );
+                                  return;
+                                }
+                                HapticFeedback.selectionClick();
+                                final idx = _audioInputDevices.indexWhere(
+                                  (d) => d.id == _selectedAudioDeviceId,
+                                );
+                                final nextDev = _audioInputDevices[
+                                    (idx + 1) % _audioInputDevices.length];
+                                setState(() {
+                                  _selectedAudioDeviceId = nextDev.id;
+                                  _topDrawerExpanded = false;
                                 });
                                 _startOrSwitchVideoCamera(
                                   _selectedCameraId,
@@ -1763,43 +2421,84 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     } else {
       hist = lastRes?.rawHistogram32 ?? const <double>[];
     }
-    final liveZebraRatio =
-        (_liveTelemetry['liveZebraRatio'] as num?)?.toDouble() ??
-            _videoTelemetry?.liveZebraRatioHigh ??
+    final liveZebraRatio = isVideoMode
+        ? (_videoTelemetry?.liveZebraRatioHigh ??
+            (_liveTelemetry['liveZebraRatio'] as num?)?.toDouble() ??
+            0.0)
+        : ((_liveTelemetry['liveZebraRatio'] as num?)?.toDouble() ??
             lastRes?.zebraRatio ??
-            0.0;
-    final liveZebraRatio70 =
-        (_liveTelemetry['liveZebraRatio70'] as num?)?.toDouble() ??
-            _videoTelemetry?.liveZebraRatioLow ??
-            0.0;
-    final livePeakingScore =
-        (_liveTelemetry['liveFocusPeakingScore'] as num?)?.toDouble() ??
+            0.0);
+    final liveZebraRatio70 = isVideoMode
+        ? (_videoTelemetry?.liveZebraRatioLow ??
+            (_liveTelemetry['liveZebraRatio70'] as num?)?.toDouble() ??
+            0.0)
+        : ((_liveTelemetry['liveZebraRatio70'] as num?)?.toDouble() ?? 0.0);
+    final livePeakingScore = isVideoMode
+        ? (_videoTelemetry?.liveFocusPeakingScore ??
+            (_liveTelemetry['liveFocusPeakingScore'] as num?)?.toDouble() ??
+            0.0)
+        : ((_liveTelemetry['liveFocusPeakingScore'] as num?)?.toDouble() ??
             lastRes?.focusPeakingScore ??
-            0.0;
+            0.0);
     final liveZebraGridRaw = _liveTelemetry['liveZebraGrid16x12'];
-    final liveZebraGrid =
-        (liveZebraGridRaw is List && liveZebraGridRaw.length == 192)
+    final liveZebraGrid = (isVideoMode &&
+            _videoTelemetry != null &&
+            _videoTelemetry!.liveZebraGrid16x12.length == 192)
+        ? _videoTelemetry!.liveZebraGrid16x12
+        : ((liveZebraGridRaw is List && liveZebraGridRaw.length == 192)
             ? liveZebraGridRaw.map((e) => (e as num).toDouble()).toList()
-            : const <double>[];
+            : const <double>[]);
     final livePeakingGridRaw = _liveTelemetry['livePeakingGrid16x12'];
-    final livePeakingGrid =
-        (livePeakingGridRaw is List && livePeakingGridRaw.length == 192)
+    final livePeakingGrid = (isVideoMode &&
+            _videoTelemetry != null &&
+            _videoTelemetry!.livePeakingGrid16x12.length == 192)
+        ? _videoTelemetry!.livePeakingGrid16x12
+        : ((livePeakingGridRaw is List && livePeakingGridRaw.length == 192)
             ? livePeakingGridRaw.map((e) => (e as num).toDouble()).toList()
-            : const <double>[];
+            : const <double>[]);
     final liveFalseColorRaw = _liveTelemetry['liveFalseColorGrid16x12'];
-    final liveFalseColorGrid =
-        (liveFalseColorRaw is List && liveFalseColorRaw.length == 192)
+    final liveFalseColorGrid = (isVideoMode &&
+            _videoTelemetry != null &&
+            _videoTelemetry!.liveFalseColorGrid16x12.length == 192)
+        ? _videoTelemetry!.liveFalseColorGrid16x12
+        : ((liveFalseColorRaw is List && liveFalseColorRaw.length == 192)
             ? liveFalseColorRaw.map((e) => (e as num).toInt()).toList()
-            : (_videoTelemetry?.liveFalseColorGrid16x12 ?? const <int>[]);
+            : const <int>[]);
+    final rawCenterSrgb = _liveTelemetry['liveCenterSrgb'];
+    final liveCenterSrgb = (rawCenterSrgb is List && rawCenterSrgb.length >= 3)
+        ? <int>[
+            (rawCenterSrgb[0] as num).round().clamp(0, 255),
+            (rawCenterSrgb[1] as num).round().clamp(0, 255),
+            (rawCenterSrgb[2] as num).round().clamp(0, 255),
+          ]
+        : const <int>[128, 128, 128];
+    final rawCenterLab = _liveTelemetry['liveCenterLabD50'];
+    final liveCenterLabD50 = (rawCenterLab is List && rawCenterLab.length >= 3)
+        ? <double>[
+            (rawCenterLab[0] as num).toDouble(),
+            (rawCenterLab[1] as num).toDouble(),
+            (rawCenterLab[2] as num).toDouble(),
+          ]
+        : ZameraCapture.srgb8ToLabD50(
+            liveCenterSrgb[0],
+            liveCenterSrgb[1],
+            liveCenterSrgb[2],
+          );
     final anyManualLocked =
-        _manualExposure || _manualWb || _manualFocus || _evCompensation != 0.0;
+        _dslrMode != DslrExposureMode.programP ||
+        _manualExposure ||
+        _aeAfLocked ||
+        _manualWb ||
+        _manualFocus ||
+        _evCompensation != 0.0 ||
+        (isArtworkMode && _useMeasuredGrayCardWb);
     final isMonoPortrait = isPortraitMode &&
         (_portraitLightingIndex == 4 ||
             _portraitLightingIndex == 5 ||
             _portraitLightingIndex == 7);
     final isHighKeyMono = isPortraitMode && _portraitLightingIndex == 5;
     final focusCenterNorm = _lastFocusTapNorm ?? const Offset(0.5, 0.44);
-    final videoLutMatrix = isVideoMode
+    final videoLutMatrix = (isVideoMode && !_videoLutBypass)
         ? ZameraCinemaMath.previewColorMatrixForLut(
             preset: _videoLutPreset,
             profile: _videoProfile,
@@ -1810,6 +2509,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapUp: (details) => _onViewfinderTapUp(details, constraints),
+      onLongPressStart: (details) =>
+          _onViewfinderLongPressStart(details, constraints),
       onScaleUpdate: (details) {
         if (details.pointerCount >= 2) {
           if (isPortraitMode) {
@@ -1838,6 +2539,17 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           setState(() {
             _lastFocusTapNorm = Offset(nx, ny);
           });
+        } else if (!isArtworkMode &&
+            !isPortraitMode &&
+            _lastFocusTapNorm != null &&
+            _activeDial == ActiveProDial.none &&
+            details.focalPointDelta.dy.abs() > 0.5) {
+          // Live vertical Sun Exposure Rail drag for quick EV bias in Pro & Video modes!
+          final evStep = -details.focalPointDelta.dy / 95.0;
+          setState(() {
+            _evCompensation = (_evCompensation + evStep).clamp(-3.0, 3.0);
+          });
+          _scheduleNativeControlsPush(artworkMode: false);
         }
       },
       onPanUpdate: (isArtworkMode &&
@@ -1968,8 +2680,48 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               ),
             ),
 
-          // 2. Portrait Mode Live Studio, Venetian Blinds Gobo & Subject Depth Portal Frame (Zero Viewfinder Blur!)
-          if (isPortraitMode)
+          // 2A. Sanat Modu (1:1 TrueColor) Center Spot Reticle, Live Lab/ΔE00 Badge & Quick Action Bar
+          if (isArtworkMode) ...[
+            if (_showSpotMeter) ...[
+              Center(
+                child: TrueColorCenterReticle(
+                  srgb8: liveCenterSrgb,
+                  isCalibrated: _calibrationResult.isMeasuredFromSensor,
+                ),
+              ),
+              Positioned(
+                top: _showLiveHistogram ? 108 : (anyManualLocked ? 78 : 54),
+                left: 14,
+                right: 14,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _showCalibrationAndProbeSheet,
+                    child: TrueColorSpotMeterBadge(
+                      srgb8: liveCenterSrgb,
+                      labD50: liveCenterLabD50,
+                      isCalibrated: _calibrationResult.isMeasuredFromSensor,
+                      wbLabel: _activeArtworkWbBadgeLabel,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (!_radialMenuOpen && _activeDial == ActiveProDial.none)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 146,
+                child: RadialShutterFeatureArc(
+                  key: const ValueKey('artwork_truecolor_quick_bar'),
+                  nodes: _buildRadialArcNodesForMode(0),
+                ),
+              ),
+          ],
+
+          // 2. Portrait Mode Live Studio HUD & Radial Optical Focal-Length Arc (Zero Viewfinder Blur!)
+          if (isPortraitMode) ...[
             IgnorePointer(
               child: CustomPaint(
                 painter: PortraitStudioFramePainter(
@@ -1983,9 +2735,27 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                           null)
                       ? 'YÜZ ALGILANDI · ARKA PLAN AYRILDI'
                       : 'NESNE ALGILANDI · ${_formatFocusDistance((_liveTelemetry['focusDistanceDiopters'] as num?)?.toDouble())}',
+                  distanceWarning: (((_liveTelemetry['focusDistanceDiopters']
+                                  as num?)
+                              ?.toDouble() ??
+                          0.0) >
+                      5.0)
+                      ? 'Daha uzağa gidin'
+                      : null,
                 ),
               ),
             ),
+            if (!_radialMenuOpen && _activeDial == ActiveProDial.none)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 146,
+                child: RadialShutterFeatureArc(
+                  key: const ValueKey('portrait_radial_feature_arc'),
+                  nodes: _buildRadialArcNodesForMode(2),
+                ),
+              ),
+          ],
 
           // 2C. Live Manual Focus & Focus Peaking HUD Overlay
           if (_manualFocus ||
@@ -2041,13 +2811,161 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               ),
             ),
 
-          // 3B. Cinema Pro Video HUD (Timecode, 180° Shutter Angle, dBFS Peak/RMS Audio Meter, Thermal & Storage Badge)
-          if (isVideoMode)
+          // 3B. ARRI/FX3 Recording Tally Frame + Interactive Cinema Pro Video HUD & Quick Deck
+          if (isVideoMode) ...[
+            Positioned.fill(
+              child: VideoRecTallyBorder(isRecording: _isVideoRecording),
+            ),
             Positioned(
               top: 50,
               left: 12,
               right: 12,
-              child: _buildProVideoCinemaHudOverlay(),
+              child: _buildInteractiveVideoCinemaHud(),
+            ),
+            if (!_radialMenuOpen && _activeDial == ActiveProDial.none)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 146,
+                child: Center(
+                  child: VideoCinemaQuickDeck(
+                    lensOptions: _cinemaLensOptions,
+                    activeLensId: _activeCinemaLensOptionId,
+                    onSelectLens: (lensId) {
+                      final z = double.tryParse(lensId) ?? 1.0;
+                      final targetCam = z < 0.95
+                          ? '3'
+                          : (z >= 2.7 && _telephotoCameraId != null
+                              ? _telephotoCameraId!
+                              : '2');
+                      if (!_isVideoRecording &&
+                          targetCam != _selectedCameraId) {
+                        _startOrSwitchVideoCamera(targetCam, keepZoom: z);
+                      } else {
+                        setState(() => _zoomFactor = z);
+                        _scheduleNativeControlsPush(artworkMode: false);
+                      }
+                    },
+                    rackDurationMs: _rackFocusDurationMs,
+                    hasPointA: _hasFocusPointA,
+                    hasPointB: _hasFocusPointB,
+                    isRackActive: _isPullingFocus,
+                    onSetPointA: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _manualFocus = true;
+                        _focusPullPointA = _focusDistance;
+                        _hasFocusPointA = true;
+                        _statusBanner =
+                            'Odak Noktası A kilitlendi (%${(_focusPullPointA * 100).round()})';
+                      });
+                      _scheduleNativeControlsPush(artworkMode: false);
+                    },
+                    onSetPointB: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _manualFocus = true;
+                        _focusPullPointB = _focusDistance;
+                        _hasFocusPointB = true;
+                        _statusBanner =
+                            'Odak Noktası B kilitlendi (%${(_focusPullPointB * 100).round()})';
+                      });
+                      _scheduleNativeControlsPush(artworkMode: false);
+                    },
+                    onTriggerRackAB: _triggerVideoFocusPull,
+                    onCycleRackDuration: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _rackFocusDurationMs = _rackFocusDurationMs <= 900
+                            ? 2000
+                            : (_rackFocusDurationMs <= 2100 ? 3500 : 800);
+                      });
+                    },
+                    eisEnabled: _videoStabilization,
+                    onToggleEis: _isVideoRecording
+                        ? null
+                        : () {
+                            HapticFeedback.selectionClick();
+                            setState(() {
+                              _videoStabilization = !_videoStabilization;
+                            });
+                            _startOrSwitchVideoCamera(
+                              _selectedCameraId,
+                              keepZoom: _zoomFactor,
+                            );
+                          },
+                    aeAfLocked: _aeAfLocked,
+                    onToggleAeAfLock: _toggleAeAfLock,
+                  ),
+                ),
+              ),
+          ],
+
+          // 3C. DSLR Pro Photo HUD Bar (P/Tv/Sv/M + Live [-3..+3] EV Meter + Drive/Timer + AEL/AFL) + Above-Shutter Radial Feature Arc
+          if (isProPhoto && !_radialMenuOpen && _activeDial == ActiveProDial.none)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 146,
+              child: RadialShutterFeatureArc(
+                key: const ValueKey('pro_radial_feature_arc'),
+                nodes: _buildRadialArcNodesForMode(1),
+              ),
+            ),
+          if (isProPhoto && _activeDial == ActiveProDial.none)
+            Positioned(
+              top: 50,
+              left: 12,
+              right: 12,
+              child: ProDslrExposureBar(
+                mode: _dslrMode,
+                driveMode: _proDriveMode,
+                meteredEvDelta:
+                    ((_liveTelemetry['meteredEvDelta'] as num?)?.toDouble() ??
+                            0.0)
+                        .clamp(-3.0, 3.0),
+                evCompensation: _evCompensation,
+                aeAfLocked: _aeAfLocked,
+                liveIso: _dslrMode.isIsoManual
+                    ? _iso.round()
+                    : ((_liveTelemetry['iso'] as num?)?.round() ??
+                        _lastCaptureResult?.iso ??
+                        100),
+                liveShutterLabel: _dslrMode.isShutterManual
+                    ? DslrStopsRegistry.formatShutterNs(_shutterExposureNs)
+                    : DslrStopsRegistry.formatShutterNs(
+                        (_liveTelemetry['exposureTimeNs'] as num?)?.toInt() ??
+                            _lastCaptureResult?.exposureTimeNs ??
+                            8000000,
+                      ),
+                liveWbLabel: _manualWb
+                    ? '${_kelvin.round()}K${_tint.abs() >= 1 ? " ${_tint > 0 ? "+${_tint.round()}M" : "${_tint.round()}G"}" : ""}'
+                    : 'AWB ${((_liveTelemetry['solvedCctKelvin'] as num?)?.round() ?? 5500)}K',
+                countdownRemainingSec: _selfTimerRemainingSec,
+                onModeChanged: _setDslrExposureMode,
+                onDriveModeChanged: (nextDrive) {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    _proDriveMode = nextDrive;
+                    _statusBanner = 'Sürücü Modu: ${nextDrive.shortLabel}';
+                  });
+                },
+                onToggleAeAfLock: _toggleAeAfLock,
+                onTapShutter: () =>
+                    _selectRadialSettingDial(ActiveProDial.shutter),
+                onTapIso: () => _selectRadialSettingDial(ActiveProDial.iso),
+                onTapWb: () => _selectRadialSettingDial(ActiveProDial.wb),
+                onEvChanged: (nextEv) {
+                  setState(() {
+                    if (_dslrMode == DslrExposureMode.manualM) {
+                      _dslrMode = DslrExposureMode.programP;
+                      _manualExposure = false;
+                    }
+                    _evCompensation = nextEv.clamp(-3.0, 3.0);
+                  });
+                  _scheduleNativeControlsPush(artworkMode: false);
+                },
+              ),
             ),
 
           // 4. iOS Yellow Tap-to-Focus Box + Sun Exposure Rail
@@ -2101,7 +3019,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           // 5. Real-Time Sensor Luma Histogram (64-Bin in Video / 32-Bin in Photo — No Fake Fallback Array!)
           if (_showLiveHistogram)
             Positioned(
-              top: isVideoMode ? 118 : 56,
+              top: isVideoMode ? 144 : (isProPhoto ? 152 : 56),
               left: 14,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -2152,8 +3070,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               ),
             ),
 
-          // 6. Top-Center iOS Yellow Badge (Only for Manual Lock in Pro/Sanat)
-          if (!isPortraitMode && !isVideoMode && anyManualLocked)
+          // 6. Top-Center iOS Yellow Badge (Only for Manual Lock in Sanat — Pro uses DSLR HUD Bar)
+          if (!isPortraitMode && !isVideoMode && !isProPhoto && anyManualLocked)
             Positioned(
               top: 52,
               left: 0,
@@ -2187,26 +3105,28 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           // 7. Subtle Status Toast
           if (_statusBanner != null && _activeDial == ActiveProDial.none)
             Positioned(
-              bottom: isPortraitMode ? 220 : 185,
+              bottom: 242,
               left: 20,
               right: 20,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 3.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    _statusBanner!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.white,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      _statusBanner!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 ),
@@ -2217,292 +3137,699 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     );
   }
 
-  /// Radial Arc of Option Pills Curved Tangent to the Rotating Bottom Radial Wheel.
-  /// Replaces flat horizontal bars so options curve along the radial wheel and spin/scroll smoothly!
-  Widget _buildRadialTangentOptionsArc({
-    required double width,
+  /// Single Source of Truth (SSOT) for each camera mode's above-shutter quick features.
+  /// Rendered on [RadialShutterFeatureArc] / [VideoCinemaQuickDeck] when idle, and moved to the
+  /// outermost concentric ring (Ring 2) of [IosCameraRadialWheelPainter] when a radial dial is selected.
+  List<({
+    RadialOuterFeatureSpec spec,
+    Key? pillKey,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+  })> _aboveShutterFeaturesForMode(int modeIndex) {
+    switch (modeIndex) {
+      case 0: // SANAT (TrueColor 1:1)
+        final isNaturalTone = _artworkExposureMode == 2;
+        final grayLocked =
+            _useMeasuredGrayCardWb && _measuredGrayCardWbGains != null;
+        return [
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'art_exposure_mode',
+              label: isNaturalTone ? '1:1 TON' : 'KAĞIT L*94',
+              isActive: isNaturalTone,
+              accentColor: isNaturalTone ? kZameraCyan : kIosYellow,
+            ),
+            pillKey: const ValueKey('artwork_pill_exposure_mode'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() {
+                _artworkExposureMode = _artworkExposureMode == 2 ? 1 : 2;
+                _statusBanner = _artworkExposureMode == 2
+                    ? '1:1 Doğal Ton aktif (artworkExposureMode = 2)'
+                    : 'Kağıt L*94 beyaz normalizasyonu aktif';
+              });
+              _scheduleNativeControlsPush(artworkMode: true);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'art_gray_wb',
+              label: 'GRİ KART WB',
+              isActive: grayLocked,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('artwork_pill_gray_card_wb'),
+            onTap: _isCapturing
+                ? null
+                : () {
+                    if (_measuredGrayCardWbGains == null) {
+                      _triggerPhotoCapture(
+                        isArtworkMode: true,
+                        lockGrayCardFromCenter: true,
+                      );
+                    } else {
+                      _triggerRadialHaptic();
+                      final nextVal = !_useMeasuredGrayCardWb;
+                      setState(() {
+                        _useMeasuredGrayCardWb = nextVal;
+                        _statusBanner = nextVal
+                            ? 'Gri Kart WB aktif (yeniden ölçmek için basılı tutun)'
+                            : 'Gri Kart WB kapatıldı · DNG WB aktif';
+                      });
+                      widget.calibrationStore.saveGrayCardWb(
+                        _selectedCameraId,
+                        wbGains: _measuredGrayCardWbGains,
+                        enabled: nextVal,
+                      );
+                      _scheduleNativeControlsPush(artworkMode: true);
+                    }
+                  },
+            onLongPress: _isCapturing
+                ? null
+                : () {
+                    _triggerPhotoCapture(
+                      isArtworkMode: true,
+                      lockGrayCardFromCenter: true,
+                    );
+                  },
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'art_24patch',
+              label: '24-YAMA KALİBRE',
+              isActive: _calibrationResult.isMeasuredFromSensor,
+              accentColor: const Color(0xFF30D158),
+            ),
+            pillKey: const ValueKey('artwork_pill_24patch_calibrate'),
+            onTap: _isCapturing
+                ? null
+                : () {
+                    _triggerPhotoCapture(
+                      isArtworkMode: true,
+                      calibrateColorChecker: true,
+                    );
+                  },
+            onLongPress: _showCalibrationAndProbeSheet,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'art_spot_meter',
+              label: 'RENK ÖLÇER',
+              isActive: _showSpotMeter,
+              accentColor: kZameraCyan,
+            ),
+            pillKey: const ValueKey('artwork_pill_spot_meter'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showSpotMeter = !_showSpotMeter);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'art_lossless_png',
+              label: 'KAYIPSIZ PNG',
+              isActive: _losslessPng,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('artwork_pill_lossless_png'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() {
+                _losslessPng = !_losslessPng;
+                _statusBanner = _losslessPng
+                    ? 'Kayıpsız 1:1 PNG çıktısı açık'
+                    : 'Yüksek kalite JPEG + DNG çıktısı aktif';
+              });
+            },
+            onLongPress: null,
+          ),
+        ];
+
+      case 1: // PRO (DSLR Photo Assists & Capture Format)
+        const cycleOrder = <PhotoCaptureFormat>[
+          PhotoCaptureFormat.rawPlusJpeg,
+          PhotoCaptureFormat.proRaw48Mp,
+          PhotoCaptureFormat.dngRawOnly,
+          PhotoCaptureFormat.losslessPng,
+          PhotoCaptureFormat.jpegOnly,
+        ];
+        return [
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'pro_format',
+              label: _userPrefs.photoFormat.shortLabel,
+              isActive: _userPrefs.photoFormat.capturesRaw,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('pro_pill_photo_format'),
+            onTap: () {
+              _triggerRadialHaptic();
+              final curIdx = cycleOrder.indexOf(_userPrefs.photoFormat);
+              final nextFmt = cycleOrder[(curIdx + 1) % cycleOrder.length];
+              final nextPrefs = _userPrefs.copyWith(photoFormat: nextFmt);
+              _applyUserPreferences(nextPrefs, persist: true);
+              setState(() {
+                _statusBanner = 'Kayıt Formatı: ${nextFmt.titleTr}';
+              });
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'pro_zebra95',
+              label: 'ZEBRA %95',
+              isActive: _showZebra,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('pro_pill_zebra95'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showZebra = !_showZebra);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'pro_peaking',
+              label: 'PEAKING',
+              isActive: _showFocusPeaking,
+              accentColor: const Color(0xFF30D158),
+            ),
+            pillKey: const ValueKey('pro_pill_peaking'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showFocusPeaking = !_showFocusPeaking);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'pro_false_color',
+              label: 'SAHTE RENK',
+              isActive: _showFalseColor,
+              accentColor: kZameraCyan,
+            ),
+            pillKey: const ValueKey('pro_pill_false_color'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showFalseColor = !_showFalseColor);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'pro_histogram',
+              label: 'HİSTOGRAM',
+              isActive: _showLiveHistogram,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('pro_pill_histogram'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showLiveHistogram = !_showLiveHistogram);
+            },
+            onLongPress: null,
+          ),
+        ];
+
+      case 2: // PORTRE (Optical Focal-Length Stops & Studio Assists)
+        return [
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'portrait_1x',
+              label: '1×',
+              secondaryLabel: '24mm',
+              isActive: _zoomFactor < 1.8,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('portrait_pill_1x'),
+            onTap: () => _applyPortraitOpticalZoom(1.0),
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'portrait_2x',
+              label: '2×',
+              secondaryLabel: '48mm',
+              isActive: _zoomFactor >= 1.8 && _zoomFactor < 2.7,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('portrait_pill_2x'),
+            onTap: () => _applyPortraitOpticalZoom(2.0),
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'portrait_3x',
+              label: '3×',
+              secondaryLabel: '77mm',
+              isActive: _zoomFactor >= 2.7,
+              accentColor: kIosYellow,
+            ),
+            pillKey: const ValueKey('portrait_pill_3x'),
+            onTap: () => _applyPortraitOpticalZoom(3.0),
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'portrait_peaking',
+              label: 'PEAKING',
+              isActive: _showFocusPeaking,
+              accentColor: const Color(0xFF30D158),
+            ),
+            pillKey: const ValueKey('portrait_pill_peaking'),
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() => _showFocusPeaking = !_showFocusPeaking);
+            },
+            onLongPress: null,
+          ),
+        ];
+
+      case 3: // VİDEO (Cinema Quick Deck features moved to Outermost Ring 2 when radial dial is active)
+      default:
+        return [
+          for (final lens in _cinemaLensOptions)
+            (
+              spec: RadialOuterFeatureSpec(
+                id: 'vid_lens_${lens.id}',
+                label: lens.label,
+                isActive: _activeCinemaLensOptionId == lens.id,
+                accentColor: kIosYellow,
+              ),
+              pillKey: null,
+              onTap: () {
+                final z = double.tryParse(lens.id) ?? 1.0;
+                final targetCam = z < 0.95
+                    ? '3'
+                    : (z >= 2.7 && _telephotoCameraId != null
+                        ? _telephotoCameraId!
+                        : '2');
+                if (!_isVideoRecording && targetCam != _selectedCameraId) {
+                  _startOrSwitchVideoCamera(targetCam, keepZoom: z);
+                } else {
+                  setState(() => _zoomFactor = z);
+                  _scheduleNativeControlsPush(artworkMode: false);
+                }
+              },
+              onLongPress: null,
+            ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_pt_a',
+              label: 'ODAK A',
+              isActive: _hasFocusPointA,
+              accentColor: kIosYellow,
+            ),
+            pillKey: null,
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() {
+                _manualFocus = true;
+                _focusPullPointA = _focusDistance;
+                _hasFocusPointA = true;
+                _statusBanner =
+                    'Odak Noktası A kilitlendi (%${(_focusPullPointA * 100).round()})';
+              });
+              _scheduleNativeControlsPush(artworkMode: false);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_pt_b',
+              label: 'ODAK B',
+              isActive: _hasFocusPointB,
+              accentColor: kIosYellow,
+            ),
+            pillKey: null,
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() {
+                _manualFocus = true;
+                _focusPullPointB = _focusDistance;
+                _hasFocusPointB = true;
+                _statusBanner =
+                    'Odak Noktası B kilitlendi (%${(_focusPullPointB * 100).round()})';
+              });
+              _scheduleNativeControlsPush(artworkMode: false);
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_rack_ab',
+              label: 'A↔B GEÇİŞ',
+              isActive: _isPullingFocus,
+              accentColor: kZameraCyan,
+            ),
+            pillKey: null,
+            onTap: _triggerVideoFocusPull,
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_rack_dur',
+              label: '${(_rackFocusDurationMs / 1000.0).toStringAsFixed(1)}s HIZ',
+              isActive: false,
+              accentColor: kIosYellow,
+            ),
+            pillKey: null,
+            onTap: () {
+              _triggerRadialHaptic();
+              setState(() {
+                _rackFocusDurationMs = _rackFocusDurationMs <= 900
+                    ? 2000
+                    : (_rackFocusDurationMs <= 2100 ? 3500 : 800);
+              });
+            },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_eis',
+              label: _videoStabilization ? 'EIS AÇIK' : 'EIS SAF',
+              isActive: _videoStabilization,
+              accentColor: kZameraCyan,
+            ),
+            pillKey: null,
+            onTap: _isVideoRecording
+                ? null
+                : () {
+                    _triggerRadialHaptic();
+                    setState(() {
+                      _videoStabilization = !_videoStabilization;
+                    });
+                    _startOrSwitchVideoCamera(
+                      _selectedCameraId,
+                      keepZoom: _zoomFactor,
+                    );
+                  },
+            onLongPress: null,
+          ),
+          (
+            spec: RadialOuterFeatureSpec(
+              id: 'vid_ael',
+              label: 'AEL KİLİT',
+              isActive: _aeAfLocked,
+              accentColor: kIosYellow,
+            ),
+            pillKey: null,
+            onTap: _toggleAeAfLock,
+            onLongPress: null,
+          ),
+        ];
+    }
+  }
+
+  List<RadialArcFeatureNode> _buildRadialArcNodesForMode(int modeIndex) {
+    final items = _aboveShutterFeaturesForMode(modeIndex);
+    return [
+      for (final item in items)
+        RadialArcFeatureNode(
+          id: item.spec.id,
+          primaryLabel: item.spec.label,
+          secondaryLabel: item.spec.secondaryLabel,
+          isActive: item.spec.isActive,
+          accentColor: item.spec.accentColor,
+          key: item.pillKey,
+          icon: item.spec.icon,
+          onTap: item.onTap,
+          onLongPress: item.onLongPress,
+        ),
+    ];
+  }
+
+  /// Returns the secondary option labels for Ring 1 (middle concentric ring).
+  /// Decoupled from Ring 0 (_continuousWheelNorm) and Ring 2 (_outerFeatureArcScrollPos).
+  List<({String label, VoidCallback onSelect, bool applyOnDrag})>
+      _secondaryRingOptionsForDial(
+    ActiveProDial dial, {
     required bool isVideo,
   }) {
-    final dial = _activeDial;
-    final List<({String label, bool active, VoidCallback onTap})> items = [];
-
     if (dial == ActiveProDial.focus) {
       final distStr = _formatFocusDistance(
         (_liveTelemetry['focusDistanceDiopters'] as num?)?.toDouble(),
       );
-      items.add((
-        label: _manualFocus ? 'MF: $distStr' : 'AF (OTOMATİK)',
-        active: !_manualFocus,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          setState(() {
-            _manualFocus = false;
-            _continuousWheelNorm = 0.0;
-          });
-          _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
-        },
-      ));
-      items.add((
-        label: '∞ SONSUZ',
-        active: _manualFocus && _focusDistance <= 0.04,
-        onTap: () => _setManualFocusPreset(0.0),
-      ));
-      items.add((
-        label: '1.5M PORTRE',
-        active: _manualFocus && (_focusDistance - 0.12).abs() < 0.05,
-        onTap: () => _setManualFocusPreset(0.12),
-      ));
-      items.add((
-        label: '40CM YAKIN',
-        active: _manualFocus && (_focusDistance - 0.35).abs() < 0.06,
-        onTap: () => _setManualFocusPreset(0.35),
-      ));
-      items.add((
-        label: '10CM MAKRO',
-        active: _manualFocus && _focusDistance >= 0.92,
-        onTap: () => _setManualFocusPreset(1.0),
-      ));
-      if (isVideo) {
-        items.add((
-          label: 'A KAYDET (${(_focusPullPointA * 100).round()}%)',
-          active: (_focusDistance - _focusPullPointA).abs() < 0.02,
-          onTap: () {
-            HapticFeedback.selectionClick();
+      return [
+        (
+          label: _manualFocus ? 'MF: $distStr' : 'AF (OTOMATİK)',
+          applyOnDrag: false,
+          onSelect: () {
             setState(() {
-              _manualFocus = true;
-              _focusPullPointA = _focusDistance;
-              _statusBanner =
-                  'Odak Noktası A kaydedildi: %${(_focusPullPointA * 100).round()}';
+              _manualFocus = false;
             });
+            _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
           },
-        ));
-        items.add((
-          label: 'B KAYDET (${(_focusPullPointB * 100).round()}%)',
-          active: (_focusDistance - _focusPullPointB).abs() < 0.02,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() {
-              _manualFocus = true;
-              _focusPullPointB = _focusDistance;
-              _statusBanner =
-                  'Odak Noktası B kaydedildi: %${(_focusPullPointB * 100).round()}';
-            });
-          },
-        ));
-        items.add((
-          label: 'SÜRE: ${_focusPullDurationSec.toInt()}SN',
-          active: false,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() {
-              if (_focusPullDurationSec <= 1.0) {
-                _focusPullDurationSec = 2.0;
-              } else if (_focusPullDurationSec <= 2.0) {
-                _focusPullDurationSec = 3.0;
-              } else if (_focusPullDurationSec <= 3.0) {
-                _focusPullDurationSec = 5.0;
-              } else {
-                _focusPullDurationSec = 1.0;
-              }
-            });
-          },
-        ));
-        items.add((
-          label: 'A↔B ODAK GEÇİŞİ',
-          active: false,
-          onTap: _triggerVideoFocusPull,
-        ));
-        items.add((
-          label: 'PEAKING',
-          active: _showFocusPeaking,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() => _showFocusPeaking = !_showFocusPeaking);
-          },
-        ));
-      }
+        ),
+        (
+          label: '∞ SONSUZ',
+          applyOnDrag: false,
+          onSelect: () => _setManualFocusPreset(0.0, syncInnerWheel: false),
+        ),
+        (
+          label: '1.5M PORTRE',
+          applyOnDrag: false,
+          onSelect: () => _setManualFocusPreset(0.12, syncInnerWheel: false),
+        ),
+        (
+          label: '40CM YAKIN',
+          applyOnDrag: false,
+          onSelect: () => _setManualFocusPreset(0.35, syncInnerWheel: false),
+        ),
+        (
+          label: '10CM MAKRO',
+          applyOnDrag: false,
+          onSelect: () => _setManualFocusPreset(1.0, syncInnerWheel: false),
+        ),
+        if (isVideo) ...[
+          (
+            label: 'A KAYDET (${(_focusPullPointA * 100).round()}%)',
+            applyOnDrag: false,
+            onSelect: () {
+              setState(() {
+                _manualFocus = true;
+                _focusPullPointA = _focusDistance;
+                _hasFocusPointA = true;
+                _statusBanner =
+                    'Odak Noktası A kaydedildi: %${(_focusPullPointA * 100).round()}';
+              });
+            },
+          ),
+          (
+            label: 'B KAYDET (${(_focusPullPointB * 100).round()}%)',
+            applyOnDrag: false,
+            onSelect: () {
+              setState(() {
+                _manualFocus = true;
+                _focusPullPointB = _focusDistance;
+                _hasFocusPointB = true;
+                _statusBanner =
+                    'Odak Noktası B kaydedildi: %${(_focusPullPointB * 100).round()}';
+              });
+            },
+          ),
+          (
+            label: 'A↔B ODAK GEÇİŞİ',
+            applyOnDrag: false,
+            onSelect: _triggerVideoFocusPull,
+          ),
+          (
+            label: 'PEAKING',
+            applyOnDrag: false,
+            onSelect: () =>
+                setState(() => _showFocusPeaking = !_showFocusPeaking),
+          ),
+        ],
+      ];
     } else if (dial == ActiveProDial.portraitLight) {
-      for (int i = 0; i < _kPortraitLightingNames.length; i++) {
-        final idx = i;
-        items.add((
-          label: idx == 0 ? 'DOĞAL (OTO)' : _kPortraitLightingNames[idx],
-          active: _portraitLightingIndex == idx,
-          onTap: () {
-            HapticFeedback.selectionClick();
+      return [
+        for (int i = 0; i < _kPortraitLightingNames.length; i++)
+          (
+            label: i == 0 ? 'DOĞAL IŞIK' : _kPortraitLightingNames[i],
+            applyOnDrag: true,
+            onSelect: () {
+              setState(() {
+                _portraitLightingIndex = i;
+              });
+              _scheduleNativeControlsPush(artworkMode: false);
+            },
+          ),
+      ];
+    } else if (dial == ActiveProDial.wb) {
+      return [
+        (
+          label: 'AWB (OTO)',
+          applyOnDrag: false,
+          onSelect: () {
             setState(() {
-              _portraitLightingIndex = idx;
-              if (idx == 0) {
-                _portraitLightIntensity = 0.80;
-                _continuousWheelNorm = 0.0;
-              }
+              _manualWb = false;
+              _tint = 0.0;
+            });
+            _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+          },
+        ),
+        for (final preset in WbPresetRegistry.presets)
+          (
+            label: '${preset.labelTr} ${preset.kelvin}K',
+            applyOnDrag: false,
+            onSelect: () {
+              setState(() {
+                _manualWb = true;
+                _kelvin = preset.kelvin.toDouble();
+                _tint = preset.tint;
+              });
+              _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+            },
+          ),
+        for (final tintVal in WbPresetRegistry.tintPresets)
+          (
+            label: tintVal == 0
+                ? 'TİNT 0'
+                : (tintVal < 0
+                    ? 'TİNT ${tintVal.round()}G'
+                    : 'TİNT +${tintVal.round()}M'),
+            applyOnDrag: true,
+            onSelect: () {
+              setState(() {
+                _manualWb = true;
+                _tint = tintVal;
+              });
+              _scheduleNativeControlsPush(artworkMode: _selectedMode == 0);
+            },
+          ),
+      ];
+    } else if (dial == ActiveProDial.shutterAngle) {
+      return [
+        (
+          label: 'OTO (180°)',
+          applyOnDrag: false,
+          onSelect: () {
+            setState(() {
+              _videoLockShutterAngle = false;
+              _videoShutterAngleDeg = 180.0;
             });
             _scheduleNativeControlsPush(artworkMode: false);
           },
-        ));
-      }
-    } else if (dial == ActiveProDial.videoProfile ||
-        dial == ActiveProDial.videoLut) {
-      for (final prof in ZameraVideoProfile.values) {
-        items.add((
-          label: prof.shortLabel,
-          active: _videoProfile == prof,
-          onTap: () {
-            if (_isVideoRecording) return;
-            HapticFeedback.selectionClick();
-            setState(() {
-              _videoProfile = prof;
-              if (_activeDial == ActiveProDial.videoProfile) {
-                _continuousWheelNorm =
-                    _normalizedValueForDial(ActiveProDial.videoProfile);
-              }
-            });
-            _startOrSwitchVideoCamera(
-              _selectedCameraId,
-              keepZoom: _zoomFactor,
-            );
-          },
-        ));
-      }
-      for (final preset in ZameraLutPreset.values) {
-        items.add((
-          label: preset.label,
-          active: _videoLutPreset == preset && _customCubeLut == null,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() {
-              _videoLutPreset = preset;
-              if (preset != ZameraLutPreset.customCube) {
-                _customCubeLut = null;
-              }
-              if (_activeDial == ActiveProDial.videoLut) {
-                _continuousWheelNorm =
-                    _normalizedValueForDial(ActiveProDial.videoLut);
-              }
-            });
-          },
-        ));
-      }
-      items.add((
-        label: _customCubeLut != null
-            ? '.CUBE AKTİF (${_customCubeLut!.size}³)'
-            : '.CUBE YÜKLE',
-        active: _customCubeLut != null,
-        onTap: _loadCustomCubeLutSample,
-      ));
-    }
-
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    const double arcRadius = 240.0;
-    const double barHeight = 84.0;
-
-    return SizedBox(
-      width: width,
-      height: barHeight,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (_) {
-          setState(() {});
-          return false;
-        },
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.symmetric(horizontal: width * 0.36),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(items.length, (i) {
-              final item = items[i];
-              return Builder(
-                builder: (pillCtx) {
-                  double dx = 0.0;
-                  final renderObj = pillCtx.findRenderObject();
-                  if (renderObj is RenderBox &&
-                      renderObj.hasSize &&
-                      renderObj.attached) {
-                    final pos = renderObj.localToGlobal(Offset.zero);
-                    dx = (pos.dx + renderObj.size.width * 0.5) - (width * 0.5);
-                  }
-
-                  final clampedDx =
-                      dx.clamp(-arcRadius * 0.90, arcRadius * 0.90);
-                  final radSq = arcRadius * arcRadius - clampedDx * clampedDx;
-                  final dy = (arcRadius - math.sqrt(math.max(0.0, radSq)))
-                      .clamp(0.0, barHeight * 0.65);
-                  final rotAngle =
-                      math.asin((clampedDx / arcRadius).clamp(-0.80, 0.80)) *
-                          0.65;
-
-                  return Transform.translate(
-                    offset: Offset(0, dy),
-                    child: Transform.rotate(
-                      angle: rotAngle,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: GestureDetector(
-                          onTap: item.onTap,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 140),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: item.active
-                                  ? kIosYellow.withValues(alpha: 0.28)
-                                  : Colors.black.withValues(alpha: 0.68),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: item.active
-                                    ? kIosYellow
-                                    : Colors.white.withValues(alpha: 0.22),
-                                width: item.active ? 1.4 : 0.8,
-                              ),
-                              boxShadow: item.active
-                                  ? [
-                                      BoxShadow(
-                                        color:
-                                            kIosYellow.withValues(alpha: 0.35),
-                                        blurRadius: 8,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              item.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: item.active
-                                    ? FontWeight.w800
-                                    : FontWeight.w600,
-                                color:
-                                    item.active ? kIosYellow : Colors.white,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            }),
-          ),
         ),
-      ),
-    );
+        for (final deg in ZameraCinemaMath.standardShutterAngles)
+          (
+            label:
+                '${deg == deg.roundToDouble() ? deg.round() : deg.toStringAsFixed(1)}°',
+            applyOnDrag: false,
+            onSelect: () {
+              setState(() {
+                _videoLockShutterAngle = true;
+                _videoShutterAngleDeg = deg;
+              });
+              _scheduleNativeControlsPush(artworkMode: false);
+            },
+          ),
+      ];
+    } else if (dial == ActiveProDial.videoProfile) {
+      final profiles = _availableVideoProfiles;
+      return [
+        for (final prof in profiles)
+          (
+            label: prof.shortLabel,
+            applyOnDrag: false,
+            onSelect: () {
+              if (_isVideoRecording) return;
+              setState(() {
+                _videoProfile = prof;
+              });
+              _startOrSwitchVideoCamera(
+                _selectedCameraId,
+                keepZoom: _zoomFactor,
+              );
+            },
+          ),
+      ];
+    } else if (dial == ActiveProDial.videoLut) {
+      return [
+        for (final preset in ZameraLutPreset.values)
+          (
+            label: preset.label,
+            applyOnDrag: true,
+            onSelect: () {
+              setState(() {
+                _videoLutPreset = preset;
+                _videoLutBypass = false;
+                if (preset != ZameraLutPreset.customCube) {
+                  _customCubeLut = null;
+                }
+              });
+            },
+          ),
+        (
+          label: _customCubeLut != null
+              ? '.CUBE (${_customCubeLut!.size}³)'
+              : '.CUBE YÜKLE',
+          applyOnDrag: false,
+          onSelect: _loadCustomCubeLutSample,
+        ),
+      ];
+    }
+    return const [];
+  }
+
+  double _initialSecondaryScrollIndexForDial(ActiveProDial dial) {
+    switch (dial) {
+      case ActiveProDial.focus:
+        if (!_manualFocus) return 0.0;
+        if (_focusDistance <= 0.04) return 1.0;
+        if ((_focusDistance - 0.12).abs() < 0.08) return 2.0;
+        if ((_focusDistance - 0.35).abs() < 0.15) return 3.0;
+        return 4.0;
+      case ActiveProDial.portraitLight:
+        return _portraitLightingIndex.toDouble();
+      case ActiveProDial.wb:
+        if (!_manualWb) return 0.0;
+        final idx = WbPresetRegistry.presets.indexWhere(
+          (p) => (p.kelvin - _kelvin).abs() <= 250,
+        );
+        return idx >= 0 ? (idx + 1).toDouble() : 1.0;
+      case ActiveProDial.shutterAngle:
+        if (!_videoLockShutterAngle) return 0.0;
+        final idx = ZameraCinemaMath.standardShutterAngles.indexWhere(
+          (a) => (a - _videoShutterAngleDeg).abs() < 1.0,
+        );
+        return idx >= 0 ? (idx + 1).toDouble() : 5.0;
+      case ActiveProDial.videoProfile:
+        final profiles = _availableVideoProfiles;
+        final idx = profiles.indexOf(_videoProfile);
+        return (idx >= 0 ? idx : 0).toDouble();
+      case ActiveProDial.videoLut:
+        if (_customCubeLut != null) {
+          return ZameraLutPreset.values.length.toDouble();
+        }
+        return _videoLutPreset.index.toDouble();
+      default:
+        return 0.0;
+    }
   }
 
   /// Selects a setting button from the radial arc and immediately opens its radial adjustment wheel
   void _selectRadialSettingDial(ActiveProDial dial, {double? targetZoom}) {
-    HapticFeedback.selectionClick();
+    _triggerRadialHaptic();
+    final outerCount = _aboveShutterFeaturesForMode(_selectedMode).length;
+    final defaultOuterScroll =
+        outerCount > 1 ? ((outerCount - 1) * 0.5) : 0.0;
+
     if (targetZoom != null) {
       final clamped = targetZoom.clamp(0.5, 10.0);
       final targetCam = clamped < 0.95 ? '3' : '2';
       setState(() {
         _zoomFactor = clamped;
         _radialMenuOpen = true;
+        if (_activeDial != ActiveProDial.lens) {
+          _outerFeatureArcScrollPos = defaultOuterScroll;
+          _lastOuterFeatureHapticIndex = _outerFeatureArcScrollPos.round();
+        }
         _activeDial = ActiveProDial.lens;
+        _activeDragRingBand = RadialRingBand.none;
         _continuousWheelNorm = _normalizedValueForDial(ActiveProDial.lens);
         _lastHapticTickIndex = (_continuousWheelNorm * 60).round();
       });
@@ -2522,12 +3849,19 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
 
     setState(() {
       _radialMenuOpen = true;
+      _activeDragRingBand = RadialRingBand.none;
       if (_activeDial == dial) {
         _activeDial = ActiveProDial.none;
       } else {
+        if (_activeDial == ActiveProDial.none) {
+          _outerFeatureArcScrollPos = defaultOuterScroll;
+          _lastOuterFeatureHapticIndex = _outerFeatureArcScrollPos.round();
+        }
         _activeDial = dial;
         _continuousWheelNorm = _normalizedValueForDial(dial);
         _lastHapticTickIndex = (_continuousWheelNorm * 60).round();
+        _secondaryArcScrollPos = _initialSecondaryScrollIndexForDial(dial);
+        _lastSecondaryHapticIndex = _secondaryArcScrollPos.round();
       }
     });
   }
@@ -2541,7 +3875,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   }) {
     final isWide05 = _zoomFactor < 0.95;
     final isZoom1x = _zoomFactor >= 0.95 && _zoomFactor < 1.8;
-    final isZoom2x = _zoomFactor >= 1.8;
+    final isZoom2x = isPortrait
+        ? (_zoomFactor >= 1.8 && _zoomFactor < 2.7)
+        : (_zoomFactor >= 1.8);
+    final isZoom3x = _zoomFactor >= 2.7;
 
     final items = <({
       String label,
@@ -2575,7 +3912,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         ),
       (
         label: isZoom1x
-            ? '${_zoomFactor.toStringAsFixed(_zoomFactor == _zoomFactor.roundToDouble() ? 0 : 1)}×'
+            ? (isPortrait
+                ? '1× 24'
+                : '${_zoomFactor.toStringAsFixed(_zoomFactor == _zoomFactor.roundToDouble() ? 0 : 1)}×')
             : '1×',
         selected: isZoom1x,
         activeDialRing: _activeDial == ActiveProDial.lens && isZoom1x,
@@ -2599,7 +3938,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       ),
       (
         label: isZoom2x
-            ? '${_zoomFactor.toStringAsFixed(_zoomFactor == _zoomFactor.roundToDouble() ? 0 : 1)}×${isVideo ? " DİJ" : ""}'
+            ? (isPortrait
+                ? '2× 48'
+                : '${_zoomFactor.toStringAsFixed(_zoomFactor == _zoomFactor.roundToDouble() ? 0 : 1)}×${isVideo ? " DİJ" : ""}')
             : (isVideo ? '2× DİJ' : '2×'),
         selected: isZoom2x,
         activeDialRing: _activeDial == ActiveProDial.lens && isZoom2x,
@@ -2622,6 +3963,28 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         },
       ),
       if (isPortrait) ...[
+        (
+          label: isZoom3x ? '3× 77' : '3×',
+          selected: isZoom3x,
+          activeDialRing: _activeDial == ActiveProDial.lens && isZoom3x,
+          onTap: () => _selectRadialSettingDial(
+                ActiveProDial.lens,
+                targetZoom: 3.0,
+              ),
+          onDrag: (dx, w) {
+            if (_activeDial != ActiveProDial.lens) {
+              setState(() {
+                _activeDial = ActiveProDial.lens;
+                _continuousWheelNorm =
+                    _normalizedValueForDial(ActiveProDial.lens);
+              });
+            }
+            _scrubContinuousWheelByDeltaNorm(
+              -dx / (w * 0.42),
+              isArtwork: false,
+            );
+          },
+        ),
         (
           label: 'ƒ${_portraitAperture.toStringAsFixed(1)}',
           selected: true,
@@ -2670,7 +4033,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       ),
       (
         label: 'ISO',
-        selected: _manualExposure,
+        selected: _selectedMode == 1 ? _dslrMode.isIsoManual : _manualExposure,
         activeDialRing: _activeDial == ActiveProDial.iso,
         onTap: () => _selectRadialSettingDial(ActiveProDial.iso),
         onDrag: null,
@@ -2678,7 +4041,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       if (!isPortrait && !isVideo)
         (
           label: 'S',
-          selected: _manualExposure,
+          selected:
+              _selectedMode == 1 ? _dslrMode.isShutterManual : _manualExposure,
           activeDialRing: _activeDial == ActiveProDial.shutter,
           onTap: () => _selectRadialSettingDial(ActiveProDial.shutter),
           onDrag: null,
@@ -2717,9 +4081,145 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     ];
 
     final count = items.length;
+    final centerX = width * 0.5;
+    if (count > 9) {
+      // Clean 2-tier concentric arc for Pro Cinema Video (zero overlap, >20px spacing)
+      final outerItems = items
+          .where(
+            (it) =>
+                it.label != 'FPS' &&
+                it.label != 'AÇI' &&
+                it.label != 'PROFİL' &&
+                it.label != 'LUT' &&
+                it.label != 'SES',
+          )
+          .toList();
+      final innerItems = items
+          .where(
+            (it) =>
+                it.label == 'FPS' ||
+                it.label == 'AÇI' ||
+                it.label == 'PROFİL' ||
+                it.label == 'LUT' ||
+                it.label == 'SES',
+          )
+          .toList();
+      final outerRadius = math.min(width * 0.46, 182.0);
+      final innerRadius = math.min(width * 0.35, 134.0);
+      const dualCenterY = 226.0;
+      const outerStart = -math.pi * 0.82;
+      const outerEnd = -math.pi * 0.18;
+      const innerStart = -math.pi * 0.78;
+      const innerEnd = -math.pi * 0.22;
+      final splitRadius = (outerRadius + innerRadius) * 0.5;
+
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (details) {
+          final dist =
+              (details.localPosition - Offset(centerX, dualCenterY)).distance;
+          _draggingMenuOuterButtonArc = dist >= splitRadius;
+        },
+        onHorizontalDragUpdate: (details) {
+          final dx = details.delta.dx;
+          setState(() {
+            if (_draggingMenuOuterButtonArc) {
+              _menuOuterArcOffsetRad =
+                  (_menuOuterArcOffsetRad + dx / outerRadius).clamp(-0.28, 0.28);
+            } else {
+              _menuInnerArcOffsetRad =
+                  (_menuInnerArcOffsetRad + dx / innerRadius).clamp(-0.28, 0.28);
+            }
+          });
+        },
+        child: SizedBox(
+          width: width,
+          height: 168,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: RadialButtonsGuideArcPainter(
+                      arcCenter: Offset(centerX, dualCenterY),
+                      arcRadius: outerRadius,
+                      startAngle: outerStart + _menuOuterArcOffsetRad,
+                      sweepAngle: outerEnd - outerStart,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: RadialButtonsGuideArcPainter(
+                      arcCenter: Offset(centerX, dualCenterY),
+                      arcRadius: innerRadius,
+                      startAngle: innerStart + _menuInnerArcOffsetRad,
+                      sweepAngle: innerEnd - innerStart,
+                    ),
+                  ),
+                ),
+              ),
+              for (int i = 0; i < outerItems.length; i++)
+                Builder(
+                  builder: (context) {
+                    final t = outerItems.length > 1
+                        ? i / (outerItems.length - 1)
+                        : 0.5;
+                    final angle = outerStart +
+                        t * (outerEnd - outerStart) +
+                        _menuOuterArcOffsetRad;
+                    final bx = centerX + outerRadius * math.cos(angle);
+                    final by = dualCenterY + outerRadius * math.sin(angle);
+                    final item = outerItems[i];
+                    return Positioned(
+                      left: bx - 19,
+                      top: by - 19,
+                      child: _buildCircularTriggerButton(
+                        label: item.label,
+                        selected: item.selected,
+                        activeDialRing: item.activeDialRing,
+                        onTap: item.onTap,
+                        onHorizontalDragUpdate: item.onDrag,
+                      ),
+                    );
+                  },
+                ),
+              for (int i = 0; i < innerItems.length; i++)
+                Builder(
+                  builder: (context) {
+                    final t = innerItems.length > 1
+                        ? i / (innerItems.length - 1)
+                        : 0.5;
+                    final angle = innerStart +
+                        t * (innerEnd - innerStart) +
+                        _menuInnerArcOffsetRad;
+                    final bx = centerX + innerRadius * math.cos(angle);
+                    final by = dualCenterY + innerRadius * math.sin(angle);
+                    final item = innerItems[i];
+                    return Positioned(
+                      left: bx - 19,
+                      top: by - 19,
+                      child: _buildCircularTriggerButton(
+                        label: item.label,
+                        selected: item.selected,
+                        activeDialRing: item.activeDialRing,
+                        onTap: item.onTap,
+                        onHorizontalDragUpdate: item.onDrag,
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final arcRadius = math.min(width * 0.46, 176.0);
     const arcCenterY = 202.0;
-    final centerX = width * 0.5;
     const startAngle = -math.pi * 0.84;
     const endAngle = -math.pi * 0.16;
 
@@ -2777,6 +4277,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   }) {
     final screenW = MediaQuery.sizeOf(context).width;
     return GestureDetector(
+      key: ValueKey<String>('radial_menu_btn_$label'),
       onTap: onTap,
       onHorizontalDragUpdate: onHorizontalDragUpdate != null
           ? (d) => onHorizontalDragUpdate(d.primaryDelta ?? 0.0, screenW)
@@ -2817,25 +4318,43 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   }
 
   /// Authentic iOS Camera Full-Bottom Semi-Circular Rotating Radial Dome
+  /// with 3 strictly independent concentric rings (Ring 0 Primary, Ring 1 Secondary, Ring 2 Outermost Mode Features).
   Widget _buildIosFullBottomRadialDome({
     required bool isArtwork,
+    required bool isVideo,
     required double width,
   }) {
     final dial = _activeDial;
     final norm = _continuousWheelNorm;
     final supportsFocus = _activeCameraCap?.supportsVariableFocus ?? true;
+    final secondaryOpts = _secondaryRingOptionsForDial(dial, isVideo: isVideo);
+    final outerModeFeatures = _aboveShutterFeaturesForMode(_selectedMode);
+    final wheelRadius = RadialRingGeometry.computeInnerWheelRadius(width);
+    const wheelHeight = 356.0;
+    final wheelCenter = Offset(width * 0.5, wheelHeight - 46.0);
 
     String centerValueText = '';
-    final liveIso = (_liveTelemetry['iso'] as num?)?.round() ??
-        _lastCaptureResult?.iso ??
-        100;
-    final liveKelvin = (_liveTelemetry['solvedCctKelvin'] as num?)?.round() ??
-        5500;
-    final liveExpNs = (_liveTelemetry['exposureTimeNs'] as num?)?.toInt() ??
-        _lastCaptureResult?.exposureTimeNs;
-    final liveShutterDenominator = liveExpNs != null && liveExpNs > 0
-        ? (1e9 / liveExpNs).round()
-        : 60;
+    final vIso = _videoTelemetry?.activeIso ?? 0;
+    final liveIso = isVideo
+        ? (vIso > 0 ? vIso : 100)
+        : ((_liveTelemetry['iso'] as num?)?.round() ??
+            _lastCaptureResult?.iso ??
+            100);
+    final vKelvin = _videoTelemetry?.solvedCctKelvin ?? 0;
+    final liveKelvin = isVideo
+        ? (vKelvin > 0 ? vKelvin : 5500)
+        : ((_liveTelemetry['solvedCctKelvin'] as num?)?.round() ?? 5500);
+    final liveExpNs = isVideo
+        ? _videoTelemetry?.shutterExposureNs
+        : ((_liveTelemetry['exposureTimeNs'] as num?)?.toInt() ??
+            _lastCaptureResult?.exposureTimeNs);
+    final liveShutterLabel = liveExpNs != null && liveExpNs > 0
+        ? DslrStopsRegistry.formatShutterNs(liveExpNs)
+        : '1/60s';
+    final isIsoManualNow =
+        _selectedMode == 1 ? _dslrMode.isIsoManual : _manualExposure;
+    final isShutterManualNow =
+        _selectedMode == 1 ? _dslrMode.isShutterManual : _manualExposure;
 
     switch (dial) {
       case ActiveProDial.lens:
@@ -2849,7 +4368,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       case ActiveProDial.portraitLight:
         centerValueText = _portraitLightingIndex == 0
             ? 'DOĞAL (OTO)'
-            : '%${(_portraitLightIntensity * 100).round()}';
+            : '${_kPortraitLightingNames[_portraitLightingIndex]} %${(_portraitLightIntensity * 100).round()}';
         break;
       case ActiveProDial.ev:
         centerValueText = _evCompensation == 0.0
@@ -2857,18 +4376,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             : '${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)} EV';
         break;
       case ActiveProDial.iso:
-        centerValueText = !_manualExposure
+        centerValueText = !isIsoManualNow
             ? 'OTO (ISO $liveIso)'
             : '${_iso.round()} ISO';
         break;
       case ActiveProDial.shutter:
-        centerValueText = !_manualExposure
-            ? 'OTO (1/${liveShutterDenominator}s)'
-            : '1/${_shutterDenominator.round()}s';
+        centerValueText = !isShutterManualNow
+            ? 'OTO ($liveShutterLabel)'
+            : DslrStopsRegistry.formatShutterNs(_shutterExposureNs);
         break;
       case ActiveProDial.wb:
-        centerValueText =
-            !_manualWb ? 'AWB (${liveKelvin}K)' : '${_kelvin.round()}K';
+        final tintSuffix = _tint.abs() >= 1.0
+            ? ' ${_tint < 0 ? "${_tint.round()}G" : "+${_tint.round()}M"}'
+            : '';
+        centerValueText = !_manualWb
+            ? 'AWB (${liveKelvin}K)'
+            : '${_kelvin.round()}K$tintSuffix';
         break;
       case ActiveProDial.focus:
         centerValueText = !_manualFocus
@@ -2885,9 +4408,13 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           _videoShutterAngleDeg,
           _videoFps,
         );
+        final degText = _videoShutterAngleDeg ==
+                _videoShutterAngleDeg.roundToDouble()
+            ? '${_videoShutterAngleDeg.round()}°'
+            : '${_videoShutterAngleDeg.toStringAsFixed(1)}°';
         centerValueText = !_videoLockShutterAngle
             ? 'OTO (180°)'
-            : '${_videoShutterAngleDeg.round()}° ($eqShutter)';
+            : '$degText ($eqShutter)';
         break;
       case ActiveProDial.videoFps:
         centerValueText =
@@ -2911,26 +4438,155 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         break;
     }
 
+    final hasSecondary = secondaryOpts.isNotEmpty;
+    final hasOuter = outerModeFeatures.isNotEmpty;
+    final clampedOuterScroll = hasOuter
+        ? _outerFeatureArcScrollPos.clamp(
+            0.0,
+            (outerModeFeatures.length - 1).toDouble(),
+          )
+        : 0.0;
+
     return GestureDetector(
+      key: const ValueKey('radial_concentric_dome_gesture'),
       behavior: HitTestBehavior.translucent,
-      onPanUpdate: (details) {
-        final dx = details.delta.dx;
-        final dy = details.delta.dy;
-        final local = details.localPosition;
-        final sideSign = local.dx < width * 0.5 ? -1.0 : 1.0;
-        final combinedDelta = dx - (dy * 0.35 * sideSign);
-        _scrubContinuousWheelByDeltaNorm(
-          -combinedDelta / (width * 0.42),
-          isArtwork: isArtwork,
+      onPanStart: (details) {
+        final hitBand = RadialRingGeometry.hitTestBand(
+          point: details.localPosition,
+          center: wheelCenter,
+          innerWheelRadius: wheelRadius,
+          hasSecondary: hasSecondary,
+          hasOuterFeature: hasOuter,
         );
+        setState(() {
+          _activeDragRingBand = hitBand;
+        });
+      },
+      onPanUpdate: (details) {
+        switch (_activeDragRingBand) {
+          case RadialRingBand.outerFeature:
+            if (!hasOuter) return;
+            final nextOuter = RadialRingGeometry.scrollPosAfterDrag(
+              currentScrollPos: clampedOuterScroll,
+              deltaDx: details.delta.dx,
+              itemCount: outerModeFeatures.length,
+            );
+            setState(() {
+              _outerFeatureArcScrollPos = nextOuter;
+            });
+            final outerIdx =
+                nextOuter.round().clamp(0, outerModeFeatures.length - 1);
+            if (outerIdx != _lastOuterFeatureHapticIndex) {
+              _lastOuterFeatureHapticIndex = outerIdx;
+              _triggerRadialHaptic();
+            }
+            return;
+
+          case RadialRingBand.middleSecondary:
+            if (!hasSecondary) return;
+            final nextSecondary = RadialRingGeometry.scrollPosAfterDrag(
+              currentScrollPos: _secondaryArcScrollPos,
+              deltaDx: details.delta.dx,
+              itemCount: secondaryOpts.length,
+            );
+            setState(() {
+              _secondaryArcScrollPos = nextSecondary;
+            });
+            final activeIdx =
+                nextSecondary.round().clamp(0, secondaryOpts.length - 1);
+            if (activeIdx != _lastSecondaryHapticIndex) {
+              _lastSecondaryHapticIndex = activeIdx;
+              _triggerRadialHaptic();
+              if (secondaryOpts[activeIdx].applyOnDrag) {
+                secondaryOpts[activeIdx].onSelect();
+              }
+            }
+            return;
+
+          case RadialRingBand.innerPrimary:
+            final dx = details.delta.dx;
+            final dy = details.delta.dy;
+            final local = details.localPosition;
+            final sideSign = local.dx < width * 0.5 ? -1.0 : 1.0;
+            final combinedDelta = dx - (dy * 0.35 * sideSign);
+            _scrubContinuousWheelByDeltaNorm(
+              -combinedDelta / (width * 0.42),
+              isArtwork: isArtwork,
+            );
+            return;
+
+          case RadialRingBand.none:
+            return;
+        }
+      },
+      onPanEnd: (_) {
+        if (_activeDragRingBand != RadialRingBand.none) {
+          setState(() => _activeDragRingBand = RadialRingBand.none);
+        }
+      },
+      onPanCancel: () {
+        if (_activeDragRingBand != RadialRingBand.none) {
+          setState(() => _activeDragRingBand = RadialRingBand.none);
+        }
+      },
+      onTapUp: (details) {
+        final local = details.localPosition;
+        final tappedBand = RadialRingGeometry.hitTestBand(
+          point: local,
+          center: wheelCenter,
+          innerWheelRadius: wheelRadius,
+          hasSecondary: hasSecondary,
+          hasOuterFeature: hasOuter,
+        );
+        if (tappedBand == RadialRingBand.outerFeature && hasOuter) {
+          final tappedIdx = RadialRingGeometry.hitTestArcItemIndex(
+            point: local,
+            center: wheelCenter,
+            currentScrollPos: clampedOuterScroll,
+            itemCount: outerModeFeatures.length,
+            angleStep: IosCameraRadialWheelPainter.kOuterFeatureItemAngleStep,
+          );
+          if (tappedIdx != null) {
+            _triggerRadialHaptic();
+            setState(() {
+              _outerFeatureArcScrollPos = tappedIdx.toDouble();
+              _lastOuterFeatureHapticIndex = tappedIdx;
+            });
+            outerModeFeatures[tappedIdx].onTap?.call();
+          }
+          return;
+        }
+
+        if (tappedBand == RadialRingBand.middleSecondary && hasSecondary) {
+          final tappedIdx = RadialRingGeometry.hitTestArcItemIndex(
+            point: local,
+            center: wheelCenter,
+            currentScrollPos: _secondaryArcScrollPos,
+            itemCount: secondaryOpts.length,
+            angleStep: IosCameraRadialWheelPainter.kSecondaryItemAngleStep,
+          );
+          if (tappedIdx != null) {
+            _triggerRadialHaptic();
+            setState(() {
+              _secondaryArcScrollPos = tappedIdx.toDouble();
+              _lastSecondaryHapticIndex = tappedIdx;
+            });
+            secondaryOpts[tappedIdx].onSelect();
+          }
+        }
       },
       child: CustomPaint(
-        size: Size(width, 315),
+        size: Size(width, wheelHeight),
         painter: IosCameraRadialWheelPainter(
           dial: dial,
           normalizedValue: norm,
           centerValueText: centerValueText,
           stops: _majorStopsForDial(dial),
+          secondaryItems: [for (final o in secondaryOpts) o.label],
+          secondaryScrollPos: _secondaryArcScrollPos,
+          outerFeatureItems: [for (final f in outerModeFeatures) f.spec],
+          outerFeatureScrollPos: clampedOuterScroll,
+          activeRingBand: _activeDragRingBand,
         ),
       ),
     );
@@ -2985,22 +4641,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       case ActiveProDial.iso:
         return const [
           (norm: 0.0, primary: 'OTO', secondary: 'ISO'),
-          (norm: 0.20, primary: '100', secondary: 'ISO'),
-          (norm: 0.36, primary: '200', secondary: 'ISO'),
-          (norm: 0.52, primary: '400', secondary: 'ISO'),
-          (norm: 0.68, primary: '800', secondary: 'ISO'),
-          (norm: 0.84, primary: '1600', secondary: 'ISO'),
-          (norm: 1.0, primary: '3200', secondary: 'ISO'),
+          (norm: 0.16, primary: '100', secondary: 'ISO'),
+          (norm: 0.34, primary: '400', secondary: 'ISO'),
+          (norm: 0.52, primary: '800', secondary: 'ISO'),
+          (norm: 0.70, primary: '1600', secondary: 'ISO'),
+          (norm: 0.86, primary: '6400', secondary: 'ISO'),
+          (norm: 1.0, primary: '12800', secondary: 'ISO'),
         ];
       case ActiveProDial.shutter:
         return const [
           (norm: 0.0, primary: 'OTO', secondary: 'EXP'),
-          (norm: 0.20, primary: '1/30', secondary: 'S'),
-          (norm: 0.40, primary: '1/60', secondary: 'S'),
-          (norm: 0.58, primary: '1/125', secondary: 'S'),
-          (norm: 0.75, primary: '1/500', secondary: 'S'),
-          (norm: 0.90, primary: '1/2000', secondary: 'S'),
-          (norm: 1.0, primary: '1/4000', secondary: 'S'),
+          (norm: 0.14, primary: '15"', secondary: 'UZUN'),
+          (norm: 0.30, primary: '1"', secondary: 'SN'),
+          (norm: 0.50, primary: '1/30', secondary: 'S'),
+          (norm: 0.68, primary: '1/125', secondary: 'S'),
+          (norm: 0.85, primary: '1/1000', secondary: 'S'),
+          (norm: 1.0, primary: '1/8000', secondary: 'S'),
         ];
       case ActiveProDial.wb:
         return const [
@@ -3036,10 +4692,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           (norm: 1.0, primary: '60', secondary: 'AKICI'),
         ];
       case ActiveProDial.videoProfile:
-        return const [
-          (norm: 0.0, primary: '709', secondary: 'SDR 8B'),
-          (norm: 0.5, primary: 'HLG10', secondary: '10-BİT'),
-          (norm: 1.0, primary: 'FLAT', secondary: 'LOG-BENZERİ'),
+        final profiles = _availableVideoProfiles;
+        if (profiles.isEmpty) return const [];
+        return [
+          for (int i = 0; i < profiles.length; i++)
+            (
+              norm: profiles.length > 1 ? i / (profiles.length - 1) : 0.0,
+              primary: profiles[i].shortLabel,
+              secondary: profiles[i].isTenBit ? '10-BİT' : 'SDR 8B',
+            ),
         ];
       case ActiveProDial.videoLut:
         return const [
@@ -3060,15 +4721,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
   }
 
-  /// Cinema Pro Video Top HUD Overlay (SMPTE Timecode, 180° Shutter Angle, dBFS Peak/RMS Meter, Thermal & Storage Guard)
-  Widget _buildProVideoCinemaHudOverlay() {
+  /// Interactive Cinema Pro Video Top HUD Overlay (SMPTE Timecode, Clickable 4K/FPS/180°/Profile/LUT+BYPASS, Broadcast dBFS Meter)
+  Widget _buildInteractiveVideoCinemaHud() {
     final tel = _videoTelemetry;
     final tc = tel?.timecodeString ?? '00:00:00:00';
     final peakDb = tel?.samplePeakDbfs ?? -60.0;
     final rmsDb = tel?.rmsDbfs ?? -60.0;
-    final peakNorm = ((peakDb + 60.0) / 60.0).clamp(0.0, 1.0);
-    final rmsNorm = ((rmsDb + 60.0) / 60.0).clamp(0.0, 1.0);
-    final isClip = peakDb >= -0.5;
     final thermal = tel?.thermalLevel ?? ZameraThermalLevel.normal;
     final remMin = (tel?.remainingRecordSeconds ?? 0) / 60.0;
     final ndRec = tel?.ndFilterRecommendation;
@@ -3076,169 +4734,148 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       _videoShutterAngleDeg,
       _videoFps,
     );
+    final degText =
+        _videoShutterAngleDeg == _videoShutterAngleDeg.roundToDouble()
+            ? '${_videoShutterAngleDeg.round()}°'
+            : '${_videoShutterAngleDeg.toStringAsFixed(1)}°';
+    final hasActiveLut =
+        _videoLutPreset != ZameraLutPreset.none || _customCubeLut != null;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.62),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: _isVideoRecording
-              ? const Color(0xFFFF3B30).withValues(alpha: 0.85)
-              : Colors.white12,
-          width: _isVideoRecording ? 1.2 : 0.8,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _isVideoRecording
-                          ? const Color(0xFFFF3B30)
-                          : kZameraCyan,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    _isVideoRecording ? 'REC  $tc' : 'STBY $tc',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.w800,
-                      color: _isVideoRecording
-                          ? const Color(0xFFFF453A)
-                          : Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              Text(
-                '${_videoResolutionHeight >= 2160 ? "4K" : "1080P"} ${_videoFps}P · ${_videoShutterAngleDeg.round()}° ($eqShutter) · ${_videoProfile.shortLabel}',
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: kIosYellow,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          Row(
-            children: [
-              const Text(
-                'dBFS',
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white70,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: SizedBox(
-                    height: 6,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Container(color: Colors.white12),
-                        FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: rmsNorm,
-                          child: Container(
-                            color: const Color(0xFF32D74B),
-                          ),
-                        ),
-                        FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: peakNorm,
-                          child: Container(
-                            color: isClip
-                                ? const Color(0xFFFF3B30)
-                                : kIosYellow.withValues(alpha: 0.72),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '${peakDb.toStringAsFixed(0)}dB',
-                style: TextStyle(
-                  fontSize: 8,
-                  fontFamily: 'monospace',
-                  fontWeight: FontWeight.w700,
-                  color: isClip ? const Color(0xFFFF453A) : Colors.white70,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                thermal.badgeText,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: thermal == ZameraThermalLevel.normal
-                      ? const Color(0xFF32D74B)
-                      : const Color(0xFFFF9F0A),
-                ),
-              ),
-              if (remMin > 0) ...[
-                const SizedBox(width: 6),
-                Text(
-                  '${remMin.toStringAsFixed(0)}dk',
-                  style: const TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white70,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (ndRec != null || _lastVideoResult != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (ndRec != null)
-                  Text(
-                    '⚠ $ndRec',
-                    style: const TextStyle(
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w800,
-                      color: kIosYellow,
-                    ),
-                  )
-                else
-                  const SizedBox.shrink(),
-                if (_lastVideoResult != null)
-                  Text(
-                    'SON: ${_lastVideoResult!.codec} · ${(_lastVideoResult!.fileSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
-                    style: const TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w700,
-                      color: kZameraCyan,
-                    ),
-                  ),
-              ],
+    final hud = ProVideoCinemaHud(
+      isRecording: _isVideoRecording,
+      timecode: tc,
+      resolutionLabel: _videoResolutionHeight >= 2160 ? '4K' : '1080P',
+      fps: _videoFps,
+      fpsOptions: const <int>[24, 25, 30, 60],
+      isFpsSelectorOpen: _videoFpsTrayOpen,
+      shutterAngleLabel: degText,
+      shutterSpeedLabel: eqShutter,
+      isShutterLocked: _videoLockShutterAngle,
+      activeProfileId: _videoProfile.name,
+      profileLabel: _videoProfile.shortLabel,
+      isTenBitOverride: _videoProfile.isTenBit,
+      profileOptions: _cinemaProfileOptions,
+      isProfileSelectorOpen: _videoProfileTrayOpen,
+      lutLabel: _customCubeLut?.title ??
+          (hasActiveLut ? _videoLutPreset.label : 'LUT YOK'),
+      isLutEnabled: hasActiveLut,
+      isLutBypassed: _videoLutBypass,
+      audioRmsDb: rmsDb,
+      audioPeakDb: peakDb,
+      thermalLabel: thermal.badgeText,
+      isThermalWarning: thermal != ZameraThermalLevel.normal,
+      remainingMinutes: remMin > 0 ? remMin.round() : null,
+      droppedFrames: tel?.droppedFrameCount ?? 0,
+      ndFilterWarning: ndRec != null,
+      onCycleResolution: _isVideoRecording
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _videoResolutionHeight =
+                    _videoResolutionHeight >= 2160 ? 1080 : 2160;
+              });
+              _startOrSwitchVideoCamera(
+                _selectedCameraId,
+                keepZoom: _zoomFactor,
+              );
+            },
+      onTapFps: _isVideoRecording
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _videoFpsTrayOpen = !_videoFpsTrayOpen;
+                if (_videoFpsTrayOpen) _videoProfileTrayOpen = false;
+              });
+            },
+      onSelectFps: _isVideoRecording
+          ? null
+          : (nextFps) {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _videoFps = nextFps;
+                _videoFpsTrayOpen = false;
+              });
+              _startOrSwitchVideoCamera(
+                _selectedCameraId,
+                keepZoom: _zoomFactor,
+              );
+            },
+      onTapShutterAngle: () =>
+          _selectRadialSettingDial(ActiveProDial.shutterAngle),
+      onToggleShutterLock: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _videoLockShutterAngle = !_videoLockShutterAngle;
+        });
+        _scheduleNativeControlsPush(artworkMode: false);
+      },
+      onTapProfile: _isVideoRecording
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _videoProfileTrayOpen = !_videoProfileTrayOpen;
+                if (_videoProfileTrayOpen) _videoFpsTrayOpen = false;
+              });
+            },
+      onSelectProfile: _isVideoRecording
+          ? null
+          : (profId) {
+              final matched = _availableVideoProfiles
+                  .where((p) => p.name == profId)
+                  .firstOrNull;
+              if (matched == null) return;
+              HapticFeedback.selectionClick();
+              setState(() {
+                _videoProfile = matched;
+                _videoProfileTrayOpen = false;
+              });
+              _startOrSwitchVideoCamera(
+                _selectedCameraId,
+                keepZoom: _zoomFactor,
+              );
+            },
+      onTapLut: () => _selectRadialSettingDial(ActiveProDial.videoLut),
+      onToggleLutBypass: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _videoLutBypass = !_videoLutBypass;
+        });
+      },
+    );
+
+    final lastVideo = _lastVideoResult;
+    if (_isVideoRecording || lastVideo == null) {
+      return hud;
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        hud,
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.62),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white12, width: 0.6),
             ),
-          ],
-        ],
-      ),
+            child: Text(
+              'SON: ${lastVideo.codec} · ${(lastVideo.fileSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB',
+              style: const TextStyle(
+                fontSize: 8,
+                fontWeight: FontWeight.w700,
+                color: kZameraCyan,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -3276,12 +4913,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   }
 
   String _getActiveDialDisplayValue(ActiveProDial dial) {
-    final liveIso = (_liveTelemetry['iso'] as num?)?.round() ??
-        _lastCaptureResult?.iso ??
-        100;
-    final liveKelvin = (_liveTelemetry['solvedCctKelvin'] as num?)?.round() ??
-        5500;
+    final isVideo = _selectedMode == 3;
+    final vIso = _videoTelemetry?.activeIso ?? 0;
+    final liveIso = isVideo
+        ? (vIso > 0 ? vIso : 100)
+        : ((_liveTelemetry['iso'] as num?)?.round() ??
+            _lastCaptureResult?.iso ??
+            100);
+    final vKelvin = _videoTelemetry?.solvedCctKelvin ?? 0;
+    final liveKelvin = isVideo
+        ? (vKelvin > 0 ? vKelvin : 5500)
+        : ((_liveTelemetry['solvedCctKelvin'] as num?)?.round() ?? 5500);
     final supportsFocus = _activeCameraCap?.supportsVariableFocus ?? true;
+    final isIsoManualNow =
+        _selectedMode == 1 ? _dslrMode.isIsoManual : _manualExposure;
+    final isShutterManualNow =
+        _selectedMode == 1 ? _dslrMode.isShutterManual : _manualExposure;
 
     switch (dial) {
       case ActiveProDial.lens:
@@ -3299,11 +4946,18 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             ? '0.0 (OTO)'
             : '${_evCompensation >= 0 ? "+" : ""}${_evCompensation.toStringAsFixed(1)}';
       case ActiveProDial.iso:
-        return !_manualExposure ? 'OTO (ISO $liveIso)' : '${_iso.round()}';
+        return !isIsoManualNow ? 'OTO (ISO $liveIso)' : '${_iso.round()}';
       case ActiveProDial.shutter:
-        return !_manualExposure ? 'OTO' : '1/${_shutterDenominator.round()}s';
+        return !isShutterManualNow
+            ? 'OTO'
+            : DslrStopsRegistry.formatShutterNs(_shutterExposureNs);
       case ActiveProDial.wb:
-        return !_manualWb ? 'AWB (${liveKelvin}K)' : '${_kelvin.round()}K';
+        final tintSuffix = _tint.abs() >= 1.0
+            ? ' ${_tint < 0 ? "${_tint.round()}G" : "+${_tint.round()}M"}'
+            : '';
+        return !_manualWb
+            ? 'AWB (${liveKelvin}K)'
+            : '${_kelvin.round()}K$tintSuffix';
       case ActiveProDial.focus:
         return !_manualFocus
             ? 'AF (OTO)'
@@ -3314,9 +4968,11 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                         (_activeCameraCap?.minimumFocusDistanceDiopters ?? 10.0),
                   );
       case ActiveProDial.shutterAngle:
-        return !_videoLockShutterAngle
-            ? 'OTO (180°)'
-            : '${_videoShutterAngleDeg.round()}°';
+        final degText =
+            _videoShutterAngleDeg == _videoShutterAngleDeg.roundToDouble()
+                ? '${_videoShutterAngleDeg.round()}°'
+                : '${_videoShutterAngleDeg.toStringAsFixed(1)}°';
+        return !_videoLockShutterAngle ? 'OTO (180°)' : degText;
       case ActiveProDial.videoFps:
         return _videoFps == 30 ? '30P (OTO)' : '$_videoFps FPS';
       case ActiveProDial.videoProfile:
@@ -3548,7 +5204,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                         if (isVideo) {
                           _toggleVideoRecording();
                         } else {
-                          _triggerPhotoCapture(
+                          _triggerProCaptureWithDriveMode(
                             isArtworkMode: isArtwork,
                             isPortraitMode: isPortrait,
                           );
@@ -3629,7 +5285,16 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                                   color: Colors.black,
                                 ),
                               )
-                            : null,
+                            : ((_selfTimerRemainingSec ?? 0) > 0 && !isVideo
+                                ? Text(
+                                    '$_selfTimerRemainingSec',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.black,
+                                    ),
+                                  )
+                                : null),
                       ),
                     ),
                   ],
@@ -3708,9 +5373,26 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     );
   }
 
+  void _applyPortraitOpticalZoom(double targetZoom) {
+    HapticFeedback.selectionClick();
+    final clamped = targetZoom.clamp(1.0, 10.0);
+    setState(() {
+      _zoomFactor = clamped;
+      _continuousWheelNorm = _normalizedValueForDial(ActiveProDial.lens);
+    });
+    if (_selectedCameraId == '3' &&
+        !_isStartingCamera &&
+        !_isVideoRecording) {
+      _startOrSwitchCamera('2', keepZoom: clamped);
+    } else {
+      _scheduleNativeControlsPush(artworkMode: false);
+    }
+  }
+
   void _showLastCaptureInspectorModal() {
     final res = _lastCaptureResult;
     if (res == null) return;
+    final isPortraitShot = _selectedMode == 2 || res.portraitDepthActive;
     CaptureInspectorModal.show(
       context,
       captureResult: res,
@@ -3719,6 +5401,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       initialLightIntensity: _portraitLightIntensity,
       subjectRadiusRatio: _portraitSubjectRadius,
       initialFocusTapNorm: _lastFocusTapNorm,
+      initialPortraitEnabled: isPortraitShot,
+      isPortraitCapture: isPortraitShot,
     );
   }
 
@@ -3727,6 +5411,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       context,
       calibrationResult: _calibrationResult,
       probeReport: _probeReport,
+      activeCameraId: _selectedCameraId,
+      onTriggerCameraCalibration: () => _triggerPhotoCapture(
+        isArtworkMode: true,
+        calibrateColorChecker: true,
+      ),
+      onResetCalibration: _resetCalibrationForActiveLens,
     );
   }
 }

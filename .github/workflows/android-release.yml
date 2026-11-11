@@ -1,8 +1,6 @@
 name: Zamera Android Cloud Build & Google Play Console Release
 
 on:
-  push:
-    branches: [ main, zamera-release ]
   workflow_dispatch:
     inputs:
       track:

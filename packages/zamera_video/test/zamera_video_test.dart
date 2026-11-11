@@ -1,7 +1,10 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zamera_video/zamera_video.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('WP-3.2: 180-degree shutter exposure math and audio dBFS', () {
     expect(ZameraCinemaMath.shutterExposureNsFromAngle(180.0, 24), 20833333);
     expect(ZameraCinemaMath.shutterExposureNsFromAngle(180.0, 25), 20000000);
@@ -63,5 +66,110 @@ void main() {
     );
     expect(coordinator.currentOwner, CameraOwnerMode.photo);
     expect(events, ['stopPhoto', 'startVideo', 'stopVideo', 'startPhoto']);
+  });
+
+  test('Platform profile OCP registry, standard shutter angles, telemetry & video focus/lock channel contracts', () async {
+    expect(
+      ZameraVideoProfile.supportedForPlatform(isIOS: true),
+      equals(const [
+        ZameraVideoProfile.universalRec709Locked,
+        ZameraVideoProfile.iosAppleLogHevc10Bit,
+        ZameraVideoProfile.iosAppleLogProRes422Hq,
+      ]),
+    );
+    expect(
+      ZameraVideoProfile.supportedForPlatform(isIOS: false),
+      equals(const [
+        ZameraVideoProfile.universalRec709Locked,
+        ZameraVideoProfile.androidHlg10Hevc10Bit,
+        ZameraVideoProfile.zameraFlatSdr,
+      ]),
+    );
+    expect(
+      ZameraCinemaMath.standardShutterAngles,
+      equals(const <double>[45.0, 90.0, 144.0, 172.8, 180.0, 270.0, 360.0]),
+    );
+
+    const defaults = ZameraVideoTelemetry();
+    expect(defaults.liveZebraGrid16x12, isEmpty);
+    expect(defaults.livePeakingGrid16x12, isEmpty);
+    expect(defaults.liveFocusPeakingScore, 0.0);
+    expect(defaults.solvedCctKelvin, 5500);
+    expect(defaults.aeAfLocked, isFalse);
+    expect(defaults.meteredEvDelta, 0.0);
+
+    final parsed = ZameraVideoTelemetry.fromMap({
+      'liveZebraGrid16x12': List<double>.filled(192, 0.25),
+      'livePeakingGrid16x12': List<double>.filled(192, 0.75),
+      'liveFocusPeakingScore': 0.84,
+      'solvedCctKelvin': 4300,
+      'aeAfLocked': true,
+      'meteredEvDelta': -0.65,
+    });
+    expect(parsed.liveZebraGrid16x12.length, 192);
+    expect(parsed.liveZebraGrid16x12.first, closeTo(0.25, 1e-6));
+    expect(parsed.livePeakingGrid16x12.length, 192);
+    expect(parsed.livePeakingGrid16x12.first, closeTo(0.75, 1e-6));
+    expect(parsed.liveFocusPeakingScore, closeTo(0.84, 1e-6));
+    expect(parsed.solvedCctKelvin, 4300);
+    expect(parsed.aeAfLocked, isTrue);
+    expect(parsed.meteredEvDelta, closeTo(-0.65, 1e-6));
+
+    const channel = MethodChannel('com.akarworks.zamera/video_engine');
+    String? lastMethod;
+    Map<dynamic, dynamic>? lastArgs;
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      lastMethod = call.method;
+      lastArgs = call.arguments as Map<dynamic, dynamic>?;
+      if (call.method == 'updateVideoControls' ||
+          call.method == 'setVideoFocusAndMeteringPoint') {
+        return true;
+      }
+      return null;
+    });
+
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final ctrlOk = await ZameraVideo.updateVideoControls(
+      fps: 24,
+      shutterAngleDeg: 172.8,
+      lockShutterAngle: true,
+      manualIso: false,
+      iso: 100,
+      evCompensation: 0.0,
+      manualFocus: false,
+      focusDistance: 0.0,
+      manualWb: false,
+      kelvin: 5500,
+      tint: 0.0,
+      zoomRatio: 1.0,
+      profile: ZameraVideoProfile.universalRec709Locked,
+      aeAfLocked: true,
+    );
+    expect(ctrlOk, isTrue);
+    expect(lastMethod, 'updateVideoControls');
+    expect(lastArgs?['aeAfLocked'], isTrue);
+    expect(lastArgs?['shutterAngleDeg'], 172.8);
+
+    final focusDefault = await ZameraVideo.setVideoFocusAndMeteringPoint(
+      x: 0.3,
+      y: 0.7,
+    );
+    expect(focusDefault, isTrue);
+    expect(lastMethod, 'setVideoFocusAndMeteringPoint');
+    expect(lastArgs, equals({'x': 0.3, 'y': 0.7, 'lockAeAf': false}));
+
+    final focusLocked = await ZameraVideo.setVideoFocusAndMeteringPoint(
+      x: 0.6,
+      y: 0.4,
+      lockAeAf: true,
+    );
+    expect(focusLocked, isTrue);
+    expect(lastArgs, equals({'x': 0.6, 'y': 0.4, 'lockAeAf': true}));
   });
 }
