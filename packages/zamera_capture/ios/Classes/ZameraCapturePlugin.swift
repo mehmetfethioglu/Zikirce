@@ -326,6 +326,14 @@ public class ZameraCapturePlugin: NSObject,
             vOut.setSampleBufferDelegate(self, queue: DispatchQueue(label: "com.akarworks.zamera.videoFrameQueue"))
             if session.canAddOutput(vOut) {
                 session.addOutput(vOut)
+                if let conn = vOut.connection(with: .video) {
+                    if conn.isVideoOrientationSupported {
+                        conn.videoOrientation = .portrait
+                    }
+                    if conn.isVideoMirroringSupported {
+                        conn.isVideoMirrored = (device.position == .front)
+                    }
+                }
                 self.videoOutput = vOut
             }
 
@@ -2288,6 +2296,9 @@ public class ZameraCapturePlugin: NSObject,
             if session.canAddOutput(mOut) {
                 session.addOutput(mOut)
                 if let mConn = mOut.connection(with: .video) {
+                    if mConn.isVideoOrientationSupported {
+                        mConn.videoOrientation = .portrait
+                    }
                     applyStabilization(mConn)
                     if profile == "iosAppleLogProRes422Hq",
                        mOut.availableVideoCodecTypes.contains(.proRes422HQ) {
@@ -2303,6 +2314,14 @@ public class ZameraCapturePlugin: NSObject,
             vDataOut.setSampleBufferDelegate(self, queue: DispatchQueue(label: "com.akarworks.zamera.videoStreamQueue"))
             if session.canAddOutput(vDataOut) {
                 session.addOutput(vDataOut)
+                if let vConn = vDataOut.connection(with: .video) {
+                    if vConn.isVideoOrientationSupported {
+                        vConn.videoOrientation = .portrait
+                    }
+                    if vConn.isVideoMirroringSupported {
+                        vConn.isVideoMirrored = (device.position == .front)
+                    }
+                }
                 applyStabilization(vDataOut.connection(with: .video))
             }
 
