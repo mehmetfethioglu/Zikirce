@@ -51,11 +51,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 67;
-  static const String currentVersionName = '2.2.1';
+  static const int currentVersionCode = 68;
+  static const String currentVersionName = '2.3.0';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 68,
+      versionName: '2.3.0',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'İrfan Meydanı, 32 Farz Kütüphanesi & SM-2 Hafıza Tekrarı',
+          titleEn: 'Arena of Wisdom, 32 Farz Library & SM-2 Spaced Review',
+          descTr: 'Alt menüye eklenen yeni İrfan sekmesiyle Günün 5 İrfan Sorusu, 228+ sahih kaynaklı sorudan oluşan İlim Halkaları (Kur’ân, Siyer, 32 Farz & İlmihal, Esmâ & Dua, Külliyat), SM-2 Aralıklı Hafıza Tekrarı, Külliyat okuma tavsiyeleri, doğrudan ilgili zikri çekme bağlantıları ve 5 yeni İrfan rozeti sunuldu.',
+          descEn: 'Added the new Wisdom tab featuring the Daily 5 Wisdom Quiz, Circles of Knowledge with 228+ verified questions across Quran, Seerah, 32 Farz & Catechism, Asma & Dua, and Islamic Library, SM-2 Spaced Review, reading recommendations, linked dhikr practice, and 5 new Wisdom badges.',
+          icon: Icons.psychology_alt_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Zikir Vakur Kart Karuseli & Hızlı Seçim Çekmecesi',
+          titleEn: 'Dhikr Vakur Card Carousel & Quick Selection Sheet',
+          descTr: 'Zikirmatik ekranından tek dokunuşla açılan yeni Vakur Kart Karuseli seçim çekmecesi, özel zikir oluşturma, fiziksel tesbih/yüzük sayacı adedi içe aktarma ve Feraciye Duası tashihi tamamlandı.',
+          descEn: 'Redesigned one-tap Dhikr Selection Sheet with Vakur Cards, custom litany creation, physical prayer bead count import, and Feraciye Prayer text refinements.',
+          icon: Icons.view_carousel_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Çift Sayfa Mushaf Düzeni, Mukabele Hatim & Zikirce TV Hub',
+          titleEn: 'Dual-Page Mushaf Spread, Mukabele Khatm & Zikirce TV Hub',
+          descTr: 'Geniş ekran çift sayfa Mushaf mizanpajı, Mukabele Hatim akışı ve Zikirce TV Hub performans ve arayüz iyileştirmeleri yapıldı.',
+          descEn: 'Enhanced wide-screen dual-page Mushaf spread layout, Mukabele Khatm flow, and Zikirce TV Hub visual and performance polish.',
+          icon: Icons.auto_stories_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 67,
       versionName: '2.2.1',

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/services/haptic_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/widgets/tv_focusable.dart';
+import '../../../irfan/presentation/widgets/irfan_seljuk_star_painter.dart';
 import '../../providers/prayer_providers.dart';
 import '../widgets/city_selection_sheet.dart';
 import '../widgets/kaza_manager_sheet.dart';
 import '../widgets/prayer_circular_ring.dart';
 import '../widgets/today_prayers_card.dart';
 import '../widgets/prayer_notification_settings_sheet.dart';
-import 'fiqh_library_screen.dart';
 
 class PrayerTimesScreen extends ConsumerWidget {
   const PrayerTimesScreen({super.key});
@@ -141,9 +143,9 @@ class PrayerTimesScreen extends ConsumerWidget {
             const SizedBox(height: 20),
 
             // ==========================================
-            // 4. 32 FARZ İLMİHAL KÜTÜPHANESİ
+            // 4. İRFAN MEYDANI & 32 FARZ KISAYOL KARTI
             // ==========================================
-            const FiqhLibraryView(isEmbedded: true),
+            const _IrfanLibraryShortcutCard(),
           ],
         ),
       ),
@@ -393,6 +395,128 @@ class PrayerTimesScreen extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _IrfanLibraryShortcutCard extends StatelessWidget {
+  const _IrfanLibraryShortcutCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final l10n = context.l10n;
+    final isTr = l10n.isTurkish;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticService.selectionClick();
+          context.go('/irfan?tab=library');
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colors.cardBackground,
+                colors.accent.withValues(alpha: 0.08),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: colors.accent.withValues(alpha: 0.28),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                alignment: Alignment.center,
+                child: IrfanSeljukStarBadge(
+                  size: 30,
+                  color: colors.accent,
+                  accentColor: const Color(0xFFD4A574),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            isTr
+                                ? '32 Farz İlmihal & İrfan Meydanı'
+                                : '32 Farz Catechism & Wisdom Plaza',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: colors.primaryText,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      l10n.irfanShortcutSubtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: colors.secondaryTextAlt,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: colors.accent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isTr ? 'Aç' : 'Open',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 11,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

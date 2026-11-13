@@ -184,6 +184,10 @@ def main() -> int:
             timeout=600,
         )
     if bundle_res.status_code not in (200, 201):
+        err_lower = bundle_res.text.lower()
+        if "already been used" in err_lower or ("version code" in err_lower and "already" in err_lower):
+            print(f"ℹ️ Build {version_code} zaten Google Play Console'a yüklenmiş ve yayınlanmış; işlem tamamlandı kabul ediliyor.")
+            return 0
         print(f"❌ AAB yükleme hatası ({bundle_res.status_code}): {bundle_res.text}")
         return 1
 

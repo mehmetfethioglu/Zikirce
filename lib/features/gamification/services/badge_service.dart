@@ -193,6 +193,65 @@ class BadgeService {
     ];
     badges.addAll(kuranBadges);
 
+    // 3. İrfan Meydanı Rozetleri (İlim & Hikmet)
+    final irfanBadges = <Badge>[
+      Badge(
+        id: 'irfan_first_step',
+        category: 'Irfan',
+        name: 'İlim Yolcusu',
+        description: 'İrfan Meydanı\'nda ilk sorunuzu çözerek ilim yolculuğuna adım atın.',
+        iconPath: 'assets/images/badge_quran_first.png',
+        emoji: '🕯️',
+        glowColor: const Color(0xFF26A69A),
+        criteria: 'İlk İrfan Sorusu',
+      ),
+      Badge(
+        id: 'irfan_daily_7',
+        category: 'Irfan',
+        name: 'Hikmet Müdavimi',
+        description: '7 gün üst üste Günün 5 İrfan Sorusu halkasını tamamlayın.',
+        iconPath: 'assets/images/badge_quran_10.png',
+        emoji: '🔥',
+        glowColor: const Color(0xFFFF9800),
+        criteria: '7 Gün İrfan Serisi',
+        targetDays: 7,
+      ),
+      Badge(
+        id: 'irfan_farz_32',
+        category: 'Irfan',
+        name: '32 Farz Muhafızı',
+        description: '32 Farz & İlmihal alanında 25 doğru cevaba ulaşarak temel fıkıh bilgisini pekiştirin.',
+        iconPath: 'assets/images/badge_hatim.png',
+        emoji: '🕌',
+        glowColor: const Color(0xFF2E7D32),
+        criteria: '25 İlmihal Doğrusu',
+        targetReadCount: 25,
+      ),
+      Badge(
+        id: 'irfan_scholar_50',
+        category: 'Irfan',
+        name: 'İrfan Ehli',
+        description: 'İrfan Meydanı\'nda toplam 50 doğru cevaba ulaşarak ilim halkalarında derinleşin.',
+        iconPath: 'assets/images/badge_quran_100.png',
+        emoji: '📜',
+        glowColor: const Color(0xFF1565C0),
+        criteria: '50 Doğru Cevap',
+        targetReadCount: 50,
+      ),
+      Badge(
+        id: 'irfan_sm2_master',
+        category: 'Irfan',
+        name: 'Hafıza Mektebi',
+        description: 'SM-2 Hafıza Tekrarı modunda 10 soruyu pekiştirin veya 100 doğru cevaba ulaşın.',
+        iconPath: 'assets/images/badge_hatim_3.png',
+        emoji: '🧠',
+        glowColor: const Color(0xFF8E24AA),
+        criteria: '10 SM-2 Tekrarı',
+        targetReadCount: 10,
+      ),
+    ];
+    badges.addAll(irfanBadges);
+
     try {
       final prefs = await SharedPreferences.getInstance();
 
@@ -401,6 +460,55 @@ class BadgeService {
           : hatimDate;
       if (fastHatim != null || dbUnlockedSet.contains('hatim_1_month')) {
         await markUnlocked(hatimFastBadge, fastHatimDate, 'Hatim');
+      }
+
+      // 5. İrfan Meydanı Unlocks Check
+      final irfanSolved = getSessionInt('Irfan_TotalSolved');
+      final irfanCorrect = getSessionInt('Irfan_TotalCorrect');
+      final irfanIlmihalCorrect = getSessionInt('Irfan_IlmihalCorrect');
+      final irfanSm2Reviews = getSessionInt('Irfan_Sm2Reviews');
+      final irfanRawStreak = getSessionInt('Irfan_CurrentStreak');
+      final irfanBestStreak = getSessionInt('Irfan_BestStreak');
+      final isDefaultSession = sessionId == null || sessionId.isEmpty || sessionId == 'default_user';
+      final irfanSfx = isDefaultSession ? '' : '_$sessionId';
+      final irfanLastDate = prefs.getString('Irfan_LastStreakDate$irfanSfx') ??
+          (isDefaultSession ? prefs.getString('Irfan_LastStreakDate') : null);
+      final irfanActiveStreak =
+          (irfanLastDate == todayStr || irfanLastDate == yesterdayStr)
+              ? irfanRawStreak
+              : 0;
+
+      final irfanFirstBadge = badges.firstWhere((b) => b.id == 'irfan_first_step');
+      if (irfanSolved >= 1 || dbUnlockedSet.contains('irfan_first_step')) {
+        await markUnlocked(irfanFirstBadge, now, 'Irfan');
+      }
+
+      final irfanDaily7Badge = badges.firstWhere((b) => b.id == 'irfan_daily_7');
+      irfanDaily7Badge.currentStreak = irfanActiveStreak;
+      if (irfanBestStreak >= 7 ||
+          irfanActiveStreak >= 7 ||
+          dbUnlockedSet.contains('irfan_daily_7')) {
+        await markUnlocked(irfanDaily7Badge, now, 'Irfan');
+      }
+
+      final irfanFarzBadge = badges.firstWhere((b) => b.id == 'irfan_farz_32');
+      irfanFarzBadge.totalReadCount = irfanIlmihalCorrect;
+      if (irfanIlmihalCorrect >= 25 || dbUnlockedSet.contains('irfan_farz_32')) {
+        await markUnlocked(irfanFarzBadge, now, 'Irfan');
+      }
+
+      final irfanScholarBadge = badges.firstWhere((b) => b.id == 'irfan_scholar_50');
+      irfanScholarBadge.totalReadCount = irfanCorrect;
+      if (irfanCorrect >= 50 || dbUnlockedSet.contains('irfan_scholar_50')) {
+        await markUnlocked(irfanScholarBadge, now, 'Irfan');
+      }
+
+      final irfanSm2Badge = badges.firstWhere((b) => b.id == 'irfan_sm2_master');
+      irfanSm2Badge.totalReadCount = irfanSm2Reviews;
+      if (irfanSm2Reviews >= 10 ||
+          irfanCorrect >= 100 ||
+          dbUnlockedSet.contains('irfan_sm2_master')) {
+        await markUnlocked(irfanSm2Badge, now, 'Irfan');
       }
     } catch (e) {
       debugPrint('[BadgeService] Error calculating badges: $e');

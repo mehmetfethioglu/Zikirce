@@ -346,24 +346,24 @@ class _UserGuideScreenState extends ConsumerState<UserGuideScreen> {
       summaryEn:
           'Explore Kutub al-Sittah references and spiritual commentaries for 36 Prophetic Duas, 12 Hadith Dhikrs, and 99 Asma ul-Husna.',
       stepsTr: [
-        'Zikirmatik ekranında üstteki zikir başlığına/kutusuna dokunun veya alt menüden "Zikir Listesi" (2. sekme) ekranına geçin.',
+        'Zikirmatik ekranında üstteki zikir başlığına/kutusuna dokunarak Zikir Seçim Çekmecesi\'ni açın.',
         'Açılan Fazilet ve Şerh çekmecesinde zikrin Arapça harekeli metnini, Türkçe okunuşunu ve sahih meâlini okuyun.',
         'Dualar kategorisindeki 36 peygamber duasının Kur\'ân sûre/âyet referanslarını; Esmâü\'l-Hüsnâ ve Hadis zikirlerinin Buhârî, Müslim, Tirmizî, Ebû Dâvûd, Nesâî ve İbn Mâce kaynaklarını inceleyin.',
         'Dilerseniz bu fazilet metnini doğrudan "Paylaş" butonuyla manevi kart olarak sevdiklerinize gönderin.',
       ],
       stepsEn: [
-        'Tap the dhikr title card at the top of the counter screen or open the "Dhikr List" (2nd tab).',
+        'Tap the dhikr title card at the top of the counter screen to open the Dhikr Selection Sheet.',
         'Read the vocalized Arabic text, transliteration, and authentic translation inside the Virtue & Commentary drawer.',
         'Review exact Quranic Surah/Ayah citations for 36 Prophetic Duas and Kutub al-Sittah Hadith references for 99 Names of Allah.',
         'Tap "Share" to turn any dhikr and its authentic source into a high-resolution spiritual card.',
       ],
       proTipTr:
-          'Zikir Listesi\'nde kategori sekmelerini (Esmâü\'l-Hüsnâ, Dualar, Hadislerden, Sabah-Akşam) kullanarak o vakte uygun tesbihatı saniyeler içinde seçebilirsiniz.',
+          'Zikir Seçim Çekmecesi\'nde kategori sekmelerini (Esmâü\'l-Hüsnâ, Dualar, Hadislerden, Sabah-Akşam) kullanarak o vakte uygun tesbihatı saniyeler içinde seçebilirsiniz.',
       proTipEn:
-          'Use the category tabs in the Dhikr List (Asma ul-Husna, Duas, From Hadith, Morning-Evening) to quickly pick the right litany for the time of day.',
+          'Use the category tabs in the Dhikr Selection Sheet (Asma ul-Husna, Duas, From Hadith, Morning-Evening) to quickly pick the right litany for the time of day.',
       actionLabelTr: 'Zikir Listesi\'ni Aç',
       actionLabelEn: 'Open Dhikr List',
-      route: '/zikirlist',
+      route: '/zikir?openSheet=1',
       searchKeywords: ['fazilet', 'hadis', 'esma', 'esmaül hüsna', 'dua', 'buhari', 'müslim', '146', 'kaynak', 'mana'],
     ),
     _GuideStepItem(
@@ -378,13 +378,13 @@ class _UserGuideScreenState extends ConsumerState<UserGuideScreen> {
       summaryEn:
           'Create personal litanies and import counts from your physical hand counter or prayer beads.',
       stepsTr: [
-        'Alt menüden "Zikir Listesi" ekranına gidin ve sağ üstteki "+" (Yeni Zikir Ekle) butonuna dokunun.',
+        'Zikirmatik ekranında üstteki zikir başlığına dokunarak Zikir Seçim Çekmecesi\'ni açın ve sağ üstteki "+" (Yeni Zikir Ekle) butonuna dokunun.',
         'Zikir adını, isteğe bağlı Arapça metnini, anlamını, günlük hedef sayısını ve kategorisini girerek kendi özel zikrinizi kaydedin.',
         'Elinizdeki fiziksel tesbihte veya yüzük zikirmatikte çektiğiniz sayıyı eklemek için zikir kartındaki "Arşiv / Sayı Ekle (📥)" ikonuna dokunun.',
         'Çektiğiniz adedi yazıp onayladığınızda sayı hem o zikrin toplamına hem de günlük/haftalık istatistiklerinize anında eklenir.',
       ],
       stepsEn: [
-        'Navigate to the "Dhikr List" tab and tap the "+" (Add New Dhikr) button at the top right.',
+        'Open the Dhikr Selection Sheet from the counter screen header and tap the "+" (Add New Dhikr) button at the top right.',
         'Enter the dhikr title, optional Arabic script, meaning, target count, and category to save your custom litany.',
         'To import counts from a physical ring counter or prayer beads, tap the "Import Count (📥)" icon on any dhikr card.',
         'Enter the number you recited; it will immediately be added to your daily statistics and total dhikr history.',
@@ -395,7 +395,7 @@ class _UserGuideScreenState extends ConsumerState<UserGuideScreen> {
           'You can count on a physical ring counter during the day and import the total in the evening with a single tap to keep your daily streak alive.',
       actionLabelTr: 'Zikir Listesi\'ne Git',
       actionLabelEn: 'Go to Dhikr List',
-      route: '/zikirlist',
+      route: '/zikir?openSheet=1',
       searchKeywords: ['özel zikir', 'ekle', 'fiziksel', 'aktarma', 'arşiv', 'sayı ekle', 'yüzük', 'tesbih'],
     ),
     _GuideStepItem(

@@ -8,8 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/dashboard/presentation/screens/bismillah_dashboard_screen.dart';
 import '../../features/zikir/presentation/screens/zikir_counter_screen.dart';
-import '../../features/zikir/presentation/screens/zikir_list_screen.dart';
 import '../../features/zikir/providers/zikir_providers.dart';
+import '../../features/irfan/presentation/screens/irfan_meydani_screen.dart';
+import '../../features/irfan/presentation/screens/irfan_quiz_session_screen.dart';
 import '../../features/kuran/presentation/screens/kuran_page_screen.dart';
 import '../../features/kuran/presentation/screens/mushaf_screen.dart';
 import '../../features/namaz_vakitleri/presentation/screens/prayer_times_screen.dart';
@@ -68,11 +69,25 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: '/zikir',
-          builder: (context, state) => const ZikirCounterScreen(),
+          builder: (context, state) {
+            final openSheet = state.uri.queryParameters['openSheet'] == '1';
+            return ZikirCounterScreen(openSelectionSheetOnMount: openSheet);
+          },
+        ),
+        GoRoute(
+          path: '/irfan',
+          builder: (context, state) {
+            final tab = state.uri.queryParameters['tab'];
+            final farzId = int.tryParse(state.uri.queryParameters['farzId'] ?? '');
+            return IrfanMeydaniScreen(
+              initialTab: tab,
+              initialFarzId: farzId,
+            );
+          },
         ),
         GoRoute(
           path: '/zikirlist',
-          builder: (context, state) => const ZikirListScreen(),
+          redirect: (context, state) => '/zikir?openSheet=1',
         ),
         GoRoute(
           path: '/namaz',
@@ -143,9 +158,17 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: '/irfan/quiz',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const IrfanQuizSessionScreen(),
+    ),
+    GoRoute(
       path: '/fiqh',
       parentNavigatorKey: _rootNavigatorKey,
-      builder: (context, state) => const FiqhLibraryScreen(),
+      builder: (context, state) {
+        final farzId = int.tryParse(state.uri.queryParameters['farzId'] ?? '');
+        return FiqhLibraryScreen(initialFarzId: farzId);
+      },
     ),
   ],
 );
@@ -156,9 +179,9 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
 
   const _MainScaffoldWithNavBar({required this.child, required this.state});
 
-  int _calculateSelectedIndex(BuildContext context) {
+  int _calculateSelectedIndex() {
     final location = state.uri.path;
-    if (location.startsWith('/zikirlist')) return 2;
+    if (location.startsWith('/irfan')) return 2;
     if (location.startsWith('/zikir')) return 1;
     if (location.startsWith('/namaz')) return 3;
     if (location.startsWith('/kuran')) return 4;
@@ -174,7 +197,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
         context.go('/zikir');
         break;
       case 2:
-        context.go('/zikirlist');
+        context.go('/irfan');
         break;
       case 3:
         context.go('/namaz');
@@ -188,7 +211,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isTvMode = ref.watch(isTvModeProvider);
-    final selectedIndex = _calculateSelectedIndex(context);
+    final selectedIndex = _calculateSelectedIndex();
     final colors = context.colors;
     final isDark = colors.statusBrightness == Brightness.light;
 
@@ -251,8 +274,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildNavItem(
-                          index: 0,
+                        _BottomNavBarItem(
                           svgPath: 'assets/images/nav_panel.svg',
                           fallbackIcon: Icons.auto_graph_rounded,
                           isSelected: selectedIndex == 0,
@@ -260,8 +282,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                           inactiveColor: inactiveColor,
                           onTap: () => _onItemTapped(0, context),
                         ),
-                        _buildNavItem(
-                          index: 1,
+                        _BottomNavBarItem(
                           svgPath: 'assets/images/nav_zikir.svg',
                           fallbackIcon: Icons.fingerprint_rounded,
                           isSelected: selectedIndex == 1,
@@ -269,17 +290,15 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                           inactiveColor: inactiveColor,
                           onTap: () => _onItemTapped(1, context),
                         ),
-                        _buildNavItem(
-                          index: 2,
-                          svgPath: 'assets/images/nav_liste.svg',
-                          fallbackIcon: Icons.format_list_bulleted_rounded,
+                        _BottomNavBarItem(
+                          svgPath: 'assets/images/nav_irfan.svg',
+                          fallbackIcon: Icons.auto_awesome_rounded,
                           isSelected: selectedIndex == 2,
                           activeColor: activeColor,
                           inactiveColor: inactiveColor,
                           onTap: () => _onItemTapped(2, context),
                         ),
-                        _buildNavItem(
-                          index: 3,
+                        _BottomNavBarItem(
                           svgPath: 'assets/images/nav_vakit.svg',
                           fallbackIcon: Icons.access_time_filled_rounded,
                           isSelected: selectedIndex == 3,
@@ -287,8 +306,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                           inactiveColor: inactiveColor,
                           onTap: () => _onItemTapped(3, context),
                         ),
-                        _buildNavItem(
-                          index: 4,
+                        _BottomNavBarItem(
                           svgPath: 'assets/images/nav_kuran.svg',
                           fallbackIcon: Icons.menu_book_rounded,
                           isSelected: selectedIndex == 4,
@@ -304,16 +322,27 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
             ),
     );
   }
+}
 
-  Widget _buildNavItem({
-    required int index,
-    required String svgPath,
-    required IconData fallbackIcon,
-    required bool isSelected,
-    required Color activeColor,
-    required Color inactiveColor,
-    required VoidCallback onTap,
-  }) {
+class _BottomNavBarItem extends StatelessWidget {
+  final String svgPath;
+  final IconData fallbackIcon;
+  final bool isSelected;
+  final Color activeColor;
+  final Color inactiveColor;
+  final VoidCallback onTap;
+
+  const _BottomNavBarItem({
+    required this.svgPath,
+    required this.fallbackIcon,
+    required this.isSelected,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
     return InkWell(
       onTap: onTap,

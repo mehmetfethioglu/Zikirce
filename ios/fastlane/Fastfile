@@ -169,6 +169,16 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.3.0 Yenilikleri:
+      • İrfan Meydanı & 32 Farz Kütüphanesi: Alt menüye eklenen yeni İrfan sekmesiyle Günün 5 İrfan Sorusu, 228+ sahih kaynaklı sorudan oluşan İlim Halkaları (Kur'ân-ı Kerîm, Siyer-i Nebî, 32 Farz & İlmihal, Esmâ & Dua, Külliyat), SM-2 Aralıklı Hafıza Tekrarı, Külliyat okuma tavsiyeleri, doğrudan ilgili zikri çekme bağlantıları ve 5 yeni İrfan rozeti sunuldu.
+      • Zikir Vakur Kart Karuseli & Hızlı Seçim Çekmecesi: Zikirmatik ekranından tek dokunuşla açılan yeni Vakur Kart Karuseli, özel zikir oluşturma, fiziksel tesbih/yüzük sayacı adedi içe aktarma ve Feraciye Duası tashihi tamamlandı.
+      • Mushaf Sahife Düzeni, Mukabele Hatim & Zikirce TV Hub: Geniş ekran çift sayfa Mushaf görünümü, Mukabele Hatim akışı ve Zikirce TV Hub arayüz ve performans iyileştirmeleri yapıldı.
+
+      What's New in v2.3.0:
+      • Arena of Wisdom & 32 Farz Library: New Wisdom tab with Daily 5 Wisdom Quiz, Circles of Knowledge with 228+ authentic questions across Quran, Seerah, 32 Farz & Catechism, Asma & Dua, and Islamic Library, SM-2 Spaced Review, reading recommendations, one-tap linked dhikr practice, and 5 new Wisdom badges.
+      • Dhikr Vakur Card Carousel & Selection Sheet: Redesigned one-tap Dhikr Selection Sheet with Vakur Cards, custom litany creation, physical counter import, and Feraciye Prayer refinements.
+      • Mushaf Page Spread, Mukabele Khatm & Zikirce TV Hub: Enhanced dual-page Mushaf layout, Mukabele Khatm flow, and Zikirce TV Hub visual and performance polish.
+
       Zikirce v2.2.0 Yenilikleri:
       • 40 Eserlik Külliyat, 16 Cep Risalesi & 84.141 Maddelik Risale-i Nur Lügati: Külliyat kitaplığına 16 müstakil Risale-i Nur Küçük Eseri ve 84.141 maddelik Risale-i Nur Büyük Lügati eklendi. Osmanlıca kelime ve kalıp tamlamalar tema uyumlu kehribar/bakır kök renklendirmesiyle gösterilir; üzerine dokunulduğunda anında lügat mânâsı açılır ve Arapça metinler Kur'ân hattıyla (Allah ve Rab lafızları kırmızı) sunulur.
       • Diyanet Birebir Ses-Kelime Senkronizasyonu, Sağdan Sola Kayan Kırmızı "Ok Takibi" & Besmele: Mukabele, Kelime Takipli Dinleme Talimi ve Mushaf ses oynatıcısında tekil âyet kaynak mimarisi ve resmi Diyanet zaman damgalarıyla 6.236 âyette sıfır gecikmeli ses-kelime uyumu, sağdan sola kayan kırmızı Ok Takibi ve Besmele-i Şerîf ile başlama özelliği eklendi.
@@ -178,52 +188,6 @@ platform :ios do
       • 40-Volume Islamic Library, 16 Pocket Risales & 84,141-Entry Risale-i Nur Dictionary: Added 16 standalone Pocket Risales and the 84,141-entry Risale-i Nur Ottoman-Turkish Dictionary with theme-adaptive root coloring, instant tap-to-view definitions, and Quranic calligraphy with ruby-red Divine Name highlights.
       • Exact Diyanet Audio-to-Word Sync, Sliding Red Arrow Tracking & Basmala Start: Zero-drift synchronization across all 6,236 verses with single-track per-verse playback, smooth right-to-left sliding red Arrow Pointer tracking matching the Diyanet Quran Platform, and Basmala recitation at session start.
       • Külliyat Home & Lock Screen Widgets & Dynamic Verse/Hadith Sharing Studio: Added iOS Home and Lock Screen Library Widgets, a 60+ Verse & Hadith picker for share cards, in-page Sajdah al-Tilawah badges, and a prayer time guard.
-
-      Zikirce v2.1.10 Yenilikleri:
-      • iOS Paylaşım Kartı & Görsel Paylaşım Düzeltmesi: iPhone ve iPad cihazlarda zikir, seri, namaz ve ibadet karnesi kartlarını paylaşırken oluşan sistem paylaşım penceresi (sharePositionOrigin) hatası kalıcı olarak giderildi.
-      • Bulut Senkronizasyonu & Yedek Paylaşım Kararlılığı: Google Drive senkronizasyon geri dönüşü ve yedek dışa aktarım adımları güçlendirildi.
-
-      What's New in v2.1.10:
-      • iOS Share Card & Image Sharing Fix: Fixed the iOS share sheet origin issue (sharePositionOrigin) when sharing dhikr, streak, prayer, and worship summary cards on iPhone and iPad.
-      • Cloud Sync & Backup Export Reliability: Improved Google Drive sync fallback and local backup sharing stability.
-
-      Zikirce v2.1.9 Yenilikleri:
-      • Matbû Kur'ân-ı Kerîm Hatim Duası: Mushafların sonunda yer alan tam metin Hatim ve Bağışlama Duası (Duâü Hatmi'l-Kur'âni'l-Azîm), varsayılan Matbû Arapça sahife görünümü, Diyanet Mushaf hattı, Lafzatullah vurgusu ve Selçuklu durak gülleriyle eklendi.
-      • 4 Modlu Kur'ân Okuma, 7 Meâl & 5 Klasik Tefsir: Mushaf, Âyet+Meâl, Akıcı Kitap Meâli ve Sayfa İçi Tefsir modları; 7 Türkçe meâl kıyaslaması ve Kur'ân Yolu, Beyzâvî, Mâtürîdî, Keşşâf ve Râzî tam metin tefsir kütüphanesi sunuldu.
-      • 23 Eserlik İslami Külliyat & Ok ile Kelime Takibi: Kütüb-i Sitte, Riyâzü's-Sâlihîn ve Risale-i Nur Külliyatı eklendi; sesli tilâvette "Ok ile Takip" işaretçisi ve 6.236 âyet akustik senkronizasyonu tamamlandı.
-      • İnteraktif Kullanım Kılavuzu & Sahih Hadis Kaynakları: Ayarlar'a kapsamlı Kullanım Kılavuzu eklendi; 99 Esmâü'l-Hüsnâ ve 146 zikir Kütüb-i Sitte sahih hadis kaynaklarıyla zenginleştirildi.
-
-      What's New in v2.1.9:
-      • Printed Mushaf Khatm Prayer: Complete traditional Khatm al-Quran Prayer with default Printed Mushaf Arabic page layout, authentic Diyanet calligraphy, Divine Name highlighting, and Seljuk rosette stop markers.
-      • 4-Mode Quran Reader, 7 Translations & 5 Classical Tafseers: Mushaf, Verse+Translation, Flowing Book, and In-Page Tafseer modes with 7 Turkish translations and 5 full-text classical Tafseer works.
-      • 23-Volume Islamic Library & Arrow Word Tracking: Added Kutub al-Sittah, Riyad as-Salihin, and Risale-i Nur library, plus the new "Arrow Pointer" word-tracking mode with acoustic sync across all 6,236 verses.
-      • Interactive User Guide & Authentic Hadith Citations: Added a searchable User Guide in Settings and enriched all 146 dhikrs and 99 Names of Allah with authentic Hadith references.
-
-      Zikirce v2.1.8 Yenilikleri:
-      • Manevi Paylaşım Stüdyosu & Ayet-Hadis Kartları: Zikir, seri ve istatistik kartlarına ayet-hadis entegrasyonu, Cuma ve Kandil özel gün tebrikleri ile Selçuklu hat sanatı detayları eklendi.
-      • Hedef Tamamlama & Paylaşım Bildirimi: Namaz, Kur'an, zikir ve ezber hedeflerine ulaşıldığında doğrudan paylaşım kartı oluşturma ve tebrik desteği sunuldu.
-      • iOS Kilit Ekranı (Lock Screen) Araçları: Namaz vakitleri, canlı geri sayım, günlük zikir sayacı, zikir zinciri ve hicri takvim kilit ekranı araçları optimize edildi.
-
-      What's New in v2.1.8:
-      • Spiritual Sharing Studio & Verse-Hadith Cards: Dynamic Quran verses, Hadiths, Islamic special day/Friday greetings, and refined Seljuk geometric frames for dhikr and streak cards.
-      • Goal Completion & Sharing Triggers: Instant sharing cards and celebration prompts upon completing daily prayer, Quran, dhikr, and memorization goals.
-      • iOS Lock Screen Widgets: Enhanced circular, rectangular, and inline Lock Screen widgets for Prayer Times, Live Countdown, Dhikr Counter, Streak, and Hijri Calendar.
-
-      Zikirce v2.1.7 Yenilikleri:
-      • iOS Kilit Ekranı (Lock Screen) Araçları: Namaz vakitleri, canlı geri sayım, günlük zikir sayacı, zikir zinciri ve hicri takvim için dairesel, dikdörtgen ve satır içi kilit ekranı araçları eklendi.
-
-      What's New in v2.1.7:
-      • iOS Lock Screen Widgets: Added circular, rectangular, and inline Lock Screen widget support for Prayer Times, Live Countdown, Dhikr Counter, Streak Tracker, and Hijri Calendar.
-
-      Zikirce v2.1.6 Yenilikleri:
-      • iOS Arka Planda Kesintisiz Kur'an & Talim Dinleme: Kelime Takipli Dinleme Talimi, Mukabele ve Mushaf ekranlarında uygulama arka plana alındığında veya ekran kilitlendiğinde ayetler arası kesintisiz geçiş sağlandı.
-      • iOS Kilit Ekranı & Dynamic Island Medya Kontrolleri: Okunan sûre/âyet bilgisi ve oynat/duraklat/ileri/geri kontrolleri iOS Kilit Ekranı ve Denetim Merkezi'ne eklendi.
-      • App Store Gizlilik & Performans Uyumluluğu: Native AVAudioSession yönetimi, PrivacyInfo.xcprivacy manifestosu ve arka plan yetki tanımları güncellendi.
-
-      What's New in v2.1.6:
-      • Seamless iOS Background Quran & Talim Playback: Gapless verse-to-verse recitation in Word-by-Word Listening (Talim), Mukabele, and Mushaf when the app is backgrounded or the device screen is locked.
-      • iOS Lock Screen, Control Center & Dynamic Island Controls: Active Surah/Ayah metadata and remote playback controls (play, pause, next/previous ayah).
-      • App Store Privacy & Compliance Enhancements: Added native PrivacyInfo.xcprivacy manifest and refined UIBackgroundModes configuration.
     CHANGELOG
 
     upload_to_testflight(

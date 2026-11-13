@@ -307,6 +307,67 @@ class BadgeGalleryCards extends ConsumerWidget {
             error: (_, __) => const SizedBox.shrink(),
           ),
         ),
+        const SizedBox(height: 24),
+
+        // ==========================================
+        // 3. İRFAN MEYDANI ROZETLERİ SECTION
+        // ==========================================
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: colors.accent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                size: 16,
+                color: colors.accent,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'İrfan Meydanı Rozetleri',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: colors.primaryText,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        SizedBox(
+          height: 156,
+          child: badgesAsync.when(
+            data: (badges) {
+              final irfanBadges = badges.where((b) => b.category == 'Irfan').toList();
+              if (irfanBadges.isEmpty) {
+                return Center(
+                  child: Text(
+                    'İrfan halkalarında ustalaştıkça rozetleriniz burada açılır.',
+                    style: TextStyle(fontSize: 12, color: colors.secondaryTextAlt),
+                  ),
+                );
+              }
+              return ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                itemCount: irfanBadges.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final badge = irfanBadges[index];
+                  return _buildZikirBadgeCard(context, badge, colors);
+                },
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
       ],
     );
   }

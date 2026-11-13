@@ -244,6 +244,17 @@ class AppLocalizations {
   String get streakDetails => translate('Streak_Details');
   String get streakHistory => translate('Streak_History');
 
+  // İrfan Meydanı
+  String get navIrfan => translate('Nav_Irfan');
+  String get irfanTitle => translate('Irfan_Title');
+  String get irfanAcademyTab => translate('Irfan_AcademyTab');
+  String get irfanLibraryTab => translate('Irfan_LibraryTab');
+  String get irfanDailyTitle => translate('Irfan_DailyTitle');
+  String get irfanTopicMapTitle => translate('Irfan_TopicMapTitle');
+  String get irfanSm2Title => translate('Irfan_Sm2Title');
+  String get irfanPracticeZikirCta => translate('Irfan_PracticeZikirCta');
+  String get irfanShortcutSubtitle => translate('Irfan_ShortcutSubtitle');
+
   // Mukabele Hatim
   String get mukabeleTitle => translate('Mukabele_Title');
   String get mukabeleStartCardTitle => translate('Mukabele_StartCardTitle');

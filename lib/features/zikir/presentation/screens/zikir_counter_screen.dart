@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 import '../../../../core/database/zikir_seed_data.dart';
 import '../../../../core/localization/app_localizations.dart';
@@ -24,7 +25,12 @@ import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 
 class ZikirCounterScreen extends ConsumerStatefulWidget {
-  const ZikirCounterScreen({super.key});
+  final bool openSelectionSheetOnMount;
+
+  const ZikirCounterScreen({
+    super.key,
+    this.openSelectionSheetOnMount = false,
+  });
 
   @override
   ConsumerState<ZikirCounterScreen> createState() => _ZikirCounterScreenState();
@@ -41,6 +47,7 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
 
   bool _isQuickSettingsOpen = false;
   Timer? _quickSettingsTimer;
+  bool _didConsumeOpenSheet = false;
 
   @override
   void initState() {
@@ -69,6 +76,28 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
       if (mounted && (Platform.isWindows || Platform.isMacOS || Platform.isLinux || isTv)) {
         _desktopFocusNode.requestFocus();
       }
+    });
+    _consumeOpenSheetIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant ZikirCounterScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.openSelectionSheetOnMount && widget.openSelectionSheetOnMount) {
+      _didConsumeOpenSheet = false;
+      _consumeOpenSheetIfNeeded();
+    } else if (!widget.openSelectionSheetOnMount) {
+      _didConsumeOpenSheet = false;
+    }
+  }
+
+  void _consumeOpenSheetIfNeeded() {
+    if (!widget.openSelectionSheetOnMount || _didConsumeOpenSheet) return;
+    _didConsumeOpenSheet = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.replace('/zikir');
+      _showSwitchZikirSheet();
     });
   }
 

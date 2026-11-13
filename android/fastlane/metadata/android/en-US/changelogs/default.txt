@@ -1,3 +1,3 @@
-• Streamlined Notification Settings & Preference Persistence: Simplified notification settings UI; Feraciye and Sala now default to off and save your preferences reliably.
-• Authentic Mushaf Calligraphy: Feraciye Prayer, Sala, and Settings previews now render with your active Quran font, red Divine Name highlights, and Seljuk rosette markers.
-• 40-Volume Islamic Library, 84,141-Entry Risale-i Nur Dictionary, Sliding Arrow Tracking, Basmala Start & Library Widgets.
+• Arena of Wisdom & 32 Farz Library: Added Daily 5 Wisdom Quiz, 228+ verified questions in Circles of Knowledge (Quran, Seerah, Catechism, Asma & Dua, Library), SM-2 Spaced Review, and 5 new Wisdom badges.
+• Dhikr Vakur Card Carousel: Redesigned one-tap Dhikr Selection Sheet with Vakur Cards, custom dhikr creation, and physical counter import.
+• Mushaf page spread, Mukabele Khatm, Zikirce TV Hub, and Feraciye Prayer refinements.

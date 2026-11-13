@@ -10,10 +10,12 @@ const Color _emeraldColor = Color(0xFF10B981);
 
 class FiqhLibraryScreen extends StatelessWidget {
   final int? initialFarzId;
+  final void Function(int farzId)? onStartQuizForFarz;
 
   const FiqhLibraryScreen({
     super.key,
     this.initialFarzId,
+    this.onStartQuizForFarz,
   });
 
   @override
@@ -21,6 +23,7 @@ class FiqhLibraryScreen extends StatelessWidget {
     return FiqhLibraryView(
       isEmbedded: false,
       initialFarzId: initialFarzId,
+      onStartQuizForFarz: onStartQuizForFarz,
     );
   }
 }
@@ -28,11 +31,13 @@ class FiqhLibraryScreen extends StatelessWidget {
 class FiqhLibraryView extends StatefulWidget {
   final bool isEmbedded;
   final int? initialFarzId;
+  final void Function(int farzId)? onStartQuizForFarz;
 
   const FiqhLibraryView({
     super.key,
     this.isEmbedded = false,
     this.initialFarzId,
+    this.onStartQuizForFarz,
   });
 
   @override
@@ -138,6 +143,9 @@ class _FiqhLibraryViewState extends State<FiqhLibraryView> {
         item: item,
         isRead: _readFarzIds.contains(item.id),
         onToggleRead: () => _toggleReadStatus(item.id),
+        onStartQuiz: widget.onStartQuizForFarz != null
+            ? () => widget.onStartQuizForFarz!(item.id)
+            : null,
       ),
     );
   }
@@ -526,7 +534,7 @@ class _FiqhLibraryViewState extends State<FiqhLibraryView> {
               ),
               const SizedBox(height: 10),
 
-              // Footer: Citation and "Detayı Oku" action
+              // Footer: Citation and "Önce Oku / Sonra Kendini Sına" actions
               Row(
                 children: [
                   Icon(Icons.menu_book_rounded,
@@ -542,6 +550,31 @@ class _FiqhLibraryViewState extends State<FiqhLibraryView> {
                       ),
                     ),
                   ),
+                  if (widget.onStartQuizForFarz != null) ...[
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () {
+                        HapticService.selectionClick();
+                        widget.onStartQuizForFarz!(item.id);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: colors.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'Kendini Sına',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: colors.accent,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Text(
                     'İlmihali Oku →',
                     style: TextStyle(
@@ -585,11 +618,13 @@ class _FarzDetailModalSheet extends StatefulWidget {
   final FarzKnowledgeItem item;
   final bool isRead;
   final VoidCallback onToggleRead;
+  final VoidCallback? onStartQuiz;
 
   const _FarzDetailModalSheet({
     required this.item,
     required this.isRead,
     required this.onToggleRead,
+    this.onStartQuiz,
   });
 
   @override
@@ -866,7 +901,7 @@ class _FarzDetailModalSheetState extends State<_FarzDetailModalSheet> {
                 ),
               ),
 
-              // Bottom Action Bar: Toggle Read Button
+              // Bottom Action Bar: Toggle Read + Quiz CTA ("Önce Oku / Sonra Kendini Sına")
               SafeArea(
                 top: false,
                 child: Padding(
@@ -889,13 +924,13 @@ class _FarzDetailModalSheetState extends State<_FarzDetailModalSheet> {
                           ),
                           label: Text(
                             _currentRead
-                                ? 'Okundu Olarak Kaydedildi'
-                                : 'Okundu Olarak İşaretle',
+                                ? 'Okundu'
+                                : 'Okundu İşaretle',
                             style: TextStyle(
                               color:
                                   _currentRead ? _emeraldColor : colors.accent,
                               fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                              fontSize: 12.5,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
@@ -911,6 +946,43 @@ class _FarzDetailModalSheetState extends State<_FarzDetailModalSheet> {
                           ),
                         ),
                       ),
+                      if (widget.onStartQuiz != null) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              if (!_currentRead) {
+                                setState(() => _currentRead = true);
+                                widget.onToggleRead();
+                              }
+                              Navigator.of(context).pop();
+                              widget.onStartQuiz!();
+                            },
+                            icon: const Icon(
+                              Icons.auto_awesome_rounded,
+                              color: Colors.white,
+                              size: 17,
+                            ),
+                            label: const Text(
+                              'Kendini Sına',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colors.accent,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

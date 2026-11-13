@@ -624,6 +624,54 @@ class GamificationNotifier extends StateNotifier<void> {
     ref.read(badgeRefreshTriggerProvider.notifier).state++;
   }
 
+  Future<bool> spendGold(int amount) async {
+    if (amount <= 0) return true;
+    final db = ref.read(databaseProvider);
+    final prefs = await SharedPreferences.getInstance();
+    final isDefault = ref.read(activeSessionProvider).id == UserSession.defaultSessionId;
+    final streak = (await (db.select(db.userStreaks)..limit(1)).get()).firstOrNull;
+    final prefGold = prefs.getInt(_sKey('GoldCount')) ??
+        (isDefault ? (prefs.getInt('GoldCount') ?? 0) : 0);
+    final effectiveGold = max(prefGold, streak?.xp ?? 0);
+    if (effectiveGold < amount) return false;
+
+    final newGold = effectiveGold - amount;
+    await prefs.setInt(_sKey('GoldCount'), newGold);
+    if (isDefault) {
+      await prefs.setInt('GoldCount', newGold);
+    }
+    if (streak != null) {
+      await (db.update(db.userStreaks)..where((t) => t.id.equals(streak.id))).write(
+        UserStreaksCompanion(xp: Value(newGold)),
+      );
+    }
+    ref.read(badgeRefreshTriggerProvider.notifier).state++;
+    return true;
+  }
+
+  Future<bool> spendDiamonds(int amount) async {
+    if (amount <= 0) return true;
+    final prefs = await SharedPreferences.getInstance();
+    final isDefault = ref.read(activeSessionProvider).id == UserSession.defaultSessionId;
+    final curDiamonds = prefs.getInt(_sKey('DiamondCount')) ??
+        (isDefault ? (prefs.getInt('DiamondCount') ?? 0) : 0);
+    if (curDiamonds < amount) return false;
+
+    final newDiamonds = curDiamonds - amount;
+    await prefs.setInt(_sKey('DiamondCount'), newDiamonds);
+    if (isDefault) {
+      await prefs.setInt('DiamondCount', newDiamonds);
+    }
+    ref.read(badgeRefreshTriggerProvider.notifier).state++;
+    return true;
+  }
+
+  Future<void> unlockBadgeById(String badgeId, String category) async {
+    final db = ref.read(databaseProvider);
+    await _unlockBadgeIfNotExists(db, badgeId, category);
+    ref.read(badgeRefreshTriggerProvider.notifier).state++;
+  }
+
   Future<SurpriseChestReward?> openSurpriseChest({required bool isTurkish}) async {
     final db = ref.read(databaseProvider);
     final activeSession = ref.read(activeSessionProvider);
