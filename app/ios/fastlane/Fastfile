@@ -129,7 +129,7 @@ platform :ios do
       api_key: api_key,
       ipa: "../build/ios/ipa/Zamera.ipa",
       skip_waiting_for_build_processing: true,
-      changelog: "Zamera v0.1.3 (Build 4) — Gerçek DSLR Pozlama (P/Tv/Sv/M, 1/3-EV, AEB ±2, AEL/AFL), Sinema Video HUD (canlı Rack Focus, ses dBFS, REC Tally) ve Sanat Modu 1:1 Gerçek Renk kalibrasyonu."
+      changelog: "Zamera v0.1.4 (Build 5) — Sanat Modu 1:1 radyometrik RAW pozlama ve parlama koruması, iOS canlı vizör kararlılığı, Portre Sahne Işığı maskesi ve çekim denetçisi iyileştirmeleri."
     )
   end
 end

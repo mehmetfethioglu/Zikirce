@@ -4,6 +4,7 @@ import AVFoundation
 import Photos
 import Vision
 import CoreImage
+import ImageIO
 import UniformTypeIdentifiers
 import Darwin
 
@@ -286,6 +287,7 @@ public class ZameraCapturePlugin: NSObject,
     // MARK: - Faz 1 & 2: Preview Session & Hardware Control
 
     private func startPreviewSession(args: [String: Any], result: @escaping FlutterResult) {
+        _ = refreshVideoOrientationOnMain()
         let cameraId = args["cameraId"] as? String ?? "builtInWideAngleCamera"
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -340,6 +342,7 @@ public class ZameraCapturePlugin: NSObject,
             let pOut = AVCapturePhotoOutput()
             if session.canAddOutput(pOut) {
                 session.addOutput(pOut)
+                self.configurePhotoOutputConnection(pOut, device: device)
                 if #available(iOS 14.3, *) {
                     if pOut.isAppleProRAWSupported {
                         pOut.isAppleProRAWEnabled = true
@@ -376,6 +379,43 @@ public class ZameraCapturePlugin: NSObject,
                     "exposureNsMax": Int(min(1_000_000_000, maxExpSec * 1_000_000_000.0))
                 ])
             }
+        }
+    }
+
+    private let orientationLock = NSLock()
+    private var cachedVideoOrientation: AVCaptureVideoOrientation = .portrait
+
+    private func refreshVideoOrientationOnMain() -> AVCaptureVideoOrientation {
+        guard Thread.isMainThread else {
+            orientationLock.lock()
+            defer { orientationLock.unlock() }
+            return cachedVideoOrientation
+        }
+        let next: AVCaptureVideoOrientation
+        switch UIDevice.current.orientation {
+        case .portraitUpsideDown:
+            next = .portraitUpsideDown
+        case .landscapeLeft:
+            next = .landscapeRight
+        case .landscapeRight:
+            next = .landscapeLeft
+        default:
+            next = .portrait
+        }
+        orientationLock.lock()
+        cachedVideoOrientation = next
+        orientationLock.unlock()
+        return next
+    }
+
+    private func configurePhotoOutputConnection(_ pOut: AVCapturePhotoOutput, device: AVCaptureDevice?) {
+        guard let conn = pOut.connection(with: .video) else { return }
+        if conn.isVideoOrientationSupported {
+            conn.videoOrientation = refreshVideoOrientationOnMain()
+        }
+        if conn.isVideoMirroringSupported {
+            conn.automaticallyAdjustsVideoMirroring = false
+            conn.isVideoMirrored = (device?.position == .front)
         }
     }
 
@@ -621,6 +661,7 @@ public class ZameraCapturePlugin: NSObject,
     // MARK: - Faz 1 & 2: Still Photo Capture
 
     private func captureRawAndHeicPhoto(args: [String: Any], result: @escaping FlutterResult) {
+        _ = refreshVideoOrientationOnMain()
         sessionQueue.async { [weak self] in
             guard let self = self, let pOut = self.photoOutput else {
                 DispatchQueue.main.async {
@@ -681,6 +722,7 @@ public class ZameraCapturePlugin: NSObject,
 
             self.pendingCaptureArgs = args
             self.pendingCaptureResult = result
+            self.configurePhotoOutputConnection(pOut, device: self.activeDevice)
             pOut.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -709,6 +751,7 @@ public class ZameraCapturePlugin: NSObject,
     // MARK: - Faz 2: AE Bracketed Photo Capture
 
     private func captureBracketedPhotos(args: [String: Any], result: @escaping FlutterResult) {
+        _ = refreshVideoOrientationOnMain()
         sessionQueue.async { [weak self] in
             guard let self = self, let pOut = self.photoOutput else {
                 DispatchQueue.main.async {
@@ -752,6 +795,7 @@ public class ZameraCapturePlugin: NSObject,
                     )
                 }
                 self.expectedBracketCount = actualSettings.count
+                self.configurePhotoOutputConnection(pOut, device: self.activeDevice)
                 pOut.capturePhoto(with: photoSettings, delegate: self)
             } else {
                 // Sequential fallback if bracketed output not directly supported
@@ -783,6 +827,7 @@ public class ZameraCapturePlugin: NSObject,
             ? AVCapturePhotoSettings(rawPixelFormatType: rawFmt!, processedFormat: [AVVideoCodecKey: AVVideoCodecType.jpeg])
             : AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
 
+        configurePhotoOutputConnection(pOut, device: activeDevice)
         pOut.capturePhoto(with: settings, delegate: self)
     }
 
@@ -966,7 +1011,8 @@ public class ZameraCapturePlugin: NSObject,
                         rawData: rData,
                         dngUrl: dngUrl,
                         outUrl: trueColorUrl,
-                        args: captureArgs
+                        args: captureArgs,
+                        oemData: procData
                     )
                     let finalUrl = devOut.wroteFile ? trueColorUrl : (oemUrl ?? dngUrl)
                     if devOut.wroteFile || oemUrl != nil {
@@ -1109,13 +1155,15 @@ public class ZameraCapturePlugin: NSObject,
         rawData: Data,
         dngUrl: URL,
         outUrl: URL,
-        args: [String: Any]
+        args: [String: Any],
+        oemData: Data? = nil
     ) -> IosTrueColorDevelopOutcome {
         let useDisplayP3 = args["useDisplayP3"] as? Bool ?? false
         let normalizeExposure = args["normalizeExposure"] as? Bool ?? true
-        let exposureMode = !normalizeExposure
-            ? 0
-            : max(0, min(2, (args["artworkExposureMode"] as? NSNumber)?.intValue ?? 2))
+        let explicitExposureMode = (args["artworkExposureMode"] as? NSNumber)?.intValue
+            ?? (args["artworkExposureMode"] as? Int)
+        let exposureMode = explicitExposureMode.map { max(0, min(2, $0)) }
+            ?? (normalizeExposure ? 1 : 0)
         let calibrateColorChecker = args["calibrateColorChecker"] as? Bool ?? false
         let losslessPng = args["losslessPng"] as? Bool ?? false
         let applyPerspectiveWarp = args["applyPerspectiveWarp"] as? Bool ?? false
@@ -1267,11 +1315,15 @@ public class ZameraCapturePlugin: NSObject,
         }
 
         // Sample 64x48 linear grid for True-Tone Exposure Mode (`0=off, 1=paperL94, 2=scene1to1`) & Center Lab D50
+        let referenceMidY = (exposureMode == 2)
+            ? Self.measureLinearTrimmedLuminance(oemData: oemData, context: context, linearSrgbCs: linSrgbCs)
+            : nil
         let gridStats = Self.measureLinearGridStats(
             image: workingImage,
             context: context,
             linearSrgbCs: linSrgbCs,
-            exposureMode: exposureMode
+            exposureMode: exposureMode,
+            referenceMidY: referenceMidY
         )
         if abs(gridStats.exposureGain - 1.0) > 0.005 {
             let evDelta = log2(gridStats.exposureGain)
@@ -1347,18 +1399,73 @@ public class ZameraCapturePlugin: NSObject,
             exposureNormGain: gain,
             highlightClippedRatio: gridStats.highlightClipRatio,
             gamutClippedRatio: gridStats.gamutClipRatio,
-            centerLinearRgb: scaledCenterLin,
+            centerLinearRgb: gridStats.centerLinearSrgb,
             centerLabD50: centerLab,
             wbGainsUsed: activeWbGains,
             liveCalibrationResult: liveCalibMap
         )
     }
 
+    private static func measureLinearTrimmedLuminance(
+        oemData: Data?,
+        context: CIContext,
+        linearSrgbCs: CGColorSpace
+    ) -> Double? {
+        guard let data = oemData,
+              var img = CIImage(data: data, options: [.applyOrientationProperty: true]) else {
+            return nil
+        }
+        let ext = img.extent
+        guard ext.width > 1, ext.height > 1 else {
+            return nil
+        }
+        if ext.origin.x != 0 || ext.origin.y != 0 {
+            img = img.transformed(by: CGAffineTransform(translationX: -ext.origin.x, y: -ext.origin.y))
+        }
+        let gw = 64
+        let gh = 48
+        let sx = CGFloat(gw) / ext.width
+        let sy = CGFloat(gh) / ext.height
+        let small = img.transformed(by: CGAffineTransform(scaleX: sx, y: sy))
+        var buf = [Float](repeating: 0, count: gw * gh * 4)
+        buf.withUnsafeMutableBytes { rawPtr in
+            if let base = rawPtr.baseAddress {
+                context.render(
+                    small,
+                    toBitmap: base,
+                    rowBytes: gw * 4 * MemoryLayout<Float>.size,
+                    bounds: CGRect(x: 0, y: 0, width: gw, height: gh),
+                    format: .RGBAf,
+                    colorSpace: linearSrgbCs
+                )
+            }
+        }
+        var lums = [Double]()
+        lums.reserveCapacity(gw * gh)
+        for i in 0..<(gw * gh) {
+            let rc = max(0.0, Double(buf[i * 4]))
+            let gc = max(0.0, Double(buf[i * 4 + 1]))
+            let bc = max(0.0, Double(buf[i * 4 + 2]))
+            lums.append(0.2126729 * rc + 0.7151522 * gc + 0.0721750 * bc)
+        }
+        guard !lums.isEmpty else { return nil }
+        lums.sort()
+        let n = lums.count
+        let i15 = (n - 1) * 150 / 1000
+        let i85 = max(i15, (n - 1) * 850 / 1000)
+        var sum = 0.0
+        for idx in i15...i85 {
+            sum += lums[idx]
+        }
+        return sum / Double(i85 - i15 + 1)
+    }
+
     private static func measureLinearGridStats(
         image: CIImage,
         context: CIContext,
         linearSrgbCs: CGColorSpace,
-        exposureMode: Int
+        exposureMode: Int,
+        referenceMidY: Double? = nil
     ) -> (exposureGain: Double, highlightClipRatio: Double, gamutClipRatio: Double, centerLinearSrgb: [Double]) {
         let gw = 64
         let gh = 48
@@ -1400,25 +1507,49 @@ public class ZameraCapturePlugin: NSObject,
             let bc = max(0.0, b)
             let m = max(rc, max(gc, bc))
             if m >= 0.995 { hiClip += 1 }
-            let y = 0.2126 * rc + 0.7152 * gc + 0.0722 * bc
+            let y = 0.2126729 * rc + 0.7151522 * gc + 0.0721750 * bc
             lums.append(y)
             maxChs.append(m)
         }
         lums.sort()
         maxChs.sort()
         let n = max(1, lums.count)
-        let p95 = lums[min(n - 1, (n * 95) / 100)]
-        let p98 = lums[min(n - 1, (n * 98) / 100)]
+        let i15 = (n - 1) * 150 / 1000
+        let i85 = max(i15, (n - 1) * 850 / 1000)
+        var rawMidSum = 0.0
+        for idx in i15...i85 {
+            rawMidSum += lums[idx]
+        }
+        let rawMidY = max(1e-4, rawMidSum / Double(i85 - i15 + 1))
+
+        let p50 = max(0.008, lums[min(n - 1, (n * 500) / 1000)])
+        let p88 = max(0.025, lums[min(n - 1, (n * 880) / 1000)])
+        let p985 = max(0.04, lums[min(n - 1, (n * 985) / 1000)])
+        let p92Rgb = max(0.05, maxChs[min(n - 1, (n * 920) / 1000)])
+        let p96Rgb = max(0.05, maxChs[min(n - 1, (n * 960) / 1000)])
         let p995Rgb = max(0.05, maxChs[min(n - 1, (n * 995) / 1000)])
+        let diffuseAnchorMax = (p995Rgb > p96Rgb * 1.35)
+            ? min(p96Rgb, p92Rgb * 1.45)
+            : p995Rgb
 
         let gain: Double
         switch exposureMode {
         case 1:
-            let rawG = p95 > 0.04 ? min(3.20, max(0.50, 0.855 / p95)) : 1.0
-            gain = max(0.50, min(rawG, 0.97 / p995Rgb))
+            let whiteGain = 0.85 / p985
+            let diffuseGain = min(6.0, 0.76 / p88)
+            let midGain = min(5.5, 0.24 / p50)
+            let blendedGain = (p985 > p88 * 1.65)
+                ? max(midGain, min(diffuseGain, midGain * 1.65))
+                : min(whiteGain * 1.85, max(whiteGain, midGain * 0.85))
+            let clamped = max(1.0, min(6.5, blendedGain))
+            gain = max(1.0, min(clamped, 0.97 / max(0.05, diffuseAnchorMax)))
         case 2:
-            let sceneG = p98 >= 0.42 ? min(1.35, max(0.80, 0.82 / p98)) : 1.0
-            gain = max(0.50, min(sceneG, 0.95 / p995Rgb))
+            if let refY = referenceMidY, refY > 0.0 {
+                let refGain = max(0.60, min(6.0, (refY + 0.003) / (rawMidY + 0.003)))
+                gain = max(0.50, min(refGain, 0.96 / max(0.05, diffuseAnchorMax)))
+            } else {
+                gain = max(0.50, min(1.68, 0.95 / max(0.05, diffuseAnchorMax)))
+            }
         default:
             gain = 1.0
         }
@@ -1721,6 +1852,43 @@ public class ZameraCapturePlugin: NSObject,
 
     // MARK: - Faz 2: Optical Portrait Engine (AVDepthData CIDepthBlurEffect + iOS 17 Vision Instance/Person CIMaskedVariableBlur)
 
+    private func readExifOrientation(from url: URL) -> Int32 {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] else {
+            return 1
+        }
+        if let num = props[kCGImagePropertyOrientation] as? NSNumber {
+            let val = num.int32Value
+            return (1...8).contains(val) ? val : 1
+        }
+        if let val = props[kCGImagePropertyOrientation] as? Int32, (1...8).contains(val) {
+            return val
+        }
+        if let val = props[kCGImagePropertyOrientation] as? UInt32, (1...8).contains(val) {
+            return Int32(val)
+        }
+        return 1
+    }
+
+    private func alignAuxiliaryImageOrientation(
+        _ auxImage: CIImage,
+        targetExtent: CGRect,
+        exifOrientation: Int32
+    ) -> CIImage {
+        let auxExt = auxImage.extent
+        let auxLandscape = auxExt.width > auxExt.height
+        let targetLandscape = targetExtent.width > targetExtent.height
+        var aligned = auxImage
+        if exifOrientation != 1 && auxExt.width != auxExt.height && targetExtent.width != targetExtent.height && (auxLandscape != targetLandscape) {
+            aligned = aligned.oriented(forExifOrientation: exifOrientation)
+        }
+        let origin = aligned.extent.origin
+        if origin.x != 0.0 || origin.y != 0.0 {
+            aligned = aligned.transformed(by: CGAffineTransform(translationX: -origin.x, y: -origin.y))
+        }
+        return aligned
+    }
+
     private func renderOpticalPortraitFile(
         sourceUrl: URL,
         outUrl: URL,
@@ -1732,14 +1900,23 @@ public class ZameraCapturePlugin: NSObject,
         inlineDepthData: AVDepthData? = nil,
         inlineMatte: AVPortraitEffectsMatte? = nil
     ) -> (wroteFile: Bool, depthActive: Bool) {
-        guard let baseImage = CIImage(contentsOf: sourceUrl, options: [.applyOrientationProperty: true]) else {
+        guard let rawBaseImage = CIImage(contentsOf: sourceUrl, options: [.applyOrientationProperty: true]) else {
             return (false, false)
+        }
+        let baseImage: CIImage
+        if rawBaseImage.extent.origin != .zero {
+            baseImage = rawBaseImage.transformed(
+                by: CGAffineTransform(translationX: -rawBaseImage.extent.origin.x, y: -rawBaseImage.extent.origin.y)
+            )
+        } else {
+            baseImage = rawBaseImage
         }
         let extent = baseImage.extent
         guard extent.width > 1, extent.height > 1 else {
             return (false, false)
         }
 
+        let exifOrientation = readExifOrientation(from: sourceUrl)
         let context = CIContext(options: [.useSoftwareRenderer: false])
         let clampedAperture = max(1.4, min(16.0, aperture))
         let clampedIntensity = max(0.15, min(1.0, lightIntensity))
@@ -1765,15 +1942,25 @@ public class ZameraCapturePlugin: NSObject,
         if let depthData = activeDepth,
            let dispData = try? depthData.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat32),
            let depthFilter = CIFilter(name: "CIDepthBlurEffect") {
-            let dispCI = CIImage(cvPixelBuffer: dispData.depthDataMap)
+            let dispCI = alignAuxiliaryImageOrientation(
+                CIImage(cvPixelBuffer: dispData.depthDataMap),
+                targetExtent: extent,
+                exifOrientation: exifOrientation
+            )
             depthFilter.setValue(baseImage, forKey: kCIInputImageKey)
             depthFilter.setValue(dispCI, forKey: kCIInputDisparityImageKey)
             depthFilter.setValue(NSNumber(value: clampedAperture), forKey: "inputAperture")
             depthFilter.setValue(focusRect, forKey: "inputFocusRect")
             if let matte = activeMatte {
-                let matteCI = CIImage(cvPixelBuffer: matte.mattingImage)
+                let matteCI = alignAuxiliaryImageOrientation(
+                    CIImage(cvPixelBuffer: matte.mattingImage),
+                    targetExtent: extent,
+                    exifOrientation: exifOrientation
+                )
                 depthFilter.setValue(matteCI, forKey: "inputMatteImage")
-                subjectMaskCI = scaleMaskToExtent(matteCI, extent: extent)
+                if pixelBufferHasForegroundSignal(matte.mattingImage) {
+                    subjectMaskCI = scaleMaskToExtent(matteCI, extent: extent)
+                }
             }
             if let out = depthFilter.outputImage?.cropped(to: extent) {
                 processedImage = out
@@ -1788,11 +1975,16 @@ public class ZameraCapturePlugin: NSObject,
             }
         }
 
-        // 2. Neural Vision Fallback (when AVDepthData is unavailable, or when Stage/High-Key needs tight subject matte)
-        let needsTightBackdropMatte = (lightingMode == 3 || lightingMode == 4 || lightingMode == 5)
+        // 2. Neural Vision Fallback (when AVDepthData is unavailable, or when studio/backdrop lighting needs subject matte)
+        let needsTightBackdropMatte = (lightingMode >= 1 && lightingMode <= 5)
         if (!depthActive || (needsTightBackdropMatte && subjectMaskCI == nil)),
            let uprightCg = context.createCGImage(baseImage, from: extent) {
-            subjectMaskCI = extractVisionForegroundMask(cgImage: uprightCg, extent: extent)
+            subjectMaskCI = extractVisionForegroundMask(
+                cgImage: uprightCg,
+                extent: extent,
+                focusX: fx,
+                focusY: fy
+            )
             if !depthActive, let fgMask = subjectMaskCI {
                 // CIMaskedVariableBlur uses 0.0 (black) = tack-sharp subject, 1.0 (white) = full variable blur radius
                 let blurRadius = max(1.5, min(28.0, 32.0 / clampedAperture))
@@ -1818,7 +2010,8 @@ public class ZameraCapturePlugin: NSObject,
             subjectMask: subjectMaskCI,
             extent: extent,
             lightingMode: lightingMode,
-            intensity: clampedIntensity
+            intensity: clampedIntensity,
+            context: context
         )
 
         guard let outCg = context.createCGImage(processedImage, from: extent) else {
@@ -1840,9 +2033,12 @@ public class ZameraCapturePlugin: NSObject,
     private func scaleMaskToExtent(_ mask: CIImage, extent: CGRect) -> CIImage {
         let mExt = mask.extent
         guard mExt.width > 0, mExt.height > 0 else { return mask }
+        let normalized = (mExt.origin.x != 0.0 || mExt.origin.y != 0.0)
+            ? mask.transformed(by: CGAffineTransform(translationX: -mExt.origin.x, y: -mExt.origin.y))
+            : mask
         let sx = extent.width / mExt.width
         let sy = extent.height / mExt.height
-        return mask
+        return normalized
             .transformed(by: CGAffineTransform(scaleX: sx, y: sy))
             .transformed(by: CGAffineTransform(translationX: extent.origin.x, y: extent.origin.y))
             .cropped(to: extent)
@@ -1878,17 +2074,133 @@ public class ZameraCapturePlugin: NSObject,
         }
     }
 
-    private func extractVisionForegroundMask(cgImage: CGImage, extent: CGRect) -> CIImage? {
+    private func ciMaskHasForegroundSignal(_ mask: CIImage, extent: CGRect, context: CIContext) -> Bool {
+        let cropped = mask.cropped(to: extent)
+        guard !cropped.extent.isEmpty, cropped.extent.width >= 1, cropped.extent.height >= 1 else {
+            return false
+        }
+        let inputExtent = CIVector(cgRect: cropped.extent)
+        guard let maxFilter = CIFilter(
+            name: "CIAreaMaximum",
+            parameters: [kCIInputImageKey: cropped, kCIInputExtentKey: inputExtent]
+        ),
+              let maxOut = maxFilter.outputImage,
+              let avgFilter = CIFilter(
+                  name: "CIAreaAverage",
+                  parameters: [kCIInputImageKey: cropped, kCIInputExtentKey: inputExtent]
+              ),
+              let avgOut = avgFilter.outputImage else {
+            return false
+        }
+        var maxPixel = [UInt8](repeating: 0, count: 4)
+        var avgPixel = [UInt8](repeating: 0, count: 4)
+        let maxBounds = CGRect(x: maxOut.extent.origin.x, y: maxOut.extent.origin.y, width: 1, height: 1)
+        let avgBounds = CGRect(x: avgOut.extent.origin.x, y: avgOut.extent.origin.y, width: 1, height: 1)
+        context.render(maxOut, toBitmap: &maxPixel, rowBytes: 4, bounds: maxBounds, format: .RGBA8, colorSpace: nil)
+        context.render(avgOut, toBitmap: &avgPixel, rowBytes: 4, bounds: avgBounds, format: .RGBA8, colorSpace: nil)
+        let peak = max(maxPixel[0], max(maxPixel[1], maxPixel[2]))
+        let mean = max(avgPixel[0], max(avgPixel[1], avgPixel[2]))
+        return peak > 90 && mean >= 1
+    }
+
+    @available(iOS 17.0, *)
+    private func selectPrimaryForegroundInstance(
+        observation obs: VNInstanceMaskObservation,
+        focusX: CGFloat,
+        focusY: CGFloat
+    ) -> IndexSet {
+        let all = obs.allInstances
+        guard all.count > 1 else { return all }
+
+        let maskBuf = obs.instanceMask
+        CVPixelBufferLockBaseAddress(maskBuf, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(maskBuf, .readOnly) }
+
+        let w = CVPixelBufferGetWidth(maskBuf)
+        let h = CVPixelBufferGetHeight(maskBuf)
+        let bpr = CVPixelBufferGetBytesPerRow(maskBuf)
+        let fmt = CVPixelBufferGetPixelFormatType(maskBuf)
+        guard w > 0, h > 0, fmt == kCVPixelFormatType_OneComponent8,
+              let base = CVPixelBufferGetBaseAddress(maskBuf) else {
+            if let first = all.first {
+                return IndexSet(integer: first)
+            }
+            return all
+        }
+
+        let clampedFx = max(0.0, min(1.0, focusX))
+        let clampedFy = max(0.0, min(1.0, focusY))
+        let tx = max(0, min(w - 1, Int(clampedFx * CGFloat(w - 1))))
+        let ty = max(0, min(h - 1, Int(clampedFy * CGFloat(h - 1))))
+
+        let directRow = base.advanced(by: ty * bpr).assumingMemoryBound(to: UInt8.self)
+        let directId = Int(directRow[tx])
+        if directId > 0 && all.contains(directId) {
+            return IndexSet(integer: directId)
+        }
+
+        var sumX: [Int: Int64] = [:]
+        var sumY: [Int: Int64] = [:]
+        var counts: [Int: Int] = [:]
+        for y in 0..<h {
+            let row = base.advanced(by: y * bpr).assumingMemoryBound(to: UInt8.self)
+            for x in 0..<w {
+                let id = Int(row[x])
+                if id > 0 {
+                    sumX[id, default: 0] += Int64(x)
+                    sumY[id, default: 0] += Int64(y)
+                    counts[id, default: 0] += 1
+                }
+            }
+        }
+
+        let maxCount = counts.values.max() ?? 0
+        let minValidCount = max(1, maxCount / 25)
+        var bestInstance: Int?
+        var bestDistSq = Double.greatestFiniteMagnitude
+
+        for id in all {
+            guard let cnt = counts[id], cnt >= minValidCount,
+                  let sx = sumX[id], let sy = sumY[id] else {
+                continue
+            }
+            let cx = Double(sx) / Double(cnt)
+            let cy = Double(sy) / Double(cnt)
+            let dx = (cx - Double(tx)) / Double(w)
+            let dy = (cy - Double(ty)) / Double(h)
+            let distSq = dx * dx + dy * dy
+            if distSq < bestDistSq {
+                bestDistSq = distSq
+                bestInstance = id
+            }
+        }
+
+        if let chosen = bestInstance ?? all.first {
+            return IndexSet(integer: chosen)
+        }
+        return all
+    }
+
+    private func extractVisionForegroundMask(
+        cgImage: CGImage,
+        extent: CGRect,
+        focusX: CGFloat = 0.5,
+        focusY: CGFloat = 0.45
+    ) -> CIImage? {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         var instanceMaskCI: CIImage?
-        var personMaskCI: CIImage?
 
         if #available(iOS 17.0, *) {
             let instanceReq = VNGenerateForegroundInstanceMaskRequest()
             do {
                 try handler.perform([instanceReq])
                 if let obs = instanceReq.results?.first, !obs.allInstances.isEmpty {
-                    let maskBuf = try obs.generateScaledMaskForImage(forInstances: obs.allInstances, from: handler)
+                    let targetInstances = selectPrimaryForegroundInstance(
+                        observation: obs,
+                        focusX: focusX,
+                        focusY: focusY
+                    )
+                    let maskBuf = try obs.generateScaledMaskForImage(forInstances: targetInstances, from: handler)
                     if pixelBufferHasForegroundSignal(maskBuf) {
                         instanceMaskCI = scaleMaskToExtent(CIImage(cvPixelBuffer: maskBuf), extent: extent)
                     }
@@ -1896,6 +2208,10 @@ public class ZameraCapturePlugin: NSObject,
             } catch {
                 NSLog("ZameraPortrait ForegroundInstanceMask fallback: %@", error.localizedDescription)
             }
+        }
+
+        if let inst = instanceMaskCI {
+            return inst
         }
 
         if #available(iOS 15.0, *) {
@@ -1906,20 +2222,14 @@ public class ZameraCapturePlugin: NSObject,
                 try handler.perform([personReq])
                 if let maskBuf = personReq.results?.first?.pixelBuffer,
                    pixelBufferHasForegroundSignal(maskBuf) {
-                    personMaskCI = scaleMaskToExtent(CIImage(cvPixelBuffer: maskBuf), extent: extent)
+                    return scaleMaskToExtent(CIImage(cvPixelBuffer: maskBuf), extent: extent)
                 }
             } catch {
                 NSLog("ZameraPortrait PersonSegmentation fallback: %@", error.localizedDescription)
             }
         }
 
-        if let inst = instanceMaskCI, let pers = personMaskCI,
-           let maxComp = CIFilter(name: "CIMaximumCompositing") {
-            maxComp.setValue(inst, forKey: kCIInputImageKey)
-            maxComp.setValue(pers, forKey: kCIInputBackgroundImageKey)
-            return maxComp.outputImage?.cropped(to: extent) ?? inst
-        }
-        return instanceMaskCI ?? personMaskCI
+        return nil
     }
 
     private func applyIosStudioLighting(
@@ -1928,7 +2238,8 @@ public class ZameraCapturePlugin: NSObject,
         subjectMask: CIImage?,
         extent: CGRect,
         lightingMode: Int,
-        intensity: Double
+        intensity: Double,
+        context: CIContext = CIContext(options: [.useSoftwareRenderer: false])
     ) -> CIImage {
         var result = bokehImage
 
@@ -1936,6 +2247,7 @@ public class ZameraCapturePlugin: NSObject,
         case 1, 2:
             // Studio & Contour: lift/sculpt ONLY the subject (never darken background into a cloud halo)
             guard let fgMask = subjectMask,
+                  ciMaskHasForegroundSignal(fgMask, extent: extent, context: context),
                   let controls = CIFilter(name: "CIColorControls"),
                   let blend = CIFilter(name: "CIBlendWithMask") else {
                 return result
@@ -1952,38 +2264,44 @@ public class ZameraCapturePlugin: NSObject,
                 }
             }
         case 3, 4:
-            // Stage (#000000) & Stage Mono (#000000) separated strictly by subject matte
+            // Stage (#000000) & Stage Mono (#000000) separated strictly by verified subject matte
+            guard let fgMask = subjectMask,
+                  ciMaskHasForegroundSignal(fgMask, extent: extent, context: context),
+                  let blend = CIFilter(name: "CIBlendWithMask") else {
+                return result
+            }
             var subj = sharpImage
             if lightingMode == 4, let noir = CIFilter(name: "CIPhotoEffectNoir") {
                 noir.setValue(subj, forKey: kCIInputImageKey)
                 if let mono = noir.outputImage?.cropped(to: extent) { subj = mono }
             }
-            if let fgMask = subjectMask, let blend = CIFilter(name: "CIBlendWithMask") {
-                let blackBg = CIImage(color: CIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)).cropped(to: extent)
-                blend.setValue(subj, forKey: kCIInputImageKey)
-                blend.setValue(blackBg, forKey: kCIInputBackgroundImageKey)
-                blend.setValue(fgMask, forKey: kCIInputMaskImageKey)
-                if let out = blend.outputImage?.cropped(to: extent) {
-                    result = out
-                }
+            let blackBg = CIImage(color: CIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 1.0)).cropped(to: extent)
+            blend.setValue(subj, forKey: kCIInputImageKey)
+            blend.setValue(blackBg, forKey: kCIInputBackgroundImageKey)
+            blend.setValue(fgMask, forKey: kCIInputMaskImageKey)
+            if let out = blend.outputImage?.cropped(to: extent) {
+                result = out
             }
         case 5:
-            // High-Key Mono (#F7F7F9) separated strictly by subject matte
+            // High-Key Mono (#F7F7F9) separated strictly by verified subject matte
+            guard let fgMask = subjectMask,
+                  ciMaskHasForegroundSignal(fgMask, extent: extent, context: context),
+                  let blend = CIFilter(name: "CIBlendWithMask") else {
+                return result
+            }
             var subj = sharpImage
             if let mono = CIFilter(name: "CIPhotoEffectTonal") {
                 mono.setValue(subj, forKey: kCIInputImageKey)
                 if let outMono = mono.outputImage?.cropped(to: extent) { subj = outMono }
             }
-            if let fgMask = subjectMask, let blend = CIFilter(name: "CIBlendWithMask") {
-                let highKeyBg = CIImage(
-                    color: CIColor(red: 247.0 / 255.0, green: 247.0 / 255.0, blue: 249.0 / 255.0, alpha: 1.0)
-                ).cropped(to: extent)
-                blend.setValue(subj, forKey: kCIInputImageKey)
-                blend.setValue(highKeyBg, forKey: kCIInputBackgroundImageKey)
-                blend.setValue(fgMask, forKey: kCIInputMaskImageKey)
-                if let out = blend.outputImage?.cropped(to: extent) {
-                    result = out
-                }
+            let highKeyBg = CIImage(
+                color: CIColor(red: 247.0 / 255.0, green: 247.0 / 255.0, blue: 249.0 / 255.0, alpha: 1.0)
+            ).cropped(to: extent)
+            blend.setValue(subj, forKey: kCIInputImageKey)
+            blend.setValue(highKeyBg, forKey: kCIInputBackgroundImageKey)
+            blend.setValue(fgMask, forKey: kCIInputMaskImageKey)
+            if let out = blend.outputImage?.cropped(to: extent) {
+                result = out
             }
         case 7:
             if let noir = CIFilter(name: "CIPhotoEffectNoir") {
@@ -2087,80 +2405,164 @@ public class ZameraCapturePlugin: NSObject,
         }
     }
 
+    private func activeTopViewController() -> UIViewController? {
+        var rootVc: UIViewController?
+        if #available(iOS 13.0, *) {
+            let scenes = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+            for scene in scenes {
+                if let keyWin = scene.windows.first(where: { $0.isKeyWindow }), let vc = keyWin.rootViewController {
+                    rootVc = vc
+                    break
+                }
+                if rootVc == nil, let firstVc = scene.windows.first?.rootViewController {
+                    rootVc = firstVc
+                }
+            }
+        } else {
+            rootVc = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+                ?? UIApplication.shared.windows.first?.rootViewController
+        }
+        var topVc = rootVc
+        while let presented = topVc?.presentedViewController, !presented.isBeingDismissed {
+            topVc = presented
+        }
+        return topVc
+    }
+
     private func extractSubjectCutoutPng(args: [String: Any], result: @escaping FlutterResult) {
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             guard let sourcePath = args["sourceJpegPath"] as? String,
-                  let uiImage = UIImage(contentsOfFile: sourcePath),
-                  let cgImage = uiImage.cgImage else {
+                  FileManager.default.fileExists(atPath: sourcePath) else {
                 DispatchQueue.main.async {
                     result(FlutterError(code: "SRC_NOT_FOUND", message: "Source image invalid for cutout", details: nil))
                 }
                 return
             }
 
-            if #available(iOS 15.0, *) {
-                let request = VNGeneratePersonSegmentationRequest()
-                request.qualityLevel = .accurate
-                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-                do {
-                    try handler.perform([request])
-                    guard let maskPixelBuffer = request.results?.first?.pixelBuffer else {
-                        DispatchQueue.main.async {
-                            result(FlutterError(code: "NO_MASK", message: "Could not segment subject", details: nil))
-                        }
-                        return
-                    }
-
-                    let maskCi = CIImage(cvPixelBuffer: maskPixelBuffer)
-                    let origCi = CIImage(cgImage: cgImage)
-                    let scaleX = origCi.extent.width / maskCi.extent.width
-                    let scaleY = origCi.extent.height / maskCi.extent.height
-                    let scaledMask = maskCi.transformed(by: CGAffineTransform(scaleX: scaleX, y: scaleY))
-
-                    guard let blend = CIFilter(name: "CIBlendWithMask") else { return }
-                    blend.setValue(origCi, forKey: kCIInputImageKey)
-                    blend.setValue(CIImage.empty(), forKey: kCIInputBackgroundImageKey)
-                    blend.setValue(scaledMask, forKey: kCIInputMaskImageKey)
-
-                    let context = CIContext()
-                    if let output = blend.outputImage,
-                       let cutCg = context.createCGImage(output, from: origCi.extent) {
-                        let cutUi = UIImage(cgImage: cutCg)
-                        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-                        let ts = Int(Date().timeIntervalSince1970 * 1000)
-                        let outUrl = docs.appendingPathComponent("ZAM_CUTOUT_\(ts).png")
-                        if let pngData = cutUi.pngData() {
-                            try? pngData.write(to: outUrl)
-
-                            // Save to Photos & System Clipboard
-                            DispatchQueue.main.async {
-                                UIPasteboard.general.image = cutUi
-                            }
-                            PHPhotoLibrary.shared().performChanges({
-                                let req = PHAssetCreationRequest.forAsset()
-                                req.addResource(with: .photo, fileURL: outUrl, options: nil)
-                            }, completionHandler: nil)
-
-                            DispatchQueue.main.async {
-                                result([
-                                    "cutoutPngPath": outUrl.path,
-                                    "copiedToClipboard": true,
-                                    "width": Int(origCi.extent.width),
-                                    "height": Int(origCi.extent.height)
-                                ])
-                            }
-                            return
-                        }
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        result(FlutterError(code: "VISION_ERR", message: error.localizedDescription, details: nil))
-                    }
-                    return
+            guard #available(iOS 15.0, *) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "UNSUPPORTED_OS", message: "iOS 15.0+ required for Person Segmentation", details: nil))
                 }
+                return
             }
+
+            let sourceUrl = URL(fileURLWithPath: sourcePath)
+            guard let rawCi = CIImage(contentsOf: sourceUrl, options: [.applyOrientationProperty: true]) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "SRC_NOT_FOUND", message: "Source image invalid for cutout", details: nil))
+                }
+                return
+            }
+
+            let origCi: CIImage
+            if rawCi.extent.origin != .zero {
+                origCi = rawCi.transformed(
+                    by: CGAffineTransform(translationX: -rawCi.extent.origin.x, y: -rawCi.extent.origin.y)
+                )
+            } else {
+                origCi = rawCi
+            }
+
+            let context = CIContext(options: [.useSoftwareRenderer: false])
+            guard origCi.extent.width > 1,
+                  origCi.extent.height > 1,
+                  let uprightCg = context.createCGImage(origCi, from: origCi.extent) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "SRC_NOT_FOUND", message: "Could not decode upright image for cutout", details: nil))
+                }
+                return
+            }
+
+            let focusX = args["focusX"] as? Double ?? (args["focusX"] as? NSNumber)?.doubleValue ?? 0.5
+            let focusY = args["focusY"] as? Double ?? (args["focusY"] as? NSNumber)?.doubleValue ?? 0.45
+            let shareNow = args["shareNow"] as? Bool ?? false
+            let saveToGallery = args["saveToGallery"] as? Bool ?? false
+
+            guard let scaledMask = self.extractVisionForegroundMask(
+                cgImage: uprightCg,
+                extent: origCi.extent,
+                focusX: CGFloat(focusX),
+                focusY: CGFloat(focusY)
+            ) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "NO_MASK", message: "Could not segment subject", details: nil))
+                }
+                return
+            }
+
+            let transparentBg = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0)).cropped(to: origCi.extent)
+            guard let blend = CIFilter(name: "CIBlendWithMask") else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "FILTER_ERR", message: "CIBlendWithMask unavailable", details: nil))
+                }
+                return
+            }
+            blend.setValue(origCi, forKey: kCIInputImageKey)
+            blend.setValue(transparentBg, forKey: kCIInputBackgroundImageKey)
+            blend.setValue(scaledMask, forKey: kCIInputMaskImageKey)
+
+            guard let output = blend.outputImage?.cropped(to: origCi.extent),
+                  let cutCg = context.createCGImage(output, from: origCi.extent) else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "RENDER_ERR", message: "Could not render subject cutout", details: nil))
+                }
+                return
+            }
+
+            let cutUi = UIImage(cgImage: cutCg)
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let ts = Int(Date().timeIntervalSince1970 * 1000)
+            let outUrl = docs.appendingPathComponent("ZAM_CUTOUT_\(ts).png")
+            guard let pngData = cutUi.pngData() else {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "ENCODE_ERR", message: "Could not encode cutout PNG", details: nil))
+                }
+                return
+            }
+
+            do {
+                try pngData.write(to: outUrl, options: .atomic)
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "WRITE_ERR", message: error.localizedDescription, details: nil))
+                }
+                return
+            }
+
+            if saveToGallery {
+                PHPhotoLibrary.shared().performChanges({
+                    let req = PHAssetCreationRequest.forAsset()
+                    req.addResource(with: .photo, fileURL: outUrl, options: nil)
+                }, completionHandler: nil)
+            }
+
             DispatchQueue.main.async {
-                result(FlutterError(code: "UNSUPPORTED_OS", message: "iOS 15.0+ required for Person Segmentation", details: nil))
+                UIPasteboard.general.image = cutUi
+                if shareNow, let presenter = self.activeTopViewController() {
+                    let activityVc = UIActivityViewController(activityItems: [outUrl], applicationActivities: nil)
+                    if let popover = activityVc.popoverPresentationController {
+                        popover.sourceView = presenter.view
+                        popover.sourceRect = CGRect(
+                            x: presenter.view.bounds.midX,
+                            y: presenter.view.bounds.midY,
+                            width: 1,
+                            height: 1
+                        )
+                        popover.permittedArrowDirections = []
+                    }
+                    presenter.present(activityVc, animated: true, completion: nil)
+                }
+                result([
+                    "cutoutPngPath": outUrl.path,
+                    "copiedToClipboard": true,
+                    "savedToGallery": saveToGallery,
+                    "shared": shareNow,
+                    "width": Int(origCi.extent.width),
+                    "height": Int(origCi.extent.height)
+                ])
             }
         }
     }

@@ -82,7 +82,7 @@ jobs:
           retention-days: 14
 
   sync-appstore-connect:
-    name: Sync v0.1.3 (Build 4) Release Notes & Attach Build in App Store Connect
+    name: Sync v0.1.4 (Build 5) Release Notes & Attach Build in App Store Connect
     needs: build-ios
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -95,7 +95,7 @@ jobs:
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: pip install pyjwt cryptography requests
 
-      - name: Update App Store Version 0.1.3, Set TR/EN Notes & Attach Build 4
+      - name: Update App Store Version 0.1.4, Set TR/EN Notes & Attach Build 5
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: |
           python3 - << 'EOF'
@@ -117,8 +117,8 @@ jobs:
               return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
           BASE = "https://api.appstoreconnect.apple.com/v1"
-          VERSION_STR = "0.1.3"
-          BUILD_NUM = "4"
+          VERSION_STR = "0.1.4"
+          BUILD_NUM = "5"
 
           r = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.zamera", headers=make_headers())
           r.raise_for_status()
@@ -173,18 +173,18 @@ jobs:
                   print("ℹ️ Could not create new App Store Version:", cr.status_code, cr.text[:300])
 
           whats_new_tr = (
-              "Zamera v0.1.3 Yenilikleri:\n"
-              "• Gerçek DSLR Pozlama (PASM): Pro moduna sarsıntısız P / Tv / Sv / M pozlama önceliği, 1/3-EV DSLR durakları (ISO 50..12800, 30\"..1/8000s), canlı [-3..+3] EV pozometre, AEB ±2 / zamanlayıcı sürücü modları ve AEL/AFL kilidi eklendi.\n"
-              "• Sinema Video Deneyimi: Etkileşimli Sinema HUD (4K/1080P, 24/25/30/60p FPS, 180° açı kilidi, 10-bit profil, tek dokunuş LUT BYPASS), canlı A · B · A↔B Rack Focus, yayın seviyesi (-60..0 dB) ses göstergesi ve kırmızı REC Tally çerçevesi eklendi.\n"
-              "• Sanat Modu 1:1 Gerçek Renk: Canlı vizörde sRGB/Gamma 2.2 ton haritalama, 14-bit RAW kareden 24-yama ColorChecker D50 kalibrasyonu, canlı CIE L*a*b* / ΔE00 renk ölçer ve TrueColor ↔ OEM karşılaştırma denetçisi eklendi.\n"
-              "• Ergonomi & Performans: Tek-IPC video telemetrisi, kayıt sırasında optik lens geçişi ve çakışmasız 2 katmanlı radyal ayar yayı."
+              "Zamera v0.1.4 Yenilikleri:\n"
+              "• Sanat Modu 1:1 Radyometrik Pozlama Düzeltmesi: 1:1 TON ve KAĞIT L*94 çekimlerinde ΔE00 renk doğruluğu, CIE (x, y) kromatisitesi ve koyu (chiaroscuro) tonlar %100 korunarak karanlık kalan RAW pozlama sahne-doğrusal radyometrik referansla gerçek sahne parlaklığına kavuşturuldu.\n"
+              "• Vernik & Cam Parlama Koruması: Noktasal yansımaların pozlamayı kilitlemesi p96 difüz pigment tavanıyla önlendi ve L* ≈ 96 sabit-tonlu parlak alan geçişi iyileştirildi.\n"
+              "• iOS Vizör Kararlılığı: Oturum başlatma ve lens geçişleri sırasındaki canlı vizör görüntü akışı kararlılığı iyileştirildi.\n"
+              "• Stüdyo Portre & Çekim Denetçisi: Sahne Işığı arka plan maskesi, şeffaf PNG panoya kopyalama akışı ve dokunarak piksel CIE L*a*b* renk ölçümü geliştirildi."
           )
           whats_new_en = (
-              "What's New in Zamera v0.1.3:\n"
-              "• True DSLR Exposure (PASM): Added bumpless P / Tv / Sv / M exposure priority, 1/3-EV DSLR stops (ISO 50..12800, 30\"..1/8000s), live [-3..+3] EV light meter, AEB ±2 / self-timer drive modes, and AEL/AFL lock to Pro mode.\n"
-              "• Cinema Video Experience: Interactive Cinema HUD (4K/1080P, 24/25/30/60p FPS, 180° shutter lock, 10-bit profile, 1-tap LUT BYPASS), live A · B · A↔B Rack Focus, broadcast (-60..0 dB) Peak+RMS audio meter, and crimson REC Tally frame.\n"
-              "• Art Mode 1:1 True-Color: Live sRGB/Gamma 2.2 viewfinder tone mapping, direct 14-bit RAW 24-patch ColorChecker D50 calibration, live CIE L*a*b* / ΔE00 spot colorimeter, and TrueColor vs OEM pixel inspector.\n"
-              "• Ergonomics & Performance: Single-IPC video telemetry, active-recording optical lens switching, and overlap-free 2-tier concentric radial settings arc."
+              "What's New in Zamera v0.1.4:\n"
+              "• Art Mode 1:1 Radiometric Exposure Fix: Restored true scene-linear brightness in 1:1 Tone and Paper L*94 RAW captures via synchronized radiometric midtone matching while preserving 100% of ΔE00 color accuracy, hue, and dark chiaroscuro tones.\n"
+              "• Specular Glint Immunity: Prevented varnish/glass reflections from locking down exposure via diffuse p96 pigment capping and refined the L* ≈ 96 constant-hue highlight shoulder.\n"
+              "• iOS Viewfinder Stability: Improved live camera viewfinder feed stability across session startup and lens transitions.\n"
+              "• Portrait Studio & Inspector: Refined Stage Light backdrop mask, clipboard-first transparent PNG cutout workflow, and tap-to-measure CIE L*a*b* spot colorimetry."
           )
 
           if target_version_id:
@@ -228,6 +228,25 @@ jobs:
                   json={"data": {"type": "builds", "id": build_id, "attributes": {"usesNonExemptEncryption": False}}},
               )
               print(f"✅ Export compliance set (usesNonExemptEncryption=False) for Build {BUILD_NUM} ({build_id})")
+              try:
+                  bloc_r = requests.get(f"{BASE}/builds/{build_id}/betaBuildLocalizations", headers=make_headers())
+                  existing_locs = {loc["attributes"]["locale"]: loc["id"] for loc in bloc_r.json().get("data", [])} if bloc_r.status_code == 200 else {}
+                  for loc_code, loc_text in [("tr", whats_new_tr), ("en-US", whats_new_en)]:
+                      if loc_code in existing_locs:
+                          requests.patch(
+                              f"{BASE}/betaBuildLocalizations/{existing_locs[loc_code]}",
+                              headers=make_headers(),
+                              json={"data": {"type": "betaBuildLocalizations", "id": existing_locs[loc_code], "attributes": {"whatsNew": loc_text}}},
+                          )
+                      else:
+                          requests.post(
+                              f"{BASE}/betaBuildLocalizations",
+                              headers=make_headers(),
+                              json={"data": {"type": "betaBuildLocalizations", "attributes": {"locale": loc_code, "whatsNew": loc_text}, "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
+                          )
+                  print(f"📝 TestFlight betaBuildLocalizations synced for Build {BUILD_NUM}")
+              except Exception as e:
+                  print("ℹ️ Beta localization note:", e)
               if target_version_id:
                   att = requests.patch(
                       f"{BASE}/appStoreVersions/{target_version_id}/relationships/build",

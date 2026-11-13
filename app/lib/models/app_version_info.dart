@@ -38,8 +38,8 @@ class ReleaseNote {
 
 /// Central repository of Zamera features and version release history.
 class AppVersionInfo {
-  static const String currentVersion = '0.1.3';
-  static const int currentBuildNumber = 4;
+  static const String currentVersion = '0.1.4';
+  static const int currentBuildNumber = 5;
   static const String appName = 'Zamera';
   static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/Zamera/';
   static const String supportEmail = 'theakar@windowslive.com';
@@ -85,6 +85,25 @@ class AppVersionInfo {
 
   /// Changelog history of all releases.
   static const List<ReleaseNote> releaseHistory = [
+    ReleaseNote(
+      version: '0.1.4',
+      buildNumber: 5,
+      releaseDate: '13 Kasım 2026',
+      titleTr: 'Sanat Modu 1:1 Radyometrik Pozlama, iOS Vizör & Portre İyileştirmeleri',
+      titleEn: 'Art Mode 1:1 Radiometric Exposure, iOS Viewfinder & Portrait Refinements',
+      bulletPointsTr: [
+        'Sanat Modu (1:1 TON ve KAĞIT L*94) çekimlerinde ΔE00 renk doğruluğu, CIE (x, y) kromatisitesi ve koyu (chiaroscuro) tonlar %100 korunarak karanlık kalan RAW pozlama sahne-doğrusal radyometrik referansla düzeltildi.',
+        'Vernik, cam ve çerçeve kaynaklı noktasal yansımaların pozlamayı kilitlemesi önlendi (p96 difüz tavan) ve L* ≈ 96 sabit-tonlu parlak alan geçişi iyileştirildi.',
+        'iOS kamera vizöründe oturum başlatma ve geçiş sırasındaki görüntü akışı kararlılığı iyileştirildi.',
+        'Stüdyo Portre Sahne Işığı maskesi, şeffaf PNG çıkartmasını doğrudan panoya kopyalama akışı ve çekim denetçisinde dokunarak piksel renk ölçümü geliştirildi.',
+      ],
+      bulletPointsEn: [
+        'Fixed dark RAW output in Art Mode (1:1 Tone & Paper L*94) via scene-linear radiometric midtone matching while preserving 100% of ΔE00 color accuracy, hue, and dark chiaroscuro tones.',
+        'Isolated specular varnish/glass glints from locking down exposure (p96 diffuse ceiling) and refined the L* ≈ 96 constant-hue highlight shoulder.',
+        'Improved iOS live viewfinder stream stability across camera session startup and lens transitions.',
+        'Refined Portrait Studio Stage Light backdrop mask, clipboard-first transparent PNG cutout workflow, and tap-to-measure pixel colorimetry in Capture Inspector.',
+      ],
+    ),
     ReleaseNote(
       version: '0.1.3',
       buildNumber: 4,

@@ -1,5 +1,4 @@
-Zamera v0.1.3:
-• Pro Mode: Bumpless P/Tv/Sv/M DSLR exposure, 1/3-EV stops (ISO 50..12800, 30"..1/8000s), live [-3..+3] EV light meter, AEB ±2, and AEL/AFL lock.
-• Cinema Video: Interactive 4K/FPS/180°/10-bit HUD, live A↔B Rack Focus, broadcast (-60..0 dB) Peak+RMS audio meter, and crimson REC Tally frame.
-• Art Mode: 1:1 True-Color (sRGB/D50 CCM), 14-bit RAW 24-patch calibration, and live CIE L*a*b* / ΔE00 spot colorimeter.
-• Overlap-free 2-tier concentric radial settings arc.
+Zamera v0.1.4:
+• Art Mode Exposure Fix: Restored true scene-linear brightness in 1:1 Tone RAW captures via radiometric midtone matching while preserving 100% of ΔE00 color accuracy, hue, and dark chiaroscuro tones.
+• Specular Glint Immunity: Isolated varnish/glass reflections from locking down exposure and refined the constant-hue highlight shoulder.
+• Portrait & Inspector: Improved Stage Light mask, clipboard PNG cutout workflow, and tap pixel colorimetry.

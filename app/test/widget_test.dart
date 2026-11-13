@@ -809,7 +809,24 @@ void main() {
     expect(lastPreviewArgs['camToXyzD50'], isNotNull);
     expect((lastPreviewArgs['camToXyzD50'] as List).length, equals(9));
 
-    // Trigger final Sanat Modu capture -> receives artworkExposureMode=2, losslessPng=true, wbGains, camToXyzD50
+    // Trigger Sanat Modu capture in KAĞIT L*94 -> artworkExposureMode=1, normalizeExposure=true
+    await tester.tap(find.text('1:1 TON'));
+    await tester.pumpAndSettle();
+    expect(find.text('KAĞIT L*94'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('shutter_button_gesture')));
+    await tester.pumpAndSettle();
+    final paperL94CaptureArgs = recordedCalls
+        .where((c) => c.method == 'capturePhoto')
+        .last
+        .arguments as Map;
+    expect(paperL94CaptureArgs['artworkExposureMode'], equals(1));
+    expect(paperL94CaptureArgs['normalizeExposure'], isTrue);
+
+    // Switch back to 1:1 TON and trigger final Sanat Modu capture -> artworkExposureMode=2, normalizeExposure=false, losslessPng=true, wbGains, camToXyzD50
+    await tester.tap(find.text('KAĞIT L*94'));
+    await tester.pumpAndSettle();
+    expect(find.text('1:1 TON'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('shutter_button_gesture')));
     await tester.pumpAndSettle();
 

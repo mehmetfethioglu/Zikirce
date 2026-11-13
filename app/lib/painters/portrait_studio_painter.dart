@@ -64,9 +64,25 @@ class PortraitStudioFramePainter extends CustomPainter {
     final hasWarning =
         distanceWarning != null && distanceWarning!.trim().isNotEmpty;
 
-    // 1. Clean Stage / High-Key Optical Alignment Ring (Zero RadialGradient / Zero Fog!)
+    // 1. Stage / High-Key Backdrop Cutout Mask & Optical Alignment Ring
     if (lightingIndex >= 3 && lightingIndex <= 5) {
       final stageRadius = (subjectR * 0.86).clamp(64.0, minDim * 0.42);
+      final stageCutoutPath = Path()
+        ..fillType = PathFillType.evenOdd
+        ..addRect(Offset.zero & size)
+        ..addOval(
+          Rect.fromCircle(center: Offset(cx, cy), radius: stageRadius),
+        );
+      final clampedIntensity = lightIntensity.clamp(0.0, 1.0);
+      final backdropColor = (lightingIndex == 3 || lightingIndex == 4)
+          ? Colors.black.withValues(
+              alpha: (0.42 + 0.30 * clampedIntensity).clamp(0.42, 0.72),
+            )
+          : const Color(0xFFF7F7F9).withValues(
+              alpha: (0.40 + 0.28 * clampedIntensity).clamp(0.40, 0.68),
+            );
+      canvas.drawPath(stageCutoutPath, Paint()..color = backdropColor);
+
       final ringPaint = Paint()
         ..color = kIosYellow.withValues(alpha: hasWarning ? 0.40 : 0.72)
         ..style = PaintingStyle.stroke

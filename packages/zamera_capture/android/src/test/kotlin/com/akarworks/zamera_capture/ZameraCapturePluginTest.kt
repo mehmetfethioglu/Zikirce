@@ -343,4 +343,30 @@ internal class ZameraCapturePluginTest {
         assertTrue(mapped[32 * 48 + 24] in 0.42f..0.58f, "Middle of active ROI must map to ~0.5")
         assertTrue(mapped[63 * 48 + 47] > 0.95f, "Bottom of active ROI must map to ~1.0")
     }
+
+    @Test
+    fun resolveArtworkExposureMode_preservesExplicitModeWhenNormalizeExposureIsFalse() {
+        assertEquals(2, resolveArtworkExposureMode(explicitMode = 2, normalizeExposure = false))
+        assertEquals(1, resolveArtworkExposureMode(explicitMode = 1, normalizeExposure = true))
+        assertEquals(0, resolveArtworkExposureMode(explicitMode = null, normalizeExposure = false))
+        assertEquals(1, resolveArtworkExposureMode(explicitMode = null, normalizeExposure = true))
+    }
+
+    @Test
+    fun computeTrimmedLinearLuminanceFromArgbPixels_returns18PercentGrayAndIgnoresSpecularOutliers() {
+        // 18% sRGB middle gray = 118 -> linear ~0.18116; inject 5% black and 5% pure white outliers
+        val total = 100
+        val gray118 = (0xFF shl 24) or (118 shl 16) or (118 shl 8) or 118
+        val black = 0xFF000000.toInt()
+        val white = 0xFFFFFFFF.toInt()
+        val pixels = IntArray(total) { idx ->
+            when {
+                idx < 5 -> black
+                idx >= 95 -> white
+                else -> gray118
+            }
+        }
+        val midY = computeTrimmedLinearLuminanceFromArgbPixels(pixels)
+        assertEquals(0.181f, midY, 0.01f, "Trimmed linear luminance must recover ~0.181 despite specular/shadow tails")
+    }
 }

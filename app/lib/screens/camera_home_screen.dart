@@ -1406,7 +1406,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       final cornersFlat = <double>[
         for (final pt in _perspectiveCorners) ...[pt.dx, pt.dy],
       ];
-      final effectiveExposureMode = isArtworkMode ? _artworkExposureMode : 2;
+      final effectiveExposureMode = isArtworkMode ? _artworkExposureMode : 0;
       final activeWbGains = lockGrayCardFromCenter
           ? null
           : _resolveActiveWbGains(isArtworkMode: isArtworkMode);

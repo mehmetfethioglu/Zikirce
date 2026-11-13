@@ -7,6 +7,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ColorSpace
 import android.graphics.ImageFormat
 import android.graphics.Matrix
@@ -53,6 +54,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ln
 import kotlin.math.log10
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -1693,20 +1695,7 @@ class ZameraCapturePlugin :
                 )
             }
             val tonemapModes = chars.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)
-            if (artworkLinearMode && tonemapModes != null) {
-                when {
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                        tonemapModes.contains(CameraMetadata.TONEMAP_MODE_PRESET_CURVE) -> {
-                        builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_PRESET_CURVE)
-                        builder.set(CaptureRequest.TONEMAP_PRESET_CURVE, CameraMetadata.TONEMAP_PRESET_CURVE_SRGB)
-                    }
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                        tonemapModes.contains(CameraMetadata.TONEMAP_MODE_GAMMA_VALUE) -> {
-                        builder.set(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_GAMMA_VALUE)
-                        builder.set(CaptureRequest.TONEMAP_GAMMA, 2.2f)
-                    }
-                }
-            } else if (tonemapModes != null) {
+            if (tonemapModes != null) {
                 when {
                     tonemapModes.contains(CaptureRequest.TONEMAP_MODE_HIGH_QUALITY) ->
                         builder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY)
@@ -1997,11 +1986,8 @@ class ZameraCapturePlugin :
             val useDisplayP3 = args["useDisplayP3"] as? Boolean ?: false
             val fullResolution = args["fullResolution"] as? Boolean ?: true
             val normalizeExposure = args["normalizeExposure"] as? Boolean ?: true
-            val artworkExposureMode = if (!normalizeExposure) {
-                0
-            } else {
-                ((args["artworkExposureMode"] as? Number)?.toInt() ?: 2).coerceIn(0, 2)
-            }
+            val explicitExposureMode = (args["artworkExposureMode"] as? Number)?.toInt()
+            val artworkExposureMode = resolveArtworkExposureMode(explicitExposureMode, normalizeExposure)
             val calibrateColorChecker = args["calibrateColorChecker"] as? Boolean ?: false
             val applyPerspectiveWarp = args["applyPerspectiveWarp"] as? Boolean ?: false
             val perspectiveCornersNorm = (args["perspectiveCornersNorm"] as? List<*>)?.mapNotNull { (it as? Number)?.toFloat() }
@@ -2054,23 +2040,21 @@ class ZameraCapturePlugin :
                     captureBuilder.set(CaptureRequest.COLOR_CORRECTION_TRANSFORM, prev.get(CaptureRequest.COLOR_CORRECTION_TRANSFORM))
                     captureBuilder.set(CaptureRequest.COLOR_CORRECTION_GAINS, prev.get(CaptureRequest.COLOR_CORRECTION_GAINS))
                 }
-                prev.get(CaptureRequest.TONEMAP_MODE)?.let { tm ->
-                    captureBuilder.set(CaptureRequest.TONEMAP_MODE, tm)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && tm == CameraMetadata.TONEMAP_MODE_PRESET_CURVE) {
-                        prev.get(CaptureRequest.TONEMAP_PRESET_CURVE)?.let { pc ->
-                            captureBuilder.set(CaptureRequest.TONEMAP_PRESET_CURVE, pc)
-                        }
-                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && tm == CameraMetadata.TONEMAP_MODE_GAMMA_VALUE) {
-                        prev.get(CaptureRequest.TONEMAP_GAMMA)?.let { g ->
-                            captureBuilder.set(CaptureRequest.TONEMAP_GAMMA, g)
-                        }
-                    }
-                }
             }
 
             val manager = appContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
             val charsId = activePhysicalCameraId ?: activeCameraId
             val physChars = manager.getCameraCharacteristics(charsId)
+            val capTonemapModes = physChars.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES)
+            when {
+                capTonemapModes != null && capTonemapModes.contains(CaptureRequest.TONEMAP_MODE_HIGH_QUALITY) ->
+                    captureBuilder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_HIGH_QUALITY)
+                capTonemapModes != null && capTonemapModes.contains(CaptureRequest.TONEMAP_MODE_FAST) ->
+                    captureBuilder.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_FAST)
+                else -> previewRequestBuilder?.get(CaptureRequest.TONEMAP_MODE)?.let { tm ->
+                    captureBuilder.set(CaptureRequest.TONEMAP_MODE, tm)
+                }
+            }
             val shadingModes = physChars.get(CameraCharacteristics.SHADING_AVAILABLE_MODES)
             if (shadingModes != null && shadingModes.contains(CameraMetadata.SHADING_MODE_HIGH_QUALITY)) {
                 captureBuilder.set(CaptureRequest.SHADING_MODE, CameraMetadata.SHADING_MODE_HIGH_QUALITY)
@@ -2291,7 +2275,18 @@ class ZameraCapturePlugin :
                                 val effectiveExposureMode = if (isArtworkMode) {
                                     artworkExposureMode
                                 } else {
-                                    if (normalizeExposure) 1 else 0
+                                    if (args["normalizeExposure"] == true) 1 else 0
+                                }
+                                val postRawBoost = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                    ((activePhysResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100).toFloat() / 100.0f)
+                                        .coerceIn(1.0f, 6.0f)
+                                } else {
+                                    1.0f
+                                }
+                                val referenceMidY = if (isArtworkMode && effectiveExposureMode == 2) {
+                                    measureJpegTrimmedLinearLuminance(jpegBytes)
+                                } else {
+                                    0.0f
                                 }
                                 val capturedIso = activePhysResult.get(CaptureResult.SENSOR_SENSITIVITY)
                                 val capturedExpNs = activePhysResult.get(CaptureResult.SENSOR_EXPOSURE_TIME)
@@ -2334,6 +2329,8 @@ class ZameraCapturePlugin :
                                     exposureTimeNs = capturedExpNs,
                                     aperture = capturedAperture,
                                     focalLengthMm = capturedFocalMm,
+                                    referenceMidY = referenceMidY,
+                                    sensorBaselineGain = postRawBoost,
                                     outFile = trueColorJpegFile
                                 )
 
@@ -6066,6 +6063,65 @@ class ZameraCapturePlugin :
         channel.setMethodCallHandler(null)
         videoChannel.setMethodCallHandler(null)
     }
+
+    private fun measureJpegTrimmedLinearLuminance(jpegBytes: ByteArray): Float {
+        if (jpegBytes.isEmpty()) return 0.0f
+        var bmp: Bitmap? = null
+        return try {
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = 32
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            bmp = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size, opts)
+            val decoded = bmp ?: return 0.0f
+            val w = decoded.width
+            val h = decoded.height
+            if (w <= 0 || h <= 0) return 0.0f
+            val pixels = IntArray(w * h)
+            decoded.getPixels(pixels, 0, w, 0, 0, w, h)
+            computeTrimmedLinearLuminanceFromArgbPixels(pixels)
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "measureJpegTrimmedLinearLuminance warning: ${e.message}")
+            0.0f
+        } finally {
+            bmp?.recycle()
+        }
+    }
+}
+
+private val SRGB_TO_LINEAR_LUT: FloatArray = FloatArray(256) { idx ->
+    val c = idx / 255.0f
+    if (c <= 0.04045f) {
+        c / 12.92f
+    } else {
+        ((c + 0.055f) / 1.055f).toDouble().pow(2.4).toFloat()
+    }
+}
+
+internal fun resolveArtworkExposureMode(explicitMode: Int?, normalizeExposure: Boolean): Int {
+    if (explicitMode != null) return explicitMode.coerceIn(0, 2)
+    return if (normalizeExposure) 1 else 0
+}
+
+internal fun computeTrimmedLinearLuminanceFromArgbPixels(pixels: IntArray): Float {
+    if (pixels.isEmpty()) return 0.0f
+    val lums = FloatArray(pixels.size)
+    for (i in pixels.indices) {
+        val px = pixels[i]
+        val rLin = SRGB_TO_LINEAR_LUT[(px ushr 16) and 0xFF]
+        val gLin = SRGB_TO_LINEAR_LUT[(px ushr 8) and 0xFF]
+        val bLin = SRGB_TO_LINEAR_LUT[px and 0xFF]
+        lums[i] = 0.2126729f * rLin + 0.7151522f * gLin + 0.0721750f * bLin
+    }
+    lums.sort()
+    val lenM1 = lums.size - 1
+    val i15 = (lenM1 * 150) / 1000
+    val i85 = ((lenM1 * 850) / 1000).coerceAtLeast(i15)
+    var sum = 0.0
+    for (i in i15..i85) {
+        sum += lums[i]
+    }
+    return (sum / (i85 - i15 + 1)).toFloat()
 }
 
 data class RustRawDevelopOutput(
@@ -6393,6 +6449,8 @@ object ZameraRustBridge {
         exposureTimeNs: Long? = null,
         aperture: Float? = null,
         focalLengthMm: Float? = null,
+        referenceMidY: Float = 0.0f,
+        sensorBaselineGain: Float = 1.0f,
         outFile: File
     ): RustRawDevelopOutput {
         if (!loaded) {
@@ -6417,7 +6475,9 @@ object ZameraRustBridge {
         val outW = if (fullResolution && writeTrueColorBitmap) width else width / 2
         val outH = if (fullResolution && writeTrueColorBitmap) height else height / 2
 
+        val hasBaseline = referenceMidY > 0.0f || sensorBaselineGain > 1.005f
         val paramFloats = when {
+            hasBaseline -> 289
             rggbShading4x48 != null && rggbShading4x48.size == 192 -> 287
             flatField8x6 != null && flatField8x6.size == 48 -> 95
             else -> 47
@@ -6452,8 +6512,16 @@ object ZameraRustBridge {
                 for (i in 0 until 48) pf.put(0.0f)
             }
         }
-        if (paramFloats >= 287 && rggbShading4x48 != null) {
-            for (i in 0 until 192) pf.put(rggbShading4x48[i])
+        if (paramFloats >= 287) {
+            if (rggbShading4x48 != null && rggbShading4x48.size == 192) {
+                for (i in 0 until 192) pf.put(rggbShading4x48[i])
+            } else {
+                for (i in 0 until 192) pf.put(0.0f)
+            }
+        }
+        if (paramFloats >= 289) {
+            pf.put(referenceMidY)
+            pf.put(sensorBaselineGain)
         }
 
         val outRgbaBuffer = ByteBuffer.allocateDirect(outW * outH * 4)

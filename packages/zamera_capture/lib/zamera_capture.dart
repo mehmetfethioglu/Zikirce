@@ -712,7 +712,7 @@ class ZameraCapture {
 
   /// iOS / Xiaomi Style Subject Lift & Cutout Sticker Extractor:
   /// Segments the person or tapped object into a 100% transparent PNG (`ZAM_..._CUTOUT.png`),
-  /// copies the sticker to the Android system clipboard, saves to `DCIM/Zamera`, and optionally opens Share sheet.
+  /// copies the sticker to the system clipboard, optionally saves to gallery, and optionally opens Share sheet.
   static Future<Map<String, dynamic>> extractSubjectCutoutPng({
     required String sourceJpegPath,
     double focusX = 0.5,
@@ -720,6 +720,7 @@ class ZameraCapture {
     double subjectRadiusRatio = 0.36,
     bool isFrontCamera = false,
     bool shareNow = false,
+    bool saveToGallery = false,
   }) async {
     final map = await _channel.invokeMapMethod<dynamic, dynamic>(
       'extractSubjectCutoutPng',
@@ -730,6 +731,7 @@ class ZameraCapture {
         'subjectRadiusRatio': subjectRadiusRatio,
         'isFrontCamera': isFrontCamera,
         'shareNow': shareNow,
+        'saveToGallery': saveToGallery,
       },
     );
     if (map == null) return const {};

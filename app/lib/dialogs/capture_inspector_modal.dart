@@ -590,7 +590,10 @@ class _CaptureInspectorModalState extends State<CaptureInspectorModal> {
     }
   }
 
-  Future<void> _triggerSubjectCutout({bool shareNow = false}) async {
+  Future<void> _triggerSubjectCutout({
+    bool shareNow = false,
+    bool saveToGallery = false,
+  }) async {
     final sourcePath =
         widget.captureResult.oemJpegPath ?? widget.captureResult.jpegPath;
     if (sourcePath == null || _isExtractingCutout) return;
@@ -612,6 +615,7 @@ class _CaptureInspectorModalState extends State<CaptureInspectorModal> {
             widget.captureResult.cameraId == '1' ||
             widget.captureResult.cameraId.contains('Front'),
         shareNow: shareNow,
+        saveToGallery: saveToGallery,
       );
       final pngPath =
           out['cutoutPngPath']?.toString() ?? out['pngPath']?.toString();
@@ -621,8 +625,9 @@ class _CaptureInspectorModalState extends State<CaptureInspectorModal> {
         setState(() {
           _extractedCutoutPngPath = pngPath;
           _hasCutoutFile = true;
-          _statusBanner =
-              'Özne seçildi, panoya kopyalandı ve galeriye şeffaf PNG olarak kaydedildi!';
+          _statusBanner = shareNow
+              ? 'Özne ayrıldı, panoya kopyalandı ve paylaşım açıldı'
+              : 'Özne ayrıldı ve şeffaf çıkartma olarak panoya kopyalandı';
         });
       }
     } catch (e) {
@@ -807,8 +812,12 @@ class _CaptureInspectorModalState extends State<CaptureInspectorModal> {
                             );
                             setState(() {
                               _editFocusNorm = mapped;
+                              if (!_isPortrait) {
+                                _pixelMeasurement = _sampleFromDecodedRgba(
+                                  mapped,
+                                );
+                              }
                             });
-                            _triggerSubjectCutout(shareNow: false);
                           },
                         ),
                       ),

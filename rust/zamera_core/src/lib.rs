@@ -926,6 +926,49 @@ pub fn develop_bayer16_to_rgba8_ext(
     rggb_shading_4x48: Option<&[[f32; 48]; 4]>,
     out_rgba: &mut [u8],
 ) -> RawDevelopStats {
+    develop_bayer16_to_rgba8_with_ref(
+        raw_bytes,
+        width,
+        height,
+        row_stride,
+        cfa_pattern,
+        black_level,
+        white_level,
+        wb_gains,
+        cam_to_xyz_d50,
+        use_display_p3,
+        exposure_mode,
+        flat_field_grid_8x6,
+        rggb_shading_4x48,
+        0.0,
+        1.0,
+        out_rgba,
+    )
+}
+
+/// Full TrueColor RAW developer with radiometric `reference_mid_y` (trimmed scene-linear
+/// luminance from the same-shutter OEM JPEG) and hardware `sensor_baseline_gain`
+/// (`POST_RAW_SENSITIVITY_BOOST / 100.0`) so `1:1 TON` (`exposure_mode == 2`) recovers
+/// physical mobile RAW headroom without hue shift or bleaching dark scenes.
+#[allow(clippy::too_many_arguments)]
+pub fn develop_bayer16_to_rgba8_with_ref(
+    raw_bytes: &[u8],
+    width: usize,
+    height: usize,
+    row_stride: usize,
+    cfa_pattern: u32,
+    black_level: [f32; 4],
+    white_level: f32,
+    wb_gains: [f32; 3],
+    cam_to_xyz_d50: [[f64; 3]; 3],
+    use_display_p3: bool,
+    exposure_mode: u32,
+    flat_field_grid_8x6: Option<&[f32; 48]>,
+    rggb_shading_4x48: Option<&[[f32; 48]; 4]>,
+    reference_mid_y: f32,
+    sensor_baseline_gain: f32,
+    out_rgba: &mut [u8],
+) -> RawDevelopStats {
     let qw = width / 2;
     let qh = height / 2;
     if qw == 0 || qh == 0 {
@@ -1070,17 +1113,39 @@ pub fn develop_bayer16_to_rgba8_ext(
             };
             blended_gain.clamp(1.0, 6.5)
         }
-        2 if !rgb_max_samples.is_empty() => {
+        2 if !rgb_max_samples.is_empty() && !lum_samples.is_empty() => {
+            lum_samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             rgb_max_samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let len_m1 = rgb_max_samples.len() - 1;
+            let lum_len_m1 = lum_samples.len() - 1;
+            let i15 = (lum_len_m1 * 150) / 1000;
+            let i85 = ((lum_len_m1 * 850) / 1000).max(i15);
+            let raw_mid_y = (lum_samples[i15..=i85].iter().copied().sum::<f32>()
+                / ((i85 - i15 + 1) as f32))
+                .max(1e-4);
+            let p92_rgb_max = rgb_max_samples[(len_m1 * 920) / 1000].max(1e-4);
+            let p96_rgb_max = rgb_max_samples[(len_m1 * 960) / 1000].max(1e-4);
             let p995_rgb_max = rgb_max_samples[(len_m1 * 995) / 1000].max(1e-4);
-            let pigment_safe_cap = 0.95 / p995_rgb_max;
-            let nominal_1to1 = if (wb_gains[1] - 1.0).abs() > 0.02 {
-                1.0_f32
+
+            let diffuse_anchor_max = if p995_rgb_max > p96_rgb_max * 1.35 {
+                p96_rgb_max.min(p92_rgb_max * 1.45)
             } else {
-                1.35_f32
+                p995_rgb_max
             };
-            nominal_1to1.min(pigment_safe_cap).clamp(0.15, 2.5)
+            let hw_boost = sensor_baseline_gain.clamp(1.0, 6.0);
+            let target_gain = if reference_mid_y > 0.0 {
+                ((reference_mid_y + 0.003) / (raw_mid_y + 0.003)).clamp(0.60, 6.0)
+            } else {
+                let base_1to1 = if (wb_gains[1] - 1.0).abs() > 0.02 {
+                    1.0_f32
+                } else {
+                    1.35_f32 * hw_boost
+                };
+                base_1to1.clamp(0.60, 6.0)
+            };
+            let pigment_safe_cap =
+                (if reference_mid_y > 0.0 { 0.96 } else { 0.95 }) / diffuse_anchor_max;
+            target_gain.min(pigment_safe_cap).clamp(0.15, 6.0)
         }
         _ => 1.0,
     };
@@ -1098,7 +1163,7 @@ pub fn develop_bayer16_to_rgba8_ext(
         (r * scale, g * scale, b * scale)
     }
 
-    let shoulder_knee = if exposure_mode == 2 { 0.95_f32 } else { 0.84_f32 };
+    let shoulder_knee = if exposure_mode == 2 { 0.90_f32 } else { 0.84_f32 };
 
     let m = [
         [
@@ -1893,7 +1958,18 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
         None
     };
 
-    let stats = develop_bayer16_to_rgba8_ext(
+    let reference_mid_y = if params_len_floats >= 288 {
+        params[287].max(0.0)
+    } else {
+        0.0
+    };
+    let sensor_baseline_gain = if params_len_floats >= 289 && params[288] > 0.0 {
+        params[288]
+    } else {
+        1.0
+    };
+
+    let stats = develop_bayer16_to_rgba8_with_ref(
         raw_slice,
         width as usize,
         height as usize,
@@ -1907,6 +1983,8 @@ pub unsafe extern "C" fn zamera_develop_bayer16_ffi(
         exposure_mode,
         ff_opt.as_ref(),
         lsm_opt.as_ref(),
+        reference_mid_y,
+        sensor_baseline_gain,
         out_rgba,
     );
 
@@ -3058,5 +3136,140 @@ mod tests {
         assert!((white_xyz[0] - 0.96422).abs() < 1e-6);
         assert!((white_xyz[1] - 1.00000).abs() < 1e-6);
         assert!((white_xyz[2] - 0.82521).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_scene1to1_radiometric_reference_lifts_dark_raw_preserving_hue_and_chiaroscuro() {
+        const M_SRGB_TO_XYZ_D50: [[f64; 3]; 3] = [
+            [0.4360747, 0.3850649, 0.1430804],
+            [0.2225045, 0.7168786, 0.0606169],
+            [0.0139322, 0.0971045, 0.7141733],
+        ];
+        let srgb_to_lin = |v: u8| -> f64 {
+            let c = (v as f64) / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let encode_14bit = |lin: f64| -> [u8; 2] {
+            let code = (1025.0 + lin.clamp(0.0, 1.0) * (16383.0 - 1025.0)).round() as u16;
+            code.to_le_bytes()
+        };
+
+        // 1. ~1.8 EV underexposed chromatic 32x32 RGGB scene (linear R:G:B = 0.090:0.054:0.024)
+        //    plus a 3% specular varnish highlight (raw = 15200).
+        let width = 32usize;
+        let height = 32usize;
+        let row_stride = width * 2;
+        let mut raw = vec![0u8; height * row_stride];
+        let patch_r = encode_14bit(0.090);
+        let patch_g = encode_14bit(0.054);
+        let patch_b = encode_14bit(0.024);
+        let spec_bytes = 15200u16.to_le_bytes();
+
+        for qy in 0..(height / 2) {
+            for qx in 0..(width / 2) {
+                let is_specular = qx < 3 && qy < 3; // 9 / 256 ≈ 3.5%
+                let (br, bg, bb) = if is_specular {
+                    (spec_bytes, spec_bytes, spec_bytes)
+                } else {
+                    (patch_r, patch_g, patch_b)
+                };
+                let r0 = (qy * 2) * row_stride + (qx * 2) * 2;
+                let r1 = (qy * 2 + 1) * row_stride + (qx * 2) * 2;
+                raw[r0..r0 + 2].copy_from_slice(&br);
+                raw[r0 + 2..r0 + 4].copy_from_slice(&bg);
+                raw[r1..r1 + 2].copy_from_slice(&bg);
+                raw[r1 + 2..r1 + 4].copy_from_slice(&bb);
+            }
+        }
+
+        let mut out_rgba = vec![0u8; width * height * 4];
+        let stats = develop_bayer16_to_rgba8_with_ref(
+            &raw,
+            width,
+            height,
+            row_stride,
+            0,
+            [1025.0; 4],
+            16383.0,
+            [1.0, 1.0, 1.0],
+            M_SRGB_TO_XYZ_D50,
+            false,
+            2,
+            None,
+            None,
+            0.21,
+            1.0,
+            &mut out_rgba,
+        );
+        assert!(
+            stats.exposure_norm_gain > 2.8,
+            "Expected radiometric gain > 2.8x despite 3.5% specular highlight, got {}",
+            stats.exposure_norm_gain
+        );
+
+        let mid_idx = (16 * width + 16) * 4;
+        assert!(
+            out_rgba[mid_idx] > 115,
+            "Expected well-exposed midtone pixel (> 115), got R={}",
+            out_rgba[mid_idx]
+        );
+
+        // Verify CIE Lab D50 hue angle matches reference (0.090, 0.054, 0.024) within < 0.5 deg
+        let out_lin = [
+            srgb_to_lin(out_rgba[mid_idx]),
+            srgb_to_lin(out_rgba[mid_idx + 1]),
+            srgb_to_lin(out_rgba[mid_idx + 2]),
+        ];
+        let ref_lab = xyz_d50_to_lab(mat3_mul_vec3(M_SRGB_TO_XYZ_D50, [0.090, 0.054, 0.024]));
+        let out_lab = xyz_d50_to_lab(mat3_mul_vec3(M_SRGB_TO_XYZ_D50, out_lin));
+        let ref_hue = ref_lab[2].atan2(ref_lab[1]).to_degrees();
+        let out_hue = out_lab[2].atan2(out_lab[1]).to_degrees();
+        let hue_diff = ((out_hue - ref_hue + 540.0) % 360.0) - 180.0;
+        assert!(
+            hue_diff.abs() < 0.5,
+            "Expected hue angle drift < 0.5 deg, got {} deg (ref={}, out={})",
+            hue_diff,
+            ref_hue,
+            out_hue
+        );
+
+        // 2. Chiaroscuro dark painting: dark reference_mid_y=0.045 keeps dark tone (< 90)
+        let dark_val = 1500u16.to_le_bytes();
+        for chunk in raw.as_chunks_mut::<2>().0 {
+            chunk[0] = dark_val[0];
+            chunk[1] = dark_val[1];
+        }
+        let stats_dark = develop_bayer16_to_rgba8_with_ref(
+            &raw,
+            width,
+            height,
+            row_stride,
+            0,
+            [1025.0; 4],
+            16383.0,
+            [1.0, 1.0, 1.0],
+            M_SRGB_TO_XYZ_D50,
+            false,
+            2,
+            None,
+            None,
+            0.045,
+            1.0,
+            &mut out_rgba,
+        );
+        assert!(
+            stats_dark.exposure_norm_gain <= 1.5,
+            "Dark chiaroscuro scene must not over-boost, got {}",
+            stats_dark.exposure_norm_gain
+        );
+        assert!(
+            out_rgba[0] < 90,
+            "Dark chiaroscuro pixel must remain < 90, got {}",
+            out_rgba[0]
+        );
     }
 }
