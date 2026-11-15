@@ -8,19 +8,22 @@ import 'package:zamera_video/zamera_video.dart';
 import '../constants/camera_colors.dart';
 import '../models/active_pro_dial.dart';
 import '../models/dslr_exposure_model.dart';
+import '../models/media_archive_item.dart';
 import '../models/radial_ring_models.dart';
 import '../models/zamera_preferences.dart';
 import '../services/color_calibration_store.dart';
 import '../services/version_tracking_service.dart';
+import '../services/zamera_media_archive_store.dart';
 import '../services/zamera_settings_store.dart';
 import '../dialogs/release_notes_dialog.dart';
 import '../dialogs/settings_sheet.dart';
-import '../dialogs/capture_inspector_modal.dart';
 import '../dialogs/calibration_probe_sheet.dart';
+import '../screens/media_studio_screen.dart';
 import '../widgets/pro_dslr_hud_bar.dart';
 import '../widgets/radial_shutter_feature_arc.dart';
 import '../widgets/truecolor_spot_meter_badge.dart';
 import '../widgets/video_cinema_hud.dart';
+import '../painters/checkerboard_and_lift_painter.dart';
 import '../painters/portrait_studio_painter.dart';
 import '../painters/radial_guide_arc_painter.dart';
 import '../painters/manual_focus_hud_painter.dart';
@@ -33,12 +36,14 @@ class ZameraHomeScreen extends StatefulWidget {
   final VersionTrackingService? versionService;
   final ColorCalibrationStore calibrationStore;
   final ZameraSettingsRepository settingsStore;
+  final MediaArchiveRepository? archiveStore;
 
   const ZameraHomeScreen({
     super.key,
     this.versionService,
     this.calibrationStore = const ColorCalibrationStore(),
     this.settingsStore = const SharedPrefsZameraSettingsStore(),
+    this.archiveStore,
   });
 
   @override
@@ -184,10 +189,52 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   bool _focusPullAtB = false;
   Timer? _rackFocusResetTimer;
 
+  late final MediaArchiveRepository _mediaArchive =
+      widget.archiveStore ?? ZameraMediaArchiveStore();
+  late final bool _ownsMediaArchive = widget.archiveStore == null;
+
+  void _onMediaArchiveChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _archiveCapturedPhoto(
+    CapturePhotoResult res, {
+    required bool isPortraitMode,
+  }) {
+    final item = ZameraMediaItem.fromPhotoCapture(
+      res,
+      isPortrait: isPortraitMode,
+      portraitAperture: _portraitAperture,
+      portraitLightingIndex: _portraitLightingIndex,
+      portraitLightIntensity: _portraitLightIntensity,
+      focusTapNorm: _lastFocusTapNorm ?? const Offset(0.5, 0.45),
+      portraitSubjectRadiusRatio: _portraitSubjectRadius,
+    );
+    unawaited(_mediaArchive.addOrUpdate(item));
+  }
+
+  void _archiveRecordedVideo(ZameraVideoRecordingResult res) {
+    final item = ZameraMediaItem.fromVideoRecording(
+      res,
+      cameraId: _selectedCameraId,
+    );
+    unawaited(_mediaArchive.addOrUpdate(item));
+  }
+
+  void _startTelemetryTimer() {
+    _telemetryTimer?.cancel();
+    _telemetryTimer = Timer.periodic(
+      const Duration(milliseconds: 350),
+      (_) => _pollLiveTelemetry(),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _mediaArchive.addListener(_onMediaArchiveChanged);
+    unawaited(_mediaArchive.load());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vs = widget.versionService;
       if (vs != null) {
@@ -211,10 +258,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     _recomputeCalibration();
     _loadStoredCalibrationForLens(_selectedCameraId);
     _runDeviceProbe();
-    _telemetryTimer = Timer.periodic(
-      const Duration(milliseconds: 350),
-      (_) => _pollLiveTelemetry(),
-    );
+    _startTelemetryTimer();
   }
 
   void _triggerRadialHaptic() {
@@ -450,7 +494,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         if (_isVideoRecording) {
           final res = await ZameraVideo.stopVideoRecording();
           _isVideoRecording = false;
-          if (res != null) _lastVideoResult = res;
+          if (res != null) {
+            _lastVideoResult = res;
+            _archiveRecordedVideo(res);
+          }
         }
         await ZameraVideo.stopVideoSession();
       },
@@ -466,6 +513,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     _telemetryTimer?.cancel();
     _selfTimerCountdown?.cancel();
     _rackFocusResetTimer?.cancel();
+    _mediaArchive.removeListener(_onMediaArchiveChanged);
+    if (_ownsMediaArchive && _mediaArchive is ChangeNotifier) {
+      (_mediaArchive as ChangeNotifier).dispose();
+    }
     super.dispose();
   }
 
@@ -494,7 +545,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             if (mounted) {
               setState(() {
                 _isVideoRecording = false;
-                if (res != null) _lastVideoResult = res;
+                if (res != null) {
+                  _lastVideoResult = res;
+                  _archiveRecordedVideo(res);
+                }
                 _statusBanner = 'Arka plana geçildi: Video güvenle kapatıldı';
               });
             }
@@ -962,6 +1016,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           _isCapturing = false;
           if (res != null) {
             _lastVideoResult = res;
+            _archiveRecordedVideo(res);
             final secStr = (res.durationMs / 1000.0).toStringAsFixed(1);
             final mbStr =
                 (res.fileSizeBytes / (1024 * 1024)).toStringAsFixed(1);
@@ -1500,6 +1555,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       setState(() {
         _isCapturing = false;
         _lastCaptureResult = res;
+        _archiveCapturedPhoto(res, isPortraitMode: isPortraitMode);
         final cctStr = res.solvedCctKelvin != null
             ? '${res.solvedCctKelvin!.round()}K'
             : '';
@@ -1546,6 +1602,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       setState(() {
         _isCapturing = false;
         if (results.isNotEmpty) {
+          for (final itemRes in results) {
+            _archiveCapturedPhoto(itemRes, isPortraitMode: false);
+          }
           _lastCaptureResult = results[results.length ~/ 2];
         }
         _statusBanner = '3x AEB Tamamlandı (${results.length} kare)';
@@ -5068,9 +5127,14 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     required bool isVideo,
   }) {
     final lastRes = _lastCaptureResult;
-    final thumbFile =
-        lastRes?.jpegPath != null ? File(lastRes!.jpegPath!) : null;
+    final latestItem = _mediaArchive.latestItem;
+    final thumbPath = latestItem?.primaryPath ?? lastRes?.jpegPath;
+    final thumbFile = thumbPath != null ? File(thumbPath) : null;
     final hasThumb = thumbFile != null && thumbFile.existsSync();
+    final hasMedia = latestItem != null || lastRes != null;
+    final isVideoThumb = latestItem?.kind == ZameraMediaKind.video;
+    final isStickerThumb = latestItem?.kind == ZameraMediaKind.sticker;
+    final archiveCount = _mediaArchive.items.length;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(22, 8, 22, 12),
@@ -5118,9 +5182,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Left: iOS Squircle Last Capture Thumbnail (Tap for Post-Capture Refocus & Subject Copy!)
+              // Left: iOS Squircle Last Capture Thumbnail (Tap for Full-Screen Pro Media & Sticker Studio)
               GestureDetector(
-                onTap: lastRes != null ? _showLastCaptureInspectorModal : null,
+                key: const ValueKey('home_media_studio_thumb'),
+                onTap: hasMedia ? _openMediaStudio : null,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -5131,24 +5196,73 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                         color: Colors.black.withValues(alpha: 0.45),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: hasThumb ? kIosYellow : Colors.white12,
-                          width: hasThumb ? 1.3 : 0.8,
+                          color: hasMedia ? kIosYellow : Colors.white12,
+                          width: hasMedia ? 1.3 : 0.8,
                         ),
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: hasThumb
-                          ? Image.file(
-                              thumbFile,
-                              key: ValueKey(thumbFile.path),
-                              fit: BoxFit.cover,
-                            )
-                          : const Icon(
-                              Icons.photo_library_outlined,
+                          ? (isVideoThumb
+                              ? Container(
+                                  color: const Color(0xFF10141E),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      const Center(
+                                        child: Icon(
+                                          Icons.play_circle_fill_rounded,
+                                          color: kIosYellow,
+                                          size: 24,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        left: 3,
+                                        right: 3,
+                                        bottom: 2,
+                                        child: Text(
+                                          (latestItem?.height ?? 0) >= 2160
+                                              ? '4K VID'
+                                              : 'VIDEO',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 7.5,
+                                            fontWeight: FontWeight.w900,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : isStickerThumb
+                                  ? CustomPaint(
+                                      painter:
+                                          const TransparencyCheckerboardPainter(
+                                        tileSize: 5,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(3),
+                                        child: Image.file(
+                                          thumbFile,
+                                          key: ValueKey(thumbFile.path),
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    )
+                                  : Image.file(
+                                      thumbFile,
+                                      key: ValueKey(thumbFile.path),
+                                      fit: BoxFit.cover,
+                                    ))
+                          : Icon(
+                              isVideoThumb
+                                  ? Icons.movie_creation_outlined
+                                  : Icons.photo_library_outlined,
                               color: Colors.white54,
                               size: 20,
                             ),
                     ),
-                    if (hasThumb)
+                    if (hasMedia)
                       Positioned(
                         right: -4,
                         top: -4,
@@ -5161,9 +5275,15 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                             color: kIosYellow,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Text(
-                            'f · ✂',
-                            style: TextStyle(
+                          child: Text(
+                            isVideoThumb
+                                ? '▶ ${archiveCount > 1 ? archiveCount : 'PRO'}'
+                                : isStickerThumb
+                                    ? '✂ ${archiveCount > 1 ? archiveCount : 'PNG'}'
+                                    : (archiveCount > 1
+                                        ? '$archiveCount'
+                                        : 'f · ✂'),
+                            style: const TextStyle(
                               fontSize: 7.5,
                               fontWeight: FontWeight.w900,
                               color: Colors.black,
@@ -5389,21 +5509,38 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     }
   }
 
-  void _showLastCaptureInspectorModal() {
+  Future<void> _openMediaStudio() async {
+    var targetId = _mediaArchive.latestItem?.id;
     final res = _lastCaptureResult;
-    if (res == null) return;
-    final isPortraitShot = _selectedMode == 2 || res.portraitDepthActive;
-    CaptureInspectorModal.show(
+    if (targetId == null && res != null) {
+      final isPortraitShot = _selectedMode == 2 || res.portraitDepthActive;
+      final fallbackItem = ZameraMediaItem.fromPhotoCapture(
+        res,
+        isPortrait: isPortraitShot,
+        portraitAperture: _portraitAperture,
+        portraitLightingIndex: _portraitLightingIndex,
+        portraitLightIntensity: _portraitLightIntensity,
+        focusTapNorm: _lastFocusTapNorm ?? const Offset(0.5, 0.45),
+        portraitSubjectRadiusRatio: _portraitSubjectRadius,
+      );
+      await _mediaArchive.addOrUpdate(fallbackItem);
+      targetId = fallbackItem.id;
+    }
+    if (!mounted) return;
+    _telemetryTimer?.cancel();
+    await MediaStudioScreen.open(
       context,
-      captureResult: res,
-      initialAperture: _portraitAperture,
-      initialLightingIndex: _portraitLightingIndex,
-      initialLightIntensity: _portraitLightIntensity,
-      subjectRadiusRatio: _portraitSubjectRadius,
+      archiveRepository: _mediaArchive,
+      initialMediaId: targetId,
+      initialPortraitAperture: _portraitAperture,
+      initialPortraitLightingIndex: _portraitLightingIndex,
+      initialPortraitLightIntensity: _portraitLightIntensity,
+      initialPortraitSubjectRadius: _portraitSubjectRadius,
       initialFocusTapNorm: _lastFocusTapNorm,
-      initialPortraitEnabled: isPortraitShot,
-      isPortraitCapture: isPortraitShot,
     );
+    if (mounted) {
+      _startTelemetryTimer();
+    }
   }
 
   void _showCalibrationAndProbeSheet() {

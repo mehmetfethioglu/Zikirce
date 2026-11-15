@@ -2,4 +2,11 @@
   package="com.akarworks.zamera_capture">
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <application>
+    <provider
+      android:name="com.akarworks.zamera_capture.ZameraMediaFileProvider"
+      android:authorities="${applicationId}.zamera_provider"
+      android:exported="false"
+      android:grantUriPermissions="true" />
+  </application>
 </manifest>

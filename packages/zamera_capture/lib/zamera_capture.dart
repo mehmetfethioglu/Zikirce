@@ -712,7 +712,8 @@ class ZameraCapture {
 
   /// iOS / Xiaomi Style Subject Lift & Cutout Sticker Extractor:
   /// Segments the person or tapped object into a 100% transparent PNG (`ZAM_..._CUTOUT.png`),
-  /// copies the sticker to the system clipboard, optionally saves to gallery, and optionally opens Share sheet.
+  /// optionally adds a white sticker outline, copies the sticker to the system clipboard,
+  /// optionally saves to gallery, and optionally opens Share sheet.
   static Future<Map<String, dynamic>> extractSubjectCutoutPng({
     required String sourceJpegPath,
     double focusX = 0.5,
@@ -721,6 +722,8 @@ class ZameraCapture {
     bool isFrontCamera = false,
     bool shareNow = false,
     bool saveToGallery = false,
+    bool addWhiteOutline = false,
+    bool copyToClipboard = true,
   }) async {
     final map = await _channel.invokeMapMethod<dynamic, dynamic>(
       'extractSubjectCutoutPng',
@@ -732,12 +735,66 @@ class ZameraCapture {
         'isFrontCamera': isFrontCamera,
         'shareNow': shareNow,
         'saveToGallery': saveToGallery,
+        'addWhiteOutline': addWhiteOutline,
+        'copyToClipboard': copyToClipboard,
       },
     );
     if (map == null) return const {};
     return Map<String, dynamic>.from(
       map.map((k, v) => MapEntry(k.toString(), v)),
     );
+  }
+
+  /// Extracts a full-resolution JPEG frame at [positionMs] from a recorded MP4/MOV video.
+  static Future<Map<String, dynamic>> extractVideoFrameJpeg({
+    required String videoPath,
+    required int positionMs,
+  }) async {
+    final map = await _channel.invokeMapMethod<dynamic, dynamic>(
+      'extractVideoFrameJpeg',
+      {
+        'videoPath': videoPath,
+        'positionMs': positionMs,
+      },
+    );
+    if (map == null) return const {};
+    return Map<String, dynamic>.from(
+      map.map((k, v) => MapEntry(k.toString(), v)),
+    );
+  }
+
+  /// Opens the native share sheet for one or more local media files (JPEG, DNG, PNG, MP4/MOV).
+  static Future<bool> shareMediaFiles({
+    required List<String> filePaths,
+    String? mimeType,
+    String? title,
+  }) async {
+    final ok = await _channel.invokeMethod<bool>('shareMediaFiles', {
+      'filePaths': filePaths,
+      'mimeType': ?mimeType,
+      'title': ?title,
+    });
+    return ok == true;
+  }
+
+  /// Copies a transparent sticker PNG file directly to the native system clipboard.
+  static Future<bool> copyPngToClipboard({required String pngPath}) async {
+    final ok = await _channel.invokeMethod<bool>('copyPngToClipboard', {
+      'pngPath': pngPath,
+    });
+    return ok == true;
+  }
+
+  /// Deletes a local media asset file and/or its MediaStore / PhotoKit entry.
+  static Future<bool> deleteMediaAsset({
+    String? filePath,
+    String? mediaStoreUri,
+  }) async {
+    final ok = await _channel.invokeMethod<bool>('deleteMediaAsset', {
+      'filePath': ?filePath,
+      'mediaStoreUri': ?mediaStoreUri,
+    });
+    return ok == true;
   }
 
   /// Converts Kelvin (2000K..10000K) and Tint (-50..+50) into RGGB channel gains.

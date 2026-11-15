@@ -250,6 +250,18 @@ public class ZameraCapturePlugin: NSObject,
         case "extractSubjectCutoutPng":
             let args = call.arguments as? [String: Any] ?? [:]
             extractSubjectCutoutPng(args: args, result: result)
+        case "extractVideoFrameJpeg":
+            let args = call.arguments as? [String: Any] ?? [:]
+            extractVideoFrameJpeg(args: args, result: result)
+        case "shareMediaFiles":
+            let args = call.arguments as? [String: Any] ?? [:]
+            shareMediaFiles(args: args, result: result)
+        case "copyPngToClipboard":
+            let args = call.arguments as? [String: Any] ?? [:]
+            copyPngToClipboard(args: args, result: result)
+        case "deleteMediaAsset":
+            let args = call.arguments as? [String: Any] ?? [:]
+            deleteMediaAsset(args: args, result: result)
 
         // Faz 3: Pro Video Engine
         case "startVideoSession":
@@ -2480,6 +2492,8 @@ public class ZameraCapturePlugin: NSObject,
             let focusY = args["focusY"] as? Double ?? (args["focusY"] as? NSNumber)?.doubleValue ?? 0.45
             let shareNow = args["shareNow"] as? Bool ?? false
             let saveToGallery = args["saveToGallery"] as? Bool ?? false
+            let addWhiteOutline = args["addWhiteOutline"] as? Bool ?? false
+            let copyToClipboard = args["copyToClipboard"] as? Bool ?? true
 
             guard let scaledMask = self.extractVisionForegroundMask(
                 cgImage: uprightCg,
@@ -2488,40 +2502,38 @@ public class ZameraCapturePlugin: NSObject,
                 focusY: CGFloat(focusY)
             ) else {
                 DispatchQueue.main.async {
-                    result(FlutterError(code: "NO_MASK", message: "Could not segment subject", details: nil))
+                    result(FlutterError(code: "NO_SUBJECT", message: "Could not segment subject", details: nil))
                 }
                 return
             }
 
-            let transparentBg = CIImage(color: CIColor(red: 0, green: 0, blue: 0, alpha: 0)).cropped(to: origCi.extent)
-            guard let blend = CIFilter(name: "CIBlendWithMask") else {
+            guard let maskCg = context.createCGImage(scaledMask, from: origCi.extent) else {
                 DispatchQueue.main.async {
-                    result(FlutterError(code: "FILTER_ERR", message: "CIBlendWithMask unavailable", details: nil))
+                    result(FlutterError(code: "RENDER_ERR", message: "Could not render subject mask", details: nil))
                 }
                 return
             }
-            blend.setValue(origCi, forKey: kCIInputImageKey)
-            blend.setValue(transparentBg, forKey: kCIInputBackgroundImageKey)
-            blend.setValue(scaledMask, forKey: kCIInputMaskImageKey)
 
-            guard let output = blend.outputImage?.cropped(to: origCi.extent),
-                  let cutCg = context.createCGImage(output, from: origCi.extent) else {
+            guard let stickerResult = self.buildStickerPngData(
+                uprightCg: uprightCg,
+                maskCg: maskCg,
+                addWhiteOutline: addWhiteOutline
+            ) else {
                 DispatchQueue.main.async {
-                    result(FlutterError(code: "RENDER_ERR", message: "Could not render subject cutout", details: nil))
+                    result(FlutterError(code: "NO_SUBJECT", message: "Tapped subject matte was empty", details: nil))
                 }
                 return
             }
 
-            let cutUi = UIImage(cgImage: cutCg)
+            let pngData = stickerResult.pngData
+            let cropW = stickerResult.width
+            let cropH = stickerResult.height
+
             let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            let stickerDir = docs.appendingPathComponent("zamera_stickers", isDirectory: true)
+            try? FileManager.default.createDirectory(at: stickerDir, withIntermediateDirectories: true)
             let ts = Int(Date().timeIntervalSince1970 * 1000)
-            let outUrl = docs.appendingPathComponent("ZAM_CUTOUT_\(ts).png")
-            guard let pngData = cutUi.pngData() else {
-                DispatchQueue.main.async {
-                    result(FlutterError(code: "ENCODE_ERR", message: "Could not encode cutout PNG", details: nil))
-                }
-                return
-            }
+            let outUrl = stickerDir.appendingPathComponent("ZAM_STICKER_\(ts).png")
 
             do {
                 try pngData.write(to: outUrl, options: .atomic)
@@ -2540,7 +2552,10 @@ public class ZameraCapturePlugin: NSObject,
             }
 
             DispatchQueue.main.async {
-                UIPasteboard.general.image = cutUi
+                if copyToClipboard {
+                    let pngType = UTType.png.identifier
+                    UIPasteboard.general.setData(pngData, forPasteboardType: pngType)
+                }
                 if shareNow, let presenter = self.activeTopViewController() {
                     let activityVc = UIActivityViewController(activityItems: [outUrl], applicationActivities: nil)
                     if let popover = activityVc.popoverPresentationController {
@@ -2556,15 +2571,380 @@ public class ZameraCapturePlugin: NSObject,
                     presenter.present(activityVc, animated: true, completion: nil)
                 }
                 result([
+                    "pngPath": outUrl.path,
                     "cutoutPngPath": outUrl.path,
-                    "copiedToClipboard": true,
+                    "copiedToClipboard": copyToClipboard,
                     "savedToGallery": saveToGallery,
                     "shared": shareNow,
-                    "width": Int(origCi.extent.width),
-                    "height": Int(origCi.extent.height)
+                    "width": cropW,
+                    "height": cropH
                 ])
             }
         }
+    }
+
+    private func buildStickerPngData(
+        uprightCg: CGImage,
+        maskCg: CGImage,
+        addWhiteOutline: Bool
+    ) -> (pngData: Data, width: Int, height: Int)? {
+        let w = uprightCg.width
+        let h = uprightCg.height
+        guard w > 0, h > 0, maskCg.width == w, maskCg.height == h else { return nil }
+        let total = w * h
+
+        let rgbColorSpace = CGColorSpaceCreateDeviceRGB()
+        let grayColorSpace = CGColorSpaceCreateDeviceGray()
+        var srcRgba = [UInt8](repeating: 0, count: total * 4)
+        var maskGray = [UInt8](repeating: 0, count: total)
+
+        let rgbBitmapInfo = CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        let rgbOk = srcRgba.withUnsafeMutableBytes { buf -> Bool in
+            guard let ptr = buf.baseAddress,
+                  let ctx = CGContext(
+                    data: ptr,
+                    width: w,
+                    height: h,
+                    bitsPerComponent: 8,
+                    bytesPerRow: w * 4,
+                    space: rgbColorSpace,
+                    bitmapInfo: rgbBitmapInfo
+                  ) else { return false }
+            ctx.draw(uprightCg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        let maskOk = maskGray.withUnsafeMutableBytes { buf -> Bool in
+            guard let ptr = buf.baseAddress,
+                  let ctx = CGContext(
+                    data: ptr,
+                    width: w,
+                    height: h,
+                    bitsPerComponent: 8,
+                    bytesPerRow: w,
+                    space: grayColorSpace,
+                    bitmapInfo: 0
+                  ) else { return false }
+            ctx.draw(maskCg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard rgbOk, maskOk else { return nil }
+
+        var minX = w
+        var minY = h
+        var maxX = -1
+        var maxY = -1
+        var corePixels = 0
+
+        for y in 0..<h {
+            let row = y * w
+            for x in 0..<w {
+                let a = maskGray[row + x]
+                if a > 12 {
+                    if a > 24 { corePixels += 1 }
+                    if x < minX { minX = x }
+                    if x > maxX { maxX = x }
+                    if y < minY { minY = y }
+                    if y > maxY { maxY = y }
+                }
+            }
+        }
+        if corePixels < max(16, total / 900) || maxX <= minX || maxY <= minY {
+            return nil
+        }
+
+        let objW = maxX - minX + 1
+        let objH = maxY - minY + 1
+        let strokeR = addWhiteOutline ? max(6, min(36, max(objW, objH) / 42)) : 0
+        let pad = addWhiteOutline ? strokeR + 8 : 6
+        let cropMinX = max(0, minX - pad)
+        let cropMinY = max(0, minY - pad)
+        let cropMaxX = min(w - 1, maxX + pad)
+        let cropMaxY = min(h - 1, maxY + pad)
+        let cw = cropMaxX - cropMinX + 1
+        let ch = cropMaxY - cropMinY + 1
+        let cropN = cw * ch
+
+        var cropAlpha = [UInt8](repeating: 0, count: cropN)
+        var cropR = [UInt8](repeating: 0, count: cropN)
+        var cropG = [UInt8](repeating: 0, count: cropN)
+        var cropB = [UInt8](repeating: 0, count: cropN)
+
+        for cy in 0..<ch {
+            let sy = cropMinY + cy
+            let sRow = sy * w
+            let dRow = cy * cw
+            for cx in 0..<cw {
+                let sx = cropMinX + cx
+                let sIdx = sRow + sx
+                let dIdx = dRow + cx
+                let a = maskGray[sIdx]
+                if a > 12 {
+                    cropAlpha[dIdx] = a
+                    let pOff = sIdx * 4
+                    cropR[dIdx] = srcRgba[pOff]
+                    cropG[dIdx] = srcRgba[pOff + 1]
+                    cropB[dIdx] = srcRgba[pOff + 2]
+                }
+            }
+        }
+
+        // Foreground RGB edge decontamination on semi-transparent boundary pixels
+        if ch > 4 && cw > 4 {
+            for cy in 2..<(ch - 2) {
+                let row = cy * cw
+                for cx in 2..<(cw - 2) {
+                    let i = row + cx
+                    let a = cropAlpha[i]
+                    if a > 12 && a < 224 {
+                        var sumR = 0
+                        var sumG = 0
+                        var sumB = 0
+                        var cnt = 0
+                        for dy in -2...2 {
+                            let nRow = (cy + dy) * cw
+                            for dx in -2...2 {
+                                let ni = nRow + (cx + dx)
+                                if cropAlpha[ni] >= 224 {
+                                    sumR += Int(cropR[ni])
+                                    sumG += Int(cropG[ni])
+                                    sumB += Int(cropB[ni])
+                                    cnt += 1
+                                }
+                            }
+                        }
+                        if cnt > 0 {
+                            let ir = Float(sumR) / Float(cnt)
+                            let ig = Float(sumG) / Float(cnt)
+                            let ib = Float(sumB) / Float(cnt)
+                            let blend = 1.0 - (Float(a) / 224.0)
+                            cropR[i] = UInt8(max(0, min(255, Int((Float(cropR[i]) * (1.0 - blend) + ir * blend).rounded()))))
+                            cropG[i] = UInt8(max(0, min(255, Int((Float(cropG[i]) * (1.0 - blend) + ig * blend).rounded()))))
+                            cropB[i] = UInt8(max(0, min(255, Int((Float(cropB[i]) * (1.0 - blend) + ib * blend).rounded()))))
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2-pass Chamfer distance transform for crisp white sticker border + soft drop shadow
+        var distFg = [Float](repeating: 1e6, count: cropN)
+        if addWhiteOutline && strokeR > 0 {
+            for i in 0..<cropN where cropAlpha[i] >= 128 {
+                distFg[i] = 0
+            }
+            for y in 0..<ch {
+                let row = y * cw
+                for x in 0..<cw {
+                    let i = row + x
+                    var best = distFg[i]
+                    if x > 0 { best = min(best, distFg[i - 1] + 1.0) }
+                    if y > 0 {
+                        best = min(best, distFg[i - cw] + 1.0)
+                        if x > 0 { best = min(best, distFg[i - cw - 1] + 1.414) }
+                        if x + 1 < cw { best = min(best, distFg[i - cw + 1] + 1.414) }
+                    }
+                    distFg[i] = best
+                }
+            }
+            for y in stride(from: ch - 1, through: 0, by: -1) {
+                let row = y * cw
+                for x in stride(from: cw - 1, through: 0, by: -1) {
+                    let i = row + x
+                    var best = distFg[i]
+                    if x + 1 < cw { best = min(best, distFg[i + 1] + 1.0) }
+                    if y + 1 < ch {
+                        best = min(best, distFg[i + cw] + 1.0)
+                        if x > 0 { best = min(best, distFg[i + cw - 1] + 1.414) }
+                        if x + 1 < cw { best = min(best, distFg[i + cw + 1] + 1.414) }
+                    }
+                    distFg[i] = best
+                }
+            }
+        }
+
+        var outPremul = [UInt8](repeating: 0, count: cropN * 4)
+        let rFloat = Float(strokeR)
+        for y in 0..<ch {
+            let row = y * cw
+            for x in 0..<cw {
+                let i = row + x
+                let aFg = Float(cropAlpha[i]) / 255.0
+                var outR: Float = 0
+                var outG: Float = 0
+                var outB: Float = 0
+                var outA: Float = 0
+
+                if addWhiteOutline && strokeR > 0 {
+                    let d = distFg[i]
+                    let strokeCov = max(0.0, min(1.0, (rFloat + 0.8 - d) / 1.5))
+                    let shadowDx = min(4, max(2, strokeR / 5))
+                    let shadowDy = min(5, max(2, strokeR / 4))
+                    var shadowAlpha: Float = 0
+                    let sy = y - shadowDy
+                    let sx = x - shadowDx
+                    if sx >= 0 && sy >= 0 {
+                        let sd = distFg[sy * cw + sx]
+                        let shCov = max(0.0, min(1.0, (rFloat + 2.5 - sd) / 3.2))
+                        shadowAlpha = shCov * 0.24
+                    }
+                    // Composite: transparent -> drop shadow -> white sticker contour -> foreground subject
+                    let baseA = strokeCov + shadowAlpha * (1.0 - strokeCov)
+                    let baseR: Float = baseA > 1e-4 ? (255.0 * strokeCov / baseA) : 0
+                    let baseG: Float = baseR
+                    let baseB: Float = baseR
+
+                    outA = aFg + baseA * (1.0 - aFg)
+                    if outA > 1e-4 {
+                        outR = (Float(cropR[i]) * aFg + baseR * baseA * (1.0 - aFg)) / outA
+                        outG = (Float(cropG[i]) * aFg + baseG * baseA * (1.0 - aFg)) / outA
+                        outB = (Float(cropB[i]) * aFg + baseB * baseA * (1.0 - aFg)) / outA
+                    }
+                } else {
+                    outA = aFg
+                    outR = Float(cropR[i])
+                    outG = Float(cropG[i])
+                    outB = Float(cropB[i])
+                }
+
+                let aByte = UInt8(max(0, min(255, Int((outA * 255.0).rounded()))))
+                let pOff = i * 4
+                if aByte == 0 {
+                    outPremul[pOff] = 0
+                    outPremul[pOff + 1] = 0
+                    outPremul[pOff + 2] = 0
+                    outPremul[pOff + 3] = 0
+                } else {
+                    let aNorm = Float(aByte) / 255.0
+                    outPremul[pOff] = UInt8(max(0, min(255, Int((outR * aNorm).rounded()))))
+                    outPremul[pOff + 1] = UInt8(max(0, min(255, Int((outG * aNorm).rounded()))))
+                    outPremul[pOff + 2] = UInt8(max(0, min(255, Int((outB * aNorm).rounded()))))
+                    outPremul[pOff + 3] = aByte
+                }
+            }
+        }
+
+        let premulInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        let croppedCg: CGImage? = outPremul.withUnsafeMutableBytes { buf in
+            guard let ptr = buf.baseAddress,
+                  let ctx = CGContext(
+                    data: ptr,
+                    width: cw,
+                    height: ch,
+                    bitsPerComponent: 8,
+                    bytesPerRow: cw * 4,
+                    space: rgbColorSpace,
+                    bitmapInfo: premulInfo
+                  ) else { return nil }
+            return ctx.makeImage()
+        }
+        guard let finalCg = croppedCg,
+              let pngData = UIImage(cgImage: finalCg).pngData() else {
+            return nil
+        }
+        return (pngData, cw, ch)
+    }
+
+    private func extractVideoFrameJpeg(args: [String: Any], result: @escaping FlutterResult) {
+        guard let videoPath = args["videoPath"] as? String,
+              FileManager.default.fileExists(atPath: videoPath) else {
+            result(FlutterError(code: "NO_VIDEO", message: "Video file not found", details: nil))
+            return
+        }
+        let positionMs = (args["positionMs"] as? NSNumber)?.int64Value ?? 0
+        DispatchQueue.global(qos: .userInitiated).async {
+            let asset = AVAsset(url: URL(fileURLWithPath: videoPath))
+            let gen = AVAssetImageGenerator(asset: asset)
+            gen.appliesPreferredTrackTransform = true
+            gen.requestedTimeToleranceBefore = .zero
+            gen.requestedTimeToleranceAfter = .zero
+            let targetTime = CMTime(value: max(0, positionMs), timescale: 1000)
+            do {
+                let cgImg = try gen.copyCGImage(at: targetTime, actualTime: nil)
+                let uiImg = UIImage(cgImage: cgImg)
+                guard let jpegData = uiImg.jpegData(compressionQuality: 0.95) else {
+                    DispatchQueue.main.async {
+                        result(FlutterError(code: "ENCODE_ERR", message: "Failed to encode video frame JPEG", details: nil))
+                    }
+                    return
+                }
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+                let frameDir = docs.appendingPathComponent("zamera_frames", isDirectory: true)
+                try FileManager.default.createDirectory(at: frameDir, withIntermediateDirectories: true)
+                let ts = Int(Date().timeIntervalSince1970 * 1000)
+                let outUrl = frameDir.appendingPathComponent("ZAM_FRAME_\(ts).jpg")
+                try jpegData.write(to: outUrl, options: .atomic)
+                DispatchQueue.main.async {
+                    result([
+                        "jpegPath": outUrl.path,
+                        "width": cgImg.width,
+                        "height": cgImg.height
+                    ])
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "FRAME_ERR", message: error.localizedDescription, details: nil))
+                }
+            }
+        }
+    }
+
+    private func shareMediaFiles(args: [String: Any], result: @escaping FlutterResult) {
+        let rawPaths = args["filePaths"] as? [String] ?? []
+        let urls = rawPaths
+            .filter { FileManager.default.fileExists(atPath: $0) }
+            .map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else {
+            result(false)
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let presenter = self.activeTopViewController() else {
+                result(false)
+                return
+            }
+            let activityVc = UIActivityViewController(activityItems: urls, applicationActivities: nil)
+            if let popover = activityVc.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(
+                    x: presenter.view.bounds.midX,
+                    y: presenter.view.bounds.midY,
+                    width: 1,
+                    height: 1
+                )
+                popover.permittedArrowDirections = []
+            }
+            presenter.present(activityVc, animated: true, completion: nil)
+            result(true)
+        }
+    }
+
+    private func copyPngToClipboard(args: [String: Any], result: @escaping FlutterResult) {
+        guard let pngPath = args["pngPath"] as? String,
+              let pngData = FileManager.default.contents(atPath: pngPath) else {
+            result(false)
+            return
+        }
+        DispatchQueue.main.async {
+            if #available(iOS 14.0, *) {
+                UIPasteboard.general.setData(pngData, forPasteboardType: UTType.png.identifier)
+            } else {
+                UIPasteboard.general.setData(pngData, forPasteboardType: "public.png")
+            }
+            result(true)
+        }
+    }
+
+    private func deleteMediaAsset(args: [String: Any], result: @escaping FlutterResult) {
+        let filePath = args["filePath"] as? String
+        if let path = filePath, !path.isEmpty, FileManager.default.fileExists(atPath: path) {
+            do {
+                try FileManager.default.removeItem(atPath: path)
+            } catch {
+                result(false)
+                return
+            }
+        }
+        result(true)
     }
 
     // MARK: - Faz 3: Pro Video Engine (Apple Log, ProRes 422 HQ, 180° Shutter, Audio)

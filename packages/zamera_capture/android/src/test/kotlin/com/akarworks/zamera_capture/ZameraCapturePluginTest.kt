@@ -369,4 +369,164 @@ internal class ZameraCapturePluginTest {
         val midY = computeTrimmedLinearLuminanceFromArgbPixels(pixels)
         assertEquals(0.181f, midY, 0.01f, "Trimmed linear luminance must recover ~0.181 despite specular/shadow tails")
     }
+
+    @Test
+    fun stickerSelectTappedSubjectMask_isolatesOnlyTappedMultiSubjectInstance() {
+        val w = 100
+        val h = 100
+        // Subject A at left (x: 10..30, y: 20..80), Subject B at right (x: 68..88, y: 20..80)
+        val candA = StickerCutoutEngine.SubjectMaskCandidate(
+            startX = 10,
+            startY = 20,
+            width = 21,
+            height = 61,
+            mask = FloatArray(21 * 61) { 0.94f }
+        )
+        val candB = StickerCutoutEngine.SubjectMaskCandidate(
+            startX = 68,
+            startY = 20,
+            width = 21,
+            height = 61,
+            mask = FloatArray(21 * 61) { 0.91f }
+        )
+
+        val selected = StickerCutoutEngine.selectTappedSubjectMask(
+            candidates = listOf(candA, candB),
+            fullW = w,
+            fullH = h,
+            focusX = 0.78f,
+            focusY = 0.50f
+        )
+        assertTrue(selected != null, "Subject B under tap must be selected")
+        assertTrue(selected!![50 * w + 78] > 0.85f, "Tapped subject B must be solid foreground")
+        assertEquals(0.0f, selected[50 * w + 20], 1e-6f, "Untapped subject A must remain completely transparent")
+    }
+
+    @Test
+    fun stickerExtractTappedStickerMatte_isolatesNonHumanConnectedObjectAndRejectsEmptyBackground() {
+        val w = 64
+        val h = 64
+        val n = w * h
+        val saliency = FloatArray(n) { 0.02f }
+        val human = FloatArray(n) { 0.0f } // non-human object scene (e.g., coffee mug or sculpture)
+        val luma = FloatArray(n) { 45f }
+        val chA = FloatArray(n) { -4f }
+        val chB = FloatArray(n) { -6f }
+
+        // Target object centered around (20, 32)
+        for (y in 20..44) {
+            for (x in 12..28) {
+                val i = y * w + x
+                // Leave a tiny interior pocket to verify hole-filling
+                saliency[i] = if (x in 19..21 && y in 31..33) 0.12f else 0.92f
+                luma[i] = 210f
+                chA[i] = 30f
+                chB[i] = 24f
+            }
+        }
+        // Unrelated disconnected object at (50, 32)
+        for (y in 22..42) {
+            for (x in 46..58) {
+                val i = y * w + x
+                saliency[i] = 0.96f
+                luma[i] = 200f
+                chA[i] = 20f
+                chB[i] = 20f
+            }
+        }
+
+        val matte = StickerCutoutEngine.extractTappedStickerMatte(
+            saliencyProb = saliency,
+            humanProb = human,
+            luma255 = luma,
+            chA = chA,
+            chB = chB,
+            segW = w,
+            segH = h,
+            focusX = 20f / 63f,
+            focusY = 32f / 63f
+        )
+        assertTrue(matte != null, "Non-human salient object under tap must yield a sticker matte")
+        assertTrue(matte!![26 * w + 20] > 0.85f, "Target object body must be opaque foreground")
+        assertTrue(matte[32 * w + 20] > 0.75f, "Enclosed interior pocket inside tapped object must be filled")
+        assertEquals(0.0f, matte[32 * w + 52], 1e-5f, "Disconnected background object must not bleed into sticker")
+
+        // Tapping empty background far from any subject must return null instead of full-frame rectangle
+        val emptyTap = StickerCutoutEngine.extractTappedStickerMatte(
+            saliencyProb = saliency,
+            humanProb = human,
+            luma255 = luma,
+            chA = chA,
+            chB = chB,
+            segW = w,
+            segH = h,
+            focusX = 5f / 63f,
+            focusY = 5f / 63f
+        )
+        assertNull(emptyTap, "Tapping empty background must return null (NO_SUBJECT)")
+    }
+
+    @Test
+    fun stickerComposeRgbaCrop_preservesTransparentBackground_decontaminatesEdges_andAddsWhiteOutline() {
+        val w = 64
+        val h = 64
+        val n = w * h
+        val bgRgb = (0xFF shl 24) or (12 shl 16) or (14 shl 8) or 16
+        val fgRgb = (0xFF shl 24) or (230 shl 16) or (40 shl 8) or 30
+        val src = IntArray(n) { bgRgb }
+        val alpha = FloatArray(n) { 0f }
+
+        // Solid crimson circle/square center x:22..42, y:22..42 + 1px dark-tinted mixed boundary
+        for (y in 22..42) {
+            for (x in 22..42) {
+                val i = y * w + x
+                val isBorder = x == 22 || x == 42 || y == 22 || y == 42
+                if (isBorder) {
+                    alpha[i] = 0.50f
+                    src[i] = (0xFF shl 24) or (60 shl 16) or (20 shl 8) or 20
+                } else {
+                    alpha[i] = 1.0f
+                    src[i] = fgRgb
+                }
+            }
+        }
+
+        val plain = StickerCutoutEngine.composeStickerRgbaCrop(
+            srcArgb = src,
+            srcW = w,
+            srcH = h,
+            fullAlpha01 = alpha,
+            addWhiteOutline = false
+        )
+        assertTrue(plain != null, "Plain sticker crop must succeed")
+        val p = plain!!
+        assertEquals(0x00000000, p.pixelsArgb[0], "Top-left background pixel must have alpha=0 (100% transparent)")
+        assertEquals(0x00000000, p.pixelsArgb[p.pixelsArgb.lastIndex], "Bottom-right pixel must have alpha=0")
+
+        // Verify center is opaque crimson and boundary RGB was decontaminated upward toward crimson R
+        val midIdx = (p.height / 2) * p.width + (p.width / 2)
+        val centerAlpha = (p.pixelsArgb[midIdx] ushr 24) and 0xFF
+        assertEquals(255, centerAlpha, "Subject core must be fully opaque")
+
+        // Outlined mode: adds pure white (#FFFFFF) contour outside subject while outer corners stay transparent
+        val outlined = StickerCutoutEngine.composeStickerRgbaCrop(
+            srcArgb = src,
+            srcW = w,
+            srcH = h,
+            fullAlpha01 = alpha,
+            addWhiteOutline = true,
+            outlineRadiusPx = 6
+        )
+        assertTrue(outlined != null, "Outlined sticker crop must succeed")
+        val o = outlined!!
+        assertEquals(0, (o.pixelsArgb[0] ushr 24) and 0xFF, "Outer background corner of outlined sticker must remain transparent")
+        val cx = o.width / 2
+        val cy = o.height / 2
+        val contourPx = o.pixelsArgb[(cy - 13) * o.width + cx]
+        val contourA = (contourPx ushr 24) and 0xFF
+        val contourR = (contourPx ushr 16) and 0xFF
+        val contourG = (contourPx ushr 8) and 0xFF
+        val contourB = contourPx and 0xFF
+        assertTrue(contourA > 200 && contourR > 240 && contourG > 240 && contourB > 240, "White sticker outline must be opaque pure white right outside the subject edge")
+    }
 }

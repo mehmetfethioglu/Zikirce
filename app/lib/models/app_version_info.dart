@@ -38,8 +38,8 @@ class ReleaseNote {
 
 /// Central repository of Zamera features and version release history.
 class AppVersionInfo {
-  static const String currentVersion = '0.1.4';
-  static const int currentBuildNumber = 5;
+  static const String currentVersion = '0.1.5';
+  static const int currentBuildNumber = 6;
   static const String appName = 'Zamera';
   static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/Zamera/';
   static const String supportEmail = 'theakar@windowslive.com';
@@ -85,6 +85,25 @@ class AppVersionInfo {
 
   /// Changelog history of all releases.
   static const List<ReleaseNote> releaseHistory = [
+    ReleaseNote(
+      version: '0.1.5',
+      buildNumber: 6,
+      releaseDate: '15 Kasım 2026',
+      titleTr: 'Kusursuz Şeffaf Sticker Kesimi & Pro Media Stüdyosu',
+      titleEn: 'True Transparent Sticker Cutout & Pro Media Studio',
+      bulletPointsTr: [
+        'Şeffaf Sticker Kesimi: Siyah arka plan (#000000) PNG hatası ve ön kamera ayna dokunuş sapması giderildi; ML Kit Subject Segmentation + U²-Net hibrit motoru, kenar RGB dekontaminasyonu ve isteğe bağlı beyaz konturla yalnız seçilen nesneyi %100 şeffaf keser.',
+        'Tam Ekran Pro Media & Sticker Stüdyosu: Koyu (#07090D) stüdyo arayüzüne yakınlaştırma, senkron alt film şeridi, 6 filtreli (Tümü, Fotoğraf, Video, Portre, RAW, Sticker\'larım) 3 sütunlu arşiv ızgarası ve tek dokunuşla Sticker Rafı pano kopyalama/paylaşım eklendi.',
+        'Profesyonel İnceleme Araçları: TrueColor 1:1 ↔ Stok OEM ve Portre ↔ Orijinal split A/B perde karşılaştırması, CIE L*a*b* (D50) / ΔE00 kolorimetre büyüteci, 64-bin RGB/Luma histogramı ve ayrı JPEG / RAW (.DNG) dışa aktarma eklendi.',
+        'Sinema Video Oynatıcısı: SMPTE (HH:MM:SS:FF) zaman kodu, 0.5x/1x/2x oynatma hızı, Pro Video telemetrisi, Kare Yakala ve videodaki kareden doğrudan Sticker kesme desteği eklendi.',
+      ],
+      bulletPointsEn: [
+        'True Transparent Sticker Cutout: Fixed the solid black #000000 PNG bug and front-camera mirror tap offset; added hybrid ML Kit Subject Segmentation + U²-Net connected-subject engine with edge RGB decontamination and optional white sticker outline.',
+        'Full-Screen Pro Media & Sticker Studio: Added dark (#07090D) review studio with pinch-to-zoom, synced bottom filmstrip, 3-column archive grid (Tümü, Fotoğraf, Video, Portre, RAW, Sticker\'larım), and 1-tap Sticker Shelf clipboard copy/share.',
+        'Pro Analysis Tools: Added TrueColor 1:1 vs OEM and Portrait vs Original split A/B curtain, CIE L*a*b* (D50) / ΔE00 spot colorimeter loupe, 64-bin RGB/Luma histogram, and separate JPEG / RAW (.DNG) sharing.',
+        'Cinema Video Player: Added SMPTE (HH:MM:SS:FF) timecode playback with 0.5x/1x/2x speed control, Pro Video telemetry, frame grab, and cut-sticker-from-frame support.',
+      ],
+    ),
     ReleaseNote(
       version: '0.1.4',
       buildNumber: 5,

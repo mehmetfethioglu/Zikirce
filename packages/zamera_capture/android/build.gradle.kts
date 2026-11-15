@@ -78,6 +78,7 @@ kotlin {
 
 dependencies {
     implementation("com.google.mlkit:segmentation-selfie:16.0.0-beta6")
+    implementation("com.google.android.gms:play-services-mlkit-subject-segmentation:16.0.0-beta1")
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
     implementation("com.google.ai.edge.litert:litert:1.4.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test")

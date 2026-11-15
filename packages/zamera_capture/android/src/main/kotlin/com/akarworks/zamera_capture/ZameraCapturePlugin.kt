@@ -3,8 +3,11 @@ package com.akarworks.zamera_capture
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -23,6 +26,8 @@ import android.hardware.camera2.params.SessionConfiguration
 import android.media.ExifInterface
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
@@ -37,6 +42,9 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenter
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -51,9 +59,14 @@ import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.log10
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -88,9 +101,28 @@ class ZameraCapturePlugin :
     private val ispWorkerCount = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
     private val ispWorkerPool = Executors.newFixedThreadPool(ispWorkerCount)
 
-    // Managed warm ML Kit SelfieSegmenter & Bundled LiteRT/TFLite Multiclass + 3D Depth + U²-NetP Matting Interpreters
+    // Managed warm ML Kit SubjectSegmenter, SelfieSegmenter & Bundled LiteRT/TFLite Interpreters
     @Volatile
     private var selfieSegmenterInstance: com.google.mlkit.vision.segmentation.Segmenter? = null
+    @Volatile
+    private var subjectSegmenterInstance: SubjectSegmenter? = null
+
+    private fun getOrCreateSubjectSegmenter(): SubjectSegmenter {
+        subjectSegmenterInstance?.let { return it }
+        synchronized(this) {
+            subjectSegmenterInstance?.let { return it }
+            val subjResultOpts = SubjectSegmenterOptions.SubjectResultOptions.Builder()
+                .enableConfidenceMask()
+                .build()
+            val opts = SubjectSegmenterOptions.Builder()
+                .enableForegroundConfidenceMask()
+                .enableMultipleSubjects(subjResultOpts)
+                .build()
+            val created = SubjectSegmentation.getClient(opts)
+            subjectSegmenterInstance = created
+            return created
+        }
+    }
     private val multiclassModelLock = Any()
     private val depthModelLock = Any()
     private val u2netModelLock = Any()
@@ -481,6 +513,22 @@ class ZameraCapturePlugin :
             "extractSubjectCutoutPng" -> {
                 val args = call.arguments as? Map<String, Any?> ?: emptyMap()
                 extractSubjectCutoutPng(args, result)
+            }
+            "extractVideoFrameJpeg" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                extractVideoFrameJpeg(args, result)
+            }
+            "shareMediaFiles" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                shareMediaFiles(args, result)
+            }
+            "copyPngToClipboard" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                copyPngToClipboard(args, result)
+            }
+            "deleteMediaAsset" -> {
+                val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                deleteMediaAsset(args, result)
             }
             "stopPreviewSession" -> {
                 stopPreviewSession()
@@ -4374,178 +4422,352 @@ class ZameraCapturePlugin :
     }
 
     /**
-     * iOS / Xiaomi Style Subject Lift & Cutout Sticker Extractor:
-     * Segments the person or tapped object using ML Kit Neural Segmentation + Geodesic Object Segmentation + Fast Guided Filter,
-     * crops tightly to the subject bounding box with a 100% transparent PNG alpha channel, saves to DCIM/Zamera,
-     * copies the transparent PNG sticker to the Android System Clipboard, and optionally opens the Android Share sheet!
+     * Decodes a source JPEG/PNG bounded to [maxDim] and applies all 8 EXIF orientation tags
+     * WITHOUT artificial front-camera mirroring so normalized `(focusX, focusY)` taps match pixel coordinates.
+     */
+    private fun decodeUprightBitmap(srcFile: File, maxDim: Int = 2400): Bitmap {
+        val exif = ExifInterface(srcFile.absolutePath)
+        val orientAttr = exif.getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+        val boundsOpts = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(srcFile.absolutePath, boundsOpts)
+        var sampleSize = 1
+        val maxSide = max(boundsOpts.outWidth, boundsOpts.outHeight)
+        while (maxSide / (sampleSize * 2) >= maxDim && sampleSize < 8) {
+            sampleSize *= 2
+        }
+        val decodeOpts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = BitmapFactory.decodeFile(srcFile.absolutePath, decodeOpts)
+            ?: throw IllegalStateException("Failed to decode source image: ${srcFile.name}")
+
+        val m = Matrix()
+        var needsTransform = true
+        when (orientAttr) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                m.postRotate(90f)
+                m.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                m.postRotate(270f)
+                m.postScale(-1f, 1f)
+            }
+            else -> needsTransform = false
+        }
+        if (!needsTransform) return decoded
+        val transformed = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true)
+        if (transformed !== decoded) decoded.recycle()
+        return transformed
+    }
+
+    /**
+     * Joint bilateral edge-aware upsampling from low-res `(segW x segH)` matte to full `(w x h)` pixels.
+     */
+    private fun upsampleMatteBilateral(
+        lowMatte: FloatArray,
+        lowPixels: IntArray,
+        segW: Int,
+        segH: Int,
+        fullPixels: IntArray,
+        w: Int,
+        h: Int
+    ): FloatArray {
+        val out = FloatArray(w * h)
+        if (w <= 0 || h <= 0 || segW < 2 || segH < 2) return out
+        val invColorSigma2 = 1.0f / (2.0f * 28.0f * 28.0f)
+
+        for (y in 0 until h) {
+            val gy = (y.toFloat() / (h - 1).coerceAtLeast(1)) * (segH - 1)
+            val y0 = gy.toInt().coerceIn(0, segH - 2)
+            val y1 = y0 + 1
+            val fy = gy - y0
+            val rowOff = y * w
+            val r0 = y0 * segW
+            val r1 = y1 * segW
+
+            for (x in 0 until w) {
+                val gx = (x.toFloat() / (w - 1).coerceAtLeast(1)) * (segW - 1)
+                val x0 = gx.toInt().coerceIn(0, segW - 2)
+                val x1 = x0 + 1
+                val fx = gx - x0
+
+                val a00 = lowMatte[r0 + x0]
+                val a10 = lowMatte[r0 + x1]
+                val a01 = lowMatte[r1 + x0]
+                val a11 = lowMatte[r1 + x1]
+
+                val minA = min(min(a00, a10), min(a01, a11))
+                val maxA = max(max(a00, a10), max(a01, a11))
+                val idx = rowOff + x
+
+                if (minA >= 0.985f) {
+                    out[idx] = 1.0f
+                } else if (maxA <= 0.015f) {
+                    out[idx] = 0.0f
+                } else {
+                    val p = fullPixels[idx]
+                    val pr = (p shr 16) and 0xFF
+                    val pg = (p shr 8) and 0xFF
+                    val pb = p and 0xFF
+
+                    val cIndices = intArrayOf(r0 + x0, r0 + x1, r1 + x0, r1 + x1)
+                    val sWeights = floatArrayOf(
+                        (1f - fx) * (1f - fy),
+                        fx * (1f - fy),
+                        (1f - fx) * fy,
+                        fx * fy
+                    )
+                    val alphas = floatArrayOf(a00, a10, a01, a11)
+
+                    var wSum = 0f
+                    var vSum = 0f
+                    for (k in 0..3) {
+                        val cp = lowPixels[cIndices[k]]
+                        val dr = ((cp shr 16) and 0xFF) - pr
+                        val dg = ((cp shr 8) and 0xFF) - pg
+                        val db = (cp and 0xFF) - pb
+                        val colorSq = (dr * dr + dg * dg + db * db).toFloat()
+                        val wJoint = sWeights[k] * exp(-colorSq * invColorSigma2)
+                        wSum += wJoint
+                        vSum += wJoint * alphas[k]
+                    }
+                    out[idx] = if (wSum > 1e-6f) {
+                        (vSum / wSum).coerceIn(0f, 1f)
+                    } else {
+                        (a00 * sWeights[0] + a10 * sWeights[1] + a01 * sWeights[2] + a11 * sWeights[3])
+                            .coerceIn(0f, 1f)
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Subject Lift & Sticker Cutout Extractor:
+     * 1. Tier 1: ML Kit SubjectSegmentation multi-subject mask isolation at `(focusX, focusY)`.
+     * 2. Tier 2 fallback: U²-NetP saliency + Multiclass human confidence via [StickerCutoutEngine] (NO DoF slicing).
+     * 3. Bilateral edge upsample + edge RGB decontamination + true `setHasAlpha(true)` transparent PNG export
+     *    with optional crisp white sticker contour (`addWhiteOutline`).
      */
     private fun extractSubjectCutoutPng(args: Map<String, Any?>, result: Result) {
         val sourcePath = args["sourceJpegPath"]?.toString()
         if (sourcePath.isNullOrEmpty() || !File(sourcePath).exists()) {
-            result.error("NO_SOURCE", "Source JPEG not found for subject cutout", null)
+            result.error("NO_SOURCE", "Source image not found for subject cutout", null)
             return
         }
-        val focusX = (args["focusX"] as? Number)?.toFloat()?.coerceIn(0.08f, 0.92f) ?: 0.5f
-        val focusY = (args["focusY"] as? Number)?.toFloat()?.coerceIn(0.08f, 0.92f) ?: 0.45f
-        val subjectRadiusRatio = (args["subjectRadiusRatio"] as? Number)?.toFloat()?.coerceIn(0.18f, 0.58f) ?: 0.36f
-        val isFrontCamera = args["isFrontCamera"] == true
+        val focusX = (args["focusX"] as? Number)?.toFloat()?.coerceIn(0.02f, 0.98f) ?: 0.5f
+        val focusY = (args["focusY"] as? Number)?.toFloat()?.coerceIn(0.02f, 0.98f) ?: 0.45f
         val shareNow = args["shareNow"] == true
+        val saveToGallery = args["saveToGallery"] == true
+        val addWhiteOutline = args["addWhiteOutline"] == true
+        val copyToClipboard = (args["copyToClipboard"] as? Boolean) ?: true
 
         rustIspExecutor.execute {
             try {
                 val srcFile = File(sourcePath)
-                val exif = ExifInterface(srcFile.absolutePath)
-                val orientAttr = exif.getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION,
-                    ExifInterface.ORIENTATION_NORMAL
-                )
-                val boundsOpts = android.graphics.BitmapFactory.Options().apply {
-                    inJustDecodeBounds = true
-                }
-                android.graphics.BitmapFactory.decodeFile(srcFile.absolutePath, boundsOpts)
-                val decodeOpts = android.graphics.BitmapFactory.Options().apply {
-                    inSampleSize = if (kotlin.math.max(boundsOpts.outWidth, boundsOpts.outHeight) > 2400) 2 else 1
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                var srcBmp = android.graphics.BitmapFactory.decodeFile(srcFile.absolutePath, decodeOpts)
-                    ?: throw IllegalStateException("Failed to decode source JPEG")
-
-                val rotDeg = when (orientAttr) {
-                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-                    else -> 0f
-                }
-                if (rotDeg != 0f || (isFrontCamera && orientAttr != ExifInterface.ORIENTATION_NORMAL)) {
-                    val m = Matrix().apply {
-                        if (rotDeg != 0f) postRotate(rotDeg)
-                        if (isFrontCamera) postScale(-1f, 1f)
-                    }
-                    val transformed = Bitmap.createBitmap(srcBmp, 0, 0, srcBmp.width, srcBmp.height, m, true)
-                    if (transformed !== srcBmp) srcBmp.recycle()
-                    srcBmp = transformed
-                }
-
+                val srcBmp = decodeUprightBitmap(srcFile, maxDim = 2400)
                 val w = srcBmp.width
                 val h = srcBmp.height
-                val segW = 288
-                val segH = (288 * h / w.coerceAtLeast(1)).coerceIn(200, 420)
 
-                val (meanA, meanB) = computeGuidedAlphaCoefficients(
-                    srcBmp = srcBmp,
-                    segW = segW,
-                    segH = segH,
-                    focusX = focusX,
-                    focusY = focusY,
-                    subjectRadiusRatio = subjectRadiusRatio
-                )
+                val segMax = 512
+                val segScale = min(1f, segMax.toFloat() / max(w, h).coerceAtLeast(1))
+                val segW = (w * segScale).roundToInt().coerceIn(64, segMax)
+                val segH = (h * segScale).roundToInt().coerceIn(64, segMax)
+                val segBmp = Bitmap.createScaledBitmap(srcBmp, segW, segH, true)
 
-                val totalPx = w * h
-                val pixels = IntArray(totalPx)
-                srcBmp.getPixels(pixels, 0, w, 0, 0, w, h)
-                srcBmp.recycle()
+                val segN = segW * segH
+                val segPixels = IntArray(segN)
+                segBmp.getPixels(segPixels, 0, segW, 0, 0, segW, segH)
+                val luma255 = FloatArray(segN)
+                val chA = FloatArray(segN)
+                val chB = FloatArray(segN)
+                for (i in 0 until segN) {
+                    val p = segPixels[i]
+                    val r = ((p shr 16) and 0xFF).toFloat()
+                    val g = ((p shr 8) and 0xFF).toFloat()
+                    val b = (p and 0xFF).toFloat()
+                    luma255[i] = 0.299f * r + 0.587f * g + 0.114f * b
+                    chA[i] = r - g
+                    chB[i] = 0.5f * (r + g) - b
+                }
 
-                var minX = w
-                var minY = h
-                var maxX = 0
-                var maxY = 0
-
-                for (y in 0 until h) {
-                    val gy = (y.toFloat() / (h - 1).coerceAtLeast(1)) * (segH - 1)
-                    val y0 = gy.toInt().coerceIn(0, segH - 2)
-                    val fy = gy - y0
-                    val rowOffset = y * w
-                    for (x in 0 until w) {
-                        val gx = (x.toFloat() / (w - 1).coerceAtLeast(1)) * (segW - 1)
-                        val x0 = gx.toInt().coerceIn(0, segW - 2)
-                        val fx = gx - x0
-                        val idx = rowOffset + x
-                        val sp = pixels[idx]
-                        val r = ((sp shr 16) and 0xFF)
-                        val g = ((sp shr 8) and 0xFF)
-                        val b = (sp and 0xFF)
-                        val lumNorm = (0.299f * r + 0.587f * g + 0.114f * b) / 255.0f
-
-                        val aVal = meanA[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                            meanA[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                            meanA[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                            meanA[(y0 + 1) * segW + x0 + 1] * fx * fy
-                        val bVal = meanB[y0 * segW + x0] * (1f - fx) * (1f - fy) +
-                            meanB[y0 * segW + x0 + 1] * fx * (1f - fy) +
-                            meanB[(y0 + 1) * segW + x0] * (1f - fx) * fy +
-                            meanB[(y0 + 1) * segW + x0 + 1] * fx * fy
-
-                        val rawFg = (aVal * lumNorm + bVal).coerceIn(0f, 1f)
-                        // Crisp cutout matte with anti-aliased edge feathering
-                        val tFg = ((rawFg - 0.18f) / 0.68f).coerceIn(0f, 1f)
-                        val alpha = tFg * tFg * (3.0f - 2.0f * tFg)
-                        val aInt = (alpha * 255.0f).toInt().coerceIn(0, 255)
-
-                        if (aInt > 12) {
-                            if (x < minX) minX = x
-                            if (x > maxX) maxX = x
-                            if (y < minY) minY = y
-                            if (y > maxY) maxY = y
-                            pixels[idx] = (aInt shl 24) or (r shl 16) or (g shl 8) or b
-                        } else {
-                            pixels[idx] = 0x00000000
+                // Tier 1: ML Kit SubjectSegmentation (all objects/pets/people)
+                var lowResMatte: FloatArray? = null
+                try {
+                    val inputImg = InputImage.fromBitmap(segBmp, 0)
+                    val segResult = Tasks.await(
+                        getOrCreateSubjectSegmenter().process(inputImg),
+                        3500L,
+                        TimeUnit.MILLISECONDS
+                    )
+                    val candidates = segResult.subjects.mapNotNull { subj ->
+                        val sw = subj.width
+                        val sh = subj.height
+                        val buf = subj.confidenceMask ?: return@mapNotNull null
+                        val needed = sw * sh
+                        if (sw <= 0 || sh <= 0) return@mapNotNull null
+                        val dup = buf.duplicate().apply { rewind() }
+                        if (dup.remaining() < needed) return@mapNotNull null
+                        val arr = FloatArray(needed)
+                        dup.get(arr)
+                        StickerCutoutEngine.SubjectMaskCandidate(
+                            startX = subj.startX,
+                            startY = subj.startY,
+                            width = sw,
+                            height = sh,
+                            mask = arr
+                        )
+                    }
+                    lowResMatte = StickerCutoutEngine.selectTappedSubjectMask(
+                        candidates = candidates,
+                        fullW = segW,
+                        fullH = segH,
+                        focusX = focusX,
+                        focusY = focusY
+                    )
+                    if (lowResMatte == null) {
+                        val fgBuf = segResult.foregroundConfidenceMask
+                        if (fgBuf != null) {
+                            val dup = fgBuf.duplicate().apply { rewind() }
+                            if (dup.remaining() >= segN) {
+                                val fgArr = FloatArray(segN)
+                                dup.get(fgArr)
+                                lowResMatte = StickerCutoutEngine.extractTappedStickerMatte(
+                                    saliencyProb = fgArr,
+                                    humanProb = null,
+                                    luma255 = luma255,
+                                    chA = chA,
+                                    chB = chB,
+                                    segW = segW,
+                                    segH = segH,
+                                    focusX = focusX,
+                                    focusY = focusY
+                                )
+                            }
                         }
                     }
+                } catch (e: Throwable) {
+                    android.util.Log.w("ZameraCapture", "MLKit SubjectSegmentation fallback: ${e.message}")
                 }
 
-                if (maxX <= minX || maxY <= minY) {
-                    minX = 0
-                    minY = 0
-                    maxX = w - 1
-                    maxY = h - 1
-                } else {
-                    val pad = 12
-                    minX = (minX - pad).coerceAtLeast(0)
-                    minY = (minY - pad).coerceAtLeast(0)
-                    maxX = (maxX + pad).coerceAtMost(w - 1)
-                    maxY = (maxY + pad).coerceAtMost(h - 1)
+                // Tier 2 Fallback: Bundled U²-NetP Saliency + Multiclass Human via StickerCutoutEngine
+                if (lowResMatte == null) {
+                    val saliency = runU2NetSalientMatting(
+                        srcBmp = segBmp,
+                        segW = segW,
+                        segH = segH,
+                        focusX = focusX,
+                        focusY = focusY
+                    )?.second
+                    val multiclass = runMulticlassSegmentation(segBmp, segW, segH)
+                    lowResMatte = StickerCutoutEngine.extractTappedStickerMatte(
+                        saliencyProb = saliency,
+                        humanProb = multiclass?.humanProb,
+                        luma255 = luma255,
+                        chA = chA,
+                        chB = chB,
+                        segW = segW,
+                        segH = segH,
+                        focusX = focusX,
+                        focusY = focusY
+                    )
                 }
 
-                val cropW = (maxX - minX + 1).coerceAtLeast(1)
-                val cropH = (maxY - minY + 1).coerceAtLeast(1)
-                val croppedPixels = IntArray(cropW * cropH)
-                for (cy in 0 until cropH) {
-                    System.arraycopy(pixels, (minY + cy) * w + minX, croppedPixels, cy * cropW, cropW)
+                if (segBmp !== srcBmp) segBmp.recycle()
+
+                val resolvedLowMatte = lowResMatte
+                if (resolvedLowMatte == null) {
+                    srcBmp.recycle()
+                    mainHandler.post {
+                        result.error("NO_SUBJECT", "Tapped subject could not be isolated", null)
+                    }
+                    return@execute
                 }
 
-                val cutoutBmp = Bitmap.createBitmap(croppedPixels, cropW, cropH, Bitmap.Config.ARGB_8888)
+                val srcPixels = IntArray(w * h)
+                srcBmp.getPixels(srcPixels, 0, w, 0, 0, w, h)
+                srcBmp.recycle()
+
+                val fullAlpha = upsampleMatteBilateral(
+                    lowMatte = resolvedLowMatte,
+                    lowPixels = segPixels,
+                    segW = segW,
+                    segH = segH,
+                    fullPixels = srcPixels,
+                    w = w,
+                    h = h
+                )
+
+                val crop = StickerCutoutEngine.composeStickerRgbaCrop(
+                    srcArgb = srcPixels,
+                    srcW = w,
+                    srcH = h,
+                    fullAlpha01 = fullAlpha,
+                    addWhiteOutline = addWhiteOutline
+                )
+                if (crop == null) {
+                    mainHandler.post {
+                        result.error("NO_SUBJECT", "Subject matte was empty after refinement", null)
+                    }
+                    return@execute
+                }
+
+                val cutoutBmp = Bitmap.createBitmap(crop.width, crop.height, Bitmap.Config.ARGB_8888).apply {
+                    setHasAlpha(true)
+                    setPixels(crop.pixelsArgb, 0, crop.width, 0, 0, crop.width, crop.height)
+                }
                 val ts = System.currentTimeMillis()
-                val outPngFile = File(appContext.cacheDir, "ZAM_CUTOUT_${ts}.png")
+                val stickerDir = File(appContext.filesDir, "zamera_stickers").apply { mkdirs() }
+                val outPngFile = File(stickerDir, "ZAM_STICKER_${ts}.png")
                 FileOutputStream(outPngFile).use { fos ->
                     cutoutBmp.compress(Bitmap.CompressFormat.PNG, 100, fos)
                 }
                 cutoutBmp.recycle()
 
-                val mediaUriStr = saveFileToMediaStoreDcim(
-                    sourceFile = outPngFile,
-                    displayName = "ZAM_${ts}_CUTOUT.png",
-                    mimeType = "image/png"
-                )
+                val mediaUriStr = if (saveToGallery) {
+                    saveFileToMediaStoreDcim(
+                        sourceFile = outPngFile,
+                        displayName = "ZAM_${ts}_CUTOUT.png",
+                        mimeType = "image/png"
+                    )
+                } else {
+                    null
+                }
+                val shareUri = mediaUriStr?.let(Uri::parse)
+                    ?: ZameraMediaFileProvider.uriForFile(appContext, outPngFile)
 
                 mainHandler.post {
+                    var copiedOk = false
                     try {
-                        if (mediaUriStr != null) {
-                            val uri = android.net.Uri.parse(mediaUriStr)
-                            val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                            val clip = android.content.ClipData.newUri(appContext.contentResolver, "Zamera Özne Çıkartması", uri)
+                        if (copyToClipboard && shareUri != null) {
+                            val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val clip = ClipData.newUri(appContext.contentResolver, "Zamera Sticker", shareUri)
                             clipboard?.setPrimaryClip(clip)
-
-                            if (shareNow) {
-                                val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                    type = "image/png"
-                                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                val chooser = android.content.Intent.createChooser(sendIntent, "Özneyi Paylaş").apply {
-                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                (activity ?: appContext).startActivity(chooser)
+                            copiedOk = clipboard != null
+                        }
+                        if (shareNow && shareUri != null) {
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "image/png"
+                                putExtra(Intent.EXTRA_STREAM, shareUri)
+                                clipData = ClipData.newRawUri("Zamera Sticker", shareUri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
+                            val chooser = Intent.createChooser(sendIntent, "Sticker Paylaş").apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            (activity ?: appContext).startActivity(chooser)
                         }
                     } catch (e: Throwable) {
                         android.util.Log.w("ZameraCapture", "Subject cutout clipboard/share warning: ${e.message}")
@@ -4553,10 +4775,13 @@ class ZameraCapturePlugin :
                     result.success(
                         mapOf(
                             "pngPath" to outPngFile.absolutePath,
+                            "cutoutPngPath" to outPngFile.absolutePath,
                             "mediaStoreUri" to mediaUriStr,
-                            "width" to cropW,
-                            "height" to cropH,
-                            "copiedToClipboard" to (mediaUriStr != null)
+                            "width" to crop.width,
+                            "height" to crop.height,
+                            "copiedToClipboard" to copiedOk,
+                            "savedToGallery" to (saveToGallery && mediaUriStr != null),
+                            "shared" to (shareNow && shareUri != null)
                         )
                     )
                 }
@@ -4566,6 +4791,177 @@ class ZameraCapturePlugin :
                 }
             }
         }
+    }
+
+    private fun extractVideoFrameJpeg(args: Map<String, Any?>, result: Result) {
+        val videoPath = args["videoPath"]?.toString()
+        if (videoPath.isNullOrEmpty() || !File(videoPath).exists()) {
+            result.error("NO_VIDEO", "Video file not found", null)
+            return
+        }
+        val positionMs = (args["positionMs"] as? Number)?.toLong()?.coerceAtLeast(0L) ?: 0L
+        rustIspExecutor.execute {
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(videoPath)
+                val frame = retriever.getFrameAtTime(
+                    positionMs * 1000L,
+                    MediaMetadataRetriever.OPTION_CLOSEST
+                ) ?: retriever.getFrameAtTime(
+                    positionMs * 1000L,
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                )
+                if (frame == null) {
+                    mainHandler.post {
+                        result.error("FRAME_NULL", "Could not decode frame from video", null)
+                    }
+                    return@execute
+                }
+                val frameDir = File(appContext.filesDir, "zamera_frames").apply { mkdirs() }
+                val outFile = File(frameDir, "ZAM_FRAME_${System.currentTimeMillis()}.jpg")
+                FileOutputStream(outFile).use { fos ->
+                    frame.compress(Bitmap.CompressFormat.JPEG, 95, fos)
+                }
+                val fw = frame.width
+                val fh = frame.height
+                frame.recycle()
+                mainHandler.post {
+                    result.success(
+                        mapOf(
+                            "jpegPath" to outFile.absolutePath,
+                            "width" to fw,
+                            "height" to fh
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                mainHandler.post {
+                    result.error("FRAME_ERR", e.message, null)
+                }
+            } finally {
+                try {
+                    retriever.release()
+                } catch (e: Throwable) {
+                    android.util.Log.w("ZameraCapture", "MediaMetadataRetriever release warning: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun resolveShareableUriForFile(file: File): Uri? {
+        ZameraMediaFileProvider.uriForFile(appContext, file)?.let { return it }
+        val shareCacheDir = File(appContext.cacheDir, "zamera_share").apply { mkdirs() }
+        val staged = File(shareCacheDir, file.name)
+        return try {
+            file.inputStream().use { input ->
+                staged.outputStream().use { output -> input.copyTo(output) }
+            }
+            ZameraMediaFileProvider.uriForFile(appContext, staged)
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "Failed staging share file: ${e.message}")
+            null
+        }
+    }
+
+    private fun shareMediaFiles(args: Map<String, Any?>, result: Result) {
+        val rawPaths = (args["filePaths"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty()
+        val mimeType = args["mimeType"]?.toString()?.takeIf { it.isNotBlank() } ?: "*/*"
+        val title = args["title"]?.toString()?.takeIf { it.isNotBlank() } ?: "Zamera Paylaş"
+
+        val uris = ArrayList<Uri>()
+        for (path in rawPaths) {
+            val f = File(path)
+            if (f.exists()) {
+                resolveShareableUriForFile(f)?.let { uris.add(it) }
+            }
+        }
+        if (uris.isEmpty()) {
+            result.success(false)
+            return
+        }
+        mainHandler.post {
+            try {
+                val intent = if (uris.size == 1) {
+                    val singleUri = uris.first()
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = mimeType
+                        putExtra(Intent.EXTRA_STREAM, singleUri)
+                        clipData = ClipData.newRawUri(title, singleUri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                } else {
+                    val clip = ClipData.newRawUri(title, uris.first())
+                    for (i in 1 until uris.size) {
+                        clip.addItem(ClipData.Item(uris[i]))
+                    }
+                    Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                        type = mimeType
+                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                        clipData = clip
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                }
+                val chooser = Intent.createChooser(intent, title).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                (activity ?: appContext).startActivity(chooser)
+                result.success(true)
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "shareMediaFiles error: ${e.message}")
+                result.success(false)
+            }
+        }
+    }
+
+    private fun copyPngToClipboard(args: Map<String, Any?>, result: Result) {
+        val pngPath = args["pngPath"]?.toString()
+        if (pngPath.isNullOrEmpty() || !File(pngPath).exists()) {
+            result.success(false)
+            return
+        }
+        val shareUri = resolveShareableUriForFile(File(pngPath))
+        if (shareUri == null) {
+            result.success(false)
+            return
+        }
+        mainHandler.post {
+            try {
+                val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                val clip = ClipData.newUri(appContext.contentResolver, "Zamera Sticker", shareUri)
+                clipboard?.setPrimaryClip(clip)
+                result.success(clipboard != null)
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "copyPngToClipboard error: ${e.message}")
+                result.success(false)
+            }
+        }
+    }
+
+    private fun deleteMediaAsset(args: Map<String, Any?>, result: Result) {
+        val filePath = args["filePath"]?.toString()
+        val mediaStoreUri = args["mediaStoreUri"]?.toString()
+        var deleted = false
+        if (!filePath.isNullOrEmpty()) {
+            val f = File(filePath)
+            if (f.exists()) {
+                try {
+                    deleted = f.delete()
+                } catch (e: Throwable) {
+                    android.util.Log.w("ZameraCapture", "deleteMediaAsset file warning: ${e.message}")
+                }
+            } else {
+                deleted = true
+            }
+        }
+        if (!mediaStoreUri.isNullOrEmpty()) {
+            try {
+                val rows = appContext.contentResolver.delete(Uri.parse(mediaStoreUri), null, null)
+                if (rows > 0) deleted = true
+            } catch (e: Throwable) {
+                android.util.Log.w("ZameraCapture", "deleteMediaAsset MediaStore warning: ${e.message}")
+            }
+        }
+        result.success(deleted)
     }
 
     private fun extractMatrix3x3(transform: ColorSpaceTransform?): FloatArray? {
@@ -4618,7 +5014,8 @@ class ZameraCapturePlugin :
                 resolver.update(uri, doneValues, null, null)
             }
             uri.toString()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("ZameraCapture", "saveFileToMediaStoreDcim error: ${e.message}")
             null
         }
     }
@@ -5833,7 +6230,8 @@ class ZameraCapturePlugin :
                 resolver.update(uri, doneValues, null, null)
             }
             uri.toString()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("ZameraCapture", "saveFileToMediaStoreDcim error: ${e.message}")
             null
         }
     }
@@ -6023,6 +6421,12 @@ class ZameraCapturePlugin :
                 android.util.Log.w("ZameraCapture", "removeThermalStatusListener warning: ${e.message}")
             }
             thermalListener = null
+        }
+        try {
+            subjectSegmenterInstance?.close()
+            subjectSegmenterInstance = null
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "SubjectSegmenter close warning: ${e.message}")
         }
         try {
             selfieSegmenterInstance?.close()

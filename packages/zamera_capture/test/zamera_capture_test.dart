@@ -183,4 +183,92 @@ void main() {
     expect(res.liveCalibrationResult?.isMeasuredFromSensor, isTrue);
     expect(res.liveCalibrationResult?.meanDeltaEAfter, closeTo(1.2, 1e-6));
   });
+
+  test('Sticker cutout, video frame, share, clipboard, and delete MethodChannel contracts', () async {
+    const channel = MethodChannel('com.akarworks.zamera/capture_probe');
+    final recordedCalls = <String, Map<dynamic, dynamic>?>{};
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      recordedCalls[call.method] = call.arguments as Map<dynamic, dynamic>?;
+      switch (call.method) {
+        case 'extractSubjectCutoutPng':
+          return {
+            'pngPath': '/data/user/0/app/files/zamera_stickers/st_1.png',
+            'cutoutPngPath': '/data/user/0/app/files/zamera_stickers/st_1.png',
+            'width': 420,
+            'height': 610,
+            'copiedToClipboard': true,
+            'savedToGallery': false,
+          };
+        case 'extractVideoFrameJpeg':
+          return {
+            'jpegPath': '/data/user/0/app/files/zamera_frames/fr_1.jpg',
+            'width': 3840,
+            'height': 2160,
+          };
+        case 'shareMediaFiles':
+        case 'copyPngToClipboard':
+        case 'deleteMediaAsset':
+          return true;
+      }
+      return null;
+    });
+
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final cutout = await ZameraCapture.extractSubjectCutoutPng(
+      sourceJpegPath: '/tmp/photo.jpg',
+      focusX: 0.42,
+      focusY: 0.58,
+      addWhiteOutline: true,
+      copyToClipboard: false,
+      saveToGallery: true,
+    );
+    expect(cutout['cutoutPngPath'], '/data/user/0/app/files/zamera_stickers/st_1.png');
+    expect(recordedCalls['extractSubjectCutoutPng']?['addWhiteOutline'], isTrue);
+    expect(recordedCalls['extractSubjectCutoutPng']?['copyToClipboard'], isFalse);
+    expect(recordedCalls['extractSubjectCutoutPng']?['saveToGallery'], isTrue);
+    expect(recordedCalls['extractSubjectCutoutPng']?['focusX'], 0.42);
+    expect(recordedCalls['extractSubjectCutoutPng']?['focusY'], 0.58);
+
+    final frame = await ZameraCapture.extractVideoFrameJpeg(
+      videoPath: '/tmp/clip.mp4',
+      positionMs: 1234,
+    );
+    expect(frame['jpegPath'], '/data/user/0/app/files/zamera_frames/fr_1.jpg');
+    expect(frame['width'], 3840);
+    expect(recordedCalls['extractVideoFrameJpeg']?['positionMs'], 1234);
+
+    final shared = await ZameraCapture.shareMediaFiles(
+      filePaths: const ['/tmp/a.jpg', '/tmp/a.dng'],
+      mimeType: '*/*',
+      title: 'JPEG + DNG',
+    );
+    expect(shared, isTrue);
+    expect(
+      recordedCalls['shareMediaFiles']?['filePaths'],
+      equals(const ['/tmp/a.jpg', '/tmp/a.dng']),
+    );
+
+    final copied = await ZameraCapture.copyPngToClipboard(
+      pngPath: '/tmp/st_1.png',
+    );
+    expect(copied, isTrue);
+    expect(recordedCalls['copyPngToClipboard']?['pngPath'], '/tmp/st_1.png');
+
+    final deleted = await ZameraCapture.deleteMediaAsset(
+      filePath: '/tmp/a.jpg',
+      mediaStoreUri: 'content://media/external/images/media/42',
+    );
+    expect(deleted, isTrue);
+    expect(recordedCalls['deleteMediaAsset']?['filePath'], '/tmp/a.jpg');
+    expect(
+      recordedCalls['deleteMediaAsset']?['mediaStoreUri'],
+      'content://media/external/images/media/42',
+    );
+  });
 }

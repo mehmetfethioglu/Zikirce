@@ -129,7 +129,7 @@ platform :ios do
       api_key: api_key,
       ipa: "../build/ios/ipa/Zamera.ipa",
       skip_waiting_for_build_processing: true,
-      changelog: "Zamera v0.1.4 (Build 5) — Sanat Modu 1:1 radyometrik RAW pozlama ve parlama koruması, iOS canlı vizör kararlılığı, Portre Sahne Işığı maskesi ve çekim denetçisi iyileştirmeleri."
+      changelog: "Zamera v0.1.5 (Build 6) — Kusursuz %100 şeffaf ve beyaz konturlu Sticker kesimi, tam ekran Pro Media & Sticker Stüdyosu (A/B perde, 64-bin RGB histogram, RAW .DNG paylaşımı) ve SMPTE sinema video oynatıcı."
     )
   end
 end

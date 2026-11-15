@@ -82,7 +82,7 @@ jobs:
           retention-days: 14
 
   sync-appstore-connect:
-    name: Sync v0.1.4 (Build 5) Release Notes & Attach Build in App Store Connect
+    name: Sync v0.1.5 (Build 6) Release Notes & Attach Build in App Store Connect
     needs: build-ios
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -95,7 +95,7 @@ jobs:
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: pip install pyjwt cryptography requests
 
-      - name: Update App Store Version 0.1.4, Set TR/EN Notes & Attach Build 5
+      - name: Update App Store Version 0.1.5, Set TR/EN Notes & Attach Build 6
         if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
         run: |
           python3 - << 'EOF'
@@ -117,8 +117,8 @@ jobs:
               return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
           BASE = "https://api.appstoreconnect.apple.com/v1"
-          VERSION_STR = "0.1.4"
-          BUILD_NUM = "5"
+          VERSION_STR = "0.1.5"
+          BUILD_NUM = "6"
 
           r = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.zamera", headers=make_headers())
           r.raise_for_status()
@@ -147,6 +147,22 @@ jobs:
 
           if not target_version_id and editable_version:
               target_version_id = editable_version["id"]
+              if editable_version["attributes"]["appStoreState"] == "WAITING_FOR_REVIEW":
+                  sub_r = requests.get(
+                      f"{BASE}/apps/{app_id}/reviewSubmissions?filter[platform]=IOS&filter[state]=WAITING_FOR_REVIEW",
+                      headers=make_headers(),
+                  )
+                  if sub_r.status_code == 200:
+                      for sub in sub_r.json().get("data", []):
+                          sub_id = sub["id"]
+                          cancel_r = requests.patch(
+                              f"{BASE}/reviewSubmissions/{sub_id}",
+                              headers=make_headers(),
+                              json={"data": {"type": "reviewSubmissions", "id": sub_id, "attributes": {"canceled": True}}},
+                          )
+                          print(f"🛑 Canceled pending reviewSubmission {sub_id}: status {cancel_r.status_code}")
+                      if sub_r.json().get("data"):
+                          time.sleep(3)
               up = requests.patch(
                   f"{BASE}/appStoreVersions/{target_version_id}",
                   headers=make_headers(),
@@ -173,18 +189,18 @@ jobs:
                   print("ℹ️ Could not create new App Store Version:", cr.status_code, cr.text[:300])
 
           whats_new_tr = (
-              "Zamera v0.1.4 Yenilikleri:\n"
-              "• Sanat Modu 1:1 Radyometrik Pozlama Düzeltmesi: 1:1 TON ve KAĞIT L*94 çekimlerinde ΔE00 renk doğruluğu, CIE (x, y) kromatisitesi ve koyu (chiaroscuro) tonlar %100 korunarak karanlık kalan RAW pozlama sahne-doğrusal radyometrik referansla gerçek sahne parlaklığına kavuşturuldu.\n"
-              "• Vernik & Cam Parlama Koruması: Noktasal yansımaların pozlamayı kilitlemesi p96 difüz pigment tavanıyla önlendi ve L* ≈ 96 sabit-tonlu parlak alan geçişi iyileştirildi.\n"
-              "• iOS Vizör Kararlılığı: Oturum başlatma ve lens geçişleri sırasındaki canlı vizör görüntü akışı kararlılığı iyileştirildi.\n"
-              "• Stüdyo Portre & Çekim Denetçisi: Sahne Işığı arka plan maskesi, şeffaf PNG panoya kopyalama akışı ve dokunarak piksel CIE L*a*b* renk ölçümü geliştirildi."
+              "Zamera v0.1.5 Yenilikleri:\n"
+              "• Kusursuz Şeffaf Sticker Kesimi: Siyah arka plan (#000000) PNG hatası ve ön kamera dokunuş sapması giderildi; kenar RGB dekontaminasyonlu %100 şeffaf kesim, panoya doğrudan şeffaf PNG kopyalama ve isteğe bağlı beyaz sticker konturu eklendi.\n"
+              "• Tam Ekran Pro Media & Sticker Stüdyosu: Koyu (#07090D) stüdyo, yakınlaştırma, alt film şeridi, 6 filtreli arşiv ızgarası (Tümü, Fotoğraf, Video, Portre, RAW, Sticker'larım) ve tek dokunuşta kopyalanabilen Sticker Rafı eklendi.\n"
+              "• Profesyonel Görüntü & Renk Denetimi: TrueColor 1:1 ↔ Stok OEM ve Portre ↔ Orijinal split A/B perde karşılaştırması, CIE L*a*b* (D50) / ΔE00 büyüteci, 64-bin RGB histogramı ve ayrı JPEG / RAW (.DNG) paylaşımı eklendi.\n"
+              "• Sinema Video Oynatıcısı: SMPTE zaman kodu, 0.5x/1x/2x hız kontrolü, Pro Video telemetrisi, Kare Yakala ve videodaki kareden doğrudan Sticker kesme özelliği eklendi."
           )
           whats_new_en = (
-              "What's New in Zamera v0.1.4:\n"
-              "• Art Mode 1:1 Radiometric Exposure Fix: Restored true scene-linear brightness in 1:1 Tone and Paper L*94 RAW captures via synchronized radiometric midtone matching while preserving 100% of ΔE00 color accuracy, hue, and dark chiaroscuro tones.\n"
-              "• Specular Glint Immunity: Prevented varnish/glass reflections from locking down exposure via diffuse p96 pigment capping and refined the L* ≈ 96 constant-hue highlight shoulder.\n"
-              "• iOS Viewfinder Stability: Improved live camera viewfinder feed stability across session startup and lens transitions.\n"
-              "• Portrait Studio & Inspector: Refined Stage Light backdrop mask, clipboard-first transparent PNG cutout workflow, and tap-to-measure CIE L*a*b* spot colorimetry."
+              "What's New in Zamera v0.1.5:\n"
+              "• True Transparent Sticker Cutout: Fixed the solid black #000000 PNG export & clipboard opacity issues and front-camera mirror tap offset; added edge RGB decontamination, UTType.png transparent clipboard copy, and optional white sticker outline.\n"
+              "• Full-Screen Pro Media & Sticker Studio: Added dark (#07090D) review gallery with pinch-to-zoom, synced bottom filmstrip, 6-filter 3-column archive grid, and 1-tap Sticker Shelf.\n"
+              "• Pro Color & Image Inspection: Added TrueColor 1:1 vs OEM and Portrait vs Original A/B split curtain, CIE L*a*b* (D50) / ΔE00 spot colorimeter loupe, 64-bin RGB histogram, and separate JPEG / RAW (.DNG) sharing.\n"
+              "• Cinema Video Player: Added SMPTE timecode playback with 0.5x/1x/2x speed control, Pro Video telemetry, frame grab, and cut-sticker-from-frame."
           )
 
           if target_version_id:

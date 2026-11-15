@@ -1,4 +1,3 @@
-Zamera v0.1.4:
-• Sanat Modu Pozlama Düzeltmesi: ΔE00 renk doğruluğu ve ton açısı (hue) %100 korunarak karanlık kalan 1:1 TON RAW çekimler sahne-doğrusal radyometrik referansla gerçek parlaklığına kavuşturuldu.
-• Vernik/Cam Parlama Koruması: Noktasal yansımaların pozlamayı kilitlemesi önlendi; sabit-tonlu parlak alan geçişi iyileştirildi.
-• Portre & Denetçi: Sahne ışığı maskesi, şeffaf PNG pano çıkartması ve dokunarak piksel renk ölçümü geliştirildi.
+Zamera v0.1.5:
+• Şeffaf Sticker Kesimi: Siyah arka plan hatası ve ön kamera dokunuş sapması giderildi; ML Kit & U²-Net hibrit motoruyla seçilen nesne %100 şeffaf veya beyaz konturlu PNG olarak kesilir.
+• Pro Media & Sticker Stüdyosu: Tam ekran galeri, film şeridi, 6 filtreli arşiv, Sticker Rafı, TrueColor/Portre A/B perde karşılaştırması, 64-bin RGB histogram, RAW paylaşımı ve SMPTE video oynatıcı eklendi.
