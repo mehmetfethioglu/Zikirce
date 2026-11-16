@@ -7,7 +7,7 @@ Zamera is a professional on-device camera and color science application develope
 ## Key Pages & Portals
 - [Privacy Policy & KVKK/GDPR/CCPA Disclosure](https://mehmetfethioglu.github.io/zamera-privacy/): Zero-tracking data safety, on-device processing guarantees, and permissions guide.
 - [Direct Privacy URL (HTML)](https://mehmetfethioglu.github.io/zamera-privacy/privacy.html): Direct privacy policy endpoint.
-- [User Support & FAQ](https://mehmetfethioglu.github.io/zamera-privacy/support.html): Contact channels (`theakar@windowslive.com`, `akarworks@gmail.com`) and troubleshooting FAQ.
+- [User Support & FAQ](https://mehmetfethioglu.github.io/zamera-privacy/support.html): Contact channel (`theakar@windowslive.com`) and troubleshooting FAQ.
 - [Download Portal](https://mehmetfethioglu.github.io/zamera-privacy/indir.html): iOS TestFlight and Google Play testing links.
 - [Extended AI Knowledge Base](https://mehmetfethioglu.github.io/zamera-privacy/llms-full.txt): Product capabilities, privacy guarantees, and FAQ.
 
