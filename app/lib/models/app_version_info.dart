@@ -41,7 +41,7 @@ class AppVersionInfo {
   static const String currentVersion = '0.1.5';
   static const int currentBuildNumber = 6;
   static const String appName = 'Zamera';
-  static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/Zamera/';
+  static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/zamera-privacy/';
   static const String supportEmail = 'theakar@windowslive.com';
 
   /// General features presented to users on their first launch or via Settings.

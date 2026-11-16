@@ -1,0 +1,50 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Zamera",
+      "operatingSystem": "Android, iOS",
+      "applicationCategory": "PhotographyApplication",
+      "softwareVersion": "0.1.5",
+      "description": "Zamera is a professional on-device true-color artwork photography and cinema camera application developed by Akarworks for iOS and Android with CIEDE2000 calibration, 14-bit Bayer RAW / ProRAW capture, transparent AI sticker cutout, Pro Media Studio, and zero telemetry.",
+      "url": "https://mehmetfethioglu.github.io/zamera-privacy/",
+      "inLanguage": [
+        "tr-TR",
+        "en-US"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks",
+        "email": "theakar@windowslive.com",
+        "url": "https://mehmetfethioglu.github.io/zamera-privacy/"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does Zamera collect or upload photos, videos, or personal data?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Zamera v0.1.5 processes 100% of photos, videos, color calibration matrices, and transparent sticker cutouts locally on the user's device without cloud uploads, analytics trackers, or advertising SDKs."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does on-device AI sticker segmentation handle privacy?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "On-device ML Kit Subject Segmentation and U2-Net on Android as well as Apple Vision foreground masking on iOS run offline on device hardware, and extracted PNG stickers stay exclusively in your local sandbox until you choose to copy or share them."
+          }
+        }
+      ]
+    }
+  ]
+}

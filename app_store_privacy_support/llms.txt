@@ -1,26 +1,18 @@
-# Zamera (1.0.0+1)
-> zamera — Akarworks Autonomous Software & Mobile Application.
+# Zamera (0.1.5+6)
+> Zamera — True-Color Artwork Photography, Pro DSLR Camera & Cinema Video Application by Akarworks.
 
 ## What is Zamera?
-Zamera is a cross-platform application developed by Akarworks that delivers zamera — Akarworks Autonomous Software & Mobile Application. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Zamera combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Zamera reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: [`app/`](app/) — Flutter UI (`com.akarworks.zamera`): Faz 0 Probe ekranı, Sanat Modu ($\Delta E_{00}$) ve Pro Foto/Video kontrol arayüzü.; [`packages/zamera_capture/`](packages/zamera_capture/) — Native kamera eklentisi:; Android: [`ZameraCapturePlugin.kt`](packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`Camera2` donanım seviyesi, fiziksel lens ID'leri, `RAW_SENSOR`, 50MP `ULTRA_HIGH_RESOLUTION_SENSOR`, 10-bit `HLG10` probe ve JNI Rust köprüsü).; iOS: [`ZameraCapturePlugin.swift`](packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`AVFoundation` ayrık fiziksel lensler 13mm/24mm/100mm, Bayer RAW vs ProRAW, Apple Log, Open Gate 4:3 probe).. Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Zamera (version 1.0.0+1) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/zamera.
+Zamera is a professional on-device camera and color science application developed by Akarworks for iOS 17.0+ and Android 10+. Engineered for deterministic reliability, 100% offline processing, and 60 to 120 FPS responsiveness, Zamera provides Art Mode true-color reproduction with a 24-patch ColorChecker CIEDE2000 solver (targeting Delta E00 <= 1.0), manual PASM exposure priority with 1/3-EV stops, 14-bit Bayer RAW and Apple ProRAW capture, and 180-degree shutter-locked Pro Video recording in Apple Log, ProRes 422 HQ, or HLG10. Version 0.1.5+6 introduces the hybrid transparent PNG sticker cutout engine with optional white sticker contour, and a full-screen Pro Media & Sticker Studio featuring A/B split curtain inspection, CIE L*a*b* pixel colorimetry, 64-bin RGB histograms, and an SMPTE cinema video player. Zero personal data is uploaded or tracked.
 
 ## Key Pages & Portals
-- [Official Download & Smart Store Redirect](https://akarworks.com/zamera/indir.html): Automatic iOS App Store, Google Play Store, and verified APK redirect.
-- [Privacy Policy & KVKK/GDPR Compliance](https://akarworks.com/zamera/index.html): Zero-tracking data safety and local encryption policy.
-- [User Support & FAQ](https://akarworks.com/zamera/support.html): Troubleshooting, contact channels, and version changelog.
-- [Extended AI Knowledge Base](https://akarworks.com/zamera/llms-full.txt): Complete technical architecture, features, and FAQ for AI assistants.
-
-## Core Capabilities
-- [`app/`](app/) — Flutter UI (`com.akarworks.zamera`): Faz 0 Probe ekranı, Sanat Modu ($\Delta E_{00}$) ve Pro Foto/Video kontrol arayüzü.
-- [`packages/zamera_capture/`](packages/zamera_capture/) — Native kamera eklentisi:
-- Android: [`ZameraCapturePlugin.kt`](packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`Camera2` donanım seviyesi, fiziksel lens ID'leri, `RAW_SENSOR`, 50MP `ULTRA_HIGH_RESOLUTION_SENSOR`, 10-bit `HLG10` probe ve JNI Rust köprüsü).
-- iOS: [`ZameraCapturePlugin.swift`](packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`AVFoundation` ayrık fiziksel lensler 13mm/24mm/100mm, Bayer RAW vs ProRAW, Apple Log, Open Gate 4:3 probe).
-- [`packages/zamera_video/`](packages/zamera_video/) — İzole Pro Video modülü (`--dart-define=ZAMERA_VIDEO=false` ile Faz 3'e kadar yalıtılmış; gerekirse *Zamera Cine* yan uygulamasına taşınabilir).
-- [`rust/zamera_core/`](rust/zamera_core/) — Ortak Rust renk bilimi motoru (Sharma 2005 doğrulanmış CIEDE2000 $\Delta E_{00}$, Bradford D50→D65, CIE XYZ→sRGB/Display P3 OETF ve `cargo-deny` sıfır-GPL lisans politikası).
-- [`.github/workflows/`](.github/workflows/) — Bulut derleme ve mağaza dağıtım iş akışları (`ci.yml`, `android-release.yml`, `ios-release.yml`).
-- [`docs/`](docs/) — [Araştırma ve Mimari Raporu](docs/ARASTIRMA_RAPORU.md), [Mimari Kararlar (ADR)](docs/kararlar.md) ve [Cihaz Yetenek Dökümleri](docs/cihaz_yetenekleri/README.md).
+- [Privacy Policy & KVKK/GDPR/CCPA Disclosure](https://mehmetfethioglu.github.io/zamera-privacy/): Zero-tracking data safety, on-device processing guarantees, and permissions guide.
+- [Direct Privacy URL (HTML)](https://mehmetfethioglu.github.io/zamera-privacy/privacy.html): Direct privacy policy endpoint.
+- [User Support & FAQ](https://mehmetfethioglu.github.io/zamera-privacy/support.html): Contact channels (`theakar@windowslive.com`, `akarworks@gmail.com`) and troubleshooting FAQ.
+- [Download Portal](https://mehmetfethioglu.github.io/zamera-privacy/indir.html): iOS TestFlight and Google Play testing links.
+- [Extended AI Knowledge Base](https://mehmetfethioglu.github.io/zamera-privacy/llms-full.txt): Product capabilities, privacy guarantees, and FAQ.
 
 ## Contact & Attribution
-- Developer: Akarworks Autonomous Software Factory
-- Website: https://akarworks.com/zamera
+- Developer: Akarworks (Mehmet Fethioglu)
+- Support Email: theakar@windowslive.com
+- Portal URL: https://mehmetfethioglu.github.io/zamera-privacy/
 - Languages: tr-TR, en-US
