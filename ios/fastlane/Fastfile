@@ -148,11 +148,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v1.9.11 (Build 23) Yenilikleri:
-      • Arçelik TV'ler İçin Ek Tanılama: Tanılama raporu artık Arçelik televizyonların kendi kumanda servisini de test ediyor; raporu bize göndererek Arçelik TV desteğinin eklenmesine yardımcı olabilirsiniz.
+      CueDeck v2.0.0 (Build 25) Yenilikleri:
+      • Evrensel Smart TV Sürücüleri: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP desteği.
+      • Paylaş → CueDeck: YouTube video ve oynatma listelerini tek dokunuşla TV'de başlatın veya akşam saatinize planlayın.
+      • 3 Gün Ücretsiz Denemeli Yıllık Pro, Haftalık ve Ömür Boyu Pro seçenekleri.
 
-      What's New in CueDeck v1.9.11 (Build 23):
-      • Extra Diagnostics for Arçelik TVs: The diagnostic report now also tests Arçelik's own remote-control service so we can add support for these TVs.
+      What's New in CueDeck v2.0.0 (Build 25):
+      • Universal Smart TV Drivers: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Remote cursor + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP.
+      • Share to TV: Launch YouTube videos and playlists directly on your TV or schedule for tonight.
+      • Flexible Weekly, Annual (3-Day Free Trial), and Lifetime Pro plans.
     CHANGELOG
 
     begin

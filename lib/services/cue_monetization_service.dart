@@ -9,6 +9,8 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/cue_models.dart';
+
 /// Platform-specific Google AdMob App IDs & Ad Unit IDs.
 /// - Android uses Google's official Test Ad Unit IDs during Closed Testing to
 ///   strictly comply with AdMob Invalid Traffic (IVT) policies.
@@ -62,9 +64,16 @@ class CueAdMobConfig {
   }
 }
 
-/// Product SKU identifiers and regional pricing tiers for CueDeck Pro (Lifetime IAP).
+/// Product SKU identifiers and regional pricing tiers for CueDeck Pro
+/// (Weekly, Annual 3-Day Free Trial, Lifetime, and 40% Loyalty Discount).
 class CueProProductCatalog {
   CueProProductCatalog._();
+
+  /// Weekly impulse remote unlock SKU.
+  static const String skuProWeekly = 'cuedeck_pro_weekly';
+
+  /// Annual Pro subscription SKU with 3-Day Free Trial (recommended default).
+  static const String skuProAnnual = 'cuedeck_pro_annual';
 
   /// Standard one-time lifetime Pro unlock SKU.
   static const String skuProLifetime = 'cuedeck_pro_lifetime';
@@ -78,6 +87,9 @@ class CueProProductCatalog {
   /// Maximum number of saved TV profiles in the Free tier.
   static const int maxFreeTvProfiles = 1;
 
+  /// Maximum number of Share-to-TV beams per calendar day in the Free tier.
+  static const int maxFreeDailyBeams = 3;
+
   /// Number of distinct rewarded ad days required to unlock the 40% loyalty discount SKU.
   static const int loyaltyDiscountTargetDays = 10;
 
@@ -87,12 +99,17 @@ class CueProProductCatalog {
   /// Minimum cooldown between rewarded ad extensions to prevent AdMob Invalid Traffic (IVT).
   static const Duration rewardedAdCooldown = Duration(hours: 4);
 
-  /// Standard price display in Turkish Lira (`149,99 ₺` standard, `89,99 ₺` with 40% Loyalty Discount).
+  /// Standard price display in Turkish Lira & Global USD.
+  static const String priceWeeklyTr = '49,99 ₺';
+  static const String priceWeeklyUsd = '\$2.99';
+  static const String priceAnnualTr = '299,99 ₺';
+  static const String priceAnnualUsd = '\$19.99';
+  static const String priceLifetimeAnchorTr = '499,99 ₺';
+  static const String priceLifetimeAnchorUsd = '\$34.99';
   static const String priceStandardTr = '149,99 ₺';
   static const String priceLaunchTr = '149,99 ₺';
   static const String priceLoyalty40Tr = '89,99 ₺';
 
-  /// Global Tier-1 USD price display.
   static const String priceStandardUsd = '\$5.99';
   static const String priceLaunchUsd = '\$5.99';
   static const String priceLoyalty40Usd = '\$3.49';
@@ -108,6 +125,10 @@ class CueEntitlementState {
     this.proPassExpiresEpochMs = 0,
     this.lastRewardedAdEpochMs = 0,
     this.rewardedDays = const <String>[],
+    this.subscriptionExpiresEpochMs = 0,
+    this.activePlanTier = '',
+    this.dailyBeamDateKey = '',
+    this.dailyBeamCount = 0,
   });
 
   final bool isProLifetime;
@@ -116,6 +137,10 @@ class CueEntitlementState {
   final int proPassExpiresEpochMs;
   final int lastRewardedAdEpochMs;
   final List<String> rewardedDays;
+  final int subscriptionExpiresEpochMs;
+  final String activePlanTier;
+  final String dailyBeamDateKey;
+  final int dailyBeamCount;
 
   /// True if the 24-hour Rewarded Pro Pass is currently active at [now].
   bool isProPassActive([DateTime? now]) {
@@ -124,9 +149,30 @@ class CueEntitlementState {
     return proPassExpiresEpochMs > currentMs;
   }
 
-  /// True if the user has full Pro access (either Lifetime Pro OR active 24h Pro Pass).
+  /// True if a Weekly or Annual Pro subscription is active at [now].
+  bool isSubscriptionActive([DateTime? now]) {
+    if (subscriptionExpiresEpochMs <= 0) return false;
+    final currentMs = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    return subscriptionExpiresEpochMs > currentMs;
+  }
+
+  /// True if the user has full Pro access (Lifetime Pro, active Subscription, OR 24h Pro Pass).
   bool hasProAccess([DateTime? now]) =>
-      isProLifetime || isProPassActive(now);
+      isProLifetime || isSubscriptionActive(now) || isProPassActive(now);
+
+  /// Remaining free Share-to-TV beams for today (`maxFreeDailyBeams` for free tier).
+  int remainingDailyFreeBeams([DateTime? now]) {
+    if (hasProAccess(now)) return 9999;
+    final todayKey = CueMonetizationService.formatDayKey(now ?? DateTime.now());
+    final used = dailyBeamDateKey == todayKey ? dailyBeamCount : 0;
+    return (CueProProductCatalog.maxFreeDailyBeams - used).clamp(
+      0,
+      CueProProductCatalog.maxFreeDailyBeams,
+    );
+  }
+
+  /// True when the user can beam another link without hitting the Pro Paywall.
+  bool canUseFreeBeamToday([DateTime? now]) => remainingDailyFreeBeams(now) > 0;
 
   /// Remaining duration on the 24-hour Pro Pass, or [Duration.zero] if expired.
   Duration remainingProPassDuration([DateTime? now]) {
@@ -178,6 +224,10 @@ class CueEntitlementState {
         'proPassExpiresEpochMs': proPassExpiresEpochMs,
         'lastRewardedAdEpochMs': lastRewardedAdEpochMs,
         'rewardedDays': rewardedDays,
+        'subscriptionExpiresEpochMs': subscriptionExpiresEpochMs,
+        'activePlanTier': activePlanTier,
+        'dailyBeamDateKey': dailyBeamDateKey,
+        'dailyBeamCount': dailyBeamCount,
       };
 
   factory CueEntitlementState.fromJson(Map<String, dynamic> json) {
@@ -197,6 +247,11 @@ class CueEntitlementState {
       proPassExpiresEpochMs: (json['proPassExpiresEpochMs'] as int?) ?? 0,
       lastRewardedAdEpochMs: (json['lastRewardedAdEpochMs'] as int?) ?? 0,
       rewardedDays: parsedDays,
+      subscriptionExpiresEpochMs:
+          (json['subscriptionExpiresEpochMs'] as int?) ?? 0,
+      activePlanTier: (json['activePlanTier'] as String?) ?? '',
+      dailyBeamDateKey: (json['dailyBeamDateKey'] as String?) ?? '',
+      dailyBeamCount: (json['dailyBeamCount'] as int?) ?? 0,
     );
   }
 }
@@ -240,7 +295,9 @@ class CueMonetizationService {
       await MobileAds.instance.initialize();
       _adsInitialized = true;
       unawaited(preloadRewardedAd());
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('CueMonetizationService AdMob init error: $e');
+    }
   }
 
   /// Preloads a `RewardedAd` in the background so tapping "24 Saat Ücretsiz Aç"
@@ -283,7 +340,9 @@ class CueMonetizationService {
     final canonical =
         '$_kIntegritySalt|pro:${state.isProLifetime}|sku:${state.purchasedSku}|'
         'ts:${state.purchaseEpochMs}|pass:${state.proPassExpiresEpochMs}|'
-        'lastAd:${state.lastRewardedAdEpochMs}|days:${sortedDays.join(",")}';
+        'lastAd:${state.lastRewardedAdEpochMs}|days:${sortedDays.join(",")}|'
+        'sub:${state.subscriptionExpiresEpochMs}|tier:${state.activePlanTier}|'
+        'beam:${state.dailyBeamDateKey}:${state.dailyBeamCount}';
     return sha256.convert(utf8.encode(canonical)).toString();
   }
 
@@ -307,13 +366,14 @@ class CueMonetizationService {
       String? jsonStr;
       if (stored.startsWith('{')) {
         jsonStr = stored;
-      } else {
+      } else if (CueAdMobConfig.isNativeMobileAdsSupported) {
         try {
           jsonStr = await _storageChannel.invokeMethod<String>(
             'decryptSecret',
             <String, dynamic>{'cipherText': stored},
           );
-        } catch (_) {
+        } catch (e) {
+          debugPrint('CueMonetizationService keystore decrypt fallback: $e');
           jsonStr = null;
         }
       }
@@ -346,21 +406,25 @@ class CueMonetizationService {
       final rawJson = jsonEncode(payloadMap);
 
       String toStore = rawJson;
-      try {
-        final encrypted = await _storageChannel.invokeMethod<String>(
-          'encryptSecret',
-          <String, dynamic>{'plainText': rawJson},
-        );
-        if (encrypted != null && encrypted.isNotEmpty) {
-          toStore = encrypted;
+      if (CueAdMobConfig.isNativeMobileAdsSupported) {
+        try {
+          final encrypted = await _storageChannel.invokeMethod<String>(
+            'encryptSecret',
+            <String, dynamic>{'plainText': rawJson},
+          );
+          if (encrypted != null && encrypted.isNotEmpty) {
+            toStore = encrypted;
+          }
+        } catch (e) {
+          debugPrint('CueMonetizationService keystore encrypt fallback: $e');
         }
-      } catch (_) {
-        // Fallback to SHA-256 sealed JSON in headless test environments
       }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kVaultPrefsKey, toStore);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('CueMonetizationService saveEntitlement error: $e');
+    }
   }
 
   /// Loads and presents a real full-screen Google AdMob `RewardedAd` on Android/iOS,
@@ -669,6 +733,12 @@ class CueMonetizationService {
       proPassExpiresEpochMs: current.proPassExpiresEpochMs,
       lastRewardedAdEpochMs: current.lastRewardedAdEpochMs,
       rewardedDays: current.rewardedDays,
+      subscriptionExpiresEpochMs: current.subscriptionExpiresEpochMs,
+      activePlanTier: current.isLoyaltyDiscountUnlocked
+          ? CuePlanTier.loyalty40.name
+          : CuePlanTier.lifetime.name,
+      dailyBeamDateKey: current.dailyBeamDateKey,
+      dailyBeamCount: current.dailyBeamCount,
     );
 
     await saveEntitlement(updated);
@@ -681,15 +751,190 @@ class CueMonetizationService {
     );
   }
 
-  /// Restores a previously purchased Lifetime Pro entitlement.
+  /// Initiates a 3-tier Pro purchase (`weekly`, `annualTrial`, `lifetime`, or `loyalty40`).
+  Future<MonetizationActionResult> purchasePlanTier(
+    CuePlanTier tier, {
+    required CueEntitlementState current,
+    DateTime? now,
+  }) async {
+    if (tier == CuePlanTier.lifetime || tier == CuePlanTier.loyalty40) {
+      return purchaseLifetimePro(current: current, now: now);
+    }
+
+    final currentTime = now ?? DateTime.now();
+    final sku = tier.sku;
+    final periodDuration = tier == CuePlanTier.weekly
+        ? const Duration(days: 7)
+        : const Duration(days: 365);
+
+    if (CueAdMobConfig.isNativeMobileAdsSupported) {
+      try {
+        final iap = InAppPurchase.instance;
+        final available = await iap.isAvailable();
+        if (!available) {
+          return MonetizationActionResult(
+            success: false,
+            message:
+                '⚠️ Google Play / App Store ödeme servisine şu anda ulaşılamıyor.',
+            entitlement: current,
+          );
+        }
+
+        final response = await iap.queryProductDetails(<String>{sku});
+        if (response.productDetails.isEmpty) {
+          final priceHint = tier == CuePlanTier.weekly
+              ? CueProProductCatalog.priceWeeklyTr
+              : CueProProductCatalog.priceAnnualTr;
+          return MonetizationActionResult(
+            success: false,
+            message:
+                'ℹ️ "$sku" ($priceHint) ürünü mağaza konsolunda yayınlandığında ödeme ekranı açılacaktır.',
+            entitlement: current,
+          );
+        }
+
+        final product = response.productDetails.first;
+        final purchaseCompleter = Completer<PurchaseDetails?>();
+        StreamSubscription<List<PurchaseDetails>>? sub;
+        sub = iap.purchaseStream.listen(
+          (List<PurchaseDetails> purchases) async {
+            for (final p in purchases) {
+              if (p.pendingCompletePurchase) {
+                await iap.completePurchase(p);
+              }
+              if (p.status == PurchaseStatus.purchased ||
+                  p.status == PurchaseStatus.restored) {
+                if (!purchaseCompleter.isCompleted) {
+                  purchaseCompleter.complete(p);
+                }
+              } else if (p.status == PurchaseStatus.error ||
+                  p.status == PurchaseStatus.canceled) {
+                if (!purchaseCompleter.isCompleted) {
+                  purchaseCompleter.complete(null);
+                }
+              }
+            }
+          },
+          onError: (_) {
+            if (!purchaseCompleter.isCompleted) {
+              purchaseCompleter.complete(null);
+            }
+          },
+        );
+
+        final param = PurchaseParam(productDetails: product);
+        final launched = await iap.buyNonConsumable(purchaseParam: param);
+        if (!launched) {
+          await sub.cancel();
+          return MonetizationActionResult(
+            success: false,
+            message: '⚠️ Mağaza abonelik penceresi başlatılamadı.',
+            entitlement: current,
+          );
+        }
+
+        final verified = await purchaseCompleter.future.timeout(
+          const Duration(minutes: 2),
+          onTimeout: () => null,
+        );
+        await sub.cancel();
+
+        if (verified == null) {
+          return MonetizationActionResult(
+            success: false,
+            message: 'ℹ️ Abonelik işlemi iptal edildi veya tamamlanmadı.',
+            entitlement: current,
+          );
+        }
+      } catch (e) {
+        return MonetizationActionResult(
+          success: false,
+          message: '⚠️ Mağaza abonelik hatası: $e',
+          entitlement: current,
+        );
+      }
+    }
+
+    final expiresAt = currentTime.add(periodDuration);
+    final updated = CueEntitlementState(
+      isProLifetime: current.isProLifetime,
+      purchasedSku: sku,
+      purchaseEpochMs: currentTime.millisecondsSinceEpoch,
+      proPassExpiresEpochMs: current.proPassExpiresEpochMs,
+      lastRewardedAdEpochMs: current.lastRewardedAdEpochMs,
+      rewardedDays: current.rewardedDays,
+      subscriptionExpiresEpochMs: expiresAt.millisecondsSinceEpoch,
+      activePlanTier: tier.name,
+      dailyBeamDateKey: current.dailyBeamDateKey,
+      dailyBeamCount: current.dailyBeamCount,
+    );
+    await saveEntitlement(updated);
+
+    return MonetizationActionResult(
+      success: true,
+      message: tier == CuePlanTier.annualTrial
+          ? '💎 CueDeck Pro (Yıllık / 3 Gün Ücretsiz Deneme) aktif edildi!'
+          : '💎 CueDeck Pro (Haftalık Paket) aktif edildi!',
+      entitlement: updated,
+    );
+  }
+
+  /// Tracks and enforces the free daily Share-to-TV beam quota (`maxFreeDailyBeams = 3`).
+  Future<MonetizationActionResult> consumeDailyBeamQuota({
+    required CueEntitlementState current,
+    DateTime? now,
+  }) async {
+    final currentTime = now ?? DateTime.now();
+    if (current.hasProAccess(currentTime)) {
+      return MonetizationActionResult(
+        success: true,
+        message: '💎 Sınırsız Pro TV Işınlama aktif.',
+        entitlement: current,
+      );
+    }
+
+    final todayKey = formatDayKey(currentTime);
+    final usedToday =
+        current.dailyBeamDateKey == todayKey ? current.dailyBeamCount : 0;
+    if (usedToday >= CueProProductCatalog.maxFreeDailyBeams) {
+      return MonetizationActionResult(
+        success: false,
+        message:
+            '⚡ Günlük ${CueProProductCatalog.maxFreeDailyBeams} ücretsiz paylaşım hakkınız doldu. Sınırsız ışınlama için Pro\'ya geçin.',
+        entitlement: current,
+      );
+    }
+
+    final updated = CueEntitlementState(
+      isProLifetime: current.isProLifetime,
+      purchasedSku: current.purchasedSku,
+      purchaseEpochMs: current.purchaseEpochMs,
+      proPassExpiresEpochMs: current.proPassExpiresEpochMs,
+      lastRewardedAdEpochMs: current.lastRewardedAdEpochMs,
+      rewardedDays: current.rewardedDays,
+      subscriptionExpiresEpochMs: current.subscriptionExpiresEpochMs,
+      activePlanTier: current.activePlanTier,
+      dailyBeamDateKey: todayKey,
+      dailyBeamCount: usedToday + 1,
+    );
+    await saveEntitlement(updated);
+    final remaining = CueProProductCatalog.maxFreeDailyBeams - (usedToday + 1);
+    return MonetizationActionResult(
+      success: true,
+      message: '📲 TV\'ye ışınlandı (Bugün kalan ücretsiz hak: $remaining)',
+      entitlement: updated,
+    );
+  }
+
+  /// Restores a previously purchased Lifetime Pro or active Subscription entitlement.
   Future<MonetizationActionResult> restorePurchases({
     required CueEntitlementState current,
   }) async {
     final loaded = await loadEntitlement();
-    if (loaded.isProLifetime) {
+    if (loaded.isProLifetime || loaded.isSubscriptionActive()) {
       return MonetizationActionResult(
         success: true,
-        message: '✓ Ömür Boyu CueDeck Pro lisansınız geri yüklendi.',
+        message: '✓ CueDeck Pro lisansınız geri yüklendi.',
         entitlement: loaded,
       );
     }

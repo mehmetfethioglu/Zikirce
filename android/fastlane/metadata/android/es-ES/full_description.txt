@@ -1,0 +1,18 @@
+CueDeck combina un control remoto universal para Smart TV con envío directo de enlaces y un planificador personal de series y listas.
+
+TELEVISORES COMPATIBLES
+• Google TV y Android TV (ADB Turbo 5555 y emparejamiento por PIN 6466)
+• Samsung Tizen Smart TV (WebSocket persistente 8002/8001, guardado de token, teclado y Wake-on-LAN)
+• LG webOS Smart TV (Puntero Magic Remote, rueda de desplazamiento, teclas de dirección y client-key)
+• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel y UPnP/DLNA
+• Modo Infrarrojo (IR): Control sin Wi-Fi para teléfonos Android con emisor IR integrado (7 perfiles)
+
+FUNCIONES PRINCIPALES
+• Compartir → CueDeck: Abre al instante enlaces y listas de YouTube en tu televisor o prográmalos para verlos por la noche.
+• Touchpad de precisión y rueda táctil con clics derecho/izquierdo.
+• Teclado en vivo del teléfono para escribir rápido en los buscadores del TV.
+• Planificador con seguimiento por episodios/minutos y copia de seguridad en Google Drive o JSON local.
+• 6 accesos directos personalizables y temas Negro OLED / Blanco Clásico.
+
+ACCESO FLEXIBLE
+• Navegación básica rápida y sin bloqueos; 3 envíos Share-to-TV diarios y 2 planes propios incluidos, con Pase Pro de 24h o planes Pro Semanal, Anual y Vitalicio.

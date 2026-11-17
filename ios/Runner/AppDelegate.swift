@@ -17,13 +17,44 @@ import UserNotifications
   private var latestVoiceTranscript: String = ""
   private var voiceSilenceTimer: Timer?
   private var voiceMaxTimeoutTimer: Timer?
+  private var shareChannel: FlutterMethodChannel?
+  private var pendingSharedPayload: [String: String]?
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    if let launchUrl = launchOptions?[.url] as? URL,
+       let payload = Self.parseShareUrl(launchUrl) {
+      pendingSharedPayload = payload
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    if let payload = Self.parseShareUrl(url) {
+      if let ch = shareChannel {
+        ch.invokeMethod("onSharedContentReceived", arguments: payload)
+      } else {
+        pendingSharedPayload = payload
+      }
+      return true
+    }
+    return super.application(app, open: url, options: options)
+  }
+
+  private static func parseShareUrl(_ url: URL) -> [String: String]? {
+    guard url.scheme?.lowercased() == "cuedeck" else { return nil }
+    let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+    let rawUrl = comps?.queryItems?.first(where: { $0.name == "url" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? url.absoluteString
+    guard !rawUrl.isEmpty else { return nil }
+    let title = comps?.queryItems?.first(where: { $0.name == "title" })?.value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return ["url": rawUrl, "subject": title]
   }
 
   override func userNotificationCenter(
@@ -80,6 +111,27 @@ import UserNotifications
           return
         }
         self.handleNotificationMethodCall(call: call, result: result)
+      }
+    }
+
+    if let shareRegistrar = engineBridge.pluginRegistry.registrar(forPlugin: "CueDeckIosShareBridge") {
+      let sChannel = FlutterMethodChannel(
+        name: "com.akarworks.cuedeck/share",
+        binaryMessenger: shareRegistrar.messenger()
+      )
+      self.shareChannel = sChannel
+      sChannel.setMethodCallHandler { [weak self] call, result in
+        guard let self = self else {
+          result(FlutterError(code: "DISPOSED", message: "AppDelegate disposed", details: nil))
+          return
+        }
+        if call.method == "consumeInitialSharedContent" {
+          let payload = self.pendingSharedPayload
+          self.pendingSharedPayload = nil
+          result(payload)
+        } else {
+          result(FlutterMethodNotImplemented)
+        }
       }
     }
   }
@@ -435,7 +487,15 @@ import UserNotifications
   private func triggerBonjourLocalNetworkPrompt() {
     DispatchQueue.main.async {
       self.netServiceBrowsers.removeAll()
-      let services = ["_androidtvremote2._tcp.", "_adb._tcp.", "_googlecast._tcp."]
+      let services = [
+        "_androidtvremote2._tcp.",
+        "_adb._tcp.",
+        "_googlecast._tcp.",
+        "_samsungmsf._tcp.",
+        "_webostv._tcp.",
+        "_arceliktvremote._tcp.",
+        "_dial-multiscreen-org._tcp."
+      ]
       for svc in services {
         let browser = NetServiceBrowser()
         browser.includesPeerToPeer = true
@@ -612,7 +672,7 @@ import UserNotifications
     var open6466 = Set<String>()
     var open8008 = Set<String>()
     var openSmartTv = Set<String>()
-    let smartTvPorts: [UInt16] = [8085, 56789, 8001, 3000, 1925, 8060]
+    let smartTvPorts: [UInt16] = [8085, 56789, 7681, 8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669]
     var permissionDeniedCount = 0
     var lastPermissionErrno: Int32 = 0
     var anyLanTrafficAllowed = false
@@ -734,7 +794,7 @@ import UserNotifications
             break
           } else if rSmart.errCode == ECONNREFUSED && !hostIsAlive {
             hostIsAlive = true
-            for extraPort: UInt16 in [8001, 3000, 1925, 8060] {
+            for extraPort: UInt16 in [8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669, 7681] {
               let rExtra = probePortWithFallback(ip: ip, port: extraPort, en0Index: en0Index, timeoutMs: 180)
               if rExtra.open {
                 lock.lock()

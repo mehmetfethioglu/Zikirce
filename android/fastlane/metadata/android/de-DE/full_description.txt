@@ -1,0 +1,18 @@
+CueDeck ist Ihre universelle Smart-TV-Fernbedienung mit Direktübertragung von YouTube-Links, Präzisions-Touchpad und persönlichem Serien-Planer.
+
+UNTERSTÜTZTE TV-SYSTEME
+• Google TV & Android TV (Port 5555 ADB Turbo & Port 6466 PIN-Kopplung)
+• Samsung Tizen Smart TV (Persistentes WebSocket 8002/8001, Token-Speicher, Tastatur-Eingabe & Wake-on-LAN)
+• LG webOS Smart TV (Magic-Remote-Mauszeiger, Scrollrad, D-Pad-Steuerung & client-key)
+• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel & UPnP/DLNA
+• Infrarot (IR) Modus: Steuerung ohne WLAN für unterstützte Android-Smartphones (7 Marken)
+
+BESONDERE FUNKTIONEN
+• Teilen → CueDeck: Senden Sie YouTube-Videos, Playlists oder Streaming-Links aus jeder App sofort auf den Fernseher oder planen Sie sie für heute Abend.
+• Touchpad & Maus-Scrollrad: Mühelose Cursor-Navigation auf Android TV und LG webOS.
+• Live-Handy-Tastatur: Direktes Tippen in TV-Suchfelder inklusive Rücktaste und Enter.
+• Persönlicher Watch-Planer: Episoden-Fortschritt, Erinnerungen und Google-Drive-/JSON-Backup.
+• OLED Echt-Schwarz- & Klassik-Weiß-Design mit 6 frei belegbaren App-Tasten.
+
+FAIRES MODELL
+• Grundlegende Fernbedienungstasten bleiben stets unterbrechungsfrei. Täglich 3 Share-to-TV-Übertragungen und 2 eigene Pläne inklusive; optionaler 24h-Pro-Pass oder Pro-Abo/Lifetime.

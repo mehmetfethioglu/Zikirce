@@ -1,0 +1,5 @@
+v2.0.0:
+• Pilotes Smart TV universels : Samsung Tizen (Token + Wake-on-LAN), LG webOS (Pointeur Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony et UPnP.
+• Mode Infrarouge (IR) sans Wi-Fi pour 7 marques de téléviseurs.
+• Partagez un lien YouTube vers la TV en un geste (lancement immédiat ou programmé).
+• Formules Pro flexibles avec essai de 3 jours sur l'offre annuelle.

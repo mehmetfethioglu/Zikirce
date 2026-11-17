@@ -1,0 +1,725 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../models/cue_models.dart';
+import '../../providers/cuedeck_providers.dart';
+import '../../screens/cuedeck_settings_screen.dart';
+import '../cuetv_channel_studio_sheet.dart';
+import '../modals/share_to_tv_beam_sheet.dart';
+import '../modals/tv_discovery_pairing_sheets.dart';
+import '../modals/voice_and_keyboard_sheets.dart';
+import 'quick_launch_app_dock.dart';
+import 'tactile_dpad_touchpad.dart';
+
+/// Google TV G10 Reference Physical Remote Control Chassis supporting True Black
+/// Dark Mode and Classic White Light Mode, Universal Smart TV protocols, IR Blaster,
+/// Wake-on-LAN, and 1-tap Link Beaming.
+class G10PhysicalRemoteChassis extends ConsumerWidget {
+  const G10PhysicalRemoteChassis({super.key, required this.isDarkMode});
+
+  final bool isDarkMode;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void sendKey(TvKeyCommand cmd) {
+      HapticFeedback.lightImpact();
+      final selected = ref.read(cueDeckProvider).selectedDevice;
+      if (selected.hasValidIp &&
+          selected.protocol == TvConnectionProtocol.remotePort6466 &&
+          !selected.isPaired) {
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => Pin6466PairingSheet(targetIp: selected.ip),
+        );
+        return;
+      }
+      ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
+    }
+
+    final isTouchpadMode = ref.watch(
+      cueDeckProvider.select((s) => s.isTouchpadMode),
+    );
+    final selectedDevice = ref.watch(
+      cueDeckProvider.select((s) => s.selectedDevice),
+    );
+    final chassisColor =
+        isDarkMode ? const Color(0xFF000000) : const Color(0xFFF5F6F9);
+    final chassisBorderColor =
+        isDarkMode ? const Color(0xFF1E2028) : const Color(0xFFDCDFE6);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 316),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+        decoration: BoxDecoration(
+          color: chassisColor,
+          borderRadius: BorderRadius.circular(44),
+          border: Border.all(color: chassisBorderColor, width: 1.4),
+          boxShadow: isDarkMode
+              ? const <BoxShadow>[]
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.10),
+                    blurRadius: 28,
+                    offset: const Offset(10, 14),
+                  ),
+                ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            // ROW 1: Power (Left) | TV Status Indicator (Center) | Inputs (Right)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                _RoundRemoteKeyButton(
+                  icon: Icons.power_settings_new_rounded,
+                  tooltip: 'Güç / Uyku',
+                  isDarkMode: isDarkMode,
+                  size: 40,
+                  iconSize: 19,
+                  onTap: () => sendKey(TvKeyCommand.power),
+                ),
+                _TvConnectionIconOnlyIndicator(
+                  isDarkMode: isDarkMode,
+                  onTap: () => _showSettingsAndPlannerModal(context),
+                ),
+                _RoundRemoteKeyButton(
+                  icon: Icons.input_rounded,
+                  tooltip: 'TV Girişleri',
+                  isDarkMode: isDarkMode,
+                  size: 40,
+                  iconSize: 18,
+                  onTap: () => sendKey(TvKeyCommand.inputs),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // ROW 2: Keyboard | Voice Mic | Settings & Planner
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: isTouchpadMode
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 18),
+                  child: _RoundRemoteKeyButton(
+                    icon: Icons.bookmark_border_rounded,
+                    tooltip: 'TV Klavye & Kısayol',
+                    isDarkMode: isDarkMode,
+                    size: 44,
+                    iconSize: 20,
+                    onTap: () => _showRemoteKeyboardSheet(context),
+                  ),
+                ),
+                _AssistantVoiceCenterButton(
+                  isDarkMode: isDarkMode,
+                  onTap: () => _showVoiceControlSheet(context, ref),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 18),
+                  child: _RoundRemoteKeyButton(
+                    icon: Icons.settings_outlined,
+                    tooltip: 'Ayarlar & İzleme Planı',
+                    isDarkMode: isDarkMode,
+                    size: 44,
+                    iconSize: 20,
+                    onTap: () => _showSettingsAndPlannerModal(context),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isTouchpadMode ? 8 : 6),
+
+            // ROW 3: Center Donut D-Pad Ring OR Multi-Zone Touchpad Cockpit
+            TactileDpadDialWidget(isDarkMode: isDarkMode),
+            SizedBox(height: isTouchpadMode ? 8 : 6),
+
+            // ROW 4: Back | Home | CueTV Live Channels
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: isTouchpadMode
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.end,
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.only(bottom: isTouchpadMode ? 0 : 14),
+                  child: _RoundRemoteKeyButton(
+                    icon: Icons.arrow_back_rounded,
+                    tooltip: 'Geri',
+                    isDarkMode: isDarkMode,
+                    size: 44,
+                    iconSize: 20,
+                    onTap: () => sendKey(TvKeyCommand.back),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 12),
+                  child: _DarkHomeCircleButton(
+                    isDarkMode: isDarkMode,
+                    onTap: () => sendKey(TvKeyCommand.home),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(bottom: isTouchpadMode ? 0 : 14),
+                  child: _RoundRemoteKeyButton(
+                    icon: Icons.live_tv_rounded,
+                    tooltip: 'CueTV Ulusal Kanal Stüdyosu',
+                    isDarkMode: isDarkMode,
+                    size: 44,
+                    iconSize: 19,
+                    onTap: () => showCueTvChannelStudioSheet(context),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: isTouchpadMode ? 10 : 14),
+
+            // ROW 5: Volume Rocker | Mute | Channel Rocker
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                _VerticalRockerPill(
+                  isDarkMode: isDarkMode,
+                  topIcon: Icons.add_rounded,
+                  topTooltip: 'Ses +',
+                  onTopTap: () => sendKey(TvKeyCommand.volUp),
+                  bottomIcon: Icons.remove_rounded,
+                  bottomTooltip: 'Ses -',
+                  onBottomTap: () => sendKey(TvKeyCommand.volDown),
+                ),
+                _RoundRemoteKeyButton(
+                  icon: Icons.volume_off_outlined,
+                  tooltip: 'Sessiz',
+                  isDarkMode: isDarkMode,
+                  size: 42,
+                  iconSize: 19,
+                  onTap: () => sendKey(TvKeyCommand.mute),
+                ),
+                _VerticalRockerPill(
+                  isDarkMode: isDarkMode,
+                  topIcon: Icons.keyboard_arrow_up_rounded,
+                  topTooltip: 'Kanal +',
+                  onTopTap: () => sendKey(TvKeyCommand.channelUp),
+                  bottomIcon: Icons.keyboard_arrow_down_rounded,
+                  bottomTooltip: 'Kanal -',
+                  onBottomTap: () => sendKey(TvKeyCommand.channelDown),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ROW 6: 2-Column Pill App Launch Buttons
+            QuickLaunchAppDock(isDarkMode: isDarkMode),
+            const SizedBox(height: 12),
+
+            // ROW 7: Compact Utility Chips (Link Beam, IR Mode, Wake-on-LAN)
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 6,
+              runSpacing: 6,
+              children: <Widget>[
+                _RemoteUtilityChip(
+                  key: const Key('remote_link_beam_chip'),
+                  label: '📲 Link Işınla',
+                  isDarkMode: isDarkMode,
+                  onTap: () => _openLinkBeam(context, ref),
+                ),
+                _RemoteUtilityChip(
+                  key: const Key('remote_ir_mode_chip'),
+                  label: '📡 IR Kumanda',
+                  isDarkMode: isDarkMode,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    showIrBlasterBrandPickerSheet(context);
+                  },
+                ),
+                if (!selectedDevice.isOnline && selectedDevice.hasValidIp)
+                  _RemoteUtilityChip(
+                    key: const Key('remote_wake_tv_chip'),
+                    label: '⚡ TV Uyandır',
+                    isDarkMode: isDarkMode,
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      ref.read(cueDeckProvider.notifier).wakeUpSelectedTv();
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openLinkBeam(BuildContext context, WidgetRef ref) async {
+    HapticFeedback.mediumImpact();
+    final foundFromClipboard = await ref
+        .read(cueDeckProvider.notifier)
+        .importClipboardAsSharedPayload();
+    if (!context.mounted) return;
+    if (!foundFromClipboard) {
+      await showShareToTvBeamSheet(
+        context,
+        SharedCuePayload(
+          url: '',
+          title: '',
+          platform: StreamingPlatform.youtube,
+          receivedAtEpochMs: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+    }
+  }
+
+  void _showVoiceControlSheet(BuildContext context, WidgetRef ref) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const VoiceControlSheet(),
+    ).whenComplete(() {
+      ref.read(cueDeckProvider.notifier).cancelVoiceCommandSession();
+    });
+  }
+
+  void _showRemoteKeyboardSheet(BuildContext context) {
+    HapticFeedback.selectionClick();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const RemoteKeyboardSheet(),
+    );
+  }
+
+  void _showSettingsAndPlannerModal(BuildContext context) {
+    HapticFeedback.selectionClick();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const CueDeckSettingsScreen(),
+      ),
+    );
+  }
+}
+
+class _RemoteUtilityChip extends StatelessWidget {
+  const _RemoteUtilityChip({
+    super.key,
+    required this.label,
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fillColor =
+        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFECEDF2);
+    final borderColor = isDarkMode
+        ? const Color(0xFFE2A84B).withValues(alpha: 0.35)
+        : const Color(0xFFCFD4DE);
+    final textColor =
+        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFF23272F);
+
+    return Material(
+      color: fillColor,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: 1.0),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TvConnectionIconOnlyIndicator extends ConsumerWidget {
+  const _TvConnectionIconOnlyIndicator({
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final device = ref.watch(cueDeckProvider.select((s) => s.selectedDevice));
+    final isScanning = ref.watch(cueDeckProvider.select((s) => s.isScanning));
+
+    final statusColor = isScanning
+        ? const Color(0xFF00B0FF)
+        : (device.isOnline ? const Color(0xFF00E676) : const Color(0xFFFFAB00));
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Container(
+          width: 4.5,
+          height: 4.5,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isDarkMode ? const Color(0xFF3A3F4D) : const Color(0xFF23272F),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Tooltip(
+          message: 'TV Bağlantı Durumu',
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDarkMode
+                    ? const Color(0xFF111318)
+                    : const Color(0xFFECEDF2),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.55),
+                  width: 1.2,
+                ),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: <Widget>[
+                  Icon(
+                    Icons.tv_rounded,
+                    size: 16,
+                    color: isDarkMode
+                        ? const Color(0xFFF2F4F8)
+                        : const Color(0xFF23272F),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Container(
+                      width: 6.5,
+                      height: 6.5,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoundRemoteKeyButton extends StatelessWidget {
+  const _RoundRemoteKeyButton({
+    required this.icon,
+    required this.tooltip,
+    required this.isDarkMode,
+    required this.onTap,
+    this.size = 44,
+    this.iconSize = 20,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool isDarkMode;
+  final VoidCallback onTap;
+  final double size;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final fillColor =
+        isDarkMode ? const Color(0xFF111318) : const Color(0xFFECEDF2);
+    final borderColor =
+        isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE);
+    final iconColor =
+        isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F);
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: fillColor,
+        shape: CircleBorder(
+          side: BorderSide(color: borderColor, width: 1.1),
+        ),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Icon(icon, color: iconColor, size: iconSize),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AssistantVoiceCenterButton extends ConsumerWidget {
+  const _AssistantVoiceCenterButton({
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isListening = ref.watch(
+      cueDeckProvider.select((s) => s.isListeningVoice),
+    );
+
+    final circleColor = isListening
+        ? const Color(0xFFD50000)
+        : (isDarkMode ? const Color(0xFF181B24) : const Color(0xFF1C2026));
+    final borderColor = isListening
+        ? const Color(0xFFFF5252)
+        : (isDarkMode ? const Color(0xFF2E3342) : const Color(0xFF1C2026));
+
+    return Tooltip(
+      message: 'Sesli Komut (Asistan)',
+      child: Material(
+        color: circleColor,
+        shape: CircleBorder(
+          side: BorderSide(color: borderColor, width: 1.2),
+        ),
+        elevation: isDarkMode ? 0 : 2,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 50,
+            height: 50,
+            child: Center(
+              child: isListening
+                  ? const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    )
+                  : const _GoogleAssistantDotsGraphic(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleAssistantDotsGraphic extends StatelessWidget {
+  const _GoogleAssistantDotsGraphic();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24,
+      height: 22,
+      child: Stack(
+        children: <Widget>[
+          Positioned(
+            left: 1,
+            top: 2,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF4285F4),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 11,
+            top: 10,
+            child: Container(
+              width: 5.5,
+              height: 5.5,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFEA4335),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 11,
+            top: 16.5,
+            child: Container(
+              width: 6.5,
+              height: 6.5,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFFFBBC05),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 17.5,
+            top: 6,
+            child: Container(
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF34A853),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DarkHomeCircleButton extends StatelessWidget {
+  const _DarkHomeCircleButton({
+    required this.isDarkMode,
+    required this.onTap,
+  });
+
+  final bool isDarkMode;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final circleColor =
+        isDarkMode ? const Color(0xFF181B24) : const Color(0xFF1C2026);
+    final borderColor =
+        isDarkMode ? const Color(0xFF2E3342) : const Color(0xFF1C2026);
+
+    return Tooltip(
+      message: 'Ana Ekran',
+      child: Material(
+        color: circleColor,
+        shape: CircleBorder(
+          side: BorderSide(color: borderColor, width: 1.2),
+        ),
+        elevation: isDarkMode ? 0 : 2,
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: const SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(
+              Icons.home_filled,
+              color: Colors.white,
+              size: 21,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VerticalRockerPill extends StatelessWidget {
+  const _VerticalRockerPill({
+    required this.isDarkMode,
+    required this.topIcon,
+    required this.topTooltip,
+    required this.onTopTap,
+    required this.bottomIcon,
+    required this.bottomTooltip,
+    required this.onBottomTap,
+  });
+
+  final bool isDarkMode;
+  final IconData topIcon;
+  final String topTooltip;
+  final VoidCallback onTopTap;
+  final IconData bottomIcon;
+  final String bottomTooltip;
+  final VoidCallback onBottomTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fillColor =
+        isDarkMode ? const Color(0xFF111318) : const Color(0xFFECEDF2);
+    final borderColor =
+        isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE);
+    final iconColor =
+        isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F);
+
+    return Container(
+      width: 50,
+      height: 106,
+      decoration: BoxDecoration(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: borderColor, width: 1.1),
+      ),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: Tooltip(
+              message: topTooltip,
+              child: InkWell(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(25),
+                ),
+                onTap: onTopTap,
+                child: Center(
+                  child: Icon(topIcon, color: iconColor, size: 20),
+                ),
+              ),
+            ),
+          ),
+          Divider(
+            height: 1,
+            thickness: 1,
+            indent: 12,
+            endIndent: 12,
+            color: borderColor.withValues(alpha: 0.6),
+          ),
+          Expanded(
+            child: Tooltip(
+              message: bottomTooltip,
+              child: InkWell(
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(25),
+                ),
+                onTap: onBottomTap,
+                child: Center(
+                  child: Icon(bottomIcon, color: iconColor, size: 20),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

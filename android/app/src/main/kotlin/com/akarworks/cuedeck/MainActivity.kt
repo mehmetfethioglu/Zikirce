@@ -1,13 +1,17 @@
 package com.akarworks.cuedeck
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.ConsumerIrManager
 import android.os.Build
+import android.os.Bundle
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.speech.RecognizerIntent
 import android.util.Base64
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -25,6 +29,8 @@ class MainActivity : FlutterActivity() {
     private val voiceChannelName = "com.akarworks.cuedeck/voice"
     private val storageChannelName = "com.akarworks.cuedeck/storage"
     private val notificationChannelName = "com.akarworks.cuedeck/notifications"
+    private val irChannelName = "com.akarworks.cuedeck/ir"
+    private val shareChannelName = "com.akarworks.cuedeck/share"
 
     private val speechRequestCode = 4041
     private val saveBackupRequestCode = 4042
@@ -42,6 +48,47 @@ class MainActivity : FlutterActivity() {
     private var pendingPickResult: MethodChannel.Result? = null
     private var pendingNotificationPermResult: MethodChannel.Result? = null
     private var pendingImmediateNotification: Map<String, Any?>? = null
+    private var pendingSharedPayload: Map<String, String>? = null
+    private var shareChannel: MethodChannel? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        extractSharedPayload(intent)?.let { pendingSharedPayload = it }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        extractSharedPayload(intent)?.let { payload ->
+            val ch = shareChannel
+            if (ch != null) {
+                ch.invokeMethod("onSharedContentReceived", payload)
+            } else {
+                pendingSharedPayload = payload
+            }
+        }
+    }
+
+    private fun extractSharedPayload(intent: Intent?): Map<String, String>? {
+        if (intent == null) return null
+        val action = intent.action ?: return null
+        if (action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
+            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+            if (sharedText.isEmpty()) return null
+            val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
+            return mapOf("text" to sharedText, "subject" to subject)
+        }
+        if (action == Intent.ACTION_VIEW) {
+            val data = intent.data ?: return null
+            if (data.scheme == "cuedeck" && data.host == "share") {
+                val urlParam = data.getQueryParameter("url")?.trim().orEmpty()
+                val raw = if (urlParam.isNotEmpty()) urlParam else data.toString()
+                val titleParam = data.getQueryParameter("title")?.trim().orEmpty()
+                return mapOf("url" to raw, "subject" to titleParam)
+            }
+        }
+        return null
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -246,6 +293,58 @@ class MainActivity : FlutterActivity() {
                 "cancelAllNotifications" -> {
                     CueDeckNotificationHelper.cancelPersistedAlarms(applicationContext)
                     result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 4. Hardware Infrared Blaster Channel (Zero-Wi-Fi fallback via ConsumerIrManager)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            irChannelName
+        ).setMethodCallHandler { call, result ->
+            val irManager = getSystemService(Context.CONSUMER_IR_SERVICE) as? ConsumerIrManager
+            when (call.method) {
+                "hasIrEmitter" -> {
+                    val hasIr = try {
+                        irManager?.hasIrEmitter() == true
+                    } catch (e: Exception) {
+                        Log.w("CueDeck", "IR emitter check failed: ${e.message}")
+                        false
+                    }
+                    result.success(hasIr)
+                }
+                "transmitIr" -> {
+                    val carrierHz = call.argument<Int>("carrierHz") ?: 38000
+                    val patternList = call.argument<List<Int>>("pattern")
+                    if (irManager == null || !irManager.hasIrEmitter() || patternList.isNullOrEmpty()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        irManager.transmit(carrierHz, patternList.toIntArray())
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.w("CueDeck", "IR transmit failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 5. OS Share Sheet (ACTION_SEND) & Deep-Link (`cuedeck://share`) Channel
+        val createdShareChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            shareChannelName
+        )
+        shareChannel = createdShareChannel
+        createdShareChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "consumeInitialSharedContent" -> {
+                    val payload = pendingSharedPayload ?: extractSharedPayload(intent)
+                    pendingSharedPayload = null
+                    result.success(payload)
                 }
                 else -> result.notImplemented()
             }

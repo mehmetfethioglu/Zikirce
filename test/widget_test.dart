@@ -8,7 +8,6 @@ import 'package:cuedeck/screens/cuedeck_home_screen.dart';
 import 'package:cuedeck/services/adb_tv_service.dart';
 import 'package:cuedeck/services/cue_monetization_service.dart';
 import 'package:cuedeck/services/cue_notification_service.dart';
-import 'package:cuedeck/services/cue_release_notes_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,6 +124,73 @@ class _FakeAdbTvService extends AdbTvService {
     );
   }
 
+  int mouseEnabledCount = 0;
+  int mouseDisabledCount = 0;
+  int mouseClickCount = 0;
+  int mouseWheelScrollCount = 0;
+  int lastWheelClicks = 0;
+  final List<String> typedTexts = <String>[];
+  int backspaceCount = 0;
+  int enterKeyCount = 0;
+
+  @override
+  Future<bool> enableTvMouseCursor(TvDevice device) async {
+    mouseEnabledCount++;
+    return true;
+  }
+
+  @override
+  Future<void> disableTvMouseCursor(TvDevice device) async {
+    mouseDisabledCount++;
+  }
+
+  @override
+  Future<bool> moveTvMouseCursor(
+    TvDevice device,
+    double dx,
+    double dy,
+  ) async =>
+      true;
+
+  @override
+  Future<bool> clickTvMouseCursor(
+    TvDevice device, {
+    bool rightClick = false,
+  }) async {
+    mouseClickCount++;
+    return true;
+  }
+
+  @override
+  Future<bool> scrollTvMouseWheel(TvDevice device, int wheelClicks) async {
+    mouseWheelScrollCount++;
+    lastWheelClicks = wheelClicks;
+    return true;
+  }
+
+  @override
+  Future<bool> sendSearchText(
+    TvDevice device,
+    String rawText, {
+    bool submitEnter = false,
+  }) async {
+    typedTexts.add(rawText);
+    if (submitEnter) enterKeyCount++;
+    return true;
+  }
+
+  @override
+  Future<bool> sendBackspace(TvDevice device, {int count = 1}) async {
+    backspaceCount += count;
+    return true;
+  }
+
+  @override
+  Future<bool> sendEnterKey(TvDevice device) async {
+    enterKeyCount++;
+    return true;
+  }
+
   @override
   Future<bool> sendKeyCommand(TvDevice device, TvKeyCommand command) async =>
       true;
@@ -187,15 +253,47 @@ void main() {
       expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
       expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
       expect(
+        find.byKey(const Key('remote_keyboard_toggle_button')),
+        findsOneWidget,
+      );
+      expect(
         find.byKey(const Key('remote_touchpad_toggle_button')),
         findsOneWidget,
       );
 
-      // Toggle D-Pad into Mouse / Touchpad surface and back via the minimal corner button
+      // Open symmetrical top-left Keyboard button and type live with phone keyboard
+      await tester.tap(find.byKey(const Key('remote_keyboard_toggle_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote_keyboard_sheet')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const Key('remote_keyboard_text_field')),
+        'Gassal',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('remote_keyboard_backspace_button')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('remote_keyboard_send_button')));
+      await tester.pumpAndSettle();
+
+      // Toggle D-Pad into rectangular Mouse / Touchpad surface + Tactile Scroll Wheel and back
       await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('dpad_touchpad_surface')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_scroll_wheel')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_wheel_up_button')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_wheel_down_button')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_left_click_button')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_right_click_button')), findsOneWidget);
       expect(find.text('TOUCHPAD'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('touchpad_wheel_up_button')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('touchpad_wheel_down_button')));
+      await tester.pump();
+      await tester.drag(
+        find.byKey(const Key('touchpad_scroll_wheel')),
+        const Offset(0, -36),
+      );
+      await tester.pump(const Duration(milliseconds: 60));
       await tester.tap(find.byKey(const Key('dpad_touchpad_surface')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
@@ -447,7 +545,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
-        find.text('Arçelik Kumanda Servisi Testi'),
+        find.text('Telefon Klavyesiyle Anında TV\'ye Yazma'),
         findsOneWidget,
       );
       await tester.tap(find.text('Harika, Devam Et'));
@@ -806,4 +904,56 @@ void main() {
     expect(lines, contains('TXT TV._arceliktvremote._tcp.local -> ver=1.0'));
     expect(lines, contains('A tv.local -> 192.168.1.106'));
   });
+
+  test(
+    'AdbTvService normalizes Turkish keyboard input and builds Linux EV_REL / UHID mouse cursor payloads',
+    () {
+      expect(
+        AdbTvService.normalizeForTvInputText('Çukur Şampiyonlar Ligi'),
+        'Cukur%sSampiyonlar%sLigi',
+      );
+      expect(
+        AdbTvService.encodeSignedInt32LeHex(15),
+        r'\x0f\x00\x00\x00',
+      );
+      expect(
+        AdbTvService.encodeSignedInt32LeHex(-15),
+        r'\xf1\xff\xff\xff',
+      );
+
+      final moveCmd = AdbTvService.buildLinuxMouseMoveCommand(
+        '/dev/input/event2',
+        12,
+        -8,
+        is64BitKernel: false,
+      );
+      expect(moveCmd, contains('/dev/input/event2'));
+      expect(moveCmd, contains(r'\x02\x00\x00\x00\x0c\x00\x00\x00'));
+      expect(moveCmd, contains(r'\x02\x00\x01\x00\xf8\xff\xff\xff'));
+
+      final clickCmd = AdbTvService.buildLinuxMouseClickCommand(
+        '/dev/input/event2',
+      );
+      expect(clickCmd, contains(r'\x01\x00\x10\x01\x01\x00\x00\x00'));
+      expect(clickCmd, contains(r'\x01\x00\x10\x01\x00\x00\x00\x00'));
+
+      final wheelUpCmd = AdbTvService.buildLinuxMouseWheelCommand(
+        '/dev/input/event2',
+        2,
+      );
+      expect(wheelUpCmd, contains('/dev/input/event2'));
+      expect(wheelUpCmd, contains(r'\x02\x00\x08\x00\x02\x00\x00\x00'));
+
+      final wheelDownCmd = AdbTvService.buildLinuxMouseWheelCommand(
+        '/dev/input/event2',
+        -2,
+      );
+      expect(wheelDownCmd, contains(r'\x02\x00\x08\x00\xfe\xff\xff\xff'));
+
+      final uhidHex = AdbTvService.buildUhidMouseCreateHexEscapes();
+      expect(uhidHex.startsWith(r'\x0b\x00\x00\x00'), isTrue);
+      // 332 bytes * 4 chars (\xHH) == 1328 chars
+      expect(uhidHex.length, 332 * 4);
+    },
+  );
 }

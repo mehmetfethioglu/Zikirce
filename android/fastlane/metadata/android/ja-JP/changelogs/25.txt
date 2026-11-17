@@ -1,0 +1,5 @@
+v2.0.0:
+• 主要Smart TV対応：Samsung Tizen（トークン保存＋Wake-on-LAN）、LG webOS（Magicマウス＋十字キー）、Roku、Philips、VIDAA、Sony、Arçelik/Vestel、UPnP/DLNA。
+• Wi-Fi不要のAndroid赤外線（IR）ブラスター7ブランド対応。
+• 共有メニューからYouTube動画や再生リストを即座にTV起動・視聴予約。
+• 週間・年間（3日間お試し）・買い切りProプランおよび24時間Proパス。

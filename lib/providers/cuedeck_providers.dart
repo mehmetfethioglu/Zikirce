@@ -5,202 +5,42 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/tv_network_validators.dart';
 import '../models/cue_models.dart';
 import '../services/adb_tv_service.dart';
 import '../services/cue_monetization_service.dart';
 import '../services/cue_notification_service.dart';
+import '../services/cue_release_notes_service.dart';
 import '../services/google_drive_backup_service.dart';
+import '../services/share/cue_share_intent_service.dart';
+import 'cue_deck_state.dart';
+
+export '../domain/tv_driver_contract.dart' show TvCapability;
+export '../domain/tv_network_validators.dart' show TvNetworkValidators;
+export '../services/cue_monetization_service.dart'
+    show
+        CueAdMobConfig,
+        CueProProductCatalog,
+        CueEntitlementState,
+        MonetizationActionResult;
+export '../services/cue_release_notes_service.dart'
+    show
+        CueReleaseNotesCatalog,
+        CueReleaseVersionEntry,
+        CueReleaseNoteItem,
+        CueReleaseNotesService;
+export '../services/drivers/ir_blaster_driver.dart'
+    show IrBlasterDriver, IrBrandProfile;
+export '../services/google_drive_backup_service.dart'
+    show CloudBackupInfo, BackupOperationResult;
+export '../services/google_oauth_sheet.dart'
+    show GoogleOAuthConstants, GoogleOAuthHelper;
+export 'cue_deck_state.dart';
 
 const String _kPrefsCueItemsKey = 'cuedeck_watch_items_v1';
 const String _kPrefsTvDeviceV2Key = 'cuedeck_tv_device_v2';
 const String _kPrefsDarkModeKey = 'cuedeck_dark_mode_v1';
 const String _kPrefsRemoteShortcutsKey = 'cuedeck_remote_shortcuts_v1';
-
-/// Immutable state for the CueDeck Remote & Watch Planner application.
-@immutable
-class CueDeckState {
-  const CueDeckState({
-    required this.activeTab,
-    required this.selectedDevice,
-    required this.discoveredDevices,
-    required this.isScanning,
-    required this.isTouchpadMode,
-    required this.lastPressedDirection,
-    required this.lastCommandStatus,
-    required this.cueItems,
-    this.remoteShortcuts = StreamingPlatform.defaultRemoteShortcuts,
-    this.isDarkMode = true,
-    this.isListeningVoice = false,
-    this.lastVoiceTranscript = '',
-    this.isGoogleSignedIn = false,
-    this.googleUserEmail = '',
-    this.googleUserName = '',
-    this.lastBackupTimeFormatted = 'Henüz yedekleme yapılmadı',
-    this.isAutoCloudBackupEnabled = false,
-    this.isProcessingBackup = false,
-    this.activePlayingCueId,
-    this.activeReminderItem,
-    this.entitlement = const CueEntitlementState(),
-    this.localWifiIp = '',
-    this.localNetworkPermissionDenied = false,
-    this.voicePermissionDenied = false,
-  });
-
-  final int activeTab;
-  final TvDevice selectedDevice;
-  final List<TvDevice> discoveredDevices;
-  final bool isScanning;
-  final bool isTouchpadMode;
-  final TvKeyCommand? lastPressedDirection;
-  final String lastCommandStatus;
-  final List<WatchCueItem> cueItems;
-  final List<StreamingPlatform> remoteShortcuts;
-  final bool isDarkMode;
-  final bool isListeningVoice;
-  final String lastVoiceTranscript;
-  final bool isGoogleSignedIn;
-  final String googleUserEmail;
-  final String googleUserName;
-  final String lastBackupTimeFormatted;
-  final bool isAutoCloudBackupEnabled;
-  final bool isProcessingBackup;
-  final String? activePlayingCueId;
-  final WatchCueItem? activeReminderItem;
-  final CueEntitlementState entitlement;
-  final String localWifiIp;
-  final bool localNetworkPermissionDenied;
-  final bool voicePermissionDenied;
-
-  /// True when the user owns the one-time Lifetime Pro upgrade.
-  bool get isProLifetime => entitlement.isProLifetime;
-
-  /// True when the 24-hour Rewarded Pro Pass is currently active.
-  bool get isProPassActive => entitlement.isProPassActive();
-
-  /// True when the user has full Pro features unlocked (Lifetime Pro OR active 24h Pro Pass).
-  bool get hasProAccess => entitlement.hasProAccess();
-
-  /// Number of distinct days the user unlocked a 24h Pro Pass via Rewarded Ad.
-  int get rewardedDaysCount => entitlement.rewardedDaysCount;
-
-  /// True when the user has unlocked the 40% Loyalty Discount (`89,99 ₺` / `$3.49`).
-  bool get isLoyaltyDiscountUnlocked => entitlement.isLoyaltyDiscountUnlocked;
-
-  /// Weighted overall completion percentage across all planned watch items (0..100).
-  int get overallCompletionPercent {
-    if (cueItems.isEmpty) return 0;
-    var totalMins = 0;
-    var watchedMins = 0;
-    for (final item in cueItems) {
-      totalMins += item.totalMinutes;
-      watchedMins += item.watchedMinutes.clamp(0, item.totalMinutes);
-    }
-    if (totalMins <= 0) return 0;
-    return ((watchedMins / totalMins) * 100).round().clamp(0, 100);
-  }
-
-  /// Total watched minutes across all planned items.
-  int get totalWatchedMinutes {
-    var sum = 0;
-    for (final item in cueItems) {
-      sum += item.watchedMinutes.clamp(0, item.totalMinutes);
-    }
-    return sum;
-  }
-
-  /// Total planned minutes across all planned items.
-  int get totalPlannedMinutes {
-    var sum = 0;
-    for (final item in cueItems) {
-      sum += item.totalMinutes;
-    }
-    return sum;
-  }
-
-  /// Number of completed watch plan items.
-  int get completedCount => cueItems.where((e) => e.isCompleted).length;
-
-  /// Returns the currently active or next upcoming incomplete WatchCueItem.
-  WatchCueItem? get primaryCueItem {
-    if (cueItems.isEmpty) return null;
-    if (activePlayingCueId != null) {
-      for (final item in cueItems) {
-        if (item.id == activePlayingCueId) return item;
-      }
-    }
-    for (final item in cueItems) {
-      if (!item.isCompleted) return item;
-    }
-    return cueItems.first;
-  }
-
-  CueDeckState copyWith({
-    int? activeTab,
-    TvDevice? selectedDevice,
-    List<TvDevice>? discoveredDevices,
-    bool? isScanning,
-    bool? isTouchpadMode,
-    TvKeyCommand? lastPressedDirection,
-    bool clearPressedDirection = false,
-    String? lastCommandStatus,
-    List<WatchCueItem>? cueItems,
-    List<StreamingPlatform>? remoteShortcuts,
-    bool? isDarkMode,
-    bool? isListeningVoice,
-    String? lastVoiceTranscript,
-    bool? isGoogleSignedIn,
-    String? googleUserEmail,
-    String? googleUserName,
-    String? lastBackupTimeFormatted,
-    bool? isAutoCloudBackupEnabled,
-    bool? isProcessingBackup,
-    String? activePlayingCueId,
-    bool clearActivePlayingCue = false,
-    WatchCueItem? activeReminderItem,
-    bool clearReminder = false,
-    CueEntitlementState? entitlement,
-    String? localWifiIp,
-    bool? localNetworkPermissionDenied,
-    bool? voicePermissionDenied,
-  }) {
-    return CueDeckState(
-      activeTab: activeTab ?? this.activeTab,
-      selectedDevice: selectedDevice ?? this.selectedDevice,
-      discoveredDevices: discoveredDevices ?? this.discoveredDevices,
-      isScanning: isScanning ?? this.isScanning,
-      isTouchpadMode: isTouchpadMode ?? this.isTouchpadMode,
-      lastPressedDirection: clearPressedDirection
-          ? null
-          : (lastPressedDirection ?? this.lastPressedDirection),
-      lastCommandStatus: lastCommandStatus ?? this.lastCommandStatus,
-      cueItems: cueItems ?? this.cueItems,
-      remoteShortcuts: remoteShortcuts ?? this.remoteShortcuts,
-      isDarkMode: isDarkMode ?? this.isDarkMode,
-      isListeningVoice: isListeningVoice ?? this.isListeningVoice,
-      lastVoiceTranscript: lastVoiceTranscript ?? this.lastVoiceTranscript,
-      isGoogleSignedIn: isGoogleSignedIn ?? this.isGoogleSignedIn,
-      googleUserEmail: googleUserEmail ?? this.googleUserEmail,
-      googleUserName: googleUserName ?? this.googleUserName,
-      lastBackupTimeFormatted:
-          lastBackupTimeFormatted ?? this.lastBackupTimeFormatted,
-      isAutoCloudBackupEnabled:
-          isAutoCloudBackupEnabled ?? this.isAutoCloudBackupEnabled,
-      isProcessingBackup: isProcessingBackup ?? this.isProcessingBackup,
-      activePlayingCueId: clearActivePlayingCue
-          ? null
-          : (activePlayingCueId ?? this.activePlayingCueId),
-      activeReminderItem: clearReminder
-          ? null
-          : (activeReminderItem ?? this.activeReminderItem),
-      entitlement: entitlement ?? this.entitlement,
-      localWifiIp: localWifiIp ?? this.localWifiIp,
-      localNetworkPermissionDenied:
-          localNetworkPermissionDenied ?? this.localNetworkPermissionDenied,
-      voicePermissionDenied:
-          voicePermissionDenied ?? this.voicePermissionDenied,
-    );
-  }
-}
 
 final adbTvServiceProvider = Provider<AdbTvService>((ref) {
   final service = AdbTvService();
@@ -222,6 +62,14 @@ final cueMonetizationServiceProvider = Provider<CueMonetizationService>((ref) {
   return CueMonetizationService();
 });
 
+final cueShareIntentServiceProvider = Provider<CueShareIntentService>((ref) {
+  return CueShareIntentService();
+});
+
+final cueReleaseNotesServiceProvider = Provider<CueReleaseNotesService>((ref) {
+  return const CueReleaseNotesService();
+});
+
 final cueDeckProvider = NotifierProvider<CueDeckNotifier, CueDeckState>(
   CueDeckNotifier.new,
 );
@@ -231,6 +79,13 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Timer? _highlightResetTimer;
   Timer? _autoBackupDebounceTimer;
   Timer? _initialRetryTimer;
+  Timer? _mouseMoveBatchTimer;
+  Timer? _mouseWheelBatchTimer;
+  double _pendingMouseDx = 0;
+  double _pendingMouseDy = 0;
+  double _pendingWheelDeltaY = 0;
+  bool _isSendingMouseMove = false;
+  bool _isSendingWheelScroll = false;
 
   @override
   CueDeckState build() {
@@ -239,10 +94,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       _highlightResetTimer?.cancel();
       _autoBackupDebounceTimer?.cancel();
       _initialRetryTimer?.cancel();
+      _mouseMoveBatchTimer?.cancel();
+      _mouseWheelBatchTimer?.cancel();
     });
 
     final now = DateTime.now();
-
     final defaultCues = <WatchCueItem>[
       WatchCueItem(
         id: 'cue_yt_playlist_1',
@@ -325,18 +181,42 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   Future<void> _initializeAsync() async {
     await _loadPersistedState();
-    final loadedEntitlement =
-        await ref.read(cueMonetizationServiceProvider).loadEntitlement();
-    state = state.copyWith(entitlement: loadedEntitlement);
     await ref.read(cueNotificationServiceProvider).requestPermission();
     await _syncNativeNotifications();
+
+    final loadedEntitlement =
+        await ref.read(cueMonetizationServiceProvider).loadEntitlement();
+    final hasIr =
+        await ref.read(adbTvServiceProvider).hasIrBlasterHardware();
+    state = state.copyWith(
+      entitlement: loadedEntitlement,
+      hasIrEmitter: hasIr,
+    );
+
+    final shareSvc = ref.read(cueShareIntentServiceProvider);
+    shareSvc.listenForIncomingShares((SharedCuePayload payload) {
+      state = state.copyWith(
+        pendingSharedPayload: payload,
+        lastCommandStatus: '📲 Paylaşılan içerik hazır: ${payload.title}',
+      );
+    });
+    final initialShare = await shareSvc.consumeInitialSharedPayload();
+    if (initialShare != null) {
+      state = state.copyWith(
+        pendingSharedPayload: initialShare,
+        lastCommandStatus: '📲 Paylaşılan içerik hazır: ${initialShare.title}',
+      );
+    }
+
     await refreshGoogleDriveStatus();
     _startScheduleMonitor();
     await scanNetworkForTvs();
-    if (!state.selectedDevice.isOnline) {
+    if (!state.selectedDevice.isOnline && !state.selectedDevice.isIrBlaster) {
       _initialRetryTimer?.cancel();
       _initialRetryTimer = Timer(const Duration(seconds: 4), () {
-        if (!state.selectedDevice.isOnline && !state.isScanning) {
+        if (!state.selectedDevice.isOnline &&
+            !state.selectedDevice.isIrBlaster &&
+            !state.isScanning) {
           scanNetworkForTvs();
         }
       });
@@ -398,15 +278,19 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           final decoded = jsonDecode(savedDeviceRaw);
           if (decoded is Map<String, dynamic>) {
             final parsed = TvDevice.fromJson(decoded);
-            if (parsed.hasValidIp) {
+            if (parsed.hasControlTarget) {
               if (parsed.isPaired &&
                   parsed.protocol == TvConnectionProtocol.remotePort6466) {
                 ref.read(adbTvServiceProvider).markPinPairedIp(parsed.ip);
               }
-              loadedDevice = parsed.copyWith(isOnline: false);
+              loadedDevice = parsed.isIrBlaster
+                  ? parsed.copyWith(isOnline: true, isPaired: true)
+                  : parsed.copyWith(isOnline: false);
             }
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('CueDeckNotifier parse saved device err: $e');
+        }
       }
 
       List<WatchCueItem>? loadedItems;
@@ -433,15 +317,15 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             : state.cueItems,
         remoteShortcuts: loadedShortcuts ?? state.remoteShortcuts,
       );
-    } catch (_) {
-      // Ignore storage read issues in headless test environments
+    } catch (e) {
+      debugPrint('CueDeckNotifier loadPersistedState skipped: $e');
     }
   }
 
   Future<void> _persistState({bool triggerAutoBackup = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (state.selectedDevice.hasValidIp) {
+      if (state.selectedDevice.hasControlTarget) {
         await prefs.setString(
           _kPrefsTvDeviceV2Key,
           jsonEncode(state.selectedDevice.toJson()),
@@ -458,8 +342,8 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         state.cueItems.map((e) => e.toJson()).toList(),
       );
       await prefs.setString(_kPrefsCueItemsKey, encoded);
-    } catch (_) {
-      // Ignore persistence errors during tests
+    } catch (e) {
+      debugPrint('CueDeckNotifier persistState skipped: $e');
     }
     unawaited(_syncNativeNotifications());
     if (triggerAutoBackup) {
@@ -483,7 +367,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   // GOOGLE DRIVE & LOCAL BACKUP / RESTORE / MULTI-DEVICE SYNC ACTIONS
   // ===========================================================================
 
-  /// Refreshes Google Drive OAuth2 sign-in state, profile info, and last backup timestamp.
   Future<void> refreshGoogleDriveStatus() async {
     try {
       final backupService = ref.read(googleDriveBackupServiceProvider);
@@ -500,10 +383,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         lastBackupTimeFormatted: lastTime,
         isAutoCloudBackupEnabled: autoEnabled,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('CueDeckNotifier refreshGoogleDriveStatus skipped: $e');
+    }
   }
 
-  /// Signs out from Google Drive and clears encrypted tokens.
   Future<BackupOperationResult> signOutGoogleDrive() async {
     _autoBackupDebounceTimer?.cancel();
     final backupService = ref.read(googleDriveBackupServiceProvider);
@@ -520,7 +404,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     );
   }
 
-  /// Toggles automatic background cloud backup; triggers an immediate backup when enabled.
   Future<void> toggleAutoCloudBackup(bool enabled) async {
     final backupService = ref.read(googleDriveBackupServiceProvider);
     await backupService.setAutoBackupEnabled(enabled);
@@ -535,7 +418,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
-  /// Immediately backs up all watch plans and settings to Google Drive (`appDataFolder`).
   Future<BackupOperationResult> backupNowToCloud({bool silent = false}) async {
     if (state.isProcessingBackup) {
       return const BackupOperationResult(
@@ -568,13 +450,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return result;
   }
 
-  /// Returns the list of available cloud and local backup snapshots.
   Future<List<CloudBackupInfo>> fetchAvailableBackups() async {
     final backupService = ref.read(googleDriveBackupServiceProvider);
     return backupService.listCloudBackups();
   }
 
-  /// Downloads and restores watch plans & settings from a specific cloud/local backup.
   Future<BackupOperationResult> restoreFromBackup({String? fileId}) async {
     if (state.isProcessingBackup) {
       return const BackupOperationResult(
@@ -603,9 +483,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         activePlayingCueId:
             parsed.items.isNotEmpty ? parsed.items.first.id : null,
         isDarkMode: restoredDark ?? state.isDarkMode,
-        selectedDevice: (restoredIp != null && AdbTvService.isValidIp(restoredIp))
-            ? state.selectedDevice.copyWith(ip: restoredIp)
-            : state.selectedDevice,
+        selectedDevice:
+            (restoredIp != null && TvNetworkValidators.isValidIp(restoredIp))
+                ? state.selectedDevice.copyWith(ip: restoredIp)
+                : state.selectedDevice,
         lastCommandStatus:
             '✓ ${parsed.items.length} izleme planı başarıyla geri yüklendi',
       );
@@ -630,7 +511,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
-  /// Synchronizes and merges local watch plans with the latest Google Drive backup.
   Future<BackupOperationResult> syncDevicesWithCloud() async {
     if (state.isProcessingBackup) {
       return const BackupOperationResult(
@@ -671,7 +551,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Exports a `.json` backup file to device storage via Android SAF.
   Future<BackupOperationResult> exportLocalBackupFile() async {
     state = state.copyWith(
       isProcessingBackup: true,
@@ -691,7 +570,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Imports and restores a `.json` backup file selected via Android SAF.
   Future<BackupOperationResult> importLocalBackupFile() async {
     state = state.copyWith(
       isProcessingBackup: true,
@@ -709,9 +587,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             ? res.restoredItems!.first.id
             : null,
         isDarkMode: restoredDark ?? state.isDarkMode,
-        selectedDevice: (restoredIp != null && AdbTvService.isValidIp(restoredIp))
-            ? state.selectedDevice.copyWith(ip: restoredIp)
-            : state.selectedDevice,
+        selectedDevice:
+            (restoredIp != null && TvNetworkValidators.isValidIp(restoredIp))
+                ? state.selectedDevice.copyWith(ip: restoredIp)
+                : state.selectedDevice,
         lastCommandStatus: res.message,
       );
       await _persistState();
@@ -750,7 +629,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     _persistState();
   }
 
-  /// Replaces the streaming app assigned to slot [slotIndex] (0..5) on the G10 remote.
   void updateRemoteShortcutSlot(int slotIndex, StreamingPlatform platform) {
     if (slotIndex < 0 || slotIndex >= 6) return;
     final current = List<StreamingPlatform>.from(
@@ -767,7 +645,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     _persistState(triggerAutoBackup: false);
   }
 
-  /// Restores the G10 remote's 6 app shortcut slots to the default lineup.
   void resetRemoteShortcutsToDefault() {
     state = state.copyWith(
       remoteShortcuts: StreamingPlatform.defaultRemoteShortcuts,
@@ -782,17 +659,120 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   void toggleTouchpadMode() {
+    final nextMode = !state.isTouchpadMode;
     state = state.copyWith(
-      isTouchpadMode: !state.isTouchpadMode,
-      lastCommandStatus: !state.isTouchpadMode
-          ? 'Dokunmatik Kaydırma (Touchpad) modu aktif'
+      isTouchpadMode: nextMode,
+      lastCommandStatus: nextMode
+          ? '🖱️ TV Mouse Oku & Touchpad modu aktif'
           : 'Klasik D-Pad Kadran modu aktif',
+    );
+    final device = state.selectedDevice;
+    if (device.hasValidIp) {
+      final service = ref.read(adbTvServiceProvider);
+      if (nextMode) {
+        unawaited(service.enableTvMouseCursor(device));
+      } else {
+        unawaited(service.disableTvMouseCursor(device));
+      }
+    }
+  }
+
+  void moveTouchpadCursor(double dx, double dy) {
+    _pendingMouseDx += dx;
+    _pendingMouseDy += dy;
+    if (_mouseMoveBatchTimer?.isActive ?? false) return;
+    _mouseMoveBatchTimer = Timer(
+      const Duration(milliseconds: 42),
+      _flushPendingMouseMove,
+    );
+  }
+
+  Future<void> _flushPendingMouseMove() async {
+    if (_isSendingMouseMove) return;
+    final dx = _pendingMouseDx;
+    final dy = _pendingMouseDy;
+    if (dx.abs() < 0.8 && dy.abs() < 0.8) return;
+    _pendingMouseDx = 0;
+    _pendingMouseDy = 0;
+
+    final device = state.selectedDevice;
+    if (!device.hasControlTarget) return;
+    _isSendingMouseMove = true;
+    try {
+      await ref.read(adbTvServiceProvider).moveTvMouseCursor(device, dx, dy);
+    } finally {
+      _isSendingMouseMove = false;
+      if (_pendingMouseDx.abs() >= 1.5 || _pendingMouseDy.abs() >= 1.5) {
+        unawaited(_flushPendingMouseMove());
+      }
+    }
+  }
+
+  Future<void> clickTouchpadCursor({bool rightClick = false}) async {
+    final device = state.selectedDevice;
+    final ok = await ref
+        .read(adbTvServiceProvider)
+        .clickTvMouseCursor(device, rightClick: rightClick);
+    state = state.copyWith(
+      selectedDevice: device.copyWith(isOnline: ok),
+      lastCommandStatus: rightClick
+          ? '🖱️ TV Sağ Tık (Geri) gönderildi'
+          : '🖱️ TV Mouse Sol Tık (Seç) gönderildi',
+    );
+  }
+
+  void scrollTouchpadWheelByDelta(double deltaY) {
+    _pendingWheelDeltaY += deltaY;
+    if (_mouseWheelBatchTimer?.isActive ?? false) return;
+    _mouseWheelBatchTimer = Timer(
+      const Duration(milliseconds: 48),
+      _flushPendingWheelScroll,
+    );
+  }
+
+  Future<void> _flushPendingWheelScroll() async {
+    if (_isSendingWheelScroll) return;
+    const double pixelsPerNotch = 16.0;
+    if (_pendingWheelDeltaY.abs() < pixelsPerNotch) return;
+
+    final int notches = (_pendingWheelDeltaY / pixelsPerNotch).truncate();
+    if (notches == 0) return;
+    _pendingWheelDeltaY -= notches * pixelsPerNotch;
+
+    final int wheelClicks = (-notches).clamp(-6, 6);
+    final device = state.selectedDevice;
+    if (!device.hasControlTarget) return;
+
+    _isSendingWheelScroll = true;
+    try {
+      await ref
+          .read(adbTvServiceProvider)
+          .scrollTvMouseWheel(device, wheelClicks);
+    } finally {
+      _isSendingWheelScroll = false;
+      if (_pendingWheelDeltaY.abs() >= pixelsPerNotch) {
+        unawaited(_flushPendingWheelScroll());
+      }
+    }
+  }
+
+  Future<void> scrollTouchpadWheelSteps(int wheelClicks) async {
+    if (wheelClicks == 0) return;
+    final device = state.selectedDevice;
+    final ok = await ref
+        .read(adbTvServiceProvider)
+        .scrollTvMouseWheel(device, wheelClicks);
+    state = state.copyWith(
+      selectedDevice: device.copyWith(isOnline: ok),
+      lastCommandStatus: wheelClicks > 0
+          ? '🖱️ Mouse Tekerlek Yukarı kaydırıldı'
+          : '🖱️ Mouse Tekerlek Aşağı kaydırıldı',
     );
   }
 
   Future<void> scanNetworkForTvs({String? customIp}) async {
     final cleanCustom = customIp?.trim() ?? '';
-    final hasCustomIp = AdbTvService.isValidIp(cleanCustom);
+    final hasCustomIp = TvNetworkValidators.isValidIp(cleanCustom);
     final targetIp = hasCustomIp
         ? cleanCustom
         : (state.selectedDevice.hasValidIp ? state.selectedDevice.ip : '');
@@ -827,21 +807,26 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         boardInfo: 'Ağda yanıt alınamadı • TV\'nin açık olduğundan emin olun',
         isOnline: false,
       );
-    } else if (state.selectedDevice.hasValidIp) {
-      selected = state.selectedDevice.copyWith(isOnline: false);
+    } else if (state.selectedDevice.hasControlTarget) {
+      selected = state.selectedDevice.isIrBlaster
+          ? state.selectedDevice
+          : state.selectedDevice.copyWith(isOnline: false);
     } else {
       selected = TvDevice.unconfigured;
     }
 
-    final statusMessage = selected.isOnline
-        ? 'Bağlandı: ${selected.name} (${selected.ip}:${selected.port})'
-        : (service.localNetworkPermissionDenied
-              ? '⚠️ iPhone "Yerel Ağ" izni kapalı! Ayarlar > CueDeck > Yerel Ağ iznini açın.'
-              : (service.lastConnectRequiredPairingPrompt && selected.hasValidIp
-                    ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
-                    : (devices.isEmpty
-                          ? 'Ağda açık TV bulunamadı — TV\'nin aynı Wi-Fi ağında olduğundan emin olun'
-                          : '${devices.length} TV bulundu — bağlanmak için listeden seçin')));
+    final statusMessage = selected.isIrBlaster
+        ? '📡 Kızılötesi (IR) Aktif: ${selected.name}'
+        : (selected.isOnline
+              ? 'Bağlandı: ${selected.name} (${selected.ip}:${selected.port})'
+              : (service.localNetworkPermissionDenied
+                    ? '⚠️ iPhone "Yerel Ağ" izni kapalı! Ayarlar > CueDeck > Yerel Ağ iznini açın.'
+                    : (service.lastConnectRequiredPairingPrompt &&
+                              selected.hasValidIp
+                          ? '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin (${selected.ip})'
+                          : (devices.isEmpty
+                                ? 'Ağda açık TV bulunamadı — TV\'nin aynı Wi-Fi ağında olduğundan emin olun'
+                                : '${devices.length} TV bulundu — bağlanmak için listeden seçin'))));
 
     state = state.copyWith(
       isScanning: false,
@@ -854,7 +839,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     await _persistState(triggerAutoBackup: false);
   }
 
-  /// Resets the currently selected TV so the user can switch to a different TV cleanly.
   void disconnectCurrentTv() {
     state = state.copyWith(
       selectedDevice: TvDevice.unconfigured,
@@ -864,8 +848,42 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     unawaited(_persistState(triggerAutoBackup: false));
   }
 
-  /// Selects a discovered [device] and connects/pairs with it.
+  /// Activates a zero-Wi-Fi Infrared Blaster profile for [brandCode].
+  Future<void> activateIrBlasterBrand(String brandCode) async {
+    final service = ref.read(adbTvServiceProvider);
+    final irDevice = await service.pairIrBlasterDevice(brandCode);
+    state = state.copyWith(
+      selectedDevice: irDevice,
+      lastCommandStatus: '📡 Kızılötesi Modu Aktif: ${irDevice.name}',
+    );
+    await _persistState(triggerAutoBackup: false);
+  }
+
+  /// Sends a Wake-on-LAN UDP magic packet to the selected TV's MAC address.
+  Future<bool> wakeUpSelectedTv() async {
+    final device = state.selectedDevice;
+    final ok = await ref.read(adbTvServiceProvider).wakeUpTv(device);
+    state = state.copyWith(
+      lastCommandStatus: ok
+          ? '⚡ TV uyandırma (Wake-on-LAN) paketi gönderildi'
+          : '⚠️ TV uyandırma için geçerli MAC adresi bulunamadı',
+    );
+    return ok;
+  }
+
+  /// Generates a full diagnostic report for the currently selected TV.
+  Future<String> generateConnectionDiagnosticReport() {
+    return ref.read(adbTvServiceProvider).buildConnectionDiagnosticReport(
+          state.selectedDevice,
+          appVersion: CueReleaseNotesCatalog.currentVersion,
+        );
+  }
+
   Future<bool> connectAndPairDevice(TvDevice device) async {
+    if (device.isIrBlaster) {
+      await activateIrBlasterBrand(device.irBrandCode);
+      return true;
+    }
     if (!device.hasValidIp) return false;
     state = state.copyWith(
       isScanning: true,
@@ -874,11 +892,31 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           '🔌 Bağlanılıyor: ${device.name} (${device.ip}:${device.port})...',
     );
 
-    if (device.protocol.isNonAndroidSmartTv) {
-      final smartConnected = device.copyWith(
-        isOnline: true,
-        isPaired: true,
+    final service = ref.read(adbTvServiceProvider);
+
+    // Interactive handshake for Samsung Tizen (8002 token), LG webOS (client-key), Sony IRCC
+    if (device.protocol == TvConnectionProtocol.samsungTizen8001 ||
+        device.protocol == TvConnectionProtocol.lgWebOs3000 ||
+        device.protocol == TvConnectionProtocol.sonyBraviaIrcc) {
+      final pairedSmart = await service.pairWithTv(device);
+      final updatedList = <TvDevice>[
+        pairedSmart,
+        ...state.discoveredDevices.where((d) => d.ip != pairedSmart.ip),
+      ];
+      state = state.copyWith(
+        isScanning: false,
+        selectedDevice: pairedSmart,
+        discoveredDevices: updatedList,
+        lastCommandStatus: pairedSmart.isOnline
+            ? '✓ Eşleşti ve Bağlandı: ${pairedSmart.name} (${pairedSmart.ip}:${pairedSmart.port})'
+            : '⚠️ ${pairedSmart.boardInfo}',
       );
+      await _persistState(triggerAutoBackup: false);
+      return pairedSmart.isOnline;
+    }
+
+    if (device.protocol.isNonAndroidSmartTv) {
+      final smartConnected = device.copyWith(isOnline: true, isPaired: true);
       final updatedList = <TvDevice>[
         smartConnected,
         ...state.discoveredDevices.where((d) => d.ip != smartConnected.ip),
@@ -894,7 +932,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return true;
     }
 
-    final service = ref.read(adbTvServiceProvider);
     if (device.protocol == TvConnectionProtocol.remotePort6466 &&
         device.port == 6466) {
       if (device.isPaired) {
@@ -911,14 +948,13 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           isScanning: false,
           selectedDevice: updatedDevice,
           discoveredDevices: updatedList,
-          lastCommandStatus: '✓ Bağlandı: ${updatedDevice.name} (${updatedDevice.ip}:6466)',
+          lastCommandStatus:
+              '✓ Bağlandı: ${updatedDevice.name} (${updatedDevice.ip}:6466)',
         );
         await _persistState(triggerAutoBackup: false);
         return true;
       }
 
-      // Check if ADB 5555 is also open on this TV for direct zero-PIN control,
-      // otherwise select it ready for Port 6466/6467 PIN pairing.
       final session = await service.startPin6467PairingSession(device);
       final adbOpen = session['adb5555Open'] == true;
       if (adbOpen) {
@@ -946,9 +982,8 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
       final pinShown =
           session['pinDisplayed'] == true || session['pinTriggered'] == true;
-      final isAlreadyPaired = device.isPaired;
       final updatedDevice = device.copyWith(
-        isOnline: isAlreadyPaired,
+        isOnline: device.isPaired,
         boardInfo: pinShown
             ? 'TV ekranında 6 haneli PIN gösteriliyor • PIN girin'
             : device.boardInfo,
@@ -987,15 +1022,13 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return pairedDevice.isOnline;
   }
 
-  /// Opens the iOS system Settings page for CueDeck so the user can enable "Yerel Ağ" (Local Network).
   Future<void> openIosLocalNetworkSettings() async {
-    final service = ref.read(adbTvServiceProvider);
-    await service.openIosLocalNetworkSettings();
+    await ref.read(adbTvServiceProvider).openIosLocalNetworkSettings();
   }
 
   String _resolveTargetTvIp(String? customIp) {
     final cleanCustom = customIp?.trim() ?? '';
-    if (AdbTvService.isValidIp(cleanCustom)) return cleanCustom;
+    if (TvNetworkValidators.isValidIp(cleanCustom)) return cleanCustom;
     if (state.selectedDevice.hasValidIp) return state.selectedDevice.ip;
     for (final d in state.discoveredDevices) {
       if (d.hasValidIp) return d.ip;
@@ -1003,9 +1036,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return '';
   }
 
-  /// Initiates an interactive 18-second ADB RSA-2048 pairing handshake with the
-  /// selected (or [customIp]) Android TV so the user can accept the on-screen
-  /// debugging prompt on Sony, TCL, Xiaomi, Philips, Samsung, LG, or Google TV sets.
   Future<bool> pairWithSelectedTv({String? customIp}) async {
     final targetIp = _resolveTargetTvIp(customIp);
     if (targetIp.isEmpty) {
@@ -1033,9 +1063,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           '🔐 TV ekranındaki "Hata ayıklamaya izin ver" onayını kabul edin ($targetIp)...',
     );
 
-    final service = ref.read(adbTvServiceProvider);
-    final pairedDevice = await service.pairWithTv(candidate);
-
+    final pairedDevice = await ref.read(adbTvServiceProvider).pairWithTv(candidate);
     final updatedList = <TvDevice>[
       pairedDevice,
       ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
@@ -1053,8 +1081,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return pairedDevice.isOnline;
   }
 
-  /// Starts a TLS Port 6467 PIN pairing session so the TV displays a 6-character
-  /// PIN code on screen immediately when the user opens the PIN Pairing sheet.
   Future<Map<String, dynamic>> startPin6467Pairing({
     String? customIp,
     bool forceRestart = false,
@@ -1080,11 +1106,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             isOnline: false,
           );
 
-    final service = ref.read(adbTvServiceProvider);
-    final res = await service.startPin6467PairingSession(
-      candidate,
-      forceRestart: forceRestart,
-    );
+    final res = await ref.read(adbTvServiceProvider).startPin6467PairingSession(
+          candidate,
+          forceRestart: forceRestart,
+        );
     final msg = (res['message'] as String?) ?? '';
     if (msg.isNotEmpty) {
       state = state.copyWith(lastCommandStatus: msg);
@@ -1092,8 +1117,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Pairs with a standard retail Android TV / Google TV over Port 6466/6467
-  /// using the 6-character PIN displayed on the TV screen (Zero-Config mode).
   Future<bool> pairWithSelectedTvPin6466(
     String sixDigitPin, {
     String? customIp,
@@ -1121,13 +1144,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     state = state.copyWith(
       isScanning: true,
       selectedDevice: candidate,
-      lastCommandStatus:
-          '🔢 TV PIN kodu doğrulanıyor ($targetIp)...',
+      lastCommandStatus: '🔢 TV PIN kodu doğrulanıyor ($targetIp)...',
     );
 
-    final service = ref.read(adbTvServiceProvider);
-    final pairedDevice = await service.pairWithPin6466(candidate, sixDigitPin);
-
+    final pairedDevice = await ref
+        .read(adbTvServiceProvider)
+        .pairWithPin6466(candidate, sixDigitPin);
     final updatedList = <TvDevice>[
       pairedDevice,
       ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
@@ -1147,20 +1169,129 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   // ===========================================================================
-  // MONETIZATION: LIFETIME PRO IAP, 24H REWARDED PRO PASS & 40% LOYALTY DISCOUNT
+  // SHARE-TO-TV BEAM & SCHEDULE (PHASE 2)
   // ===========================================================================
 
-  /// Unlocks a 24-hour "CueDeck Pro Pass" via a real Google AdMob Rewarded Video Ad
-  /// (`RewardedAd.show` -> `onUserEarnedReward`) and increments the user's distinct-day
-  /// loyalty counter toward the 40% discount.
+  void clearPendingSharedPayload() {
+    state = state.copyWith(clearPendingSharedPayload: true);
+  }
+
+  Future<bool> importClipboardAsSharedPayload() async {
+    final payload = await ref
+        .read(cueShareIntentServiceProvider)
+        .readClipboardAsSharePayload();
+    if (payload == null) {
+      state = state.copyWith(
+        lastCommandStatus:
+            '📋 Panoda geçerli YouTube veya video bağlantısı bulunamadı',
+      );
+      return false;
+    }
+    state = state.copyWith(
+      pendingSharedPayload: payload,
+      lastCommandStatus: '📲 Panodaki bağlantı hazır: ${payload.title}',
+    );
+    return true;
+  }
+
+  Future<({bool beamed, bool needsPaywall})> beamSharedPayloadNow(
+    SharedCuePayload payload,
+  ) async {
+    final quotaRes = await ref
+        .read(cueMonetizationServiceProvider)
+        .consumeDailyBeamQuota(current: state.entitlement);
+    if (!quotaRes.success) {
+      state = state.copyWith(
+        entitlement: quotaRes.entitlement,
+        shouldPromptPaywall: true,
+        lastCommandStatus: quotaRes.message,
+      );
+      return (beamed: false, needsPaywall: true);
+    }
+
+    final ok = await ref.read(adbTvServiceProvider).launchPlatformOrDeepLink(
+          state.selectedDevice,
+          platform: payload.platform,
+          deepLinkUrl: payload.url,
+          fallbackSearchQuery: payload.title,
+        );
+    state = state.copyWith(
+      entitlement: quotaRes.entitlement,
+      clearPendingSharedPayload: true,
+      selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
+      lastCommandStatus: ok
+          ? '🔥 TV\'ye Işınlandı: ${payload.title}'
+          : '⚡ TV başlatma komutu gönderildi: ${payload.title}',
+    );
+    return (beamed: true, needsPaywall: false);
+  }
+
+  bool scheduleSharedPayload(
+    SharedCuePayload payload, {
+    required int hour,
+    required int minute,
+  }) {
+    if (!canAddMoreWatchPlans) {
+      state = state.copyWith(
+        shouldPromptPaywall: true,
+        lastCommandStatus:
+            '⚡ Ücretsiz sürümde en fazla ${CueProProductCatalog.maxFreeWatchPlans} izleme planı eklenebilir.',
+      );
+      return false;
+    }
+    final now = DateTime.now();
+    final scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+    final item = WatchCueItem(
+      id: 'cue_share_${now.millisecondsSinceEpoch}',
+      title: payload.title,
+      subtitle: '${payload.platform.label} • Paylaşımdan Planlandı',
+      platform: payload.platform,
+      scheduledTime: scheduled,
+      totalMinutes: 45,
+      sessionMinutes: 45,
+      deepLinkUrl: payload.url,
+      recurrence: WatchRecurrence.once,
+    );
+    addWatchCue(item);
+    clearPendingSharedPayload();
+    return true;
+  }
+
+  // ===========================================================================
+  // MONETIZATION: 3-TIER PAYWALL, 24H REWARDED PRO PASS & LOYALTY DISCOUNT
+  // ===========================================================================
+
+  static const Set<String> _seededDemoCueIds = <String>{
+    'cue_yt_playlist_1',
+    'cue_bein_2',
+    'cue_tabii_3',
+    'cue_netflix_4',
+  };
+
+  int get customWatchPlanCount => state.cueItems
+      .where((item) => !_seededDemoCueIds.contains(item.id))
+      .length;
+
+  bool get canAddMoreWatchPlans =>
+      state.hasProAccess ||
+      customWatchPlanCount < CueProProductCatalog.maxFreeWatchPlans;
+
+  void triggerPaywallPrompt() {
+    state = state.copyWith(shouldPromptPaywall: true);
+  }
+
+  void dismissPaywallPrompt() {
+    if (state.shouldPromptPaywall) {
+      state = state.copyWith(shouldPromptPaywall: false);
+    }
+  }
+
   Future<MonetizationActionResult> unlockProPassWithRewardedAd({
     DateTime? now,
   }) async {
-    final service = ref.read(cueMonetizationServiceProvider);
-    final res = await service.watchRewardedAdAndUnlockProPass(
-      current: state.entitlement,
-      now: now,
-    );
+    final res = await ref
+        .read(cueMonetizationServiceProvider)
+        .watchRewardedAdAndUnlockProPass(current: state.entitlement, now: now);
     state = state.copyWith(
       entitlement: res.entitlement,
       lastCommandStatus: res.message,
@@ -1168,13 +1299,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Resets the current 24h Pro Pass / Pro state back to the Free Ad-Supported state
-  /// so the user can test Banner & Rewarded Video Ads anytime without waiting 24 hours.
   Future<MonetizationActionResult> resetProPassToFree() async {
-    final service = ref.read(cueMonetizationServiceProvider);
-    final res = await service.resetEntitlementToFree(
-      current: state.entitlement,
-    );
+    final res = await ref
+        .read(cueMonetizationServiceProvider)
+        .resetEntitlementToFree(current: state.entitlement);
     state = state.copyWith(
       entitlement: res.entitlement,
       lastCommandStatus: res.message,
@@ -1182,13 +1310,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Completes the one-time Lifetime Pro purchase (`cuedeck_pro_lifetime` or `cuedeck_pro_loyalty_40`).
   Future<MonetizationActionResult> purchaseLifetimePro({DateTime? now}) async {
-    final service = ref.read(cueMonetizationServiceProvider);
-    final res = await service.purchaseLifetimePro(
-      current: state.entitlement,
-      now: now,
-    );
+    final res = await ref
+        .read(cueMonetizationServiceProvider)
+        .purchaseLifetimePro(current: state.entitlement, now: now);
     state = state.copyWith(
       entitlement: res.entitlement,
       lastCommandStatus: res.message,
@@ -1196,10 +1321,25 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return res;
   }
 
-  /// Restores any previously purchased Lifetime Pro entitlement.
+  Future<MonetizationActionResult> purchasePlan(
+    CuePlanTier tier, {
+    DateTime? now,
+  }) async {
+    final res = await ref
+        .read(cueMonetizationServiceProvider)
+        .purchasePlanTier(tier, current: state.entitlement, now: now);
+    state = state.copyWith(
+      entitlement: res.entitlement,
+      shouldPromptPaywall: false,
+      lastCommandStatus: res.message,
+    );
+    return res;
+  }
+
   Future<MonetizationActionResult> restoreProPurchases() async {
-    final service = ref.read(cueMonetizationServiceProvider);
-    final res = await service.restorePurchases(current: state.entitlement);
+    final res = await ref
+        .read(cueMonetizationServiceProvider)
+        .restorePurchases(current: state.entitlement);
     state = state.copyWith(
       entitlement: res.entitlement,
       lastCommandStatus: res.message,
@@ -1210,10 +1350,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   void selectDevice(TvDevice device) {
     state = state.copyWith(
       selectedDevice: device,
-      lastCommandStatus: 'Aktif TV: ${device.name} (${device.ip})',
+      lastCommandStatus: 'Aktif TV: ${device.name} (${device.displayEndpoint})',
     );
     _persistState();
-    if (!device.isOnline && !state.isScanning) {
+    if (!device.isOnline && !device.isIrBlaster && !state.isScanning) {
       unawaited(scanNetworkForTvs(customIp: device.ip));
     }
   }
@@ -1228,19 +1368,19 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       state = state.copyWith(clearPressedDirection: true);
     });
 
-    final service = ref.read(adbTvServiceProvider);
-    final ok = await service.sendKeyCommand(state.selectedDevice, command);
+    final ok = await ref
+        .read(adbTvServiceProvider)
+        .sendKeyCommand(state.selectedDevice, command);
     state = state.copyWith(
-      selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
+      selectedDevice: state.selectedDevice.isIrBlaster
+          ? state.selectedDevice
+          : state.selectedDevice.copyWith(isOnline: ok),
       lastCommandStatus: ok
-          ? '✓ TV: ${command.label} (${state.selectedDevice.ip})'
+          ? '✓ TV: ${command.label} (${state.selectedDevice.displayEndpoint})'
           : '⚡ Komut kuyruğa alındı: ${command.label}',
     );
   }
 
-  /// Listens to the phone's microphone via native speech recognizer and executes
-  /// the spoken command or YouTube search directly on the TV.
-  /// Returns `true` when a spoken transcript was recognized and executed.
   Future<bool> startVoiceCommandSession() async {
     if (state.isListeningVoice) return false;
     state = state.copyWith(
@@ -1273,19 +1413,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return true;
   }
 
-  /// Finalizes an active voice recording session on the phone so any spoken words
-  /// are processed immediately without waiting for the silence timer.
   Future<void> stopVoiceCommandSession() async {
     if (!state.isListeningVoice) return;
-    final service = ref.read(adbTvServiceProvider);
-    await service.stopPhoneMicrophone();
+    await ref.read(adbTvServiceProvider).stopPhoneMicrophone();
   }
 
-  /// Cancels an active voice recording session immediately (e.g., when closing the sheet).
   Future<void> cancelVoiceCommandSession() async {
     if (!state.isListeningVoice) return;
-    final service = ref.read(adbTvServiceProvider);
-    await service.cancelPhoneMicrophone();
+    await ref.read(adbTvServiceProvider).cancelPhoneMicrophone();
     if (state.isListeningVoice) {
       state = state.copyWith(
         isListeningVoice: false,
@@ -1294,7 +1429,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
-  /// Executes a spoken or preset voice transcript on the TV.
   Future<void> runVoiceTranscript(String transcript) async {
     final cleaned = transcript.trim();
     if (cleaned.isEmpty) return;
@@ -1304,34 +1438,35 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       lastCommandStatus: '🎙️ İşleniyor: "$cleaned"...',
     );
 
-    final service = ref.read(adbTvServiceProvider);
-    final statusMsg = await service.executeVoiceCommand(
-      state.selectedDevice,
-      cleaned,
-    );
+    final statusMsg = await ref
+        .read(adbTvServiceProvider)
+        .executeVoiceCommand(state.selectedDevice, cleaned);
 
     state = state.copyWith(
-      selectedDevice: state.selectedDevice.copyWith(
-        isOnline: statusMsg.startsWith('🎙️'),
-      ),
+      selectedDevice: state.selectedDevice.isIrBlaster
+          ? state.selectedDevice
+          : state.selectedDevice.copyWith(
+              isOnline: statusMsg.startsWith('🎙️'),
+            ),
       lastCommandStatus: statusMsg,
     );
   }
 
-  /// Triggers the TV's native Google Assistant / Voice Search overlay (`KEYCODE_VOICE_ASSIST`).
-  Future<void> triggerTvNativeVoiceAssistant() async {
-    await sendRemoteKey(TvKeyCommand.voiceAssist);
-  }
+  Future<void> triggerTvNativeVoiceAssistant() =>
+      sendRemoteKey(TvKeyCommand.voiceAssist);
 
-  Future<void> launchPlatformApp(StreamingPlatform platform) async {
+  Future<void> launchPlatformApp(
+    StreamingPlatform platform, {
+    String? deepLinkUrl,
+  }) async {
     state = state.copyWith(
       lastCommandStatus: '${platform.label} TV ekranında açılıyor...',
     );
-    final service = ref.read(adbTvServiceProvider);
-    final ok = await service.launchPlatformOrDeepLink(
-      state.selectedDevice,
-      platform: platform,
-    );
+    final ok = await ref.read(adbTvServiceProvider).launchPlatformOrDeepLink(
+          state.selectedDevice,
+          platform: platform,
+          deepLinkUrl: deepLinkUrl ?? '',
+        );
     state = state.copyWith(
       selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
       lastCommandStatus: ok
@@ -1340,8 +1475,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     );
   }
 
-  /// Launches a planned watch item directly on the TV (with deep-link URL if set)
-  /// and activates its live checkpoint tracker.
   Future<void> beamCueToTv(WatchCueItem item) async {
     state = state.copyWith(
       activePlayingCueId: item.id,
@@ -1350,13 +1483,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           '🎬 TV\'de Başlatılıyor: ${item.title} (${item.watchedMinutes}. dk)',
     );
 
-    final service = ref.read(adbTvServiceProvider);
-    final ok = await service.launchPlatformOrDeepLink(
-      state.selectedDevice,
-      platform: item.platform,
-      deepLinkUrl: item.deepLinkUrl,
-      fallbackSearchQuery: item.title,
-    );
+    final ok = await ref.read(adbTvServiceProvider).launchPlatformOrDeepLink(
+          state.selectedDevice,
+          platform: item.platform,
+          deepLinkUrl: item.deepLinkUrl,
+          fallbackSearchQuery: item.title,
+        );
 
     state = state.copyWith(
       selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
@@ -1366,14 +1498,58 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     );
   }
 
-  Future<void> sendKeyboardText(String text) async {
-    if (text.trim().isEmpty) return;
-    final service = ref.read(adbTvServiceProvider);
-    final ok = await service.sendSearchText(state.selectedDevice, text);
+  Future<void> sendKeyboardText(
+    String text, {
+    bool submitEnter = false,
+  }) async {
+    if (text.isEmpty) return;
+    if (text != ' ' && text.trim().isEmpty) return;
+    final ok = await ref.read(adbTvServiceProvider).sendSearchText(
+          state.selectedDevice,
+          text,
+          submitEnter: submitEnter,
+        );
+    final display = text == ' ' ? 'Boşluk' : text.trim();
     state = state.copyWith(
       lastCommandStatus: ok
-          ? '✓ TV\'ye metin yazıldı: "${text.trim()}"'
-          : 'Metin gönderildi: "${text.trim()}"',
+          ? '✓ TV\'ye yazıldı: "$display"'
+          : 'Metin gönderildi: "$display"',
+    );
+  }
+
+  Future<void> sendKeyboardBackspace({int count = 1}) async {
+    final ok = await ref
+        .read(adbTvServiceProvider)
+        .sendBackspace(state.selectedDevice, count: count);
+    state = state.copyWith(
+      lastCommandStatus: ok
+          ? '⌫ TV klavyede silindi ($count karakter)'
+          : '⌫ Silme komutu gönderildi',
+    );
+  }
+
+  Future<void> sendKeyboardEnter() async {
+    final ok = await ref.read(adbTvServiceProvider).sendEnterKey(state.selectedDevice);
+    state = state.copyWith(
+      lastCommandStatus: ok
+          ? '↵ TV\'de Arama / Enter onaylandı'
+          : '↵ Enter komutu gönderildi',
+    );
+  }
+
+  Future<void> searchTranscriptOnYoutube(String query) async {
+    final clean = query.trim();
+    if (clean.isEmpty) return;
+    final ok = await ref.read(adbTvServiceProvider).launchPlatformOrDeepLink(
+          state.selectedDevice,
+          platform: StreamingPlatform.youtube,
+          fallbackSearchQuery: clean,
+        );
+    state = state.copyWith(
+      selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
+      lastCommandStatus: ok
+          ? '🎬 YouTube\'da aratıldı: "$clean"'
+          : '⚡ YouTube arama sinyali gönderildi: "$clean"',
     );
   }
 
@@ -1393,9 +1569,8 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     _persistState();
   }
 
-  void updateWatchedProgress(String id, int deltaMinutes) {
-    stepProgress(id, deltaMinutes);
-  }
+  void updateWatchedProgress(String id, int deltaMinutes) =>
+      stepProgress(id, deltaMinutes);
 
   void incrementEpisode(String id, {int delta = 1}) {
     final updated = state.cueItems.map((item) {
@@ -1416,8 +1591,6 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     _persistState();
   }
 
-  /// Advances a planned watch item by one planned session (`item.sessionMinutes`)
-  /// and increments the episode/video counter when applicable.
   void completeSessionStep(String id) {
     final updated = state.cueItems.map((item) {
       if (item.id != id) return item;
@@ -1428,10 +1601,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       final nextEp = item.totalEpisodes > 1
           ? (item.currentEpisode + 1).clamp(1, item.totalEpisodes)
           : item.currentEpisode;
-      return item.copyWith(
-        watchedMinutes: nextMins,
-        currentEpisode: nextEp,
-      );
+      return item.copyWith(watchedMinutes: nextMins, currentEpisode: nextEp);
     }).toList();
 
     state = state.copyWith(
@@ -1454,10 +1624,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       final nextEp = currentEpisode != null
           ? currentEpisode.clamp(1, item.totalEpisodes)
           : item.currentEpisode;
-      return item.copyWith(
-        watchedMinutes: nextMins,
-        currentEpisode: nextEp,
-      );
+      return item.copyWith(watchedMinutes: nextMins, currentEpisode: nextEp);
     }).toList();
 
     state = state.copyWith(cueItems: updated);

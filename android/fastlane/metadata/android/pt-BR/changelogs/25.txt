@@ -1,0 +1,5 @@
+v2.0.0:
+• Drivers universais Smart TV: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Cursor Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony e UPnP.
+• Modo Infravermelho (IR) sem Wi-Fi com 7 perfis de marcas de TV.
+• Envie links e playlists do YouTube para a TV pelo menu Compartilhar.
+• Planos Pro flexíveis com teste de 3 dias na assinatura anual.

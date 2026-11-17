@@ -115,6 +115,20 @@ enum StreamingPlatform {
     leanbackActivity: '',
     brandColor: Color(0xFFFF8800),
     icon: Icons.video_library_rounded,
+  ),
+  tvBrowser(
+    label: 'TV Tarayıcı',
+    packageName: 'net.mrowser',
+    leanbackActivity: 'net.mrowser.MainActivity',
+    brandColor: Color(0xFF38BDF8),
+    icon: Icons.public_rounded,
+  ),
+  cueTv(
+    label: 'CueTV Ulusal',
+    packageName: 'com.akarworks.cuetv',
+    leanbackActivity: 'com.akarworks.cuetv.MainActivity',
+    brandColor: Color(0xFFE2A84B),
+    icon: Icons.live_tv_rounded,
   );
 
   const StreamingPlatform({
@@ -132,7 +146,7 @@ enum StreamingPlatform {
     StreamingPlatform.netflix,
     StreamingPlatform.beinConnect,
     StreamingPlatform.tabii,
-    StreamingPlatform.tivibu,
+    StreamingPlatform.cueTv,
     StreamingPlatform.zikirce,
   ];
 
@@ -166,7 +180,9 @@ enum StreamingPlatform {
       case StreamingPlatform.twitch:
       case StreamingPlatform.kodi:
       case StreamingPlatform.vlc:
-        return 'https://... (opsiyonel derin bağlantı veya boş bırakın)';
+      case StreamingPlatform.tvBrowser:
+      case StreamingPlatform.cueTv:
+        return 'https://... (film, canlı maç veya .m3u8 yayın adresi)';
     }
   }
 
@@ -195,7 +211,9 @@ enum StreamingPlatform {
       case StreamingPlatform.twitch:
       case StreamingPlatform.kodi:
       case StreamingPlatform.vlc:
-        return 'Örn: Canlı Yayın / Çalma Listesi';
+      case StreamingPlatform.tvBrowser:
+      case StreamingPlatform.cueTv:
+        return 'Örn: TRT 1 / BBC News / Canlı Maç Yayını';
     }
   }
 
@@ -204,6 +222,7 @@ enum StreamingPlatform {
     switch (this) {
       case StreamingPlatform.youtube:
       case StreamingPlatform.vlc:
+      case StreamingPlatform.tvBrowser:
         return 'Video';
       case StreamingPlatform.beinConnect:
       case StreamingPlatform.tivibu:
@@ -211,6 +230,7 @@ enum StreamingPlatform {
       case StreamingPlatform.todTv:
       case StreamingPlatform.twitch:
       case StreamingPlatform.kodi:
+      case StreamingPlatform.cueTv:
         return 'Yayın';
       case StreamingPlatform.spotify:
         return 'Parça';
@@ -317,7 +337,19 @@ enum TvConnectionProtocol {
   philipsJointSpace1925('Philips Smart TV • JointSpace (Port 1925)', 1925),
 
   /// Port 8060: Roku ECP (`POST /keypress/<key>`) & Universal DIAL Smart TV protocol.
-  rokuEcp8060('Evrensel Smart TV • ECP/DIAL (Port 8060)', 8060);
+  rokuEcp8060('Evrensel Smart TV • ECP/DIAL (Port 8060)', 8060),
+
+  /// Port 36669: Hisense / Toshiba VIDAA Smart TV WebSocket/MQTT TLS protocol.
+  vidaaSmart36669('Hisense / Toshiba • VIDAA (Port 36669)', 36669),
+
+  /// Port 80: Sony BRAVIA IRCC-IP SOAP + X-Auth-PSK protocol.
+  sonyBraviaIrcc('Sony BRAVIA • IRCC-IP (Port 80)', 80),
+
+  /// Port 1900 / SOAP: Universal UPnP RenderingControl & AVTransport control.
+  upnpDlnaControl('Evrensel Smart TV • UPnP/DLNA', 1900),
+
+  /// Hardware ConsumerIrManager Infrared Blaster (Zero Wi-Fi fallback).
+  irBlasterHardware('Kızılötesi Kumanda • IR Blaster', 0);
 
   const TvConnectionProtocol(this.label, this.defaultPort);
 
@@ -330,7 +362,11 @@ enum TvConnectionProtocol {
       this == TvConnectionProtocol.samsungTizen8001 ||
       this == TvConnectionProtocol.lgWebOs3000 ||
       this == TvConnectionProtocol.philipsJointSpace1925 ||
-      this == TvConnectionProtocol.rokuEcp8060;
+      this == TvConnectionProtocol.rokuEcp8060 ||
+      this == TvConnectionProtocol.vidaaSmart36669 ||
+      this == TvConnectionProtocol.sonyBraviaIrcc ||
+      this == TvConnectionProtocol.upnpDlnaControl ||
+      this == TvConnectionProtocol.irBlasterHardware;
 
   static TvConnectionProtocol fromNameOrPort(String? name, int port) {
     for (final p in TvConnectionProtocol.values) {
@@ -341,6 +377,8 @@ enum TvConnectionProtocol {
       case 6467:
         return TvConnectionProtocol.remotePort6466;
       case 8085:
+      case 7681:
+      case 8080:
         return TvConnectionProtocol.arcelikGrundig8085;
       case 56789:
         return TvConnectionProtocol.vestelSmart56789;
@@ -355,13 +393,21 @@ enum TvConnectionProtocol {
         return TvConnectionProtocol.philipsJointSpace1925;
       case 8060:
         return TvConnectionProtocol.rokuEcp8060;
+      case 36669:
+        return TvConnectionProtocol.vidaaSmart36669;
+      case 80:
+        return TvConnectionProtocol.sonyBraviaIrcc;
+      case 1900:
+        return TvConnectionProtocol.upnpDlnaControl;
+      case 0:
+        return TvConnectionProtocol.irBlasterHardware;
       default:
         return TvConnectionProtocol.adbPort5555;
     }
   }
 }
 
-/// Represents a discovered Smart TV device on the local Wi-Fi network.
+/// Represents a discovered Smart TV device on the local Wi-Fi network or IR Blaster profile.
 @immutable
 class TvDevice {
   const TvDevice({
@@ -372,6 +418,8 @@ class TvDevice {
     this.isOnline = true,
     this.protocol = TvConnectionProtocol.adbPort5555,
     this.isPaired = false,
+    this.macAddress = '',
+    this.irBrandCode = '',
   });
 
   static const TvDevice unconfigured = TvDevice(
@@ -391,17 +439,32 @@ class TvDevice {
   final bool isOnline;
   final TvConnectionProtocol protocol;
   final bool isPaired;
+  final String macAddress;
+  final String irBrandCode;
+
+  bool get isIrBlaster => protocol == TvConnectionProtocol.irBlasterHardware;
 
   bool get hasValidIp => ip.trim().isNotEmpty;
 
-  String get displayEndpoint =>
-      hasValidIp ? '${ip.trim()}:$port' : 'Henüz TV bağlanmadı';
+  bool get hasControlTarget =>
+      hasValidIp || (isIrBlaster && irBrandCode.trim().isNotEmpty);
+
+  String get displayEndpoint {
+    if (isIrBlaster) {
+      final brand = irBrandCode.trim().isNotEmpty ? irBrandCode.trim() : 'IR';
+      return 'Kızılötesi ($brand)';
+    }
+    return hasValidIp ? '${ip.trim()}:$port' : 'Henüz TV bağlanmadı';
+  }
 
   String get protocolBadgeLabel {
+    if (isIrBlaster) {
+      return 'Kızılötesi (IR) • Wi-Fi Gerektirmez';
+    }
     if (!hasValidIp) return 'Bağlı Değil';
     switch (protocol) {
       case TvConnectionProtocol.arcelikGrundig8085:
-        return 'Port 8085 • Arçelik/Grundig Smart TV';
+        return 'Port $port • Arçelik/Grundig Smart TV';
       case TvConnectionProtocol.vestelSmart56789:
         return 'Port 56789 • Vestel/Arçelik Smart TV';
       case TvConnectionProtocol.samsungTizen8001:
@@ -411,7 +474,15 @@ class TvDevice {
       case TvConnectionProtocol.philipsJointSpace1925:
         return 'Port $port • Philips Smart TV';
       case TvConnectionProtocol.rokuEcp8060:
-        return 'Port $port • Evrensel Smart TV';
+        return 'Port $port • Roku / Evrensel Smart TV';
+      case TvConnectionProtocol.vidaaSmart36669:
+        return 'Port $port • Hisense / VIDAA Smart TV';
+      case TvConnectionProtocol.sonyBraviaIrcc:
+        return 'Port $port • Sony BRAVIA IRCC';
+      case TvConnectionProtocol.upnpDlnaControl:
+        return 'Port $port • UPnP / DLNA Smart TV';
+      case TvConnectionProtocol.irBlasterHardware:
+        return 'Kızılötesi (IR) • Wi-Fi Gerektirmez';
       case TvConnectionProtocol.remotePort6466:
         return 'Port 6466 • Standart Kumanda';
       case TvConnectionProtocol.adbPort5555:
@@ -430,6 +501,8 @@ class TvDevice {
     bool? isOnline,
     TvConnectionProtocol? protocol,
     bool? isPaired,
+    String? macAddress,
+    String? irBrandCode,
   }) {
     return TvDevice(
       name: name ?? this.name,
@@ -439,6 +512,8 @@ class TvDevice {
       isOnline: isOnline ?? this.isOnline,
       protocol: protocol ?? this.protocol,
       isPaired: isPaired ?? this.isPaired,
+      macAddress: macAddress ?? this.macAddress,
+      irBrandCode: irBrandCode ?? this.irBrandCode,
     );
   }
 
@@ -450,11 +525,17 @@ class TvDevice {
         'isOnline': isOnline,
         'protocol': protocol.name,
         'isPaired': isPaired,
+        'macAddress': macAddress,
+        'irBrandCode': irBrandCode,
       };
 
   factory TvDevice.fromJson(Map<String, dynamic> json) {
     final parsedPort = (json['port'] as int?) ?? 5555;
     final parsedIp = ((json['ip'] as String?) ?? '').trim();
+    final parsedProto = TvConnectionProtocol.fromNameOrPort(
+      json['protocol'] as String?,
+      parsedPort,
+    );
     return TvDevice(
       name: (json['name'] as String?) ??
           (parsedIp.isNotEmpty ? 'Akıllı TV ($parsedIp)' : 'TV Seçilmedi'),
@@ -463,11 +544,10 @@ class TvDevice {
       boardInfo:
           (json['boardInfo'] as String?) ?? 'Android TV / Google TV',
       isOnline: (json['isOnline'] as bool?) ?? false,
-      protocol: TvConnectionProtocol.fromNameOrPort(
-        json['protocol'] as String?,
-        parsedPort,
-      ),
+      protocol: parsedProto,
       isPaired: (json['isPaired'] as bool?) ?? false,
+      macAddress: ((json['macAddress'] as String?) ?? '').trim(),
+      irBrandCode: ((json['irBrandCode'] as String?) ?? '').trim(),
     );
   }
 
@@ -481,11 +561,21 @@ class TvDevice {
           port == other.port &&
           isOnline == other.isOnline &&
           protocol == other.protocol &&
-          isPaired == other.isPaired;
+          isPaired == other.isPaired &&
+          macAddress == other.macAddress &&
+          irBrandCode == other.irBrandCode;
 
   @override
-  int get hashCode =>
-      Object.hash(name, ip, port, isOnline, protocol, isPaired);
+  int get hashCode => Object.hash(
+        name,
+        ip,
+        port,
+        isOnline,
+        protocol,
+        isPaired,
+        macAddress,
+        irBrandCode,
+      );
 }
 
 /// Represents a personal scheduled watch plan item with YouTube playlist / deep-link URL,
@@ -790,4 +880,63 @@ class WatchCueItem {
       reminderFired: (json['reminderFired'] as bool?) ?? false,
     );
   }
+}
+
+/// Incoming link/video payload shared from external apps via OS Share Sheet or `cuedeck://share`.
+@immutable
+class SharedCuePayload {
+  const SharedCuePayload({
+    required this.url,
+    required this.title,
+    required this.platform,
+    required this.receivedAtEpochMs,
+  });
+
+  final String url;
+  final String title;
+  final StreamingPlatform platform;
+  final int receivedAtEpochMs;
+
+  SharedCuePayload copyWith({
+    String? url,
+    String? title,
+    StreamingPlatform? platform,
+    int? receivedAtEpochMs,
+  }) {
+    return SharedCuePayload(
+      url: url ?? this.url,
+      title: title ?? this.title,
+      platform: platform ?? this.platform,
+      receivedAtEpochMs: receivedAtEpochMs ?? this.receivedAtEpochMs,
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'url': url,
+        'title': title,
+        'platform': platform.name,
+        'receivedAtEpochMs': receivedAtEpochMs,
+      };
+
+  factory SharedCuePayload.fromJson(Map<String, dynamic> json) {
+    return SharedCuePayload(
+      url: ((json['url'] as String?) ?? '').trim(),
+      title: ((json['title'] as String?) ?? '').trim(),
+      platform: StreamingPlatform.fromName(json['platform'] as String?),
+      receivedAtEpochMs: (json['receivedAtEpochMs'] as int?) ?? 0,
+    );
+  }
+}
+
+/// Three-tier Pro monetization plans + 40% loyalty lifetime anchor.
+enum CuePlanTier {
+  weekly('Haftalık Acil Paket', 'cuedeck_pro_weekly'),
+  annualTrial('Yıllık Pro (3 Gün Ücretsiz)', 'cuedeck_pro_annual'),
+  lifetime('Ömür Boyu Tek Ödeme', 'cuedeck_pro_lifetime'),
+  loyalty40('Sadakat İndirimli Ömür Boyu (%40)', 'cuedeck_pro_loyalty_40');
+
+  const CuePlanTier(this.labelTr, this.sku);
+
+  final String labelTr;
+  final String sku;
 }

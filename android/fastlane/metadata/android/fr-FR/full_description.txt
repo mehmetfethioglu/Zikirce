@@ -1,0 +1,18 @@
+CueDeck réunit une télécommande universelle Smart TV, le partage instantané de liens vidéo vers votre téléviseur et un planificateur de visionnage.
+
+TÉLÉVISEURS PRIS EN CHARGE
+• Google TV et Android TV (ADB Turbo 5555 et appairage par code PIN 6466)
+• Samsung Tizen Smart TV (WebSocket persistant 8002/8001, jeton enregistré, clavier et Wake-on-LAN)
+• LG webOS Smart TV (Pointeur Magic Remote, molette tactile, touches directionnelles et client-key)
+• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel et UPnP/DLNA
+• Infrarouge (IR) : Contrôle sans Wi-Fi sur les smartphones Android équipés d'un émetteur IR (7 profils)
+
+FONCTIONNALITÉS CLÉS
+• Partager → CueDeck : Envoyez vidéos ou playlists YouTube sur votre TV immédiatement via DIAL v2 ou programmez-les pour ce soir.
+• Pavé tactile de précision et molette de défilement avec clics gauche/droit.
+• Clavier du téléphone en direct pour saisir vos recherches TV sans effort.
+• Planificateur avec suivi par épisode/minute et sauvegarde Google Drive ou JSON local.
+• 6 raccourcis d'applications configurables et thèmes Noir OLED / Blanc Classique.
+
+ACCÈS FLEXIBLE
+• Touches essentielles toujours rapides; 3 envois Share-to-TV par jour et 2 programmes personnalisés inclus, plus Pass Pro 24h ou formules Pro Hebdo, Annuelle et À vie.

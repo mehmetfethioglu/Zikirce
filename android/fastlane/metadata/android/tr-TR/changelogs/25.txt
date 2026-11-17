@@ -1,0 +1,5 @@
+v2.0.0:
+• Evrensel Smart TV desteği: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP.
+• Wi-Fi gerektirmeyen Kızılötesi (IR) Blaster modu (7 TV markası).
+• Paylaş Menüsünden tek tıkla TV'ye YouTube / video ışınlama ve akşam saatine planlama.
+• 3 Gün Ücretsiz Denemeli Yıllık Pro ve Ömür Boyu paket seçenekleri.

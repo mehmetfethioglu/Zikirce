@@ -1,0 +1,5 @@
+v2.0.0:
+• Universal Smart TV drivers: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Remote cursor + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP.
+• Zero-Wi-Fi Android IR Blaster mode with 7 brand profiles.
+• Share-to-TV link beaming from any app (YouTube DIAL v2 + Schedule Tonight).
+• Flexible Weekly, Annual (3-Day Trial), and Lifetime Pro tiers + 24h Rewarded Pass.

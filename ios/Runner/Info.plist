@@ -32,12 +32,29 @@
 		</dict>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>CueDeck, aynı Wi-Fi ağındaki Android TV ve Google TV cihazlarınızı otomatik keşfetmek ve kumanda komutlarını iletmek için yerel ağ erişimi kullanır.</string>
+	<string>CueDeck, aynı Wi-Fi ağındaki Samsung Tizen, LG webOS, Roku, Arçelik, Vestel, Philips, Android TV ve Google TV cihazlarınızı keşfetmek ve kumanda komutlarını iletmek için yerel ağ erişimi kullanır.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_androidtvremote2._tcp</string>
 		<string>_adb._tcp</string>
 		<string>_googlecast._tcp</string>
+		<string>_samsungmsf._tcp</string>
+		<string>_webostv._tcp</string>
+		<string>_arceliktvremote._tcp</string>
+		<string>_dial-multiscreen-org._tcp</string>
+		<string>_airplay._tcp</string>
+		<string>_hap._tcp</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.akarworks.cuedeck</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cuedeck</string>
+			</array>
+		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CueDeck, sesli TV komutlarınızı ve YouTube aramalarınızı algılamak için mikrofon erişimi kullanır.</string>

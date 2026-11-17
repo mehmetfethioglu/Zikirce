@@ -40,11 +40,65 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '1.9.11+23';
-  static const String currentShortVersion = 'v1.9.11';
+  static const String currentVersion = '2.0.0+25';
+  static const String currentShortVersion = 'v2.0.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '2.0.0+25',
+      versionLabel: 'v2.0.0 (Build 25)',
+      releaseDate: '17 Kasım 2026',
+      headline:
+          'Evrensel Smart TV Sürücüleri (Samsung, LG, Roku, Arçelik, IR), Paylaş Menüsünden TV\'ye Işınlama & Magic Mouse',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'EVRENSEL TV',
+          title: 'Samsung Tizen, LG webOS Magic Remote, Roku & Kızılötesi (IR) Desteği',
+          description:
+              'Samsung (Token + Wake-on-LAN), LG webOS (Magic Mouse Oku + Tekerlek), Roku ECP, Hisense VIDAA, Arçelik/Vestel/UPnP ve Wi-Fi gerektirmeyen Kızılötesi (IR) kumanda modları tek çekirdekte birleştirildi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'PAYLAŞ & IŞINLA',
+          title: 'Telefonun Paylaş Menüsünden Tek Tıkla TV\'ye Işınlama',
+          description:
+              'YouTube, Netflix veya tarayıcıdaki herhangi bir videoyu/listeyi «Paylaş → CueDeck» ile doğrudan TV\'de açabilir veya akşam saatinize planlayabilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'PRO PLANLAR',
+          title: '3 Gün Ücretsiz Denemeli Esnek Pro Paketler',
+          description:
+              'Haftalık, Yıllık (3 Gün Ücretsiz Deneme) ve Ömür Boyu Pro seçeneklerinin yanında 1 ödüllü reklamla 24 saatlik Pro Pass imkânı sunuldu.',
+        ),
+      ],
+    ),
+    CueReleaseVersionEntry(
+      version: '1.9.12+24',
+      versionLabel: 'v1.9.12 (Build 24)',
+      releaseDate: '1 Kasım 2026',
+      headline:
+          'Telefon Klavyesiyle Yazma, Geniş Mouse Pad, TV Ekranında Mouse Oku ve Akıllı Sesli Komut',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'KLAVYE',
+          title: 'Telefon Klavyesiyle Anında TV\'ye Yazma',
+          description:
+              'Kumandanın sol üst köşesindeki yeni Klavye tuşuna bastığınızda telefonunuzun klavyesi açılır; yazdığınız ve sildiğiniz harfler anında televizyona aktarılır.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'MOUSE OKU & PAD',
+          title: 'Daha Geniş Mouse Pad Alanı ve TV Ekranında Mouse Oku',
+          description:
+              'Mouse moduna geçtiğinizde dokunmatik alan geniş bir dörtgene dönüşür, TV ekranında gerçek mouse oku belirir ve Sol/Sağ Tık tuşlarıyla kolayca seçim yapabilirsiniz.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'SESLİ KOMUT',
+          title: 'Bulunduğunuz Ekranda Sesle Yazma ve Arama',
+          description:
+              'Sesli komut artık her konuşmada YouTube\'a geçmek yerine, yalnızca «YouTube\'da ...» dediğinizde YouTube\'u açar; diğer konuşmaları bulunduğunuz ekrandaki arama kutusuna yazar.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '1.9.11+23',
       versionLabel: 'v1.9.11 (Build 23)',

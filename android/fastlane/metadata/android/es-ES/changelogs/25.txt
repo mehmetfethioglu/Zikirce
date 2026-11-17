@@ -1,0 +1,5 @@
+v2.0.0:
+• Controladores universales Smart TV: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Puntero Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony y UPnP.
+• Modo Infrarrojo (IR) sin Wi-Fi con 7 marcas compatibles.
+• Envía enlaces y listas de YouTube al televisor desde el menú Compartir.
+• Planes Pro flexibles con prueba de 3 días en suscripción anual.

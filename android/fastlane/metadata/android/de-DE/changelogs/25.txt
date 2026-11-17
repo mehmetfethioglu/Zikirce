@@ -1,0 +1,5 @@
+v2.0.0:
+• Universelle Smart-TV-Treiber: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic-Maus + D-Pad), Roku, Philips, VIDAA, Sony & UPnP.
+• Infrarot (IR) Blaster-Modus ohne WLAN für 7 Markenprofile.
+• Share-to-TV: YouTube-Videos und Playlists direkt über das Android-Teilen-Menü am TV starten oder planen.
+• Flexible Pro-Tarife inklusive 3-Tage-Testversion.

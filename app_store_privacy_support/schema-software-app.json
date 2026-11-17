@@ -1,0 +1,49 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Cuedeck",
+      "operatingSystem": "Android, iOS, Windows, macOS",
+      "applicationCategory": "UtilitiesApplication",
+      "softwareVersion": "2.0.0",
+      "description": "Cuedeck is a cross-platform application developed by Akarworks that delivers CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Cuedeck combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Cuedeck reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner; Paket Kimliği:** `com.akarworks.cuedeck`; Mevcut Sürüm:** `v1.9.12+24`; ⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmi .... Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Cuedeck (version 2.0.0+25) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/cuedeck.",
+      "url": "https://akarworks.com/cuedeck",
+      "inLanguage": [
+        "tr-TR",
+        "en-US"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks",
+        "url": "https://akarworks.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Cuedeck nedir ve ne işe yarar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Cuedeck is a cross-platform application developed by Akarworks that delivers CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Cuedeck combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Cuedeck reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner; Paket Kimliği:** `com.akarworks.cuedeck`; Mevcut Sürüm:** `v1.9.12+24`; ⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmi .... Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Cuedeck (version 2.0.0+25) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/cuedeck."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Cuedeck?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Cuedeck is a cross-platform application developed by Akarworks that delivers CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Cuedeck combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Cuedeck reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner; Paket Kimliği:** `com.akarworks.cuedeck`; Mevcut Sürüm:** `v1.9.12+24`; ⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmi .... Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Cuedeck (version 2.0.0+25) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/cuedeck."
+          }
+        }
+      ]
+    }
+  ]
+}

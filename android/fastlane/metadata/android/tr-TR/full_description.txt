@@ -1,0 +1,19 @@
+CueDeck, evinizdeki tüm televizyonları tek bir akıcı kumandada ve akıllı izleme planlayıcısında birleştiren evrensel Smart TV kumandasıdır.
+
+DESTEKLENEN TELEVİZYON PROTOKOLLERİ
+• Google TV ve Android TV (ADB Turbo Port 5555 + Standart 6466 PIN eşleştirme)
+• Samsung Tizen Smart TV (Kalıcı WebSocket 8002/8001, token kaydı, telefon klavyesi girişi ve Wake-on-LAN ile kapalı TV açma)
+• LG webOS Smart TV (Magic Remote imleç kontrolü, dokunmatik tekerlek, yön tuşları ve client-key kalıcılığı)
+• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP ve Arçelik / Grundig / Vestel / UPnP-DLNA televizyonlar
+• Kızılötesi (IR) Blaster Modu: IR vericili Android telefonlarda Wi-Fi olmadan 7 marka için doğrudan kontrol
+
+AYIRT EDİCİ ÖZELLİKLER
+• Paylaş → CueDeck (Share-to-TV): YouTube, Netflix, Prime Video, tabii veya tarayıcıdan paylaştığınız bağlantıyı evrensel YouTube DIAL v2 ile anında TV ekranında açın ya da akşam saatinize planlayın.
+• Dokunmatik Touchpad & Fiziksel Tekerlek: TV ekranında akıcı imleç hareketi, sol/sağ tıklama ve tek elle sayfa kaydırma.
+• Canlı Telefon Klavyesi: TV ekranındaki arama kutularına telefon klavyenizden anında harf harf yazın.
+• Kişisel İzleme Planlayıcısı & Bildirimler: YouTube oynatma listeleri ve dizileriniz için akşam saati alarmı, bölüm/dakika takibi ve Google Drive veya yerel JSON yedekleme.
+• Özelleştirilebilir 6 Kısayol Yuvası & Gerçek Siyah OLED / Klasik Beyaz Tema.
+
+ESNEK ERİŞİM SEÇENEKLERİ
+• Temel kumanda tuşlarında kesinti yok — yön tuşları, ses ve kanal kontrolü her zaman hızlıdır.
+• Ücretsiz sürümde günlük 3 Share-to-TV ışınlama ve 2 özel izleme planı dahildir; dilerseniz ödüllü video ile 24 Saat Pro Pass açabilir veya Yıllık (3 Gün Ücretsiz Deneme), Haftalık ya da Ömür Boyu Pro planına geçebilirsiniz.
