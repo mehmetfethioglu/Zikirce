@@ -32,6 +32,8 @@ export '../services/cue_release_notes_service.dart'
         CueReleaseNotesService;
 export '../services/drivers/ir_blaster_driver.dart'
     show IrBlasterDriver, IrBrandProfile;
+export '../services/drivers/tv_quirks_registry.dart'
+    show TvQuirkProfile, TvQuirksRegistry;
 export '../services/google_drive_backup_service.dart'
     show CloudBackupInfo, BackupOperationResult;
 export '../services/google_oauth_sheet.dart'
@@ -184,6 +186,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Future<void> _initializeAsync() async {
     await _loadPersistedState();
     if (!ref.mounted) return;
+    unawaited(ref.read(adbTvServiceProvider).quirksRegistry.loadCachedOverrides());
     await ref.read(cueNotificationServiceProvider).requestPermission();
     if (!ref.mounted) return;
     await _syncNativeNotifications();
@@ -1023,6 +1026,61 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         );
   }
 
+  /// Generates a Zero-PII compatibility report (strips LAN IP, MAC, and personal names).
+  Future<String> generateAnonymizedCompatibilityReport() {
+    return ref.read(adbTvServiceProvider).buildAnonymizedCompatibilityReport(
+          state.selectedDevice,
+          appVersion: CueReleaseNotesCatalog.currentVersion,
+        );
+  }
+
+  /// Returns ranked alternative protocol/port profiles for troubleshooting OEM chassis quirks.
+  List<TvQuirkProfile> getSuggestedAlternativeProfiles() {
+    return ref
+        .read(adbTvServiceProvider)
+        .quirksRegistry
+        .suggestedAlternativeProfiles(state.selectedDevice);
+  }
+
+  /// Manually switches the active TV's control protocol/port profile without losing TV identity.
+  Future<bool> switchTvProtocolProfile(TvQuirkProfile profile) async {
+    final current = state.selectedDevice;
+    if (!current.hasValidIp) {
+      state = state.copyWith(
+        lastCommandStatus: '⚠️ Profil değiştirmek için önce bir TV seçin veya IP girin',
+      );
+      return false;
+    }
+
+    final needsExplicitAuth =
+        profile.protocol == TvConnectionProtocol.adbPort5555 ||
+        profile.protocol == TvConnectionProtocol.remotePort6466 ||
+        profile.protocol == TvConnectionProtocol.samsungTizen8001 ||
+        profile.protocol == TvConnectionProtocol.lgWebOs3000 ||
+        profile.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+        profile.protocol == TvConnectionProtocol.vidaaSmart36669 ||
+        profile.protocol == TvConnectionProtocol.sonyBraviaIrcc;
+
+    final updated = current.copyWith(
+      protocol: profile.protocol,
+      port: profile.port,
+      isPaired: profile.protocol == current.protocol
+          ? current.isPaired
+          : !needsExplicitAuth,
+      isOnline: true,
+      boardInfo: '${profile.label} • ${profile.subtitle}',
+    );
+
+    state = state.copyWith(
+      selectedDevice: updated,
+      discoveredDevices: _mergeDeviceIntoDiscovered(updated),
+      lastCommandStatus:
+          '✓ Alternatif profil seçildi: ${profile.label} (Port ${profile.port})',
+    );
+    await _persistState(triggerAutoBackup: false);
+    return true;
+  }
+
   Future<bool> connectAndPairDevice(TvDevice device) async {
     if (device.isIrBlaster) {
       await activateIrBlasterBrand(device.irBrandCode);
@@ -1038,9 +1096,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     final service = ref.read(adbTvServiceProvider);
 
-    // Interactive handshake for Samsung Tizen (8002 token), LG webOS (client-key), Sony IRCC
+    // Interactive handshake for Samsung Tizen (8002 token), LG webOS (client-key), Philips v6, VIDAA, Sony IRCC
     if (device.protocol == TvConnectionProtocol.samsungTizen8001 ||
         device.protocol == TvConnectionProtocol.lgWebOs3000 ||
+        device.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+        device.protocol == TvConnectionProtocol.vidaaSmart36669 ||
         device.protocol == TvConnectionProtocol.sonyBraviaIrcc) {
       final pairedSmart = await service.pairWithTv(device);
       final updatedList = <TvDevice>[
@@ -1294,6 +1354,96 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     final pairedDevice = await ref
         .read(adbTvServiceProvider)
         .pairWithPin6466(candidate, sixDigitPin);
+    final updatedList = <TvDevice>[
+      pairedDevice,
+      ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
+    ];
+
+    final ok = pairedDevice.isPaired || pairedDevice.isOnline;
+    state = state.copyWith(
+      isScanning: false,
+      selectedDevice: pairedDevice,
+      discoveredDevices: updatedList,
+      lastCommandStatus: ok
+          ? '✓ Eşleşti ve Bağlandı: ${pairedDevice.name} (${pairedDevice.ip})'
+          : '⚠️ PIN Eşleştirme hatası: ${pairedDevice.boardInfo}',
+    );
+    await _persistState(triggerAutoBackup: false);
+    return ok;
+  }
+
+  /// Protocol-aware PIN request (supports 6-char Google TV 6466, 4-digit Philips 1926, and 4-digit VIDAA 36669).
+  Future<Map<String, dynamic>> startSmartPinPairing({
+    String? customIp,
+    bool forceRestart = false,
+  }) async {
+    final targetIp = _resolveTargetTvIp(customIp);
+    if (targetIp.isEmpty) {
+      return const <String, dynamic>{
+        'pinDisplayed': false,
+        'adb5555Open': false,
+        'pinLength': 6,
+        'message':
+            'Önce "Ağdaki Cihazları Ara" ile TV seçin veya TV IP adresini girin.',
+      };
+    }
+
+    final candidate = state.selectedDevice.ip == targetIp
+        ? state.selectedDevice
+        : TvDevice(
+            name: 'Google TV ($targetIp)',
+            ip: targetIp,
+            port: 6466,
+            protocol: TvConnectionProtocol.remotePort6466,
+            boardInfo: 'Smart TV • PIN İsteniyor...',
+            isOnline: false,
+          );
+
+    final res = await ref.read(adbTvServiceProvider).startSmartTvPinPairing(
+          candidate,
+          forceRestart: forceRestart,
+        );
+    final msg = (res['message'] as String?) ?? '';
+    if (msg.isNotEmpty) {
+      state = state.copyWith(lastCommandStatus: msg);
+    }
+    return res;
+  }
+
+  /// Protocol-aware PIN submission (supports 6-char Google TV 6466, 4-digit Philips 1926, and 4-digit VIDAA 36669).
+  Future<bool> submitSmartPinPairing(
+    String pin, {
+    String? customIp,
+  }) async {
+    final targetIp = _resolveTargetTvIp(customIp);
+    if (targetIp.isEmpty) {
+      state = state.copyWith(
+        lastCommandStatus:
+            '⚠️ Önce "Ağdaki Cihazları Ara" ile TV seçin veya TV IP adresini girin',
+      );
+      return false;
+    }
+
+    final candidate = state.selectedDevice.ip == targetIp
+        ? state.selectedDevice
+        : TvDevice(
+            name: 'Google TV ($targetIp)',
+            ip: targetIp,
+            port: 6466,
+            protocol: TvConnectionProtocol.remotePort6466,
+            boardInfo: 'Smart TV • PIN Eşleştiriliyor...',
+            isOnline: false,
+          );
+
+    state = state.copyWith(
+      isScanning: true,
+      selectedDevice: candidate,
+      lastCommandStatus: '🔢 TV PIN kodu doğrulanıyor ($targetIp)...',
+    );
+
+    final pairedDevice = await ref
+        .read(adbTvServiceProvider)
+        .completeSmartTvPinPairing(candidate, pin);
     final updatedList = <TvDevice>[
       pairedDevice,
       ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),

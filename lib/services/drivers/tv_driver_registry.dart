@@ -29,13 +29,15 @@ class TvDriverRegistry {
     final vestel = VestelSmartCenterDriver(arcelikDelegate: arcelik);
     final samsung = SamsungTizenDriver(vault: vault, logger: logger);
     final lg = LgWebOsDriver(vault: vault, logger: logger);
-    final philips = PhilipsJointSpaceDriver(logger: logger);
+    final philips = PhilipsJointSpaceDriver(vault: vault, logger: logger);
     final roku = RokuEcpDriver(logger: logger);
-    final vidaa = VidaaSmartDriver(logger: logger);
+    final vidaa = VidaaSmartDriver(vault: vault, logger: logger);
     final sony = SonyBraviaIrccDriver(vault: vault, logger: logger);
     final ir = IrBlasterDriver(logger: logger);
 
     irBlasterDriver = ir;
+    philipsDriver = philips;
+    vidaaDriver = vidaa;
     _drivers = <TvConnectionProtocol, TvRemoteDriver>{
       TvConnectionProtocol.arcelikGrundig8085: arcelik,
       TvConnectionProtocol.vestelSmart56789: vestel,
@@ -52,6 +54,8 @@ class TvDriverRegistry {
 
   late final Map<TvConnectionProtocol, TvRemoteDriver> _drivers;
   late final IrBlasterDriver irBlasterDriver;
+  late final PhilipsJointSpaceDriver philipsDriver;
+  late final VidaaSmartDriver vidaaDriver;
 
   TvRemoteDriver? driverFor(TvConnectionProtocol protocol) => _drivers[protocol];
 

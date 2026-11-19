@@ -199,6 +199,7 @@ class LgWebOsDriver implements TvRemoteDriver {
   Future<bool> _ensureRegistered(
     String ip, {
     bool waitForUserPrompt = false,
+    int? preferredPort,
   }) async {
     final cleanIp = ip.trim();
     if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
@@ -216,9 +217,16 @@ class LgWebOsDriver implements TvRemoteDriver {
     final isFirstUnpairedPrompt =
         !hasSavedKey && !Platform.environment.containsKey('FLUTTER_TEST');
 
-    for (final useTls in <bool>[true, false]) {
+    final candidateUrls = (preferredPort != null &&
+            preferredPort > 0 &&
+            preferredPort != 3000 &&
+            preferredPort != 3001)
+        ? <String>['ws://$cleanIp:$preferredPort']
+        : <String>['wss://$cleanIp:3001', 'ws://$cleanIp:3000'];
+
+    for (final url in candidateUrls) {
+      final useTls = url.startsWith('wss://');
       try {
-        final url = useTls ? 'wss://$cleanIp:3001' : 'ws://$cleanIp:3000';
         final client = HttpClient()
           ..connectionTimeout = const Duration(milliseconds: 2200)
           ..badCertificateCallback = (X509Certificate cert, String host, _) =>
@@ -303,9 +311,10 @@ class LgWebOsDriver implements TvRemoteDriver {
     String ip,
     String uri, {
     Map<String, Object?>? payload,
+    int? preferredPort,
   }) async {
     for (var attempt = 0; attempt < 2; attempt++) {
-      final ready = await _ensureRegistered(ip);
+      final ready = await _ensureRegistered(ip, preferredPort: preferredPort);
       if (!ready || _ssapWs == null || _ssapWs!.readyState != WebSocket.open) {
         _closeAllSockets();
         continue;
@@ -348,7 +357,10 @@ class LgWebOsDriver implements TvRemoteDriver {
     return null;
   }
 
-  Future<WebSocket?> _ensurePointerSocket(String ip) async {
+  Future<WebSocket?> _ensurePointerSocket(
+    String ip, {
+    int? preferredPort,
+  }) async {
     final cleanIp = ip.trim();
     if (_pointerWs != null &&
         _connectedIp == cleanIp &&
@@ -360,6 +372,7 @@ class LgWebOsDriver implements TvRemoteDriver {
     final resp = await _sendSsapRequest(
       cleanIp,
       'ssap://com.webos.service.networkinput/getPointerInputSocket',
+      preferredPort: preferredPort,
     );
     final payload = resp?['payload'];
     final socketPath =
@@ -394,9 +407,13 @@ class LgWebOsDriver implements TvRemoteDriver {
     }
   }
 
-  Future<bool> _sendPointerFrame(String ip, String frame) async {
+  Future<bool> _sendPointerFrame(
+    String ip,
+    String frame, {
+    int? preferredPort,
+  }) async {
     for (var attempt = 0; attempt < 2; attempt++) {
-      final ptrWs = await _ensurePointerSocket(ip);
+      final ptrWs = await _ensurePointerSocket(ip, preferredPort: preferredPort);
       if (ptrWs == null || ptrWs.readyState != WebSocket.open) {
         _closePointerSocket();
         continue;
@@ -422,12 +439,16 @@ class LgWebOsDriver implements TvRemoteDriver {
         boardInfo: 'Geçersiz LG webOS IP adresi',
       );
     }
-    final ok = await _ensureRegistered(cleanIp, waitForUserPrompt: true);
+    final ok = await _ensureRegistered(
+      cleanIp,
+      waitForUserPrompt: true,
+      preferredPort: device.port,
+    );
     if (ok) {
-      await _ensurePointerSocket(cleanIp);
+      await _ensurePointerSocket(cleanIp, preferredPort: device.port);
     }
     return device.copyWith(
-      port: ok ? 3001 : device.port,
+      port: ok ? (device.port > 0 ? device.port : 3001) : device.port,
       protocol: TvConnectionProtocol.lgWebOs3000,
       isPaired: ok,
       isOnline: ok,
@@ -447,13 +468,18 @@ class LgWebOsDriver implements TvRemoteDriver {
           await _sendPointerFrame(
             cleanIp,
             buildPointerButtonFrame(pointerButton),
+            preferredPort: device.port,
           )) {
         return true;
       }
       final uri = command == TvKeyCommand.channelUp
           ? 'ssap://tv/channelUp'
           : 'ssap://tv/channelDown';
-      final res = await _sendSsapRequest(cleanIp, uri);
+      final res = await _sendSsapRequest(
+        cleanIp,
+        uri,
+        preferredPort: device.port,
+      );
       return res != null;
     }
 
@@ -461,6 +487,7 @@ class LgWebOsDriver implements TvRemoteDriver {
       if (await _sendPointerFrame(
         cleanIp,
         buildPointerButtonFrame(pointerButton),
+        preferredPort: device.port,
       )) {
         return true;
       }
@@ -468,6 +495,7 @@ class LgWebOsDriver implements TvRemoteDriver {
         final res = await _sendSsapRequest(
           cleanIp,
           'ssap://com.webos.service.ime/sendEnterKey',
+          preferredPort: device.port,
         );
         return res != null;
       }
@@ -496,7 +524,12 @@ class LgWebOsDriver implements TvRemoteDriver {
         uri = 'ssap://com.webos.service.ime/sendEnterKey';
     }
 
-    final res = await _sendSsapRequest(cleanIp, uri, payload: payload);
+    final res = await _sendSsapRequest(
+      cleanIp,
+      uri,
+      payload: payload,
+      preferredPort: device.port,
+    );
     if (res == null &&
         command == TvKeyCommand.power &&
         TvNetworkValidators.isValidMacAddress(device.macAddress)) {
@@ -507,12 +540,20 @@ class LgWebOsDriver implements TvRemoteDriver {
 
   @override
   Future<bool> movePointer(TvDevice device, double dx, double dy) =>
-      _sendPointerFrame(device.ip.trim(), buildPointerMoveFrame(dx, dy));
+      _sendPointerFrame(
+        device.ip.trim(),
+        buildPointerMoveFrame(dx, dy),
+        preferredPort: device.port,
+      );
 
   @override
   Future<bool> clickPointer(TvDevice device, {bool rightClick = false}) async {
     if (rightClick) return sendKey(device, TvKeyCommand.back);
-    if (await _sendPointerFrame(device.ip.trim(), buildPointerClickFrame())) {
+    if (await _sendPointerFrame(
+      device.ip.trim(),
+      buildPointerClickFrame(),
+      preferredPort: device.port,
+    )) {
       return true;
     }
     return sendKey(device, TvKeyCommand.ok);
@@ -523,6 +564,7 @@ class LgWebOsDriver implements TvRemoteDriver {
       _sendPointerFrame(
         device.ip.trim(),
         buildPointerScrollFrame(wheelClicks),
+        preferredPort: device.port,
       );
 
   @override
@@ -537,6 +579,7 @@ class LgWebOsDriver implements TvRemoteDriver {
       cleanIp,
       'ssap://com.webos.service.ime/insertText',
       payload: <String, Object?>{'text': text, 'replace': 0},
+      preferredPort: device.port,
     );
     if (submitEnter) {
       await sendEnter(device);
@@ -550,6 +593,7 @@ class LgWebOsDriver implements TvRemoteDriver {
       device.ip.trim(),
       'ssap://com.webos.service.ime/deleteCharacters',
       payload: <String, Object?>{'count': count.clamp(1, 20)},
+      preferredPort: device.port,
     );
     return res != null;
   }
@@ -559,6 +603,7 @@ class LgWebOsDriver implements TvRemoteDriver {
     final res = await _sendSsapRequest(
       device.ip.trim(),
       'ssap://com.webos.service.ime/sendEnterKey',
+      preferredPort: device.port,
     );
     return res != null;
   }
@@ -599,6 +644,7 @@ class LgWebOsDriver implements TvRemoteDriver {
       device.ip.trim(),
       'ssap://system.launcher/launch',
       payload: payload,
+      preferredPort: device.port,
     );
     return res != null;
   }

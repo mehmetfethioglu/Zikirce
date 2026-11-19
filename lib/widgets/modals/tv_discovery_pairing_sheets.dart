@@ -67,9 +67,12 @@ class _TvDiscoveryModalSheetState extends ConsumerState<TvDiscoveryModalSheet> {
     });
 
     final updated = ref.read(cueDeckProvider).selectedDevice;
-    if (device.protocol == TvConnectionProtocol.remotePort6466 &&
-        updated.port == 6466 &&
-        !updated.isPaired) {
+    final needsPinSheet = !updated.isPaired &&
+        ((device.protocol == TvConnectionProtocol.remotePort6466 &&
+                updated.port == 6466) ||
+            updated.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+            updated.protocol == TvConnectionProtocol.vidaaSmart36669);
+    if (needsPinSheet) {
       Navigator.of(context).pop();
       showModalBottomSheet<void>(
         context: context,
@@ -940,7 +943,8 @@ class _InteractiveTvPairingSheetState
   }
 }
 
-/// 6-Character PIN Pairing Sheet for Port 6466/6467 (`Android TV Remote Protocol v2`).
+/// Multi-Protocol PIN Pairing Sheet (`Android TV 6466` 6-char hex PIN,
+/// `Philips JointSpace 1926` 4-digit PIN, and `Hisense/Toshiba VIDAA 36669` 4-digit PIN).
 class Pin6466PairingSheet extends ConsumerStatefulWidget {
   const Pin6466PairingSheet({super.key, required this.targetIp});
 
@@ -958,6 +962,7 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
   bool _isVerifyingPin = false;
   bool _pinDisplayedOnTv = false;
   bool _adb5555OpenOnTv = false;
+  int _expectedPinLength = 6;
   String _sessionMessage = '';
 
   @override
@@ -965,6 +970,11 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
     super.initState();
     _pinController = TextEditingController();
     final state = ref.read(cueDeckProvider);
+    final selectedProto = state.selectedDevice.protocol;
+    if (selectedProto == TvConnectionProtocol.philipsJointSpace1925 ||
+        selectedProto == TvConnectionProtocol.vidaaSmart36669) {
+      _expectedPinLength = 4;
+    }
     final initialIp = TvNetworkValidators.isValidIp(widget.targetIp)
         ? widget.targetIp.trim()
         : (state.selectedDevice.hasValidIp
@@ -1000,17 +1010,20 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
     setState(() {
       _isRequestingPin = true;
       _sessionMessage =
-          '📡 $ip adresindeki TV ekranında 6 haneli PIN kodu oluşturuluyor...';
+          '📡 $ip adresindeki TV ekranında PIN kodu oluşturuluyor...';
     });
 
     final res = await ref
         .read(cueDeckProvider.notifier)
-        .startPin6467Pairing(customIp: ip, forceRestart: forceRestart);
+        .startSmartPinPairing(customIp: ip, forceRestart: forceRestart);
     if (!mounted) return;
     setState(() {
       _isRequestingPin = false;
       _pinDisplayedOnTv = res['pinDisplayed'] == true;
       _adb5555OpenOnTv = res['adb5555Open'] == true;
+      if (res['pinLength'] is int) {
+        _expectedPinLength = res['pinLength'] as int;
+      }
       _sessionMessage = (res['message'] as String?) ?? '';
     });
   }
@@ -1018,10 +1031,14 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
   Future<void> _submitPinAndPair() async {
     final pin = _pinController.text.trim();
     final ip = _ipController.text.trim();
-    if (!TvNetworkValidators.isValidPairingPinCode(pin)) {
+    final isValidPin = _expectedPinLength == 4
+        ? RegExp(r'^\d{4}$').hasMatch(pin)
+        : TvNetworkValidators.isValidPairingPinCode(pin);
+    if (!isValidPin) {
       setState(() {
-        _sessionMessage =
-            '⚠️ Lütfen TV ekranında görünen 6 karakterli PIN kodunu eksiksiz girin (0-9 / A-F).';
+        _sessionMessage = _expectedPinLength == 4
+            ? '⚠️ Lütfen TV ekranında görünen 4 rakamlı PIN kodunu girin (Örn: 4829).'
+            : '⚠️ Lütfen TV ekranında görünen 6 karakterli PIN kodunu eksiksiz girin (0-9 / A-F).';
       });
       return;
     }
@@ -1034,7 +1051,7 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
     final nav = Navigator.of(context);
     final ok = await ref
         .read(cueDeckProvider.notifier)
-        .pairWithSelectedTvPin6466(pin, customIp: ip);
+        .submitSmartPinPairing(pin, customIp: ip);
     if (!mounted) return;
     setState(() {
       _isVerifyingPin = false;
@@ -1052,6 +1069,12 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final selectedProto = ref.watch(
+      cueDeckProvider.select((s) => s.selectedDevice.protocol),
+    );
+    final isFourDigit = _expectedPinLength == 4 ||
+        selectedProto == TvConnectionProtocol.philipsJointSpace1925 ||
+        selectedProto == TvConnectionProtocol.vidaaSmart36669;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final sheetBg =
         isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
@@ -1063,6 +1086,15 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
         isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
     final mintText =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
+
+    final pinSheetTitle = selectedProto == TvConnectionProtocol.philipsJointSpace1925
+        ? '🔢 Philips v6 PIN Eşleştirme (Port 1926)'
+        : (selectedProto == TvConnectionProtocol.vidaaSmart36669
+              ? '🔢 Hisense / VIDAA PIN Eşleştirme (36669)'
+              : '🔢 Standart TV PIN Eşleştirme (Port 6466)');
+    final pinSheetDesc = isFourDigit
+        ? 'TV ekranınızda beliren 4 haneli güvenlik PIN kodunu girerek şifreli eşleştirmeyi tamamlayın.'
+        : 'Standart Google TV / Android TV cihazlarında TV ekranında beliren 6 karakterli PIN kodunu (rakam veya A-F harf) girin.';
 
     return Container(
       decoration: BoxDecoration(
@@ -1078,7 +1110,7 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
             children: <Widget>[
               Expanded(
                 child: Text(
-                  '🔢 Standart TV PIN Eşleştirme (Port 6466)',
+                  pinSheetTitle,
                   style: TextStyle(
                     color: primaryText,
                     fontWeight: FontWeight.w800,
@@ -1104,7 +1136,7 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Standart Google TV / Android TV cihazlarında TV ekranında beliren 6 karakterli PIN kodunu (rakam veya A-F harf) girin.',
+            pinSheetDesc,
             style: TextStyle(
               color: secondaryText,
               fontSize: 12,
@@ -1184,9 +1216,11 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
           const SizedBox(height: 10),
           TextField(
             controller: _pinController,
-            keyboardType: TextInputType.visiblePassword,
+            keyboardType: isFourDigit
+                ? TextInputType.number
+                : TextInputType.visiblePassword,
             textCapitalization: TextCapitalization.characters,
-            maxLength: 6,
+            maxLength: isFourDigit ? 4 : 6,
             style: TextStyle(
               color: primaryText,
               fontWeight: FontWeight.w800,
@@ -1194,7 +1228,9 @@ class _Pin6466PairingSheetState extends ConsumerState<Pin6466PairingSheet> {
               letterSpacing: 4,
             ),
             decoration: InputDecoration(
-              labelText: '6 Karakterli TV PIN Kodu (Örn: 123456 veya A1B2C3)',
+              labelText: isFourDigit
+                  ? '4 Rakamlı TV PIN Kodu (Örn: 4829)'
+                  : '6 Karakterli TV PIN Kodu (Örn: 123456 veya A1B2C3)',
               labelStyle: TextStyle(color: goldText, fontSize: 12),
               counterText: '',
               filled: true,
@@ -1433,10 +1469,50 @@ class _ConnectionDiagnosticSheetState
                     child: OutlinedButton.icon(
                       onPressed: _running ? null : _run,
                       icon: const Icon(Icons.refresh_rounded, size: 16),
-                      label: const Text('Yeniden Test Et'),
+                      label: const Text(
+                        'Yenile',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const Key('copy_anonymized_report_button'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: goldText,
+                        side: BorderSide(color: goldText.withValues(alpha: 0.45)),
+                      ),
+                      onPressed: _running
+                          ? null
+                          : () async {
+                              final anonJson = await ref
+                                  .read(cueDeckProvider.notifier)
+                                  .generateAnonymizedCompatibilityReport();
+                              await Clipboard.setData(
+                                ClipboardData(text: anonJson),
+                              );
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context)
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      '✓ Kişisel verisiz (IP/MAC gizli) uyumluluk raporu kopyalandı',
+                                    ),
+                                  ),
+                                );
+                            },
+                      icon: const Icon(Icons.privacy_tip_outlined, size: 15),
+                      label: const Text(
+                        'Anonim',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
@@ -1461,10 +1537,186 @@ class _ConnectionDiagnosticSheetState
                                 );
                             },
                       icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: const Text('Raporu Kopyala'),
+                      label: const Text(
+                        'Tam Rapor',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet letting users switch between ranked alternative Smart TV protocols/ports
+/// when a regional OEM TV chassis ignores its auto-detected default profile.
+class TvAlternativeProfileSheet extends ConsumerWidget {
+  const TvAlternativeProfileSheet({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final selected = ref.watch(cueDeckProvider.select((s) => s.selectedDevice));
+    final suggestions = ref
+        .read(cueDeckProvider.notifier)
+        .getSuggestedAlternativeProfiles();
+
+    final sheetBg =
+        isDarkMode ? const Color(0xFF0A0C12) : const Color(0xFFF3F5F9);
+    final cardBg = isDarkMode ? const Color(0xFF11141E) : Colors.white;
+    final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
+    final secondaryText =
+        isDarkMode ? Colors.white70 : const Color(0xFF525B6C);
+    final goldText =
+        isDarkMode ? const Color(0xFFE2A84B) : const Color(0xFFB87818);
+    final borderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.09)
+        : const Color(0xFFE2E8F0);
+
+    return FractionallySizedBox(
+      heightFactor: 0.78,
+      child: Container(
+        key: const Key('tv_alternative_profile_sheet'),
+        decoration: BoxDecoration(
+          color: sheetBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(Icons.tune_rounded, color: goldText, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '🔄 Alternatif Kumanda Profili Seç',
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: secondaryText),
+                  ),
+                ],
+              ),
+              Text(
+                'Tuşlar TV\'de yanlış işlev açıyorsa veya tepki vermiyorsa farklı bir OEM kontrol profili deneyin '
+                '(Şu an: ${selected.protocol.label} • Port ${selected.port}).',
+                style: TextStyle(
+                  color: secondaryText,
+                  fontSize: 11.5,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: suggestions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final p = suggestions[index];
+                    return InkWell(
+                      key: Key('tv_profile_${p.id}'),
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () async {
+                        HapticFeedback.mediumImpact();
+                        final nav = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final ok = await ref
+                            .read(cueDeckProvider.notifier)
+                            .switchTvProtocolProfile(p);
+                        if (!context.mounted) return;
+                        nav.pop();
+                        if (ok) {
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(
+                                content: Text('✓ Profil değiştirildi: ${p.label}'),
+                              ),
+                            );
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          children: <Widget>[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: goldText.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                ':${p.port}',
+                                style: TextStyle(
+                                  color: goldText,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    p.label,
+                                    style: TextStyle(
+                                      color: primaryText,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    p.subtitle,
+                                    style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: secondaryText,
+                              size: 18,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),

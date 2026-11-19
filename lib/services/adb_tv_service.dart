@@ -18,10 +18,12 @@ import 'drivers/arcelik_vestel_upnp_driver.dart';
 import 'drivers/lg_webos_driver.dart';
 import 'drivers/samsung_tizen_driver.dart';
 import 'drivers/tv_driver_registry.dart';
+import 'drivers/tv_quirks_registry.dart';
 import 'drivers/youtube_dial_beam_service.dart';
 
 export 'crypto/adb_rsa_authenticator.dart' show AdbRsaAuthenticator;
 export 'drivers/ir_blaster_driver.dart' show IrBlasterDriver, IrBrandProfile;
+export 'drivers/tv_quirks_registry.dart' show TvQuirkProfile, TvQuirksRegistry;
 
 /// Pure-Dart Universal Smart TV & Android TV Transport Orchestrator.
 /// - Android TV / Google TV: Port 5555 (ADB RSA-2048 + evdev/UHID mouse) & Port 6466/6467 (mTLS PIN).
@@ -71,10 +73,13 @@ class AdbTvService {
   static const Duration _idleSocketTimeout = Duration(minutes: 10);
 
   final TvSecretVault _secretVault;
+  final TvQuirksRegistry _quirksRegistry = TvQuirksRegistry();
   late final TvDriverRegistry _driverRegistry;
   late final YoutubeDialBeamService _dialBeamService;
   late final TvDiagnosticReporter _diagnosticReporter;
   final AdbRsaAuthenticator _rsaAuth = AdbRsaAuthenticator();
+
+  TvQuirksRegistry get quirksRegistry => _quirksRegistry;
 
   Socket? _socket;
   StreamSubscription<Uint8List>? _socketSub;
@@ -1351,6 +1356,8 @@ class AdbTvService {
       if (driver != null &&
           (device.protocol == TvConnectionProtocol.samsungTizen8001 ||
               device.protocol == TvConnectionProtocol.lgWebOs3000 ||
+              device.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+              device.protocol == TvConnectionProtocol.vidaaSmart36669 ||
               device.protocol == TvConnectionProtocol.sonyBraviaIrcc)) {
         final pairedSmart = await driver.pair(device);
         return pairedSmart.copyWith(
@@ -2452,6 +2459,31 @@ class AdbTvService {
     return _sendRemote6466KeyFrame(device, code);
   }
 
+  Future<Map<String, dynamic>> startSmartTvPinPairing(
+    TvDevice device, {
+    bool forceRestart = false,
+  }) {
+    switch (device.protocol) {
+      case TvConnectionProtocol.philipsJointSpace1925:
+        return _driverRegistry.philipsDriver.startPinPairing(device);
+      case TvConnectionProtocol.vidaaSmart36669:
+        return _driverRegistry.vidaaDriver.startPinPairing(device);
+      default:
+        return startPin6467PairingSession(device, forceRestart: forceRestart);
+    }
+  }
+
+  Future<TvDevice> completeSmartTvPinPairing(TvDevice device, String pin) {
+    switch (device.protocol) {
+      case TvConnectionProtocol.philipsJointSpace1925:
+        return _driverRegistry.philipsDriver.completePinPairing(device, pin);
+      case TvConnectionProtocol.vidaaSmart36669:
+        return _driverRegistry.vidaaDriver.submitAuthPin(device, pin);
+      default:
+        return pairWithPin6466(device, pin);
+    }
+  }
+
   Future<String> buildConnectionDiagnosticReport(
     TvDevice device, {
     String appVersion = '',
@@ -2462,6 +2494,18 @@ class AdbTvService {
         appVersion: appVersion,
         detectedWifiIp: _detectedWifiIp,
         localNetworkPermissionDenied: _localNetworkPermissionDenied,
+        recentDiagLog: _diagLog,
+        scanPortsOverride: scanPortsOverride,
+      );
+
+  Future<String> buildAnonymizedCompatibilityReport(
+    TvDevice device, {
+    String appVersion = '',
+    List<int>? scanPortsOverride,
+  }) =>
+      _diagnosticReporter.buildAnonymizedCompatibilityReport(
+        device,
+        appVersion: appVersion,
         recentDiagLog: _diagLog,
         scanPortsOverride: scanPortsOverride,
       );

@@ -40,11 +40,32 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '2.0.0+25';
+  static const String currentVersion = '2.0.0+27';
   static const String currentShortVersion = 'v2.0.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '2.0.0+27',
+      versionLabel: 'v2.0.0 (Build 27)',
+      releaseDate: '19 Kasım 2026',
+      headline:
+          'Küresel TV Uyumluluk Motoru: Philips v6 Digest+PIN, Hisense VIDAA MQTT TLS, Alternatif Profil Seçici & Anonim Tanılama',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'PHİLİPS & VIDAA',
+          title: 'Philips JointSpace v6 (1926 PIN) & Hisense/Toshiba VIDAA MQTT TLS',
+          description:
+              'Avrupa Philips TV\'ler için 4 haneli PIN + HTTP Digest doğrulaması; Hisense/Toshiba VIDAA TV\'ler için şifreli MQTT v3.1.1 ve PIN eşleştirmesi eklendi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'PROFİL SEÇİCİ',
+          title: 'Vestel/Regal Düzeltmeleri, Dinamik Sessiz İkonu & Alternatif Profil',
+          description:
+              'Regal/Vestel YouTube/Kanal tuş haritası yenilendi, sessiz ikonu canlı duruma bağlandı; Ayarlar\'a tek dokunuş «Alternatif Profil» ve IP/MAC gizleyen Anonim Tanılama Raporu eklendi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '2.0.0+25',
       versionLabel: 'v2.0.0 (Build 25)',

@@ -733,11 +733,19 @@ class _CueDeckSettingsScreenState
                                           .read(cueDeckProvider.notifier)
                                           .connectAndPairDevice(d);
                                       if (!context.mounted) return;
-                                      if (d.protocol ==
-                                              TvConnectionProtocol
-                                                  .remotePort6466 &&
-                                          d.port == 6466 &&
-                                          !d.isPaired) {
+                                      if ((d.protocol ==
+                                                  TvConnectionProtocol
+                                                      .remotePort6466 &&
+                                              d.port == 6466 &&
+                                              !d.isPaired) ||
+                                          ((d.protocol ==
+                                                      TvConnectionProtocol
+                                                          .philipsJointSpace1925 ||
+                                                  d.protocol ==
+                                                      TvConnectionProtocol
+                                                          .vidaaSmart36669) &&
+                                              !d.isPaired &&
+                                              !ok)) {
                                         _openPin6466Dialog(context, d.ip);
                                       } else if (!ok) {
                                         _openInteractiveRsaPairingSheet(
@@ -951,36 +959,73 @@ class _CueDeckSettingsScreenState
                               ],
                             ),
                             const SizedBox(height: 6),
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextButton.icon(
-                                key: const Key('tv_diagnostic_report_button'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: secondaryText,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: () {
-                                  HapticFeedback.selectionClick();
-                                  showModalBottomSheet<void>(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (_) =>
-                                        const ConnectionDiagnosticSheet(),
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.medical_information_outlined,
-                                  size: 15,
-                                ),
-                                label: const Text(
-                                  '🩺 Bağlantı Tanılama Raporu',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 11,
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: TextButton.icon(
+                                    key: const Key('switch_tv_profile_button'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: goldText,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: () {
+                                      HapticFeedback.selectionClick();
+                                      showModalBottomSheet<void>(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        backgroundColor: Colors.transparent,
+                                        builder: (_) =>
+                                            const TvAlternativeProfileSheet(),
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.tune_rounded,
+                                      size: 15,
+                                    ),
+                                    label: const Text(
+                                      '🔄 Alternatif Profil',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                                Expanded(
+                                  child: TextButton.icon(
+                                    key: const Key('tv_diagnostic_report_button'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: secondaryText,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: () {
+                                      HapticFeedback.selectionClick();
+                                      showModalBottomSheet<void>(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        backgroundColor: Colors.transparent,
+                                        builder: (_) =>
+                                            const ConnectionDiagnosticSheet(),
+                                      );
+                                    },
+                                    icon: const Icon(
+                                      Icons.medical_information_outlined,
+                                      size: 15,
+                                    ),
+                                    label: const Text(
+                                      '🩺 Tanılama Raporu',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),

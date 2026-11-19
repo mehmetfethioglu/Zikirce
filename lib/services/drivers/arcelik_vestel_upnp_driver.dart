@@ -436,8 +436,9 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
 
   Future<bool> sendVestelSmartCenterKey(
     String ip,
-    TvKeyCommand command,
-  ) async {
+    TvKeyCommand command, {
+    int? preferredPort,
+  }) async {
     final code = vestelKeyCodeForCommand(command);
     final unquotedXml = '<remote><key code=$code/></remote>';
     final quotedXml =
@@ -449,9 +450,15 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     ];
     final dialBase = _dialAppUrls[ip];
     final targetUrls = <String>[
+      if (preferredPort != null &&
+          preferredPort > 0 &&
+          preferredPort != 56789) ...<String>[
+        'http://$ip:$preferredPort/apps/SmartCenter',
+        'http://$ip:$preferredPort/apps/vr/remote',
+      ],
       'http://$ip:56789/apps/SmartCenter',
       'http://$ip:56789/apps/vr/remote',
-      'http://$ip:56791/apps/vr/remote',
+      if (preferredPort != 56791) 'http://$ip:56791/apps/vr/remote',
       if (dialBase != null && dialBase.isNotEmpty)
         '${dialBase.endsWith('/') ? dialBase : '$dialBase/'}SmartCenter',
     ];
@@ -560,10 +567,19 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     if (!TvNetworkValidators.isValidIp(ip)) return false;
 
     final query = arcelikGrundigQueryForCommand(command);
+    if (device.port > 0 && device.port != 8085 && device.port != 8080) {
+      if (await sendRawHttpGetOverTcp(ip, device.port, '/sendrcpackage?$query')) {
+        return true;
+      }
+    }
     if (await sendRawHttpGetOverTcp(ip, 8085, '/sendrcpackage?$query')) {
       return true;
     }
-    if (await sendVestelSmartCenterKey(ip, command)) {
+    if (await sendVestelSmartCenterKey(
+      ip,
+      command,
+      preferredPort: device.port,
+    )) {
       return true;
     }
     if (await sendRawHttpGetOverTcp(ip, 8080, '/sendrcpackage?$query')) {
@@ -651,7 +667,11 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
-    if (await _arcelikDelegate.sendVestelSmartCenterKey(ip, command)) {
+    if (await _arcelikDelegate.sendVestelSmartCenterKey(
+      ip,
+      command,
+      preferredPort: device.port,
+    )) {
       return true;
     }
     final query = ArcelikGrundigDriver.arcelikGrundigQueryForCommand(command);

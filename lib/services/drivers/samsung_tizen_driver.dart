@@ -92,14 +92,17 @@ class SamsungTizenDriver implements TvRemoteDriver {
     String ip, {
     required bool useTls,
     String? token,
+    int? port,
   }) {
     final cleanIp = ip.trim();
+    final effectivePort =
+        (port != null && port > 0) ? port : (useTls ? 8002 : 8001);
     final tokenPart = (token != null && token.trim().isNotEmpty)
         ? '&token=${Uri.encodeQueryComponent(token.trim())}'
         : '';
     return useTls
-        ? 'wss://$cleanIp:8002/api/v2/channels/samsung.remote.control?name=$_encodedAppName$tokenPart'
-        : 'ws://$cleanIp:8001/api/v2/channels/samsung.remote.control?name=$_encodedAppName$tokenPart';
+        ? 'wss://$cleanIp:$effectivePort/api/v2/channels/samsung.remote.control?name=$_encodedAppName$tokenPart'
+        : 'ws://$cleanIp:$effectivePort/api/v2/channels/samsung.remote.control?name=$_encodedAppName$tokenPart';
   }
 
   /// Builds a Samsung Tizen `ms.remote.control` JSON key command frame.
@@ -175,6 +178,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
   Future<bool> _ensureConnected(
     String ip, {
     bool waitForInteractiveAllow = false,
+    int? preferredPort,
   }) async {
     final cleanIp = ip.trim();
     if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
@@ -190,7 +194,12 @@ class SamsungTizenDriver implements TvRemoteDriver {
     final hasSavedToken = savedToken != null && savedToken.trim().isNotEmpty;
     final isFirstUnpairedPrompt =
         !hasSavedToken && !Platform.environment.containsKey('FLUTTER_TEST');
-    final tryTlsOrder = <bool>[true, false];
+    final hasCustomPort =
+        preferredPort != null &&
+        preferredPort > 0 &&
+        preferredPort != 8001 &&
+        preferredPort != 8002;
+    final tryTlsOrder = hasCustomPort ? const <bool>[false] : const <bool>[true, false];
 
     for (final useTls in tryTlsOrder) {
       try {
@@ -198,6 +207,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
           cleanIp,
           useTls: useTls,
           token: savedToken,
+          port: hasCustomPort ? preferredPort : null,
         );
         final client = HttpClient()
           ..connectionTimeout = const Duration(milliseconds: 2400)
@@ -263,10 +273,14 @@ class SamsungTizenDriver implements TvRemoteDriver {
     String cleanIp,
     String payload, {
     String? secondPayload,
+    int? preferredPort,
     required String errorContext,
   }) async {
     for (var attempt = 0; attempt < 2; attempt++) {
-      final connected = await _ensureConnected(cleanIp);
+      final connected = await _ensureConnected(
+        cleanIp,
+        preferredPort: preferredPort,
+      );
       if (!connected || _ws == null || _ws!.readyState != WebSocket.open) {
         _closeSocket();
         continue;
@@ -295,9 +309,13 @@ class SamsungTizenDriver implements TvRemoteDriver {
         boardInfo: 'Geçersiz Samsung TV IP adresi',
       );
     }
-    final ok = await _ensureConnected(cleanIp, waitForInteractiveAllow: true);
+    final ok = await _ensureConnected(
+      cleanIp,
+      waitForInteractiveAllow: true,
+      preferredPort: device.port,
+    );
     return device.copyWith(
-      port: ok ? 8002 : device.port,
+      port: ok ? (device.port > 0 ? device.port : 8002) : device.port,
       protocol: TvConnectionProtocol.samsungTizen8001,
       isPaired: ok,
       isOnline: ok,
@@ -313,6 +331,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
     final sent = await _sendWsPayloadWithRetry(
       cleanIp,
       buildControlPayload(command),
+      preferredPort: device.port,
       errorContext: 'Samsung tuş gönderim hatası',
     );
     if (sent) return true;
@@ -335,6 +354,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
       cleanIp,
       buildImeTextPayload(text),
       secondPayload: submitEnter ? buildControlPayload(TvKeyCommand.ok) : null,
+      preferredPort: device.port,
       errorContext: 'Samsung metin gönderim hatası',
     );
   }
@@ -376,7 +396,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
     // If launching YouTube with a specific video/playlist URL, try WebSocket deep-link first
     if (platform == StreamingPlatform.youtube &&
         deepLinkUrl.trim().isNotEmpty &&
-        await _ensureConnected(cleanIp)) {
+        await _ensureConnected(cleanIp, preferredPort: device.port)) {
       try {
         _ws!.add(
           jsonEncode(<String, Object?>{

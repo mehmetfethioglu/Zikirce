@@ -184,6 +184,151 @@ class TvDiagnosticReporter {
     return b.toString();
   }
 
+  /// Strips IPv4, IPv6, and MAC addresses from diagnostic text lines.
+  static String redactPii(String raw) {
+    return raw
+        .replaceAll(
+          RegExp(r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'),
+          '<MAC>',
+        )
+        .replaceAll(
+          RegExp(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'),
+          '<LAN_IP>',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b(?:fe80::[0-9a-fA-F:%]+|(?:[0-9a-fA-F]{1,4}:){4,7}[0-9a-fA-F]{0,4}|(?:[0-9a-fA-F]{0,4}:){1,6}::[0-9a-fA-F:%]*)\b',
+            caseSensitive: false,
+          ),
+          '<IPV6>',
+        );
+  }
+
+  static const List<(String, String)> _knownBrandTokens = <(String, String)>[
+    ('samsung', 'Samsung'),
+    ('tizen', 'Samsung'),
+    ('webos', 'LG'),
+    ('lg ', 'LG'),
+    ('philips', 'Philips'),
+    ('hisense', 'Hisense'),
+    ('vidaa', 'VIDAA'),
+    ('bravia', 'Sony BRAVIA'),
+    ('sony', 'Sony'),
+    ('roku', 'Roku'),
+    ('regal', 'Regal'),
+    ('vestel', 'Vestel'),
+    ('toshiba', 'Toshiba'),
+    ('telefunken', 'Telefunken'),
+    ('jvc', 'JVC'),
+    ('finlux', 'Finlux'),
+    ('hi-level', 'Hi-Level'),
+    ('arçelik', 'Arçelik'),
+    ('arcelik', 'Arçelik'),
+    ('beko', 'Beko'),
+    ('grundig', 'Grundig'),
+    ('altus', 'Altus'),
+    ('tcl', 'TCL'),
+    ('xiaomi', 'Xiaomi'),
+    ('google tv', 'Google TV'),
+    ('android tv', 'Android TV'),
+    ('fire tv', 'Fire TV'),
+  ];
+
+  /// Extracts a non-personal brand/chassis fingerprint without copying user room names.
+  static String extractBrandFingerprint(TvDevice device) {
+    final hay = ' ${device.name} ${device.boardInfo} '.toLowerCase();
+    final matched = <String>[];
+    for (final (token, label) in _knownBrandTokens) {
+      if (hay.contains(token) && !matched.contains(label)) {
+        matched.add(label);
+      }
+    }
+    return matched.isEmpty ? 'Generic Smart TV' : matched.join(' / ');
+  }
+
+  Future<String> _httpStatusOnlyProbe(String ip, int port, String path) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 520);
+    try {
+      final req = await client
+          .getUrl(Uri.parse('http://$ip:$port$path'))
+          .timeout(const Duration(milliseconds: 580));
+      req.headers.set(HttpHeaders.connectionHeader, 'close');
+      final resp = await req.close().timeout(const Duration(milliseconds: 580));
+      await resp.drain<void>();
+      return 'HTTP ${resp.statusCode}';
+    } catch (_) {
+      return 'none';
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Generates a Zero-PII anonymized JSON compatibility snapshot containing no LAN IP,
+  /// Wi-Fi IP, MAC address, or personal TV room names.
+  Future<String> buildAnonymizedCompatibilityReport(
+    TvDevice device, {
+    required String appVersion,
+    required List<String> recentDiagLog,
+    List<int>? scanPortsOverride,
+  }) async {
+    final ip = device.ip.trim();
+    final hasValidIp = TvNetworkValidators.isValidIp(ip);
+    final portsToScan = scanPortsOverride ?? _curatedPorts;
+    final openPorts = hasValidIp
+        ? (await _portScan(
+            ip,
+            portsToScan,
+            concurrency: scanPortsOverride != null ? 8 : 12,
+            timeout: const Duration(milliseconds: 650),
+          ))
+            .open
+        : <int>[];
+
+    final dialProbes = <String, String>{};
+    if (hasValidIp) {
+      final candidateDialPorts = <int>{
+        if (device.port > 0) device.port,
+        56789,
+        56791,
+        8008,
+        8060,
+      };
+      for (final p in openPorts) {
+        if (!candidateDialPorts.contains(p)) continue;
+        dialProbes['port_${p}_YouTube'] =
+            await _httpStatusOnlyProbe(ip, p, '/apps/YouTube');
+        dialProbes['port_${p}_Netflix'] =
+            await _httpStatusOnlyProbe(ip, p, '/apps/Netflix');
+      }
+    }
+
+    final sanitizedEvents = recentDiagLog.reversed
+        .take(15)
+        .toList()
+        .reversed
+        .map(redactPii)
+        .toList(growable: false);
+
+    final payload = <String, Object?>{
+      'schemaVersion': 1,
+      'privacy': 'zero-pii-redacted',
+      'appVersion': appVersion,
+      'os': Platform.operatingSystem,
+      'protocol': device.protocol.name,
+      'port': device.port,
+      'isPaired': device.isPaired,
+      'isOnline': device.isOnline,
+      'brandFingerprint': extractBrandFingerprint(device),
+      'openPorts': openPorts,
+      'dialProbes': dialProbes,
+      'recentEvents': sanitizedEvents,
+    };
+
+    final prettyJson = const JsonEncoder.withIndent('  ').convert(payload);
+    return redactPii(prettyJson);
+  }
+
   Future<({List<int> open, int refused, int timedOut, int otherErrors})>
   _portScan(
     String ip,
