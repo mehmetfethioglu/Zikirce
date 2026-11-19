@@ -17,7 +17,7 @@ class SamsungTizenDriver implements TvRemoteDriver {
   })  : _log = logger;
 
   static const String _encodedAppName = 'Q3VlRGVjaw=='; // Base64("CueDeck")
-  static const Duration _idleTimeout = Duration(seconds: 45);
+  static const Duration _idleTimeout = Duration(minutes: 10);
 
   final TvSecretVault _vault;
   final TvDiagLogger? _log;
@@ -187,6 +187,9 @@ class SamsungTizenDriver implements TvRemoteDriver {
 
     _closeSocket();
     final savedToken = await _vault.readSecret(tokenStorageKey(cleanIp));
+    final hasSavedToken = savedToken != null && savedToken.trim().isNotEmpty;
+    final isFirstUnpairedPrompt =
+        !hasSavedToken && !Platform.environment.containsKey('FLUTTER_TEST');
     final tryTlsOrder = <bool>[true, false];
 
     for (final useTls in tryTlsOrder) {
@@ -197,13 +200,14 @@ class SamsungTizenDriver implements TvRemoteDriver {
           token: savedToken,
         );
         final client = HttpClient()
-          ..connectionTimeout = const Duration(milliseconds: 1400)
+          ..connectionTimeout = const Duration(milliseconds: 2400)
           ..badCertificateCallback = (X509Certificate cert, String host, _) =>
               TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
 
         final ws = await WebSocket.connect(url, customClient: client).timeout(
-          const Duration(milliseconds: 2200),
+          const Duration(milliseconds: 2800),
         );
+        ws.pingInterval = const Duration(seconds: 20);
 
         _ws = ws;
         _connectedIp = cleanIp;
@@ -234,7 +238,9 @@ class SamsungTizenDriver implements TvRemoteDriver {
 
         final waitDuration = waitForInteractiveAllow
             ? const Duration(seconds: 18)
-            : const Duration(milliseconds: 1400);
+            : (isFirstUnpairedPrompt
+                ? const Duration(seconds: 15)
+                : const Duration(milliseconds: 3500));
         final authorized = await completer.future.timeout(
           waitDuration,
           onTimeout: () => _ws != null && _ws!.readyState == WebSocket.open,
@@ -247,6 +253,33 @@ class SamsungTizenDriver implements TvRemoteDriver {
         _closeSocket();
       } catch (e) {
         _diag('Samsung ${useTls ? 8002 : 8001} bağlantı hatası ($cleanIp): $e');
+        _closeSocket();
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _sendWsPayloadWithRetry(
+    String cleanIp,
+    String payload, {
+    String? secondPayload,
+    required String errorContext,
+  }) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final connected = await _ensureConnected(cleanIp);
+      if (!connected || _ws == null || _ws!.readyState != WebSocket.open) {
+        _closeSocket();
+        continue;
+      }
+      try {
+        _ws!.add(payload);
+        if (secondPayload != null) {
+          _ws!.add(secondPayload);
+        }
+        _scheduleIdle();
+        return true;
+      } catch (e) {
+        _diag('$errorContext: $e');
         _closeSocket();
       }
     }
@@ -277,24 +310,17 @@ class SamsungTizenDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final cleanIp = device.ip.trim();
-    final connected = await _ensureConnected(cleanIp);
-    if (!connected || _ws == null) {
-      if (command == TvKeyCommand.power &&
-          TvNetworkValidators.isValidMacAddress(device.macAddress)) {
-        return wakeOnLan(device);
-      }
-      return false;
+    final sent = await _sendWsPayloadWithRetry(
+      cleanIp,
+      buildControlPayload(command),
+      errorContext: 'Samsung tuş gönderim hatası',
+    );
+    if (sent) return true;
+    if (command == TvKeyCommand.power &&
+        TvNetworkValidators.isValidMacAddress(device.macAddress)) {
+      return wakeOnLan(device);
     }
-
-    try {
-      _ws!.add(buildControlPayload(command));
-      _scheduleIdle();
-      return true;
-    } catch (e) {
-      _diag('Samsung tuş gönderim hatası: $e');
-      _closeSocket();
-      return false;
-    }
+    return false;
   }
 
   @override
@@ -305,20 +331,12 @@ class SamsungTizenDriver implements TvRemoteDriver {
   }) async {
     final cleanIp = device.ip.trim();
     if (text.isEmpty) return false;
-    final connected = await _ensureConnected(cleanIp);
-    if (!connected || _ws == null) return false;
-    try {
-      _ws!.add(buildImeTextPayload(text));
-      if (submitEnter) {
-        _ws!.add(buildControlPayload(TvKeyCommand.ok));
-      }
-      _scheduleIdle();
-      return true;
-    } catch (e) {
-      _diag('Samsung metin gönderim hatası: $e');
-      _closeSocket();
-      return false;
-    }
+    return _sendWsPayloadWithRetry(
+      cleanIp,
+      buildImeTextPayload(text),
+      secondPayload: submitEnter ? buildControlPayload(TvKeyCommand.ok) : null,
+      errorContext: 'Samsung metin gönderim hatası',
+    );
   }
 
   @override

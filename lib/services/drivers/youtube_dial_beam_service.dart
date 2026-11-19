@@ -9,8 +9,8 @@ import 'tv_driver_registry.dart';
 
 /// Universal Smart TV YouTube & Streaming DIAL v2 / Lounge Beamer.
 /// Routes deep-links and YouTube Playlist payloads cleanly across LG webOS SSAP,
-/// Roku ECP (`837`), Samsung Tizen WS/REST, Vestel/Arçelik keycodes (`1067`/`1059`),
-/// and Universal DIAL (`POST <appUrl>/YouTube` with `v=<vid>&list=<pid>`).
+/// Roku ECP (`837`), Samsung Tizen WS/REST, Universal DIAL (`56789`/`56791` `/apps/YouTube`),
+/// and Vestel/Regal post-DIAL keycode fallbacks (`1064` Netflix / `1046` Smart Portal).
 class YoutubeDialBeamService {
   YoutubeDialBeamService({
     required this._dialAppUrls,
@@ -83,18 +83,7 @@ class YoutubeDialBeamService {
       if (ok) return true;
     }
 
-    // 2. Vestel / Arçelik Smart Center (Port 56789) dedicated app keycodes
-    if ((device.protocol == TvConnectionProtocol.vestelSmart56789 ||
-            device.port == 56789) &&
-        sendVestelRawKey != null) {
-      if (platform == StreamingPlatform.youtube && deepLinkUrl.trim().isEmpty) {
-        if (await sendVestelRawKey(ip, 1067)) return true;
-      } else if (platform == StreamingPlatform.netflix) {
-        if (await sendVestelRawKey(ip, 1059)) return true;
-      }
-    }
-
-    // 3. Universal DIAL v2 Protocol (`POST <Application-URL>/YouTube` or common DIAL ports)
+    // 2. Universal DIAL v2 Protocol (`POST <Application-URL>/YouTube` or common DIAL ports)
     String? dialAppName;
     String dialPayload = '';
     if (platform == StreamingPlatform.youtube) {
@@ -109,50 +98,80 @@ class YoutubeDialBeamService {
       dialAppName = 'AmazonInstantVideo';
     }
 
-    if (dialAppName == null) return false;
+    if (dialAppName != null) {
+      final candidateUrls = <String>[];
+      final cachedAppUrl = _dialAppUrls[ip]?.trim() ?? '';
+      if (cachedAppUrl.isNotEmpty) {
+        final base = cachedAppUrl.endsWith('/')
+            ? cachedAppUrl
+            : '$cachedAppUrl/';
+        candidateUrls.add('$base$dialAppName');
+      }
 
-    final candidateUrls = <String>[];
-    final cachedAppUrl = _dialAppUrls[ip]?.trim() ?? '';
-    if (cachedAppUrl.isNotEmpty) {
-      final base = cachedAppUrl.endsWith('/')
-          ? cachedAppUrl
-          : '$cachedAppUrl/';
-      candidateUrls.add('$base$dialAppName');
+      final dialPorts = <int>{
+        device.port,
+        56789,
+        56791,
+        8008,
+        8060,
+        8085,
+        3697,
+        7676,
+        8080,
+      };
+      for (final dPort in dialPorts) {
+        if (dPort <= 0) continue;
+        candidateUrls.add('http://$ip:$dPort/apps/$dialAppName');
+      }
+
+      for (final targetUrl in candidateUrls) {
+        if (await _postDialRequest(targetUrl, dialPayload)) {
+          return true;
+        }
+        final isVestelDial = device.protocol == TvConnectionProtocol.vestelSmart56789 ||
+            targetUrl.contains(':56789/') ||
+            targetUrl.contains(':56791/');
+        if (isVestelDial &&
+            dialPayload.isEmpty &&
+            await _postDialRequest(
+              targetUrl,
+              dialPayload,
+              contentType: 'application/x-www-form-urlencoded',
+            )) {
+          return true;
+        }
+      }
     }
 
-    final dialPorts = <int>{
-      device.port,
-      8008,
-      8060,
-      56789,
-      8085,
-      3697,
-      7676,
-      8080,
-    };
-    for (final dPort in dialPorts) {
-      if (dPort <= 0) continue;
-      candidateUrls.add('http://$ip:$dPort/apps/$dialAppName');
+    // 3. Post-DIAL Vestel / Regal SmartCenter fallback (never sends 1067 Settings)
+    if ((device.protocol == TvConnectionProtocol.vestelSmart56789 ||
+            device.port == 56789 ||
+            device.port == 56791) &&
+        sendVestelRawKey != null) {
+      if (platform == StreamingPlatform.netflix) {
+        return sendVestelRawKey(ip, 1064);
+      }
+      if (platform == StreamingPlatform.youtube && deepLinkUrl.trim().isEmpty) {
+        return sendVestelRawKey(ip, 1046);
+      }
     }
 
-    for (final targetUrl in candidateUrls) {
-      final ok = await _postDialRequest(targetUrl, dialPayload);
-      if (ok) return true;
-    }
     return false;
   }
 
-  Future<bool> _postDialRequest(String url, String dialPayload) async {
+  Future<bool> _postDialRequest(
+    String url,
+    String dialPayload, {
+    String contentType = 'text/plain; charset=utf-8',
+  }) async {
     final client = HttpClient()
       ..connectionTimeout = const Duration(milliseconds: 520);
     try {
       final req = await client
           .postUrl(Uri.parse(url))
           .timeout(const Duration(milliseconds: 560));
-      req.headers.set(
-        HttpHeaders.contentTypeHeader,
-        'text/plain; charset=utf-8',
-      );
+      req.headers.set(HttpHeaders.contentTypeHeader, contentType);
+      req.headers.set(HttpHeaders.connectionHeader, 'close');
       final bodyBytes = utf8.encode(dialPayload);
       req.contentLength = bodyBytes.length;
       if (bodyBytes.isNotEmpty) req.add(bodyBytes);

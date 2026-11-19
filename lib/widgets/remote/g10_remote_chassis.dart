@@ -45,6 +45,9 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
     final selectedDevice = ref.watch(
       cueDeckProvider.select((s) => s.selectedDevice),
     );
+    final isMuted = ref.watch(
+      cueDeckProvider.select((s) => s.isMuted),
+    );
     final chassisColor =
         isDarkMode ? const Color(0xFF000000) : const Color(0xFFF5F6F9);
     final chassisBorderColor =
@@ -191,14 +194,19 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                   topIcon: Icons.add_rounded,
                   topTooltip: 'Ses +',
                   onTopTap: () => sendKey(TvKeyCommand.volUp),
+                  centerLabel: 'SES',
                   bottomIcon: Icons.remove_rounded,
                   bottomTooltip: 'Ses -',
                   onBottomTap: () => sendKey(TvKeyCommand.volDown),
                 ),
                 _RoundRemoteKeyButton(
-                  icon: Icons.volume_off_outlined,
-                  tooltip: 'Sessiz',
+                  key: const Key('remote_mute_button'),
+                  icon: isMuted
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  tooltip: isMuted ? 'Sesi Aç' : 'Sessize Al',
                   isDarkMode: isDarkMode,
+                  isActive: isMuted,
                   size: 42,
                   iconSize: 19,
                   onTap: () => sendKey(TvKeyCommand.mute),
@@ -208,6 +216,7 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                   topIcon: Icons.keyboard_arrow_up_rounded,
                   topTooltip: 'Kanal +',
                   onTopTap: () => sendKey(TvKeyCommand.channelUp),
+                  centerLabel: 'KNL',
                   bottomIcon: Icons.keyboard_arrow_down_rounded,
                   bottomTooltip: 'Kanal -',
                   onBottomTap: () => sendKey(TvKeyCommand.channelDown),
@@ -442,10 +451,12 @@ class _TvConnectionIconOnlyIndicator extends ConsumerWidget {
 
 class _RoundRemoteKeyButton extends StatelessWidget {
   const _RoundRemoteKeyButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.isDarkMode,
     required this.onTap,
+    this.isActive = false,
     this.size = 44,
     this.iconSize = 20,
   });
@@ -454,17 +465,21 @@ class _RoundRemoteKeyButton extends StatelessWidget {
   final String tooltip;
   final bool isDarkMode;
   final VoidCallback onTap;
+  final bool isActive;
   final double size;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    final fillColor =
-        isDarkMode ? const Color(0xFF111318) : const Color(0xFFECEDF2);
-    final borderColor =
-        isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE);
-    final iconColor =
-        isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F);
+    final fillColor = isActive
+        ? (isDarkMode ? const Color(0xFF2B1418) : const Color(0xFFFFEBEE))
+        : (isDarkMode ? const Color(0xFF111318) : const Color(0xFFECEDF2));
+    final borderColor = isActive
+        ? const Color(0xFFFF5252)
+        : (isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE));
+    final iconColor = isActive
+        ? (isDarkMode ? const Color(0xFFFF6B6B) : const Color(0xFFD32F2F))
+        : (isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F));
 
     return Tooltip(
       message: tooltip,
@@ -654,6 +669,7 @@ class _VerticalRockerPill extends StatelessWidget {
     required this.bottomIcon,
     required this.bottomTooltip,
     required this.onBottomTap,
+    this.centerLabel,
   });
 
   final bool isDarkMode;
@@ -663,6 +679,7 @@ class _VerticalRockerPill extends StatelessWidget {
   final IconData bottomIcon;
   final String bottomTooltip;
   final VoidCallback onBottomTap;
+  final String? centerLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -672,6 +689,8 @@ class _VerticalRockerPill extends StatelessWidget {
         isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE);
     final iconColor =
         isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F);
+    final labelColor =
+        isDarkMode ? const Color(0xFF7D8598) : const Color(0xFF6B7280);
 
     return Container(
       width: 50,
@@ -697,13 +716,28 @@ class _VerticalRockerPill extends StatelessWidget {
               ),
             ),
           ),
-          Divider(
-            height: 1,
-            thickness: 1,
-            indent: 12,
-            endIndent: 12,
-            color: borderColor.withValues(alpha: 0.6),
-          ),
+          if (centerLabel != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                centerLabel!,
+                style: TextStyle(
+                  color: labelColor,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.7,
+                  height: 1.0,
+                ),
+              ),
+            )
+          else
+            Divider(
+              height: 1,
+              thickness: 1,
+              indent: 12,
+              endIndent: 12,
+              color: borderColor.withValues(alpha: 0.6),
+            ),
           Expanded(
             child: Tooltip(
               message: bottomTooltip,

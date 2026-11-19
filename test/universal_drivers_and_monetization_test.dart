@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cuedeck/models/cue_models.dart';
 import 'package:cuedeck/providers/cuedeck_providers.dart';
@@ -6,13 +7,16 @@ import 'package:cuedeck/services/adb_tv_service.dart';
 import 'package:cuedeck/services/crypto/tv_secret_vault.dart';
 import 'package:cuedeck/services/cue_monetization_service.dart';
 import 'package:cuedeck/services/cue_notification_service.dart';
+import 'package:cuedeck/services/drivers/arcelik_vestel_upnp_driver.dart';
 import 'package:cuedeck/services/drivers/lg_webos_driver.dart';
 import 'package:cuedeck/services/drivers/roku_philips_vidaa_driver.dart';
 import 'package:cuedeck/services/drivers/samsung_tizen_driver.dart';
+import 'package:cuedeck/services/drivers/tv_driver_registry.dart';
 import 'package:cuedeck/services/drivers/youtube_dial_beam_service.dart';
 import 'package:cuedeck/services/share/cue_share_intent_service.dart';
 import 'package:cuedeck/widgets/modals/cue_pro_paywall_sheet.dart';
 import 'package:cuedeck/widgets/modals/share_to_tv_beam_sheet.dart';
+import 'package:cuedeck/widgets/remote/g10_remote_chassis.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,6 +76,57 @@ class _TestAdbTvService extends AdbTvService {
   }
 }
 
+class _HealingTestAdbTvService extends _TestAdbTvService {
+  _HealingTestAdbTvService({
+    this.upgradeOnVerify = false,
+    this.reachableOnVerify = true,
+  });
+
+  final bool upgradeOnVerify;
+  final bool reachableOnVerify;
+  final List<(TvConnectionProtocol, int, TvKeyCommand)> sentKeys =
+      <(TvConnectionProtocol, int, TvKeyCommand)>[];
+  int verifyCalls = 0;
+
+  @override
+  Future<bool> sendKeyCommand(TvDevice device, TvKeyCommand command) async {
+    sentKeys.add((device.protocol, device.port, command));
+    if (device.protocol == TvConnectionProtocol.rokuEcp8060 &&
+        command == TvKeyCommand.channelUp) {
+      return false;
+    }
+    if (device.protocol == TvConnectionProtocol.lgWebOs3000 &&
+        command == TvKeyCommand.channelUp) {
+      return false;
+    }
+    return true;
+  }
+
+  @override
+  Future<String> executeVoiceCommand(
+    TvDevice device,
+    String rawSpokenText,
+  ) async =>
+      '⚡ Sesli komut sinyali gönderildi: "$rawSpokenText"';
+
+  @override
+  Future<TvDevice> verifyOrReconnectDevice(TvDevice device) async {
+    verifyCalls++;
+    if (!reachableOnVerify) {
+      return device.copyWith(isOnline: false);
+    }
+    if (upgradeOnVerify) {
+      return device.copyWith(
+        port: 56789,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+        isOnline: true,
+        isPaired: true,
+      );
+    }
+    return device.copyWith(isOnline: true);
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -126,12 +181,23 @@ void main() {
   );
 
   test(
-    'LgWebOsDriver builds SSAP register payload, D-Pad pointer button map, move and scroll frames',
+    'LgWebOsDriver builds SSAP register payload, channel permissions, D-Pad & channel pointer button map, move and scroll frames',
     () {
       final reg = LgWebOsDriver.buildRegisterPayload(clientKey: 'lg-key-1');
       expect(reg['type'], 'register');
       final regPayload = reg['payload']! as Map<String, Object?>;
       expect(regPayload['client-key'], 'lg-key-1');
+      final manifest = regPayload['manifest']! as Map<String, Object?>;
+      final signed = manifest['signed']! as Map<String, Object?>;
+      final perms = signed['permissions']! as List<String>;
+      expect(
+        perms,
+        containsAll(<String>[
+          'CONTROL_TV_CHANNEL',
+          'READ_CURRENT_CHANNEL',
+          'READ_TV_CHANNEL_LIST',
+        ]),
+      );
 
       expect(LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.up), 'UP');
       expect(LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.down), 'DOWN');
@@ -143,6 +209,14 @@ void main() {
       expect(LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.ok), 'ENTER');
       expect(LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.back), 'BACK');
       expect(LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.home), 'HOME');
+      expect(
+        LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.channelUp),
+        'CHANNELUP',
+      );
+      expect(
+        LgWebOsDriver.pointerButtonNameForKey(TvKeyCommand.channelDown),
+        'CHANNELDOWN',
+      );
 
       final moveFrame = LgWebOsDriver.buildPointerMoveFrame(10, -20);
       expect(moveFrame, startsWith('type:move\n'));
@@ -453,6 +527,317 @@ void main() {
       expect(find.text('Seçili Planı Başlat'), findsOneWidget);
 
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'AdbTvService ADB fast key uses input keyevent for channel keys and guards event0 against 64-bit kernels',
+    () {
+      expect(
+        AdbTvService.buildFastKeyShellCommand(TvKeyCommand.channelUp),
+        'input keyevent 166',
+      );
+      expect(
+        AdbTvService.buildFastKeyShellCommand(TvKeyCommand.channelDown),
+        'input keyevent 167',
+      );
+      final okShell = AdbTvService.buildFastKeyShellCommand(TvKeyCommand.ok);
+      expect(okShell, contains('aarch64'));
+      expect(okShell, contains('x86_64'));
+      expect(okShell, contains('input keyevent 23'));
+    },
+  );
+
+  test(
+    'CueDeckNotifier.sendRemoteKey keeps TV online when single key fails on reachable TV and upgrades DIAL to SmartCenter',
+    () async {
+      final reachableService = _HealingTestAdbTvService(
+        upgradeOnVerify: false,
+        reachableOnVerify: true,
+      );
+      final container1 = ProviderContainer(
+        overrides: [
+          adbTvServiceProvider.overrideWithValue(reachableService),
+          cueNotificationServiceProvider.overrideWithValue(
+            _TestCueNotificationService(),
+          ),
+        ],
+      );
+      addTearDown(container1.dispose);
+
+      container1.read(cueDeckProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      const lgTv = TvDevice(
+        name: 'LG webOS Test',
+        ip: '192.168.1.55',
+        port: 3001,
+        protocol: TvConnectionProtocol.lgWebOs3000,
+        isOnline: true,
+        isPaired: true,
+      );
+      final notifier1 = container1.read(cueDeckProvider.notifier);
+      notifier1.selectDevice(lgTv);
+      await notifier1.sendRemoteKey(TvKeyCommand.channelUp);
+
+      final state1 = container1.read(cueDeckProvider);
+      expect(reachableService.verifyCalls, 1);
+      expect(state1.selectedDevice.isOnline, isTrue);
+
+      await notifier1.runVoiceTranscript('sessiz');
+      expect(container1.read(cueDeckProvider).selectedDevice.isOnline, isTrue);
+      expect(reachableService.verifyCalls, 2);
+
+      final upgradingService = _HealingTestAdbTvService(
+        upgradeOnVerify: true,
+        reachableOnVerify: true,
+      );
+      final container2 = ProviderContainer(
+        overrides: [
+          adbTvServiceProvider.overrideWithValue(upgradingService),
+          cueNotificationServiceProvider.overrideWithValue(
+            _TestCueNotificationService(),
+          ),
+        ],
+      );
+      addTearDown(container2.dispose);
+
+      container2.read(cueDeckProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      const misclassifiedTv = TvDevice(
+        name: 'Vestel / Smart TV',
+        ip: '192.168.1.60',
+        port: 8060,
+        protocol: TvConnectionProtocol.rokuEcp8060,
+        isOnline: true,
+        isPaired: true,
+      );
+      final notifier2 = container2.read(cueDeckProvider.notifier);
+      notifier2.selectDevice(misclassifiedTv);
+      await notifier2.sendRemoteKey(TvKeyCommand.channelUp);
+
+      final state2 = container2.read(cueDeckProvider);
+      expect(state2.selectedDevice.isOnline, isTrue);
+      expect(
+        state2.selectedDevice.protocol,
+        TvConnectionProtocol.vestelSmart56789,
+      );
+      expect(state2.selectedDevice.port, 56789);
+      expect(upgradingService.sentKeys, <(TvConnectionProtocol, int, TvKeyCommand)>[
+        (TvConnectionProtocol.rokuEcp8060, 8060, TvKeyCommand.channelUp),
+        (TvConnectionProtocol.vestelSmart56789, 56789, TvKeyCommand.channelUp),
+      ]);
+
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+    },
+  );
+
+  test(
+    'ArcelikGrundigDriver.vestelKeyCodeForCommand returns verified Regal/Vestel codes without 1067 or 1014',
+    () {
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.up), 1020);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.down), 1019);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.left), 1021);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.right), 1022);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.ok), 1053);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.back), 1010);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.home), 1048);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.menu), 1048);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.inputs), 1056);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.volUp), 1016);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.volDown), 1017);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.mute), 1013);
+      expect(ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.power), 1012);
+      expect(
+        ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.channelUp),
+        1032,
+      );
+      expect(
+        ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.channelDown),
+        1033,
+      );
+      expect(
+        ArcelikGrundigDriver.vestelKeyCodeForCommand(TvKeyCommand.search),
+        1046,
+      );
+
+      for (final cmd in TvKeyCommand.values) {
+        final code = ArcelikGrundigDriver.vestelKeyCodeForCommand(cmd);
+        expect(code, isNot(1067), reason: '1067 opens System Settings on Vestel');
+        expect(code, isNot(1014), reason: '1014 opens Picture Presets on Vestel');
+      }
+    },
+  );
+
+  test(
+    'YoutubeDialBeamService uses DIAL before Vestel fallback and never sends 1067 or 1059',
+    () async {
+      final prevOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = prevOverrides);
+
+      final requests = <String>[];
+      var return404ForDial = false;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      server.listen((req) async {
+        requests.add('${req.method} ${req.uri.path}');
+        req.response.statusCode = return404ForDial ? 404 : 201;
+        await req.response.close();
+      });
+
+      final vault = EncryptedTvSecretVault();
+      final ssdpLocs = <String, String>{};
+      final dialUrls = <String, String>{
+        '127.0.0.1': 'http://127.0.0.1:${server.port}/apps/',
+      };
+      final registry = TvDriverRegistry(
+        vault: vault,
+        openLanSocket: (ip, port, {required Duration timeout}) =>
+            Socket.connect(ip, port, timeout: timeout),
+        ssdpLocationUrls: ssdpLocs,
+        dialAppUrls: dialUrls,
+      );
+      addTearDown(registry.dispose);
+
+      final beam = YoutubeDialBeamService(
+        dialAppUrls: dialUrls,
+        registry: registry,
+      );
+      final rawKeys = <int>[];
+      const vestelDev = TvDevice(
+        name: 'Regal Smart TV',
+        ip: '127.0.0.1',
+        port: 56789,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+        isOnline: true,
+        isPaired: true,
+      );
+
+      final ytDialOk = await beam.launchOnSmartTv(
+        vestelDev,
+        platform: StreamingPlatform.youtube,
+        sendVestelRawKey: (ip, code) async {
+          rawKeys.add(code);
+          return true;
+        },
+      );
+      expect(ytDialOk, isTrue);
+      expect(requests, contains('POST /apps/YouTube'));
+      expect(rawKeys, isEmpty);
+
+      return404ForDial = true;
+      dialUrls['127.0.0.1'] = 'http://127.0.0.1:${server.port}/apps/';
+      final nfFallbackOk = await beam.launchOnSmartTv(
+        vestelDev,
+        platform: StreamingPlatform.netflix,
+        sendVestelRawKey: (ip, code) async {
+          rawKeys.add(code);
+          return true;
+        },
+      );
+      expect(nfFallbackOk, isTrue);
+      expect(rawKeys, contains(1064));
+      expect(rawKeys, isNot(contains(1059)));
+
+      rawKeys.clear();
+      final ytFallbackOk = await beam.launchOnSmartTv(
+        vestelDev,
+        platform: StreamingPlatform.youtube,
+        sendVestelRawKey: (ip, code) async {
+          rawKeys.add(code);
+          return true;
+        },
+      );
+      expect(ytFallbackOk, isTrue);
+      expect(rawKeys, contains(1046));
+      expect(rawKeys, isNot(contains(1067)));
+    },
+  );
+
+  testWidgets(
+    'G10PhysicalRemoteChassis mute icon starts unmuted (volume_up) and toggles cleanly with SES/KNL labels',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adbTvServiceProvider.overrideWithValue(_HealingTestAdbTvService()),
+            cueNotificationServiceProvider.overrideWithValue(
+              _TestCueNotificationService(),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: Center(
+                  child: G10PhysicalRemoteChassis(isDarkMode: true),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('SES'), findsOneWidget);
+      expect(find.text('KNL'), findsOneWidget);
+
+      final muteBtn = find.byKey(const Key('remote_mute_button'));
+      expect(muteBtn, findsOneWidget);
+      expect(
+        find.descendant(
+          of: muteBtn,
+          matching: find.byIcon(Icons.volume_up_rounded),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(muteBtn);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: muteBtn,
+          matching: find.byIcon(Icons.volume_off_rounded),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Ses +'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: muteBtn,
+          matching: find.byIcon(Icons.volume_up_rounded),
+        ),
+        findsOneWidget,
+      );
+
+      final element = tester.element(muteBtn);
+      final container = ProviderScope.containerOf(element);
+      await tester.tap(muteBtn);
+      await tester.pumpAndSettle();
+      expect(container.read(cueDeckProvider).isMuted, isTrue);
+
+      container.read(cueDeckProvider.notifier).selectDevice(
+        const TvDevice(
+          name: 'Another TV',
+          ip: '192.168.1.99',
+          port: 5555,
+          isOnline: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(cueDeckProvider).isMuted, isFalse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 300));
     },
   );
 }

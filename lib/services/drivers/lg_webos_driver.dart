@@ -16,7 +16,7 @@ class LgWebOsDriver implements TvRemoteDriver {
     TvDiagLogger? logger,
   })  : _log = logger;
 
-  static const Duration _idleTimeout = Duration(seconds: 45);
+  static const Duration _idleTimeout = Duration(minutes: 10);
 
   final TvSecretVault _vault;
   final TvDiagLogger? _log;
@@ -74,7 +74,10 @@ class LgWebOsDriver implements TvRemoteDriver {
               'CONTROL_INPUT_TEXT',
               'CONTROL_MOUSE_AND_KEYBOARD',
               'CONTROL_POWER',
+              'CONTROL_TV_CHANNEL',
               'READ_INSTALLED_APPS',
+              'READ_CURRENT_CHANNEL',
+              'READ_TV_CHANNEL_LIST',
             ],
           },
         },
@@ -103,6 +106,10 @@ class LgWebOsDriver implements TvRemoteDriver {
         return 'MENU';
       case TvKeyCommand.inputs:
         return 'LIST';
+      case TvKeyCommand.channelUp:
+        return 'CHANNELUP';
+      case TvKeyCommand.channelDown:
+        return 'CHANNELDOWN';
       case TvKeyCommand.voiceAssist:
       case TvKeyCommand.search:
         return 'HOME';
@@ -176,6 +183,19 @@ class LgWebOsDriver implements TvRemoteDriver {
     _pendingRequests.clear();
   }
 
+  void _closePointerSocket() {
+    _pointerSub?.cancel();
+    _pointerSub = null;
+    final ptr = _pointerWs;
+    _pointerWs = null;
+    if (ptr != null) {
+      unawaited(ptr.close().catchError((Object e) {
+        _diag('LG Pointer close err: $e');
+        return null;
+      }));
+    }
+  }
+
   Future<bool> _ensureRegistered(
     String ip, {
     bool waitForUserPrompt = false,
@@ -191,18 +211,23 @@ class LgWebOsDriver implements TvRemoteDriver {
 
     _closeAllSockets();
     final savedClientKey = await _vault.readSecret(clientKeyStorageKey(cleanIp));
+    final hasSavedKey =
+        savedClientKey != null && savedClientKey.trim().isNotEmpty;
+    final isFirstUnpairedPrompt =
+        !hasSavedKey && !Platform.environment.containsKey('FLUTTER_TEST');
 
     for (final useTls in <bool>[true, false]) {
       try {
         final url = useTls ? 'wss://$cleanIp:3001' : 'ws://$cleanIp:3000';
         final client = HttpClient()
-          ..connectionTimeout = const Duration(milliseconds: 1400)
+          ..connectionTimeout = const Duration(milliseconds: 2200)
           ..badCertificateCallback = (X509Certificate cert, String host, _) =>
               TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
 
         final ws = await WebSocket.connect(url, customClient: client).timeout(
-          const Duration(milliseconds: 2200),
+          const Duration(milliseconds: 2600),
         );
+        ws.pingInterval = const Duration(seconds: 20);
         _ssapWs = ws;
         _connectedIp = cleanIp;
         final regCompleter = Completer<bool>();
@@ -251,10 +276,13 @@ class LgWebOsDriver implements TvRemoteDriver {
 
         ws.add(jsonEncode(buildRegisterPayload(clientKey: savedClientKey)));
 
+        final registerTimeout = waitForUserPrompt
+            ? const Duration(seconds: 20)
+            : (isFirstUnpairedPrompt
+                ? const Duration(seconds: 18)
+                : const Duration(milliseconds: 3800));
         final ok = await regCompleter.future.timeout(
-          waitForUserPrompt
-              ? const Duration(seconds: 20)
-              : const Duration(milliseconds: 1600),
+          registerTimeout,
           onTimeout: () => false,
         );
         if (ok) {
@@ -276,47 +304,61 @@ class LgWebOsDriver implements TvRemoteDriver {
     String uri, {
     Map<String, Object?>? payload,
   }) async {
-    final ready = await _ensureRegistered(ip);
-    if (!ready || _ssapWs == null) return null;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final ready = await _ensureRegistered(ip);
+      if (!ready || _ssapWs == null || _ssapWs!.readyState != WebSocket.open) {
+        _closeAllSockets();
+        continue;
+      }
 
-    final reqId = 'cmd_${_nextReqId++}';
-    final completer = Completer<Map<String, dynamic>?>();
-    _pendingRequests[reqId] = completer;
+      final reqId = 'cmd_${_nextReqId++}';
+      final completer = Completer<Map<String, dynamic>?>();
+      _pendingRequests[reqId] = completer;
 
-    try {
-      _ssapWs!.add(
-        jsonEncode(<String, Object?>{
-          'id': reqId,
-          'type': 'request',
-          'uri': uri,
-          'payload': ?payload,
-        }),
-      );
-      _scheduleIdle();
-      return await completer.future.timeout(
-        const Duration(milliseconds: 1400),
-        onTimeout: () {
-          _pendingRequests.remove(reqId);
-          return null;
-        },
-      );
-    } catch (e) {
-      _pendingRequests.remove(reqId);
-      _diag('LG SSAP request hatası ($uri): $e');
-      return null;
+      try {
+        _ssapWs!.add(
+          jsonEncode(<String, Object?>{
+            'id': reqId,
+            'type': 'request',
+            'uri': uri,
+            'payload': ?payload,
+          }),
+        );
+        _scheduleIdle();
+        final resp = await completer.future.timeout(
+          const Duration(milliseconds: 2000),
+          onTimeout: () {
+            _pendingRequests.remove(reqId);
+            return null;
+          },
+        );
+        if (resp != null) {
+          if (resp['type'] == 'error') {
+            _diag('LG SSAP hata yanıtı ($uri): ${resp['error'] ?? resp}');
+            return null;
+          }
+          return resp;
+        }
+      } catch (e) {
+        _pendingRequests.remove(reqId);
+        _diag('LG SSAP request hatası ($uri): $e');
+      }
+      _closeAllSockets();
     }
+    return null;
   }
 
   Future<WebSocket?> _ensurePointerSocket(String ip) async {
+    final cleanIp = ip.trim();
     if (_pointerWs != null &&
-        _connectedIp == ip.trim() &&
+        _connectedIp == cleanIp &&
         _pointerWs!.readyState == WebSocket.open) {
       _scheduleIdle();
       return _pointerWs;
     }
 
     final resp = await _sendSsapRequest(
-      ip,
+      cleanIp,
       'ssap://com.webos.service.networkinput/getPointerInputSocket',
     );
     final payload = resp?['payload'];
@@ -326,30 +368,49 @@ class LgWebOsDriver implements TvRemoteDriver {
 
     try {
       final client = HttpClient()
-        ..connectionTimeout = const Duration(milliseconds: 1200)
+        ..connectionTimeout = const Duration(milliseconds: 2200)
         ..badCertificateCallback = (X509Certificate cert, String host, _) =>
             TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
       final ptrWs = await WebSocket.connect(socketPath, customClient: client)
-          .timeout(const Duration(milliseconds: 1600));
+          .timeout(const Duration(milliseconds: 2600));
+      ptrWs.pingInterval = const Duration(seconds: 20);
       _pointerWs = ptrWs;
       _pointerSub?.cancel();
       _pointerSub = ptrWs.listen(
         (_) {},
         onError: (Object e) {
           _diag('LG Pointer socket hata: $e');
-          _pointerWs = null;
+          _closePointerSocket();
         },
-        onDone: () {
-          _pointerWs = null;
-        },
+        onDone: _closePointerSocket,
         cancelOnError: false,
       );
       _scheduleIdle();
       return ptrWs;
     } catch (e) {
       _diag('LG Pointer socket bağlantı hatası: $e');
+      _closePointerSocket();
       return null;
     }
+  }
+
+  Future<bool> _sendPointerFrame(String ip, String frame) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final ptrWs = await _ensurePointerSocket(ip);
+      if (ptrWs == null || ptrWs.readyState != WebSocket.open) {
+        _closePointerSocket();
+        continue;
+      }
+      try {
+        ptrWs.add(frame);
+        _scheduleIdle();
+        return true;
+      } catch (e) {
+        _diag('LG Pointer frame hatası: $e');
+        _closePointerSocket();
+      }
+    }
+    return false;
   }
 
   @override
@@ -380,17 +441,28 @@ class LgWebOsDriver implements TvRemoteDriver {
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final cleanIp = device.ip.trim();
     final pointerButton = pointerButtonNameForKey(command);
+    if (command == TvKeyCommand.channelUp ||
+        command == TvKeyCommand.channelDown) {
+      if (pointerButton != null &&
+          await _sendPointerFrame(
+            cleanIp,
+            buildPointerButtonFrame(pointerButton),
+          )) {
+        return true;
+      }
+      final uri = command == TvKeyCommand.channelUp
+          ? 'ssap://tv/channelUp'
+          : 'ssap://tv/channelDown';
+      final res = await _sendSsapRequest(cleanIp, uri);
+      return res != null;
+    }
+
     if (pointerButton != null) {
-      final ptrWs = await _ensurePointerSocket(cleanIp);
-      if (ptrWs != null) {
-        try {
-          ptrWs.add(buildPointerButtonFrame(pointerButton));
-          _scheduleIdle();
-          return true;
-        } catch (e) {
-          _diag('LG Pointer tuş hatası ($pointerButton): $e');
-          _pointerWs = null;
-        }
+      if (await _sendPointerFrame(
+        cleanIp,
+        buildPointerButtonFrame(pointerButton),
+      )) {
+        return true;
       }
       if (command == TvKeyCommand.ok) {
         final res = await _sendSsapRequest(
@@ -414,10 +486,6 @@ class LgWebOsDriver implements TvRemoteDriver {
         payload = const <String, Object?>{'mute': true};
       case TvKeyCommand.power:
         uri = 'ssap://system/turnOff';
-      case TvKeyCommand.channelUp:
-        uri = 'ssap://tv/channelUp';
-      case TvKeyCommand.channelDown:
-        uri = 'ssap://tv/channelDown';
       case TvKeyCommand.playPause:
         uri = 'ssap://media.controls/play';
       case TvKeyCommand.rewind:
@@ -438,50 +506,24 @@ class LgWebOsDriver implements TvRemoteDriver {
   }
 
   @override
-  Future<bool> movePointer(TvDevice device, double dx, double dy) async {
-    final ptrWs = await _ensurePointerSocket(device.ip.trim());
-    if (ptrWs == null) return false;
-    try {
-      ptrWs.add(buildPointerMoveFrame(dx, dy));
-      _scheduleIdle();
-      return true;
-    } catch (e) {
-      _diag('LG Pointer move hatası: $e');
-      _pointerWs = null;
-      return false;
-    }
-  }
+  Future<bool> movePointer(TvDevice device, double dx, double dy) =>
+      _sendPointerFrame(device.ip.trim(), buildPointerMoveFrame(dx, dy));
 
   @override
   Future<bool> clickPointer(TvDevice device, {bool rightClick = false}) async {
     if (rightClick) return sendKey(device, TvKeyCommand.back);
-    final ptrWs = await _ensurePointerSocket(device.ip.trim());
-    if (ptrWs == null) return sendKey(device, TvKeyCommand.ok);
-    try {
-      ptrWs.add(buildPointerClickFrame());
-      _scheduleIdle();
+    if (await _sendPointerFrame(device.ip.trim(), buildPointerClickFrame())) {
       return true;
-    } catch (e) {
-      _diag('LG Pointer click hatası: $e');
-      _pointerWs = null;
-      return false;
     }
+    return sendKey(device, TvKeyCommand.ok);
   }
 
   @override
-  Future<bool> scrollWheel(TvDevice device, int wheelClicks) async {
-    final ptrWs = await _ensurePointerSocket(device.ip.trim());
-    if (ptrWs == null) return false;
-    try {
-      ptrWs.add(buildPointerScrollFrame(wheelClicks));
-      _scheduleIdle();
-      return true;
-    } catch (e) {
-      _diag('LG Pointer scroll hatası: $e');
-      _pointerWs = null;
-      return false;
-    }
-  }
+  Future<bool> scrollWheel(TvDevice device, int wheelClicks) =>
+      _sendPointerFrame(
+        device.ip.trim(),
+        buildPointerScrollFrame(wheelClicks),
+      );
 
   @override
   Future<bool> sendText(

@@ -15,6 +15,7 @@ import 'crypto/tv_secret_vault.dart';
 import 'diagnostics/tv_diagnostic_reporter.dart';
 import 'discovery/tv_discovery_helpers.dart';
 import 'drivers/arcelik_vestel_upnp_driver.dart';
+import 'drivers/lg_webos_driver.dart';
 import 'drivers/samsung_tizen_driver.dart';
 import 'drivers/tv_driver_registry.dart';
 import 'drivers/youtube_dial_beam_service.dart';
@@ -67,7 +68,7 @@ class AdbTvService {
     'com.akarworks.cuedeck/network',
   );
 
-  static const Duration _idleSocketTimeout = Duration(seconds: 6);
+  static const Duration _idleSocketTimeout = Duration(minutes: 10);
 
   final TvSecretVault _secretVault;
   late final TvDriverRegistry _driverRegistry;
@@ -1200,16 +1201,28 @@ class AdbTvService {
           }
         } else if (topTag == 0x42) {
           var pingVal = 0;
-          if (frame.length >= 3 && frame[2] == 0x08) {
+          var idx = 1;
+          while (idx < frame.length && idx < 4) {
+            final b = frame[idx++];
+            if ((b & 0x80) == 0) break;
+          }
+          if (idx < frame.length - 1 && frame[idx] == 0x08) {
+            idx++;
             var pShift = 0;
-            for (var i = 3; i < frame.length && i < 8; i++) {
-              final b = frame[i];
+            while (idx < frame.length && pShift < 35) {
+              final b = frame[idx++];
               pingVal |= (b & 0x7F) << pShift;
               if ((b & 0x80) == 0) break;
               pShift += 7;
             }
           }
-          _remote6466Socket?.add(buildRemote6466PingResponseFrame(pingVal));
+          final sock = _remote6466Socket;
+          if (sock != null) {
+            sock.add(buildRemote6466PingResponseFrame(pingVal));
+            unawaited(sock.flush().catchError((Object e) {
+              _diag('6466 pong flush: $e');
+            }));
+          }
         }
       } catch (e) {
         _diag('6466 frame dispatch err: $e');
@@ -1220,7 +1233,7 @@ class AdbTvService {
   void _scheduleRemote6466IdleDisconnect() {
     _remote6466IdleTimer?.cancel();
     _remote6466IdleTimer = Timer(
-      const Duration(seconds: 45),
+      const Duration(minutes: 10),
       _closeRemote6466Socket,
     );
   }
@@ -1244,8 +1257,9 @@ class AdbTvService {
         context: mtls.context,
         onBadCertificate: (X509Certificate cert) =>
             TvNetworkValidators.isPrivateLanIp(cleanIp) && cert.der.isNotEmpty,
-        timeout: const Duration(milliseconds: 1500),
+        timeout: const Duration(milliseconds: 2800),
       );
+      tlsSocket.setOption(SocketOption.tcpNoDelay, true);
       _remote6466Socket = tlsSocket;
       _remote6466Ip = cleanIp;
       _remote6466ReadyCompleter = Completer<bool>();
@@ -1257,7 +1271,7 @@ class AdbTvService {
       );
 
       final ready = await _remote6466ReadyCompleter!.future.timeout(
-        const Duration(milliseconds: 450),
+        const Duration(milliseconds: 700),
         onTimeout: () => false,
       );
       if (!ready && _remote6466Socket != null) {
@@ -1277,29 +1291,45 @@ class AdbTvService {
     }
   }
 
+  Future<bool> _sendRemote6466FrameWithRetry(
+    String cleanIp,
+    Uint8List frame,
+    String errorContext,
+  ) async {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final connected = await _ensureRemote6466Connected(cleanIp);
+      if (!connected || _remote6466Socket == null) {
+        _closeRemote6466Socket();
+        continue;
+      }
+      try {
+        _remote6466Socket!.add(frame);
+        await _remote6466Socket!.flush();
+        _scheduleRemote6466IdleDisconnect();
+        return true;
+      } catch (e) {
+        _diag('$errorContext (deneme ${attempt + 1}): $e');
+        _closeRemote6466Socket();
+      }
+    }
+    return false;
+  }
+
   Future<bool> _sendRemote6466KeyFrame(TvDevice device, int keyCode) async {
     final cleanIp = device.ip.trim();
     if (!isValidIp(cleanIp)) return false;
     final frame = buildRemote6466KeyFrame(keyCode);
 
-    final connected = await _ensureRemote6466Connected(cleanIp);
-    if (!connected || _remote6466Socket == null) {
-      if (Platform.environment.containsKey('FLUTTER_TEST')) {
-        return pingTv(cleanIp, port: 6466, timeout: const Duration(milliseconds: 350));
-      }
-      return false;
+    final sent = await _sendRemote6466FrameWithRetry(
+      cleanIp,
+      frame,
+      '6466 key frame err',
+    );
+    if (sent) return true;
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return pingTv(cleanIp, port: 6466, timeout: const Duration(milliseconds: 350));
     }
-
-    try {
-      _remote6466Socket!.add(frame);
-      await _remote6466Socket!.flush();
-      _scheduleRemote6466IdleDisconnect();
-      return true;
-    } catch (e) {
-      _diag('6466 key frame err: $e');
-      _closeRemote6466Socket();
-      return false;
-    }
+    return false;
   }
 
   Future<TvDevice> pairWithTv(TvDevice device) async {
@@ -1777,18 +1807,58 @@ class AdbTvService {
     return discoveredByMdns;
   }
 
+  Future<bool> _isGenuineRoku8060(String ip) async {
+    final cleanIp = ip.trim();
+    if (!isValidIp(cleanIp) ||
+        Platform.environment.containsKey('FLUTTER_TEST')) {
+      return false;
+    }
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 350);
+    try {
+      final req = await client
+          .getUrl(Uri.parse('http://$cleanIp:8060/query/device-info'))
+          .timeout(const Duration(milliseconds: 400));
+      final resp = await req.close().timeout(const Duration(milliseconds: 400));
+      if (resp.statusCode != 200) {
+        await resp.drain<void>();
+        return false;
+      }
+      final xml = await resp
+          .transform(utf8.decoder)
+          .join()
+          .timeout(const Duration(milliseconds: 400));
+      final lower = xml.toLowerCase();
+      return lower.contains('<device-info>') &&
+          (lower.contains('roku') ||
+              lower.contains('<friendly-device-name>') ||
+              lower.contains('<serial-number>'));
+    } catch (e) {
+      _diag('Roku 8060 doğrulama atlandı ($cleanIp): $e');
+      return false;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<int> _probeOpenSmartTvPort(
     String ip, {
     Duration timeout = const Duration(milliseconds: 300),
   }) async {
     const ports = <int>[
-      8002, 8001, 3001, 3000, 8060, 8085, 56789, 1926, 1925, 36669,
+      8002, 8001, 3001, 3000, 56789, 8085, 1926, 1925, 36669, 8060,
     ];
     final checks = await Future.wait<bool>(
       ports.map((p) => pingTv(ip, port: p, timeout: timeout)),
     );
     for (var i = 0; i < ports.length; i++) {
-      if (checks[i]) return ports[i];
+      if (!checks[i]) continue;
+      if (ports[i] == 8060) {
+        if (await _isGenuineRoku8060(ip)) return 8060;
+        if (await pingTv(ip, port: 8080, timeout: timeout)) return 8080;
+        continue;
+      }
+      return ports[i];
     }
     return 0;
   }
@@ -1929,6 +1999,27 @@ class AdbTvService {
 
       if (effectiveSmartPort > 0) {
         final proto = TvConnectionProtocol.fromNameOrPort(null, effectiveSmartPort);
+        var smartPaired = true;
+        var smartBoardInfo = metaModel.isNotEmpty
+            ? '$metaModel • ${proto.label}'
+            : proto.label;
+        if (proto == TvConnectionProtocol.samsungTizen8001) {
+          final token = await _secretVault.readSecret(
+            SamsungTizenDriver.tokenStorageKey(ip),
+          );
+          smartPaired = token != null && token.trim().isNotEmpty;
+          smartBoardInfo = smartPaired
+              ? 'Samsung Tizen • Yetkili Oturum (Port $effectiveSmartPort)'
+              : 'Samsung Tizen • İlk Tuşta TV Onayı Gerekir (Port $effectiveSmartPort)';
+        } else if (proto == TvConnectionProtocol.lgWebOs3000) {
+          final key = await _secretVault.readSecret(
+            LgWebOsDriver.clientKeyStorageKey(ip),
+          );
+          smartPaired = key != null && key.trim().isNotEmpty;
+          smartBoardInfo = smartPaired
+              ? 'LG webOS • Yetkili Oturum (Port $effectiveSmartPort)'
+              : 'LG webOS • İlk Tuşta TV Onayı Gerekir (Port $effectiveSmartPort)';
+        }
         return TvDevice(
           name: metaName.isNotEmpty
               ? metaName
@@ -1936,11 +2027,9 @@ class AdbTvService {
           ip: ip,
           port: effectiveSmartPort,
           protocol: proto,
-          isPaired: true,
+          isPaired: smartPaired,
           macAddress: metaMac,
-          boardInfo: metaModel.isNotEmpty
-              ? '$metaModel • ${proto.label}'
-              : proto.label,
+          boardInfo: smartBoardInfo,
           isOnline: true,
         );
       }
@@ -2010,23 +2099,24 @@ class AdbTvService {
             openSmartPort = 8002;
           } else if (portChecks[3]) {
             openSmartPort = 3001;
-          } else if (portChecks[4]) {
-            openSmartPort = 8060;
-          } else if (portChecks[5]) {
-            openSmartPort = 8085;
           } else if (portChecks[6]) {
             openSmartPort = 56789;
+          } else if (portChecks[5]) {
+            openSmartPort = 8085;
           }
 
           final hasHit = portChecks[0] ||
               portChecks[1] ||
               openSmartPort > 0 ||
+              portChecks[4] ||
               portChecks[7] ||
               multicastHints.containsKey(candidateIp);
           if (!hasHit) return null;
 
           if (openSmartPort == 0 &&
-              (portChecks[7] || multicastHints.containsKey(candidateIp))) {
+              (portChecks[4] ||
+                  portChecks[7] ||
+                  multicastHints.containsKey(candidateIp))) {
             openSmartPort = await _probeOpenSmartTvPort(
               candidateIp,
               timeout: const Duration(milliseconds: 240),
@@ -2060,55 +2150,242 @@ class AdbTvService {
 
   Future<bool> _sendVestelRawKeyCode(String ip, int keyCode) async {
     final xmlPayload = '<remote><key code=$keyCode/></remote>';
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(milliseconds: 500);
-    try {
-      final req = await client
-          .postUrl(Uri.parse('http://$ip:56789/apps/SmartCenter'))
-          .timeout(const Duration(milliseconds: 550));
-      req.headers.set(HttpHeaders.contentTypeHeader, 'text/xml; charset=utf-8');
-      final bytes = utf8.encode(xmlPayload);
-      req.contentLength = bytes.length;
-      req.add(bytes);
-      final resp = await req.close().timeout(const Duration(milliseconds: 550));
-      await resp.drain<void>();
-      return resp.statusCode >= 200 && resp.statusCode < 400;
-    } catch (e) {
-      _diag('Vestel raw keycode err ($ip): $e');
-      return false;
-    } finally {
-      client.close(force: true);
+    final endpoints = <String>[
+      'http://$ip:56789/apps/SmartCenter',
+      'http://$ip:56791/apps/vr/remote',
+    ];
+    for (final endpoint in endpoints) {
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(milliseconds: 500);
+      try {
+        final req = await client
+            .postUrl(Uri.parse(endpoint))
+            .timeout(const Duration(milliseconds: 550));
+        req.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'text/plain; charset=ISO-8859-1',
+        );
+        req.headers.set(HttpHeaders.connectionHeader, 'close');
+        final bytes = utf8.encode(xmlPayload);
+        req.contentLength = bytes.length;
+        req.add(bytes);
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 550),
+        );
+        await resp.drain<void>();
+        if (resp.statusCode >= 200 && resp.statusCode < 400) {
+          return true;
+        }
+      } catch (e) {
+        _diag('Vestel raw keycode err ($endpoint): $e');
+      } finally {
+        client.close(force: true);
+      }
     }
+    return false;
   }
 
-  String _buildFastKeyShellCommand(TvKeyCommand command) {
+  static String buildFastKeyShellCommand(TvKeyCommand command) {
     final scan = command.linuxScanCode;
     final code = command.keyCode;
-    if (scan <= 0) return 'input keyevent $code';
+    if (scan <= 0 ||
+        command == TvKeyCommand.channelUp ||
+        command == TvKeyCommand.channelDown) {
+      return 'input keyevent $code';
+    }
     final lo = (scan & 0xFF).toRadixString(16).padLeft(2, '0');
     final hi = ((scan >> 8) & 0xFF).toRadixString(16).padLeft(2, '0');
     const z8 = r'\x00\x00\x00\x00\x00\x00\x00\x00';
     final down = '$z8\\x01\\x00\\x$lo\\x$hi\\x01\\x00\\x00\\x00';
     const syn = '$z8\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00';
     final up = '$z8\\x01\\x00\\x$lo\\x$hi\\x00\\x00\\x00\\x00';
-    return "if [ -w /dev/input/event0 ] && ( [ -f /vendor/usr/keylayout/venus_IR_input.kl ] || [ -f /system/usr/keylayout/venus_IR_input.kl ] ); then printf '$down$syn$up$syn' > /dev/input/event0; else input keyevent $code; fi";
+    return 'ARCH=\$(uname -m); if [ "\$ARCH" != "aarch64" ] && [ "\$ARCH" != "x86_64" ] && [ -w /dev/input/event0 ] && ( [ -f /vendor/usr/keylayout/venus_IR_input.kl ] || [ -f /system/usr/keylayout/venus_IR_input.kl ] ); then printf \'$down$syn$up$syn\' > /dev/input/event0; else input keyevent $code; fi';
   }
 
   Future<bool> _sendRemote6466AppLink(String ip, String uriString) async {
     final cleanIp = ip.trim();
     if (!isValidIp(cleanIp) || uriString.trim().isEmpty) return false;
-    final connected = await _ensureRemote6466Connected(cleanIp);
-    if (!connected || _remote6466Socket == null) return false;
-    try {
-      _remote6466Socket!.add(buildRemote6466AppLinkFrame(uriString.trim()));
-      await _remote6466Socket!.flush();
-      _scheduleRemote6466IdleDisconnect();
-      return true;
-    } catch (e) {
-      _diag('6466 app link err: $e');
-      _closeRemote6466Socket();
-      return false;
+    return _sendRemote6466FrameWithRetry(
+      cleanIp,
+      buildRemote6466AppLinkFrame(uriString.trim()),
+      '6466 app link err',
+    );
+  }
+
+  Future<bool> _tryFallbackControlProtocols(
+    TvDevice device,
+    TvKeyCommand command,
+  ) async {
+    final ip = device.ip.trim();
+    if (!isValidIp(ip)) return false;
+
+    const candidatePorts = <int>[56789, 8085, 6466, 5555];
+    final checks = await Future.wait<bool>(
+      candidatePorts.map(
+        (p) => pingTv(ip, port: p, timeout: const Duration(milliseconds: 220)),
+      ),
+    );
+
+    if (checks[0]) {
+      final vestel = _driverRegistry.driverFor(
+        TvConnectionProtocol.vestelSmart56789,
+      );
+      if (vestel != null &&
+          await vestel.sendKey(
+            device.copyWith(
+              port: 56789,
+              protocol: TvConnectionProtocol.vestelSmart56789,
+            ),
+            command,
+          )) {
+        return true;
+      }
     }
+
+    if (checks[1]) {
+      final arcelik = _driverRegistry.driverFor(
+        TvConnectionProtocol.arcelikGrundig8085,
+      );
+      if (arcelik != null &&
+          await arcelik.sendKey(
+            device.copyWith(
+              port: 8085,
+              protocol: TvConnectionProtocol.arcelikGrundig8085,
+            ),
+            command,
+          )) {
+        return true;
+      }
+    }
+
+    if (checks[2] && _pinPairedIps.contains(ip)) {
+      if (await _sendRemote6466KeyFrame(
+        device.copyWith(
+          port: 6466,
+          protocol: TvConnectionProtocol.remotePort6466,
+        ),
+        command.keyCode,
+      )) {
+        return true;
+      }
+    }
+
+    if (checks[3]) {
+      if (await _executeShellCommand(
+        device.copyWith(port: 5555, protocol: TvConnectionProtocol.adbPort5555),
+        buildFastKeyShellCommand(command),
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Verifies reachability of [device], silently restores persistent ADB/6466
+  /// sockets when open, and upgrades generic DIAL/UPnP endpoints if a native
+  /// TV control port responds on the same IP.
+  Future<TvDevice> verifyOrReconnectDevice(TvDevice device) async {
+    if (device.isIrBlaster) {
+      return device.copyWith(isOnline: true, isPaired: true);
+    }
+    final ip = device.ip.trim();
+    if (!isValidIp(ip)) return device.copyWith(isOnline: false);
+
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+    final checkPort = device.port > 0
+        ? device.port
+        : (device.protocol.defaultPort > 0 ? device.protocol.defaultPort : 5555);
+
+    if (isTestEnv) {
+      final ok = await pingTv(
+        ip,
+        port: checkPort,
+        timeout: const Duration(milliseconds: 250),
+      );
+      return device.copyWith(isOnline: ok);
+    }
+
+    final isGenericDialOrUpnp =
+        device.protocol == TvConnectionProtocol.rokuEcp8060 ||
+        device.protocol == TvConnectionProtocol.upnpDlnaControl;
+
+    final currentReachable = await pingTv(
+      ip,
+      port: checkPort,
+      timeout: const Duration(milliseconds: 450),
+      warmupRetry: true,
+    );
+
+    if (currentReachable && !isGenericDialOrUpnp) {
+      if (device.protocol == TvConnectionProtocol.adbPort5555 &&
+          (_socket == null || !_handshakeDone || _connectedIp != ip)) {
+        await _ensureConnected(device, allowInteractivePairing: false);
+      } else if (device.protocol == TvConnectionProtocol.remotePort6466 &&
+          (device.isPaired || _pinPairedIps.contains(ip)) &&
+          (_remote6466Socket == null || _remote6466Ip != ip)) {
+        await _ensureRemote6466Connected(ip);
+      }
+      return device.copyWith(isOnline: true);
+    }
+
+    final adbOpen = await pingTv(
+      ip,
+      port: 5555,
+      timeout: const Duration(milliseconds: 350),
+    );
+    if (adbOpen) {
+      return device.copyWith(
+        port: 5555,
+        protocol: TvConnectionProtocol.adbPort5555,
+        isPaired: true,
+        isOnline: true,
+        boardInfo: 'Android TV • Port 5555 Yeniden Bağlandı',
+      );
+    }
+
+    final smartPort = await _probeOpenSmartTvPort(
+      ip,
+      timeout: const Duration(milliseconds: 320),
+    );
+    if (smartPort > 0) {
+      final newProto = TvConnectionProtocol.fromNameOrPort(null, smartPort);
+      return device.copyWith(
+        port: smartPort,
+        protocol: newProto,
+        isOnline: true,
+        boardInfo: newProto.label,
+      );
+    }
+
+    if (_pinPairedIps.contains(ip) ||
+        (device.protocol == TvConnectionProtocol.remotePort6466 &&
+            device.isPaired)) {
+      final port6466Open = await pingTv(
+        ip,
+        port: 6466,
+        timeout: const Duration(milliseconds: 350),
+      );
+      if (port6466Open) {
+        await _ensureRemote6466Connected(ip);
+        return device.copyWith(
+          port: 6466,
+          protocol: TvConnectionProtocol.remotePort6466,
+          isPaired: true,
+          isOnline: true,
+        );
+      }
+    }
+
+    if (!currentReachable && device.protocol == TvConnectionProtocol.upnpDlnaControl) {
+      final castOpen = await pingTv(
+        ip,
+        port: 8008,
+        timeout: const Duration(milliseconds: 280),
+      );
+      return device.copyWith(isOnline: castOpen);
+    }
+
+    return device.copyWith(isOnline: currentReachable);
   }
 
   Future<bool> sendKeyCommand(TvDevice device, TvKeyCommand command) async {
@@ -2126,7 +2403,13 @@ class AdbTvService {
       if (driver != null) {
         final ok = await driver.sendKey(device, command);
         _diag('TUŞ ${command.name} SMART SONUÇ: ${ok ? "BAŞARILI" : "BAŞARISIZ"}');
-        return ok;
+        if (ok) return true;
+        if (!isTestEnv &&
+            (device.protocol == TvConnectionProtocol.rokuEcp8060 ||
+                device.protocol == TvConnectionProtocol.upnpDlnaControl)) {
+          return _tryFallbackControlProtocols(device, command);
+        }
+        return false;
       }
       return false;
     }
@@ -2144,7 +2427,7 @@ class AdbTvService {
         if (hasAdb) {
           final adbOk = await _executeShellCommand(
             device.copyWith(port: 5555),
-            _buildFastKeyShellCommand(command),
+            buildFastKeyShellCommand(command),
           );
           if (adbOk) return true;
         }
@@ -2163,7 +2446,7 @@ class AdbTvService {
 
     final adbOk = await _executeShellCommand(
       device,
-      _buildFastKeyShellCommand(command),
+      buildFastKeyShellCommand(command),
     );
     if (adbOk) return true;
     return _sendRemote6466KeyFrame(device, code);

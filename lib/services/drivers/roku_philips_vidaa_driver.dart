@@ -419,7 +419,13 @@ class PhilipsJointSpaceDriver implements TvRemoteDriver {
 class VidaaSmartDriver implements TvRemoteDriver {
   VidaaSmartDriver({TvDiagLogger? logger}) : _log = logger;
 
+  static const Duration _idleTimeout = Duration(minutes: 10);
+
   final TvDiagLogger? _log;
+  WebSocket? _ws;
+  StreamSubscription<dynamic>? _wsSub;
+  String? _wsIp;
+  Timer? _idleTimer;
 
   @override
   TvConnectionProtocol get protocol => TvConnectionProtocol.vidaaSmart36669;
@@ -490,24 +496,57 @@ class VidaaSmartDriver implements TvRemoteDriver {
     );
   }
 
-  @override
-  Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
-    final ip = device.ip.trim();
-    if (!TvNetworkValidators.isValidIp(ip)) return false;
+  void _scheduleIdle() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(_idleTimeout, _closeSocket);
+  }
 
+  void _closeSocket() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    _wsSub?.cancel();
+    _wsSub = null;
+    final ws = _ws;
+    _ws = null;
+    _wsIp = null;
+    if (ws != null) {
+      unawaited(ws.close().catchError((Object e) {
+        _log?.call('VIDAA WS close err: $e');
+        return null;
+      }));
+    }
+  }
+
+  Future<bool> _ensureConnected(String ip) async {
+    if (_ws != null && _wsIp == ip && _ws!.readyState == WebSocket.open) {
+      _scheduleIdle();
+      return true;
+    }
+    _closeSocket();
     for (final scheme in const <String>['wss', 'ws']) {
       WebSocket? ws;
       try {
         final client = HttpClient()
-          ..connectionTimeout = const Duration(milliseconds: 650)
+          ..connectionTimeout = const Duration(milliseconds: 1400)
           ..badCertificateCallback = (X509Certificate cert, String host, _) =>
               TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
         ws = await WebSocket.connect(
           '$scheme://$ip:36669',
           customClient: client,
-        ).timeout(const Duration(milliseconds: 850));
-        ws.add(buildJsonPayload(command));
-        await ws.close();
+        ).timeout(const Duration(milliseconds: 1800));
+        ws.pingInterval = const Duration(seconds: 20);
+        _ws = ws;
+        _wsIp = ip;
+        _wsSub = ws.listen(
+          (_) {},
+          onError: (Object e) {
+            _log?.call('VIDAA WS stream hata ($ip): $e');
+            _closeSocket();
+          },
+          onDone: _closeSocket,
+          cancelOnError: false,
+        );
+        _scheduleIdle();
         return true;
       } catch (e) {
         _log?.call('VIDAA $scheme://:36669 hatası: $e');
@@ -517,6 +556,30 @@ class VidaaSmartDriver implements TvRemoteDriver {
             return null;
           });
         }
+      }
+    }
+    return false;
+  }
+
+  @override
+  Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
+    final ip = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(ip)) return false;
+
+    final payload = buildJsonPayload(command);
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final ready = await _ensureConnected(ip);
+      if (!ready || _ws == null || _ws!.readyState != WebSocket.open) {
+        _closeSocket();
+        continue;
+      }
+      try {
+        _ws!.add(payload);
+        _scheduleIdle();
+        return true;
+      } catch (e) {
+        _log?.call('VIDAA tuş gönderim hatası ($ip): $e');
+        _closeSocket();
       }
     }
     return false;
@@ -565,7 +628,7 @@ class VidaaSmartDriver implements TvRemoteDriver {
       false;
 
   @override
-  void dispose() {}
+  void dispose() => _closeSocket();
 }
 
 /// Sony BRAVIA IRCC-IP SOAP (`POST /sony/IRCC`) driver with `TvSecretVault` PSK persistence.

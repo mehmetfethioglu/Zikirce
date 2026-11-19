@@ -317,50 +317,54 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     }
   }
 
-  static String vestelXmlForCommand(TvKeyCommand command) {
-    int code;
+  /// Official Vestel / Regal / Toshiba / JVC SmartCenter integer keycodes.
+  static int vestelKeyCodeForCommand(TvKeyCommand command) {
     switch (command) {
       case TvKeyCommand.up:
-        code = 1030;
+        return 1020;
       case TvKeyCommand.down:
-        code = 1031;
+        return 1019;
       case TvKeyCommand.left:
-        code = 1032;
+        return 1021;
       case TvKeyCommand.right:
-        code = 1033;
+        return 1022;
       case TvKeyCommand.ok:
-        code = 1029;
+        return 1053;
       case TvKeyCommand.back:
-        code = 1010;
+        return 1010;
       case TvKeyCommand.home:
-        code = 1044;
+        return 1048;
       case TvKeyCommand.menu:
-        code = 1018;
+        return 1048;
       case TvKeyCommand.inputs:
-        code = 1023;
+        return 1056;
       case TvKeyCommand.volUp:
-        code = 1014;
+        return 1016;
       case TvKeyCommand.volDown:
-        code = 1015;
+        return 1017;
       case TvKeyCommand.mute:
-        code = 1013;
+        return 1013;
       case TvKeyCommand.power:
-        code = 1024;
+        return 1012;
       case TvKeyCommand.playPause:
-        code = 1025;
+        return 1025;
       case TvKeyCommand.rewind:
-        code = 1027;
+        return 1027;
       case TvKeyCommand.fastForward:
-        code = 1028;
+        return 1028;
       case TvKeyCommand.channelUp:
-        code = 1016;
+        return 1032;
       case TvKeyCommand.channelDown:
-        code = 1017;
+        return 1033;
       case TvKeyCommand.voiceAssist:
-        code = 1044;
+        return 1046;
       case TvKeyCommand.search:
-        code = 1067;
+        return 1046;
     }
+  }
+
+  static String vestelXmlForCommand(TvKeyCommand command) {
+    final code = vestelKeyCodeForCommand(command);
     return '<remote><key code=$code/></remote>';
   }
 
@@ -434,36 +438,39 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     String ip,
     TvKeyCommand command,
   ) async {
-    final unquotedXml = vestelXmlForCommand(command);
-    final quotedXml = unquotedXml.replaceAllMapped(
-      RegExp(r'code=(\d+)'),
-      (m) => '<?xml version="1.0" ?><remote><key code="${m.group(1)}"/></remote>',
-    );
+    final code = vestelKeyCodeForCommand(command);
+    final unquotedXml = '<remote><key code=$code/></remote>';
+    final quotedXml =
+        '<?xml version="1.0" ?><remote><key code="$code"/></remote>';
+    final payloads = <(String, String)>[
+      (unquotedXml, 'text/plain; charset=ISO-8859-1'),
+      (unquotedXml, 'application/xml'),
+      (quotedXml, 'text/xml; charset=utf-8'),
+    ];
     final dialBase = _dialAppUrls[ip];
     final targetUrls = <String>[
       'http://$ip:56789/apps/SmartCenter',
       'http://$ip:56789/apps/vr/remote',
+      'http://$ip:56791/apps/vr/remote',
       if (dialBase != null && dialBase.isNotEmpty)
         '${dialBase.endsWith('/') ? dialBase : '$dialBase/'}SmartCenter',
     ];
 
     for (final url in targetUrls) {
-      for (final payload in <String>[unquotedXml, quotedXml]) {
+      for (final (payload, contentType) in payloads) {
         final client = HttpClient()
-          ..connectionTimeout = const Duration(milliseconds: 480);
+          ..connectionTimeout = const Duration(milliseconds: 520);
         try {
           final req = await client
               .postUrl(Uri.parse(url))
-              .timeout(const Duration(milliseconds: 520));
-          req.headers.set(
-            HttpHeaders.contentTypeHeader,
-            'text/xml; charset=utf-8',
-          );
+              .timeout(const Duration(milliseconds: 560));
+          req.headers.set(HttpHeaders.contentTypeHeader, contentType);
+          req.headers.set(HttpHeaders.connectionHeader, 'close');
           final bytes = utf8.encode(payload);
           req.contentLength = bytes.length;
           req.add(bytes);
           final resp = await req.close().timeout(
-            const Duration(milliseconds: 520),
+            const Duration(milliseconds: 560),
           );
           await resp.drain<void>();
           if (resp.statusCode >= 200 && resp.statusCode < 400) {
@@ -479,6 +486,20 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     return false;
   }
 
+  void _close7681Socket() {
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    final ws = _ws7681;
+    _ws7681 = null;
+    _ws7681Ip = null;
+    if (ws != null) {
+      unawaited(ws.close().catchError((Object e) {
+        _log?.call('Arçelik 7681 WS close err: $e');
+        return null;
+      }));
+    }
+  }
+
   Future<bool> _tryArcelik7681WebSocket(
     String ip,
     TvKeyCommand command,
@@ -490,11 +511,11 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       try {
         _ws7681!.add(jsonEncode(<String, Object?>{'command': query}));
         _idleTimer?.cancel();
-        _idleTimer = Timer(const Duration(seconds: 30), dispose);
+        _idleTimer = Timer(const Duration(minutes: 10), _close7681Socket);
         return true;
       } catch (e) {
         _log?.call('Arçelik 7681 WS send hatası: $e');
-        dispose();
+        _close7681Socket();
       }
     }
 
@@ -508,12 +529,13 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
           'ws://$ip:7681/',
           protocols: proto,
           headers: <String, Object>{'Origin': 'http://$ip:7681'},
-        ).timeout(const Duration(milliseconds: 650));
+        ).timeout(const Duration(milliseconds: 850));
+        ws.pingInterval = const Duration(seconds: 20);
         _ws7681 = ws;
         _ws7681Ip = ip;
         ws.add(jsonEncode(<String, Object?>{'command': query}));
         _idleTimer?.cancel();
-        _idleTimer = Timer(const Duration(seconds: 30), dispose);
+        _idleTimer = Timer(const Duration(minutes: 10), _close7681Socket);
         return true;
       } catch (e) {
         _log?.call('Arçelik 7681 handshake ($proto): $e');
@@ -596,19 +618,7 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       false;
 
   @override
-  void dispose() {
-    _idleTimer?.cancel();
-    _idleTimer = null;
-    final ws = _ws7681;
-    _ws7681 = null;
-    _ws7681Ip = null;
-    if (ws != null) {
-      unawaited(ws.close().catchError((Object e) {
-        _log?.call('Arçelik 7681 WS close err: $e');
-        return null;
-      }));
-    }
-  }
+  void dispose() => _close7681Socket();
 }
 
 /// Vestel / Regal / Toshiba / Arçelik SmartCenter (`Port 56789`) driver.

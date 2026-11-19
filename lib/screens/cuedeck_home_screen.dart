@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,12 +40,14 @@ class CueDeckHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<CueDeckHomeScreen> createState() => _CueDeckHomeScreenState();
 }
 
-class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen> {
+class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen>
+    with WidgetsBindingObserver {
   bool _checkedStartupReleaseNotes = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeShowStartupReleaseNotes();
       final pending = ref.read(cueDeckProvider).pendingSharedPayload;
@@ -51,6 +55,19 @@ class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen> {
         showShareToTvBeamSheet(context, pending);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(cueDeckProvider.notifier).onAppResumed());
+    }
   }
 
   Future<void> _maybeShowStartupReleaseNotes() async {

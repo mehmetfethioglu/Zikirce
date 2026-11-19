@@ -34,6 +34,7 @@ class CueDeckState {
     this.hasIrEmitter = false,
     this.pendingSharedPayload,
     this.shouldPromptPaywall = false,
+    this.isMuted = false,
   });
 
   final int activeTab;
@@ -63,6 +64,7 @@ class CueDeckState {
   final bool hasIrEmitter;
   final SharedCuePayload? pendingSharedPayload;
   final bool shouldPromptPaywall;
+  final bool isMuted;
 
   bool get isProLifetime => entitlement.isProLifetime;
   bool get isProPassActive => entitlement.isProPassActive();
@@ -145,6 +147,7 @@ class CueDeckState {
     SharedCuePayload? pendingSharedPayload,
     bool clearPendingSharedPayload = false,
     bool? shouldPromptPaywall,
+    bool? isMuted,
   }) {
     return CueDeckState(
       activeTab: activeTab ?? this.activeTab,
@@ -186,6 +189,7 @@ class CueDeckState {
           ? null
           : (pendingSharedPayload ?? this.pendingSharedPayload),
       shouldPromptPaywall: shouldPromptPaywall ?? this.shouldPromptPaywall,
+      isMuted: isMuted ?? this.isMuted,
     );
   }
 }

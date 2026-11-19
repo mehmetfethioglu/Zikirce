@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -86,6 +87,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   double _pendingWheelDeltaY = 0;
   bool _isSendingMouseMove = false;
   bool _isSendingWheelScroll = false;
+  bool _healingConnection = false;
 
   @override
   CueDeckState build() {
@@ -181,13 +183,18 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   Future<void> _initializeAsync() async {
     await _loadPersistedState();
+    if (!ref.mounted) return;
     await ref.read(cueNotificationServiceProvider).requestPermission();
+    if (!ref.mounted) return;
     await _syncNativeNotifications();
+    if (!ref.mounted) return;
 
     final loadedEntitlement =
         await ref.read(cueMonetizationServiceProvider).loadEntitlement();
+    if (!ref.mounted) return;
     final hasIr =
         await ref.read(adbTvServiceProvider).hasIrBlasterHardware();
+    if (!ref.mounted) return;
     state = state.copyWith(
       entitlement: loadedEntitlement,
       hasIrEmitter: hasIr,
@@ -195,12 +202,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     final shareSvc = ref.read(cueShareIntentServiceProvider);
     shareSvc.listenForIncomingShares((SharedCuePayload payload) {
+      if (!ref.mounted) return;
       state = state.copyWith(
         pendingSharedPayload: payload,
         lastCommandStatus: '📲 Paylaşılan içerik hazır: ${payload.title}',
       );
     });
     final initialShare = await shareSvc.consumeInitialSharedPayload();
+    if (!ref.mounted) return;
     if (initialShare != null) {
       state = state.copyWith(
         pendingSharedPayload: initialShare,
@@ -209,11 +218,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
 
     await refreshGoogleDriveStatus();
+    if (!ref.mounted) return;
     _startScheduleMonitor();
     await scanNetworkForTvs();
+    if (!ref.mounted) return;
     if (!state.selectedDevice.isOnline && !state.selectedDevice.isIrBlaster) {
       _initialRetryTimer?.cancel();
       _initialRetryTimer = Timer(const Duration(seconds: 4), () {
+        if (!ref.mounted) return;
         if (!state.selectedDevice.isOnline &&
             !state.selectedDevice.isIrBlaster &&
             !state.isScanning) {
@@ -224,9 +236,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   Future<void> _syncNativeNotifications() async {
+    if (!ref.mounted) return;
+    final items = state.cueItems;
     await ref
         .read(cueNotificationServiceProvider)
-        .syncScheduledReminders(state.cueItems);
+        .syncScheduledReminders(items);
   }
 
   void _startScheduleMonitor() {
@@ -262,6 +276,111 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       );
       _persistState(triggerAutoBackup: false);
     }
+
+    if (!Platform.environment.containsKey('FLUTTER_TEST') &&
+        state.selectedDevice.hasValidIp &&
+        !state.selectedDevice.isIrBlaster &&
+        !state.selectedDevice.isOnline &&
+        !state.isScanning) {
+      unawaited(healSelectedTvConnection(allowSubnetRescan: true));
+    }
+  }
+
+  List<TvDevice> _mergeDeviceIntoDiscovered(TvDevice updated) {
+    final others = state.discoveredDevices.where((d) => d.ip != updated.ip);
+    return <TvDevice>[updated, ...others];
+  }
+
+  /// Silently verifies the selected TV socket/port, restores dropped connections,
+  /// upgrades DIAL/UPnP endpoints if a native protocol responds, and optionally
+  /// rescans the local subnet if the TV changed IP.
+  Future<bool> healSelectedTvConnection({bool allowSubnetRescan = false}) async {
+    if (_healingConnection || state.isScanning) {
+      return state.selectedDevice.isOnline;
+    }
+    final current = state.selectedDevice;
+    if (!current.hasValidIp || current.isIrBlaster) return current.isOnline;
+
+    _healingConnection = true;
+    try {
+      final service = ref.read(adbTvServiceProvider);
+      final refreshed = await service.verifyOrReconnectDevice(current);
+      if (!ref.mounted) return false;
+      if (refreshed.isOnline) {
+        final protocolUpgraded = refreshed.port != current.port ||
+            refreshed.protocol != current.protocol;
+        state = state.copyWith(
+          selectedDevice: refreshed,
+          discoveredDevices: _mergeDeviceIntoDiscovered(refreshed),
+          lastCommandStatus: protocolUpgraded
+              ? '✓ Bağlantı iyileştirildi: ${refreshed.name} (${refreshed.displayEndpoint})'
+              : state.lastCommandStatus,
+        );
+        if (protocolUpgraded) {
+          unawaited(_persistState(triggerAutoBackup: false));
+        }
+        return true;
+      }
+
+      if (allowSubnetRescan &&
+          !Platform.environment.containsKey('FLUTTER_TEST')) {
+        final discovered = await service.discoverDevices(preferredIp: current.ip);
+        if (!ref.mounted) return false;
+        if (discovered.isNotEmpty) {
+          TvDevice? rebound;
+          if (current.macAddress.trim().isNotEmpty) {
+            final cleanMac = current.macAddress.trim().toLowerCase();
+            for (final d in discovered) {
+              if (d.macAddress.trim().toLowerCase() == cleanMac && d.isOnline) {
+                rebound = d;
+                break;
+              }
+            }
+          }
+          if (rebound == null && current.name.trim().isNotEmpty) {
+            final cleanName = current.name.trim().toLowerCase();
+            for (final d in discovered) {
+              if (d.name.trim().toLowerCase() == cleanName && d.isOnline) {
+                rebound = d;
+                break;
+              }
+            }
+          }
+          if (rebound == null) {
+            final onlineOnes = discovered.where((d) => d.isOnline).toList();
+            if (onlineOnes.length == 1) {
+              rebound = onlineOnes.first;
+            }
+          }
+          if (rebound != null) {
+            state = state.copyWith(
+              selectedDevice: rebound,
+              discoveredDevices: discovered,
+              lastCommandStatus:
+                  '✓ TV bağlantısı yenilendi: ${rebound.name} (${rebound.displayEndpoint})',
+            );
+            await _persistState(triggerAutoBackup: false);
+            return true;
+          }
+        }
+      }
+
+      if (!ref.mounted) return false;
+      if (state.selectedDevice.isOnline) {
+        state = state.copyWith(
+          selectedDevice: state.selectedDevice.copyWith(isOnline: false),
+        );
+      }
+      return false;
+    } finally {
+      _healingConnection = false;
+    }
+  }
+
+  /// Warms up / restores active TV connection when the phone resumes from sleep.
+  Future<void> onAppResumed() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    await healSelectedTvConnection(allowSubnetRescan: true);
   }
 
   Future<void> _loadPersistedState() async {
@@ -323,28 +442,34 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   Future<void> _persistState({bool triggerAutoBackup = true}) async {
+    if (!ref.mounted) return;
+    final currentDevice = state.selectedDevice;
+    final currentDark = state.isDarkMode;
+    final currentShortcuts = state.remoteShortcuts;
+    final currentItems = state.cueItems;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (state.selectedDevice.hasControlTarget) {
+      if (currentDevice.hasControlTarget) {
         await prefs.setString(
           _kPrefsTvDeviceV2Key,
-          jsonEncode(state.selectedDevice.toJson()),
+          jsonEncode(currentDevice.toJson()),
         );
       } else {
         await prefs.remove(_kPrefsTvDeviceV2Key);
       }
-      await prefs.setBool(_kPrefsDarkModeKey, state.isDarkMode);
+      await prefs.setBool(_kPrefsDarkModeKey, currentDark);
       await prefs.setStringList(
         _kPrefsRemoteShortcutsKey,
-        state.remoteShortcuts.map((e) => e.name).toList(growable: false),
+        currentShortcuts.map((e) => e.name).toList(growable: false),
       );
       final encoded = jsonEncode(
-        state.cueItems.map((e) => e.toJson()).toList(),
+        currentItems.map((e) => e.toJson()).toList(),
       );
       await prefs.setString(_kPrefsCueItemsKey, encoded);
     } catch (e) {
       debugPrint('CueDeckNotifier persistState skipped: $e');
     }
+    if (!ref.mounted) return;
     unawaited(_syncNativeNotifications());
     if (triggerAutoBackup) {
       _scheduleDebouncedAutoCloudBackup();
@@ -786,6 +911,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     final service = ref.read(adbTvServiceProvider);
     final devices = await service.discoverDevices(preferredIp: targetIp);
+    if (!ref.mounted) return;
 
     TvDevice selected;
     if (devices.isNotEmpty) {
@@ -837,6 +963,24 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       lastCommandStatus: statusMessage,
     );
     await _persistState(triggerAutoBackup: false);
+
+    if (!Platform.environment.containsKey('FLUTTER_TEST') &&
+        selected.isOnline &&
+        !selected.isPaired &&
+        (selected.protocol == TvConnectionProtocol.samsungTizen8001 ||
+            selected.protocol == TvConnectionProtocol.lgWebOs3000)) {
+      unawaited(() async {
+        final warmed = await service.pairWithTv(selected);
+        if (!ref.mounted) return;
+        if (warmed.isOnline && warmed.isPaired) {
+          state = state.copyWith(
+            selectedDevice: warmed,
+            discoveredDevices: _mergeDeviceIntoDiscovered(warmed),
+          );
+          await _persistState(triggerAutoBackup: false);
+        }
+      }());
+    }
   }
 
   void disconnectCurrentTv() {
@@ -1350,6 +1494,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   void selectDevice(TvDevice device) {
     state = state.copyWith(
       selectedDevice: device,
+      isMuted: false,
       lastCommandStatus: 'Aktif TV: ${device.name} (${device.displayEndpoint})',
     );
     _persistState();
@@ -1358,27 +1503,82 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
+  bool _nextMuteState(TvKeyCommand command) {
+    if (command == TvKeyCommand.mute) return !state.isMuted;
+    if (command == TvKeyCommand.volUp || command == TvKeyCommand.volDown) {
+      return false;
+    }
+    return state.isMuted;
+  }
+
   Future<void> sendRemoteKey(TvKeyCommand command) async {
+    if (!ref.mounted) return;
     _highlightResetTimer?.cancel();
+    final initialDevice = state.selectedDevice;
     state = state.copyWith(
       lastPressedDirection: command,
       lastCommandStatus: 'Komut gönderildi: ${command.label}',
     );
     _highlightResetTimer = Timer(const Duration(milliseconds: 220), () {
+      if (!ref.mounted) return;
       state = state.copyWith(clearPressedDirection: true);
     });
 
-    final ok = await ref
-        .read(adbTvServiceProvider)
-        .sendKeyCommand(state.selectedDevice, command);
+    final service = ref.read(adbTvServiceProvider);
+    var ok = await service.sendKeyCommand(initialDevice, command);
+    if (!ref.mounted) return;
+
+    if (initialDevice.isIrBlaster) {
+      state = state.copyWith(
+        isMuted: _nextMuteState(command),
+        lastCommandStatus: ok
+            ? '✓ IR: ${command.label} (${initialDevice.displayEndpoint})'
+            : '⚡ IR sinyali gönderildi: ${command.label}',
+      );
+      return;
+    }
+
+    if (ok) {
+      state = state.copyWith(
+        selectedDevice: initialDevice.isOnline
+            ? initialDevice
+            : initialDevice.copyWith(isOnline: true),
+        isMuted: _nextMuteState(command),
+        lastCommandStatus:
+            '✓ TV: ${command.label} (${initialDevice.displayEndpoint})',
+      );
+      return;
+    }
+
+    final refreshed = await service.verifyOrReconnectDevice(initialDevice);
+    if (!ref.mounted) return;
+    if (refreshed.isOnline) {
+      final upgraded = refreshed.port != initialDevice.port ||
+          refreshed.protocol != initialDevice.protocol;
+      if (upgraded) {
+        ok = await service.sendKeyCommand(refreshed, command);
+        if (!ref.mounted) return;
+      }
+      state = state.copyWith(
+        selectedDevice: refreshed,
+        discoveredDevices: _mergeDeviceIntoDiscovered(refreshed),
+        isMuted: ok ? _nextMuteState(command) : state.isMuted,
+        lastCommandStatus: ok
+            ? '✓ TV: ${command.label} (${refreshed.displayEndpoint})'
+            : 'ℹ️ "${command.label}" bu TV kaynağında yanıt vermedi (Canlı TV / uydu modunu kontrol edin)',
+      );
+      if (upgraded) {
+        unawaited(_persistState(triggerAutoBackup: false));
+      }
+      return;
+    }
+
     state = state.copyWith(
-      selectedDevice: state.selectedDevice.isIrBlaster
-          ? state.selectedDevice
-          : state.selectedDevice.copyWith(isOnline: ok),
-      lastCommandStatus: ok
-          ? '✓ TV: ${command.label} (${state.selectedDevice.displayEndpoint})'
-          : '⚡ Komut kuyruğa alındı: ${command.label}',
+      selectedDevice: refreshed,
+      discoveredDevices: _mergeDeviceIntoDiscovered(refreshed),
+      lastCommandStatus: '⚠️ TV bağlantısı koptu — yeniden bağlanılıyor...',
     );
+    unawaited(healSelectedTvConnection(allowSubnetRescan: true));
   }
 
   Future<bool> startVoiceCommandSession() async {
@@ -1431,23 +1631,34 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   Future<void> runVoiceTranscript(String transcript) async {
     final cleaned = transcript.trim();
-    if (cleaned.isEmpty) return;
+    if (cleaned.isEmpty || !ref.mounted) return;
 
     state = state.copyWith(
       lastVoiceTranscript: cleaned,
       lastCommandStatus: '🎙️ İşleniyor: "$cleaned"...',
     );
 
-    final statusMsg = await ref
-        .read(adbTvServiceProvider)
-        .executeVoiceCommand(state.selectedDevice, cleaned);
+    final service = ref.read(adbTvServiceProvider);
+    final device = state.selectedDevice;
+    final statusMsg = await service.executeVoiceCommand(device, cleaned);
+    if (!ref.mounted) return;
+
+    if (device.isIrBlaster) {
+      state = state.copyWith(lastCommandStatus: statusMsg);
+      return;
+    }
+
+    var nextOnline = device.isOnline;
+    if (statusMsg.startsWith('🎙️')) {
+      nextOnline = true;
+    } else if (device.hasValidIp) {
+      final refreshed = await service.verifyOrReconnectDevice(device);
+      if (!ref.mounted) return;
+      nextOnline = refreshed.isOnline;
+    }
 
     state = state.copyWith(
-      selectedDevice: state.selectedDevice.isIrBlaster
-          ? state.selectedDevice
-          : state.selectedDevice.copyWith(
-              isOnline: statusMsg.startsWith('🎙️'),
-            ),
+      selectedDevice: device.copyWith(isOnline: nextOnline),
       lastCommandStatus: statusMsg,
     );
   }
@@ -1459,19 +1670,37 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     StreamingPlatform platform, {
     String? deepLinkUrl,
   }) async {
+    if (!ref.mounted) return;
     state = state.copyWith(
       lastCommandStatus: '${platform.label} TV ekranında açılıyor...',
     );
-    final ok = await ref.read(adbTvServiceProvider).launchPlatformOrDeepLink(
-          state.selectedDevice,
-          platform: platform,
-          deepLinkUrl: deepLinkUrl ?? '',
-        );
+    final service = ref.read(adbTvServiceProvider);
+    final device = state.selectedDevice;
+    final ok = await service.launchPlatformOrDeepLink(
+      device,
+      platform: platform,
+      deepLinkUrl: deepLinkUrl ?? '',
+    );
+    if (!ref.mounted) return;
+
+    if (ok || device.isIrBlaster) {
+      state = state.copyWith(
+        selectedDevice: device.isIrBlaster
+            ? device
+            : device.copyWith(isOnline: true),
+        lastCommandStatus: ok
+            ? '✓ TV\'de Açıldı: ${platform.label}'
+            : '⚡ ${platform.label} başlatma sinyali gönderildi',
+      );
+      return;
+    }
+
+    final refreshed = await service.verifyOrReconnectDevice(device);
+    if (!ref.mounted) return;
     state = state.copyWith(
-      selectedDevice: state.selectedDevice.copyWith(isOnline: ok),
-      lastCommandStatus: ok
-          ? '✓ TV\'de Açıldı: ${platform.label}'
-          : '⚡ ${platform.label} başlatma sinyali gönderildi',
+      selectedDevice: refreshed,
+      discoveredDevices: _mergeDeviceIntoDiscovered(refreshed),
+      lastCommandStatus: '⚡ ${platform.label} başlatma sinyali gönderildi',
     );
   }
 

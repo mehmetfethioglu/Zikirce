@@ -818,11 +818,31 @@ void main() {
       );
       expect(
         AdbTvService.vestelXmlForCommand(TvKeyCommand.ok),
-        '<remote><key code=1029/></remote>',
+        '<remote><key code=1053/></remote>',
       );
       expect(
         AdbTvService.vestelXmlForCommand(TvKeyCommand.home),
-        '<remote><key code=1044/></remote>',
+        '<remote><key code=1048/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.channelUp),
+        '<remote><key code=1032/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.channelDown),
+        '<remote><key code=1033/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.volUp),
+        '<remote><key code=1016/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.volDown),
+        '<remote><key code=1017/></remote>',
+      );
+      expect(
+        AdbTvService.vestelXmlForCommand(TvKeyCommand.power),
+        '<remote><key code=1012/></remote>',
       );
       expect(
         AdbTvService.samsungKeyForCommand(TvKeyCommand.volUp),
