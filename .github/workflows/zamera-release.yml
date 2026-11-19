@@ -20,7 +20,7 @@ on:
 
 jobs:
   build-publish-android:
-    name: 🤖 Android: Rust JNI + AAB -> Google Play Closed Testing
+    name: "🤖 Android: Rust JNI + AAB -> Google Play Closed Testing"
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'android' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -115,7 +115,7 @@ jobs:
           whatsNewDirectory: docs/play_store_whats_new
 
   build-publish-ios:
-    name: 🍎 iOS: Rust Staticlib + Fastlane -> Apple TestFlight
+    name: "🍎 iOS: Rust Staticlib + Fastlane -> Apple TestFlight"
     if: ${{ (github.event_name == 'workflow_dispatch' && (github.event.inputs.target_platform == 'all' || github.event.inputs.target_platform == 'ios')) }}
     runs-on: macos-latest
     timeout-minutes: 60
