@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../app/router/app_startup_route_config.dart';
 import '../../../../core/localization/locale_provider.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/audio_download_service.dart';
@@ -26,6 +28,7 @@ class SettingsState {
   final bool isExcusedModeEnabled;
   final bool isAutoLocalBackupEnabled;
   final bool isKeepScreenAwakeEnabled;
+  final bool isStartOnZikirEnabled;
   final bool isShareCardsEnabled;
   final String selectedLanguage;
   final String selectedBirdAvatar;
@@ -89,6 +92,7 @@ class SettingsState {
     this.isExcusedModeEnabled = false,
     this.isAutoLocalBackupEnabled = true,
     this.isKeepScreenAwakeEnabled = false,
+    this.isStartOnZikirEnabled = false,
     this.isShareCardsEnabled = true,
     this.selectedLanguage = 'tr',
     this.selectedBirdAvatar = 'Kuş 1 (Varsayılan)',
@@ -174,6 +178,7 @@ class SettingsState {
     bool? isExcusedModeEnabled,
     bool? isAutoLocalBackupEnabled,
     bool? isKeepScreenAwakeEnabled,
+    bool? isStartOnZikirEnabled,
     bool? isShareCardsEnabled,
     String? selectedLanguage,
     String? selectedBirdAvatar,
@@ -237,6 +242,7 @@ class SettingsState {
       isExcusedModeEnabled: isExcusedModeEnabled ?? this.isExcusedModeEnabled,
       isAutoLocalBackupEnabled: isAutoLocalBackupEnabled ?? this.isAutoLocalBackupEnabled,
       isKeepScreenAwakeEnabled: isKeepScreenAwakeEnabled ?? this.isKeepScreenAwakeEnabled,
+      isStartOnZikirEnabled: isStartOnZikirEnabled ?? this.isStartOnZikirEnabled,
       isShareCardsEnabled: isShareCardsEnabled ?? this.isShareCardsEnabled,
       selectedLanguage: selectedLanguage ?? this.selectedLanguage,
       selectedBirdAvatar: selectedBirdAvatar ?? this.selectedBirdAvatar,
@@ -359,6 +365,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final isExcused = PrefUtils.getBoolFromKeys(prefs, ['IsExcusedModeEnabled$sfx', 'IsSpecialDaysModeEnabled$sfx', 'IsZaruriHalEnabled$sfx', 'IsExcusedModeEnabled'], false);
     final isAutoLocalBackup = PrefUtils.getBoolFromKeys(prefs, ['IsAutoLocalBackupEnabled$sfx', 'IsAutoBackupEnabled$sfx', 'IsAutoLocalBackupEnabled'], true);
     final isKeepScreenAwake = PrefUtils.getBool(prefs, _sKey('IsKeepScreenAwakeEnabled', sid), false);
+    final isStartOnZikir = PrefUtils.getBoolFromKeys(prefs, ['IsStartOnZikirEnabled$sfx', 'IsStartOnZikirEnabled'], false);
+    AppStartupRouteConfig.openDirectlyOnZikir = isStartOnZikir;
     final isShareCards = PrefUtils.getBoolFromKeys(prefs, ['IsShareCardsEnabled$sfx', 'IsShareCardsEnabled'], true);
     final lang = PrefUtils.getStringFromKeys(prefs, ['SelectedLanguage$sfx', 'AppLanguage$sfx', 'app_language$sfx', 'SelectedLanguage', 'AppLanguage', 'app_language'], 'tr');
     final bird = PrefUtils.getString(prefs, _sKey('SelectedBirdAvatar', sid), 'Kuş 1 (Varsayılan)');
@@ -480,6 +488,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       isExcusedModeEnabled: isExcused,
       isAutoLocalBackupEnabled: isAutoLocalBackup,
       isKeepScreenAwakeEnabled: isKeepScreenAwake,
+      isStartOnZikirEnabled: isStartOnZikir,
       isShareCardsEnabled: isShareCards,
       selectedLanguage: lang,
       selectedBirdAvatar: bird,
@@ -564,7 +573,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           profile.copyWith(userName: name),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SettingsNotifier] setUserDisplayName DB notice: $e');
+    }
   }
 
   Future<void> setUserProfileImage(String path) async {
@@ -588,7 +599,9 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           profile.copyWith(avatar: path),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[SettingsNotifier] setUserProfileImage DB notice: $e');
+    }
   }
 
   Future<void> setDailyZikirGoal(int count) async {
@@ -684,6 +697,17 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsKeepScreenAwakeEnabled', enabled);
     await ScreenAwakeService.setKeepAwake(enabled);
+  }
+
+  Future<void> toggleStartOnZikir(bool enabled) async {
+    state = state.copyWith(isStartOnZikirEnabled: enabled);
+    AppStartupRouteConfig.openDirectlyOnZikir = enabled;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await _setSessionPrefBool(prefs, 'IsStartOnZikirEnabled', enabled);
+    } catch (e) {
+      debugPrint('[SettingsNotifier] toggleStartOnZikir error: $e');
+    }
   }
 
   Future<void> toggleShareCards(bool enabled) async {

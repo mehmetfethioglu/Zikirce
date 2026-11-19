@@ -1,4 +1,5 @@
 import '../domain/irfan_models.dart';
+import 'irfan_questions_diyanet_ilmihal.dart';
 import 'irfan_questions_esma_dua.dart';
 import 'irfan_questions_ilmihal.dart';
 import 'irfan_questions_kulliyat_esma_dua.dart';
@@ -13,6 +14,7 @@ abstract final class IrfanQuestionBank {
   static final List<IrfanQuestion> allQuestions = List.unmodifiable([
     ...kIrfanQuestionsIlmihal,
     ...kIrfanQuestionsKulliyatIlmihal,
+    ...kIrfanQuestionsDiyanetIlmihal,
     ...kIrfanQuestionsSiyer,
     ...kIrfanQuestionsKulliyatSiyer,
     ...kIrfanQuestionsQuran,

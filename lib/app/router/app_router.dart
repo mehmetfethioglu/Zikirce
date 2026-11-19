@@ -7,6 +7,9 @@ import '../../core/theme/app_theme_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/dashboard/presentation/screens/bismillah_dashboard_screen.dart';
+import '../../features/dashboard/presentation/screens/detailed_stats_screen.dart';
+import 'app_startup_route_config.dart';
+export 'app_startup_route_config.dart';
 import '../../features/zikir/presentation/screens/zikir_counter_screen.dart';
 import '../../features/zikir/providers/zikir_providers.dart';
 import '../../features/irfan/presentation/screens/irfan_meydani_screen.dart';
@@ -33,7 +36,9 @@ final appRouter = GoRouter(
   observers: [
     SentryNavigatorObserver(),
   ],
-  initialLocation: TvModeService.isHardwareTv ? '/' : '/zikir',
+  initialLocation: AppStartupRouteConfig.resolveInitialLocation(
+    isHardwareTv: TvModeService.isHardwareTv,
+  ),
   redirect: (context, state) async {
     if (TvModeService.isHardwareTv && state.uri.path == '/onboarding') {
       return '/';
@@ -170,6 +175,11 @@ final appRouter = GoRouter(
         return FiqhLibraryScreen(initialFarzId: farzId);
       },
     ),
+    GoRoute(
+      path: '/stats',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const DetailedStatsScreen(),
+    ),
   ],
 );
 
@@ -276,7 +286,7 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                       children: [
                         _BottomNavBarItem(
                           svgPath: 'assets/images/nav_panel.svg',
-                          fallbackIcon: Icons.auto_graph_rounded,
+                          fallbackIcon: Icons.home_rounded,
                           isSelected: selectedIndex == 0,
                           activeColor: activeColor,
                           inactiveColor: inactiveColor,

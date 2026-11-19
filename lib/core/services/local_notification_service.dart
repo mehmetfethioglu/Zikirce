@@ -36,6 +36,45 @@ class LocalNotificationService {
       pendingPrayerNotificationTapped =
       StreamController<({String prayerName, String dateStr})>.broadcast();
 
+  static ({String prayerName, String dateStr})? _pendingLaunchPrayerTap;
+
+  /// Consumes and clears any cold-start prayer notification tap payload captured during initialization.
+  static ({String prayerName, String dateStr})?
+      consumeInitialPrayerNotificationTap() {
+    final pending = _pendingLaunchPrayerTap;
+    _pendingLaunchPrayerTap = null;
+    return pending;
+  }
+
+  /// Dispatches a notification payload to the matching listener or buffers a cold-start prayer tap.
+  static void dispatchNotificationPayload(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    if (payload.startsWith('prayer_question|')) {
+      final parts = payload.split('|');
+      if (parts.length >= 3) {
+        final tap = (prayerName: parts[1], dateStr: parts[2]);
+        if (pendingPrayerNotificationTapped.hasListener) {
+          pendingPrayerNotificationTapped.add(tap);
+        } else {
+          _pendingLaunchPrayerTap = tap;
+        }
+      }
+    } else if (payload.startsWith('farz_article|')) {
+      final parts = payload.split('|');
+      if (parts.length >= 2) {
+        final farzId = int.tryParse(parts[1]);
+        if (farzId != null) {
+          pendingFarzNotificationTapped.add(farzId);
+        }
+      }
+    } else if (payload.startsWith('special_spiritual|')) {
+      final parts = payload.split('|');
+      if (parts.length >= 2) {
+        pendingSpiritualNotificationTapped.add(parts[1]);
+      }
+    }
+  }
+
   /// Stream emitting when user taps a 32 Farz prayer notification
   static final StreamController<int> pendingFarzNotificationTapped =
       StreamController<int>.broadcast();
@@ -55,7 +94,8 @@ class LocalNotificationService {
       debugPrint('[LocalNotificationService] Timezone native lookup fallback: $e');
       try {
         tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
-      } catch (_) {
+      } catch (fallbackErr) {
+        debugPrint('[LocalNotificationService] Istanbul timezone fallback: $fallbackErr');
         tz.setLocalLocation(tz.local);
       }
     }
@@ -83,28 +123,7 @@ class LocalNotificationService {
       onDidReceiveNotificationResponse: (response) {
         final payload = response.payload;
         debugPrint('[Notification] User tapped notification: $payload');
-        if (payload != null && payload.startsWith('prayer_question|')) {
-          final parts = payload.split('|');
-          if (parts.length >= 3) {
-            final prayerName = parts[1];
-            final dateStr = parts[2];
-            pendingPrayerNotificationTapped
-                .add((prayerName: prayerName, dateStr: dateStr));
-          }
-        } else if (payload != null && payload.startsWith('farz_article|')) {
-          final parts = payload.split('|');
-          if (parts.length >= 2) {
-            final farzId = int.tryParse(parts[1]);
-            if (farzId != null) {
-              pendingFarzNotificationTapped.add(farzId);
-            }
-          }
-        } else if (payload != null && payload.startsWith('special_spiritual|')) {
-          final parts = payload.split('|');
-          if (parts.length >= 2) {
-            pendingSpiritualNotificationTapped.add(parts[1]);
-          }
-        }
+        dispatchNotificationPayload(payload);
       },
     );
 
@@ -277,6 +296,16 @@ class LocalNotificationService {
           showBadge: false,
         ),
       );
+    }
+
+    try {
+      final launchDetails =
+          await _notificationsPlugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        dispatchNotificationPayload(launchDetails?.notificationResponse?.payload);
+      }
+    } catch (e) {
+      debugPrint('[LocalNotificationService] launchDetails error: $e');
     }
   }
 

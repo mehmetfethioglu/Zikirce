@@ -16,12 +16,12 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     ),
     payload: MultipleChoicePayload(
       options: [
+        LocalizedText(tr: 'Kur\'ân hıfzının', en: 'Qur\'an memorization'),
+        LocalizedText(tr: 'Hac ve umrenin', en: 'Hajj and Umrah'),
         LocalizedText(tr: 'İmanın', en: 'Faith (Iman)'),
-        LocalizedText(tr: 'İlim tahsilinin', en: 'Seeking knowledge'),
-        LocalizedText(tr: 'Hac ibadetinin', en: 'The pilgrimage'),
-        LocalizedText(tr: 'Kardeşliğin', en: 'Brotherhood'),
+        LocalizedText(tr: 'İlim ve hikmetin', en: 'Sacred knowledge'),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: 'Aynı hadisin devamında "Elhamdülillâh mîzânı doldurur" buyrulur.',
@@ -36,7 +36,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Sahîh-i Müslim, Tahâret 1 (Hadis No: 223)',
         en: 'Sahih Muslim, Kitab at-Taharah 1 (Hadith 223)',
       ),
-      linkedFarzId: 13,
+      linkedFarzId: 21,
       linkedBookId: 'book_hadith_muslim',
       linkedZikirKey: 'Elhamdülillah',
     ),
@@ -64,7 +64,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Risale-i Nur Külliyatı, Küçük Sözler, Dördüncü Söz',
         en: 'Risale-i Nur Collection, Short Words (Küçük Sözler), Fourth Word',
       ),
-      linkedFarzId: 9,
+      linkedFarzId: 8,
       linkedBookId: 'book_rn_kucuk_sozler',
     ),
   ),
@@ -140,23 +140,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Malî ibadetlerdeki zekât nisabının yıl sonu hesabını',
+          en: 'The annual threshold calculations for financial Zakat',
+        ),
+        LocalizedText(
           tr: 'Kulluğunu, aczini ve nimetlerin gerçek sahibine şükür borcunu',
           en: 'One\'s servitude, dependence, and duty of gratitude to the True Provider',
         ),
         LocalizedText(
-          tr: 'Sadece bedensel spor kurallarını',
-          en: 'Only athletic conditioning rules',
+          tr: 'Yalnızca yolculuk ve seferde namazları kısaltma ruhsatını',
+          en: 'Only the concession for shortening prayers during travel',
         ),
         LocalizedText(
-          tr: 'Dünya ticaretinde kâr oranlarını',
-          en: 'Commercial profit margins',
-        ),
-        LocalizedText(
-          tr: 'Yalnızca tarihî takvim hesabını',
-          en: 'Merely historical calendar calculation',
+          tr: 'Sadece Mescid-i Harâm\'da ihrama girme ve tavaf âdâbını',
+          en: 'Merely the etiquette of entering Ihram and performing Tawaf',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: 'Birinci ve İkinci Nüktelerde rubûbiyet-i ilâhiye ve şükür hakikatleri işlenir.',
@@ -171,7 +171,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Risale-i Nur Külliyatı, Ramazan Risalesi (29. Mektup, 2. Kısım)',
         en: 'Risale-i Nur Collection, Treatise on Ramadan (29th Letter, Part 2)',
       ),
-      linkedFarzId: 11,
+      linkedFarzId: 10,
       linkedBookId: 'book_rn_ramazan_iktisat_sukur',
       linkedZikirKey: 'Eş-Şekûr',
     ),
@@ -187,12 +187,12 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     ),
     payload: MultipleChoicePayload(
       options: [
-        LocalizedText(tr: 'Misvak (diş temizliği)', en: 'Using the Siwak (tooth-stick)'),
         LocalizedText(tr: 'Gusül almak', en: 'Taking Ghusl'),
         LocalizedText(tr: 'Teyemmüm etmek', en: 'Performing Tayammum'),
         LocalizedText(tr: 'İtikâfa girmek', en: 'Entering I\'tikaf'),
+        LocalizedText(tr: 'Misvak (diş temizliği)', en: 'Using the Siwak (tooth-stick)'),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: '"Ümmetime meşakkat vermeyecek olsaydım her namaz vaktinde ... emrederdim." hadisi meşhurdur.',
@@ -207,7 +207,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Sünen-i Tirmizî, Tahâret 18; Sünen-i Ebû Dâvûd, Tahâret 25',
         en: 'Sunan at-Tirmidhi, Taharah 18; Sunan Abi Dawud, Taharah 25',
       ),
-      linkedFarzId: 13,
+      linkedFarzId: 16,
       linkedBookId: 'book_hadith_tirmizi',
     ),
   ),
@@ -234,7 +234,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Sünen-i Nesâî, İmâmet 42; Sahîh-i Buhârî, Ezân 30',
         en: 'Sunan an-Nasa\'i, Imamah 42; Sahih al-Bukhari, Adhan 30',
       ),
-      linkedFarzId: 9,
+      linkedFarzId: 8,
       linkedBookId: 'book_hadith_nesai',
     ),
   ),
@@ -254,16 +254,16 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
           en: 'Actions are judged solely by intentions, and every person has what they intended',
         ),
         LocalizedText(
-          tr: 'Sadece gece namazı kılanlar kurtulur',
-          en: 'Only those who pray at night succeed',
+          tr: 'Farz ibadetlerin ancak cemaatle kılındığında geçerli sayılabileceği',
+          en: 'Obligatory acts of worship are valid only when performed in congregation',
         ),
         LocalizedText(
-          tr: 'İbadetlerde sesli okumak şarttır',
-          en: 'Reciting aloud is mandatory in all worship',
+          tr: 'Nâfile ibadetlerde sözlü telaffuz olmadan sevabın yazılamayacağı',
+          en: 'Voluntary worship earns no reward without audible verbal utterance',
         ),
         LocalizedText(
-          tr: 'Seferde hiçbir namaz kılınmaz',
-          en: 'No prayers are performed while traveling',
+          tr: 'Zahirî edep kurallarının kalbî ihlastan daha öncelikli görüldüğü',
+          en: 'Outward ceremonial form takes precedence over inner heart sincerity',
         ),
       ],
       correctIndex: 0,
@@ -281,7 +281,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Riyâzü\'s-Sâlihîn, Hadis No: 1; Buhârî, Bed\'ü\'l-vahy 1',
         en: 'Riyad as-Salihin, Hadith 1; Sahih al-Bukhari, Bad\' al-Wahy 1',
       ),
-      linkedFarzId: 27,
+      linkedFarzId: 26,
       linkedBookId: 'book_hadith_riyazus_salihin',
     ),
   ),
@@ -297,23 +297,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'İman ve ibadetlerini sahih şekilde öğrenecek kadar ilmihal bilmek',
+          tr: 'Her Müslümanın bizzat müçtehit seviyesinde fetva usulü bilmesi',
+          en: 'Every Muslim attaining the rank of an independent jurist (mujtahid)',
+        ),
+        LocalizedText(
+          tr: 'Dünyevî geçim sebeplerini terk edip yalnızca inzivaya çekilmek',
+          en: 'Abandoning all lawful livelihood to remain solely in seclusion',
+        ),
+        LocalizedText(
+          tr: 'İman ve ibadetlerini sahih kılacak ilmihal bilgisini öğrenmek',
           en: 'Learning essential creed and worship knowledge (Fard al-\'Ayn)',
         ),
         LocalizedText(
-          tr: 'Yalnızca yabancı dillerde şiir ezberlemek',
-          en: 'Memorizing foreign poetry alone',
-        ),
-        LocalizedText(
-          tr: 'Hiç çalışmadan inzivaya çekilmek',
-          en: 'Retreating from all livelihood',
-        ),
-        LocalizedText(
-          tr: 'Sadece yolculuk haritaları çizmek',
-          en: 'Only drawing travel maps',
+          tr: 'İlmi yalnızca âlim zümresine has farz-ı kifâye sayıp avâmı muaf tutmak',
+          en: 'Restricting religious study to scholars as a communal obligation only',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: 'Kişinin günlük iman, namaz, oruç ve helâl-haram bilgisini öğrenmesi "farz-ı ayın"dır.',
@@ -349,23 +349,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Her vaktin kâinatta önemli bir inkılâp ve insan ömrünün/senenin devirlerine işaret eden azametli bir tasarruf anı olması',
-          en: 'Each time marks a major cosmic transition reflecting the stages of human life and divine Majesty',
+          tr: 'Namaz vakitlerinin yalnızca kamerî ayların başlangıcını tayin için konulması',
+          en: 'Prayer times serving solely to determine the start of lunar months',
         ),
         LocalizedText(
-          tr: 'Güneş saatlerini süslemek için rastgele seçilmesi',
-          en: 'Being chosen arbitrarily to decorate sundials',
+          tr: 'Her vaktin kâinatta önemli bir inkılâp ve insan ömrünün devirlerine işaret eden azametli bir tasarruf anı olması',
+          en: 'Each time marking a major cosmic transition reflecting the stages of human life and divine Majesty',
         ),
         LocalizedText(
-          tr: 'Sadece kış mevsimine uyarlanması',
-          en: 'Being tailored only for winter months',
+          tr: 'Beş vaktin yalnız Cuma ve bayram hutbelerine hazırlık amacıyla geçici belirlenmesi',
+          en: 'Five times functioning temporarily as preparation solely for Friday sermons',
         ),
         LocalizedText(
-          tr: 'İnsanların uykusunu tamamen yasaklamak için konulması',
-          en: 'Intending to forbid sleep completely',
+          tr: 'Vakitlerin yalnız ikindi güneşinin zevaline göre değişmez saatlere bağlanması',
+          en: 'Times being tied to fixed non-solar hours throughout every season',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: 'Dokuzuncu Söz\'de her namaz vakti, ilâhî kudretin büyük bir devir ve tecellî başlangıcı olarak açıklanır.',
@@ -380,7 +380,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Risale-i Nur Külliyatı, Sözler, Dokuzuncu Söz',
         en: 'Risale-i Nur Collection, The Words (Sözler), Ninth Word',
       ),
-      linkedFarzId: 23,
+      linkedFarzId: 25,
       linkedBookId: 'book_rn_sozler',
     ),
   ),
@@ -396,23 +396,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Rükû, kavme, secde ve celsede azaların en az bir tesbih miktarı sükûnet bulması gerekir; Şâfiî\'de farz, Hanefî\'de sahih görüşe göre vaciptir',
+          tr: 'Yalnızca teravih ve teheccüd gibi nâfile namazlarda gözetilen bir edep olup farz namazlarda gerekmez',
+          en: 'It is an etiquette observed only in voluntary prayers and not required in obligatory prayers',
+        ),
+        LocalizedText(
+          tr: 'Yalnız imamın rükû ve secdede beklemesi kâfidir; imama uyan cemaat için ta\'dîl-i erkân aranmaz',
+          en: 'Only the imam must pause in ruku and sujud; followers in congregation are exempt',
+        ),
+        LocalizedText(
+          tr: 'Kıraat rüknünden sonra yalnız bayram namazlarında ilâve edilen tekbir sünnetinden ibarettir',
+          en: 'It refers exclusively to the extra takbirs performed during the two Eid prayers',
+        ),
+        LocalizedText(
+          tr: 'Rükû, kavme, secde ve celsede azaların en az bir tesbih miktarı sükûnet bulması gerekir; Şâfiî\'de farz, Hanefî fetvasında vaciptir',
           en: 'Pausing calmly in ruku, standing, sujud, and sitting is essential—obligatory (fard) in the Shafi\'i school and wajib in the Hanafi school',
         ),
-        LocalizedText(
-          tr: 'Namazı olabildiğince hızlı bitirmek sünnettir',
-          en: 'Rushing through movements is recommended',
-        ),
-        LocalizedText(
-          tr: 'Sadece Cuma namazında geçerlidir',
-          en: 'It applies only to Friday prayer',
-        ),
-        LocalizedText(
-          tr: 'Yalnızca imamın uyması yeterlidir',
-          en: 'Only the imam needs to observe it',
-        ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: '"Musî-i Salâh" (namazını hızlı kılan sahâbî) hadisinde Peygamberimiz üç defa "Dön, namazını yeniden kıl" buyurmuştur.',
@@ -435,7 +435,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Tuma\'nîne (azaların sükûneti) rükû, i\'tidâl, secde ve iki secde arası oturuşta rükün/farzdır.',
         en: 'Calmness (tuma\'ninah) is an integral pillar (fard) in ruku, rising, sujud, and sitting between prostrations.',
       ),
-      linkedFarzId: 29,
+      linkedFarzId: 30,
       linkedBookId: 'book_hadith_ebu_davud',
     ),
   ),
@@ -455,16 +455,16 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
           en: 'The annual revival of hundreds of thousands of plant and animal species every spring after winter',
         ),
         LocalizedText(
-          tr: 'Sadece antik taş yazıtların okunması',
-          en: 'Reading ancient stone inscriptions alone',
+          tr: 'Eski medeniyetlere ait tarihî kitâbelerin ve nesep kayıtlarının kronolojik incelenmesi',
+          en: 'Chronological study of ancient inscriptions and historical lineage records',
         ),
         LocalizedText(
-          tr: 'Yalnızca rüya tabirleri',
-          en: 'Dream interpretations exclusively',
+          tr: 'Yalnızca uyku hâlinde görülen rüyaların şahsî sezgiyle tabir edilmesi',
+          en: 'Personal intuition interpreting symbolic dreams experienced during sleep',
         ),
         LocalizedText(
-          tr: 'Sadece göktaşı büyüklükleri',
-          en: 'Meteorite sizes only',
+          tr: 'Sadece insan bedeninin uyku sonrasında sabahları olağan biçimde uyanması',
+          en: 'Merely the everyday waking of a human body after ordinary sleep',
         ),
       ],
       correctIndex: 0,
@@ -499,23 +499,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Her iki mezhepte de seferde beş vakit namazın tamamı öğle ve akşamda cem\' edilir',
+          en: 'In both schools, all five prayers are combined into Dhuhr and Maghrib during travel',
+        ),
+        LocalizedText(
+          tr: 'Hanefî\'de tüm yolculuklarda öğle ile ikindi mutlaka birleştirilir; Şâfiî\'de cem\' yalnız yağmurda olur',
+          en: 'Hanafi requires combining Dhuhr and Asr on travel, while Shafi\'i permits it strictly for rain',
+        ),
+        LocalizedText(
           tr: 'Şâfiî\'de yolculukta cem\'-i takdîm ve cem\'-i te\'hîr caizdir; Hanefî\'de ise cem\' yalnız Hac\'da Arafat ve Müzdelife\'ye mahsustur',
           en: 'Shafi\'i permits combining prayers while traveling; Hanafi limits actual combining to Arafat and Muzdalifah during Hajj',
         ),
         LocalizedText(
-          tr: 'Yolculukta namaz tamamen terk edilir',
-          en: 'Prayers are completely dropped while traveling',
-        ),
-        LocalizedText(
-          tr: 'Yalnızca sabah ile öğle birleştirilir',
-          en: 'Only Fajr and Dhuhr may be combined',
-        ),
-        LocalizedText(
-          tr: 'Akşam namazı 1 rekâta indirilir',
-          en: 'Maghrib is shortened to 1 rak\'ah',
+          tr: 'Her iki mezhepte seferde öğle ve akşam namazları birleştirilip ikişer rekât kılınır',
+          en: 'In both schools Dhuhr and Maghrib are merged and prayed as two rak\'ahs each',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: 'Her iki mezhep de seferde dört rekâtlı farzların iki rekât (kasr) kılındığında müttefiktir; farklılık cem\' ruhsatındadır.',
@@ -538,7 +538,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Meşru sefer şartları oluştuğunda öğle-ikindi ve akşam-yatsı takdîm veya te\'hîr ile cem\' edilebilir.',
         en: 'When valid travel conditions are met, Dhuhr-Asr and Maghrib-Isha may be combined either early or delayed.',
       ),
-      linkedFarzId: 23,
+      linkedFarzId: 25,
       linkedBookId: 'book_hadith_ebu_davud',
     ),
   ),
@@ -554,23 +554,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Her şüphede kalp tamamen mutmain oluncaya dek abdesti ve namazı en baştan tekrarlamaktır',
+          en: 'Repeating wudu and prayer from the start at every doubt until completely certain',
+        ),
+        LocalizedText(
           tr: 'Ehemmiyet vermemek ve üzerinde durmamaktır; zira vesvese önem verildikçe büyür, verilmedikçe söner',
           en: 'Giving it no importance and not dwelling on it—for waswasah grows with attention and fades when ignored',
         ),
         LocalizedText(
-          tr: 'Her şüphede abdesti on defa tekrarlamaktır',
-          en: 'Repeating wudu ten times at every doubt',
+          tr: 'Vesvese hâli geçinceye kadar namazları tehir edip daha sonra toplu kaza etmektir',
+          en: 'Deferring prayers until doubts subside and making them up later together',
         ),
         LocalizedText(
-          tr: 'Namazı tamamen bırakmaktır',
-          en: 'Abandoning prayer altogether',
-        ),
-        LocalizedText(
-          tr: 'Hiçbir zaman niyet etmemektir',
-          en: 'Never forming an intention',
+          tr: 'Kalpten geçen istemsiz hayalleri dil ile ikrar edilmiş kesin bir kanaat saymaktır',
+          en: 'Treating involuntary passing thoughts as deliberate personal convictions',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: 'Birinci Vecih\'te "Hayaldeki şeytanın attığı şüpheye ehemmiyet vermezsen küçülür, kaybolur" prensibi öğretilir.',
@@ -686,23 +686,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Bereketi, arınmayı ve affetmekle gelen izzeti',
+          tr: 'Zekât veren kimsenin diğer farz ibadetlerden geçici olarak muaf tutulmasını',
+          en: 'Temporary exemption of the Zakah payer from other obligatory rituals',
+        ),
+        LocalizedText(
+          tr: 'Borçlu kalınan ticaret mallarının hesaplanmasında nisap şartının kalkmasını',
+          en: 'Removal of the nisab threshold when calculating indebted trade assets',
+        ),
+        LocalizedText(
+          tr: 'Dünyevî serveti başkalarına karşı övünme ve üstünlük vesilesine çevirmeyi',
+          en: 'Turning worldly wealth into an instrument of social boastfulness',
+        ),
+        LocalizedText(
+          tr: 'Bereketi, arınmayı ve affetmekle gelen gerçek izzeti',
           en: 'Blessing (barakah), purification, and honor through forgiveness',
         ),
-        LocalizedText(
-          tr: 'Borçlanma mecburiyetini',
-          en: 'Mandatory debt',
-        ),
-        LocalizedText(
-          tr: 'İbadet yükümlülüğünün kalkmasını',
-          en: 'Exemption from prayer',
-        ),
-        LocalizedText(
-          tr: 'Dünya sevgisinin artmasını',
-          en: 'Attachment to hoarding',
-        ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: 'Tevbe 103. âyette de sadakanın malı ve gönlü temizleyip arındırdığı bildirilir.',
@@ -717,7 +717,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Sahîh-i Müslim, Birr 69 (Hadis No: 2588)',
         en: 'Sahih Muslim, Kitab al-Birr 69 (Hadith 2588)',
       ),
-      linkedFarzId: 10,
+      linkedFarzId: 9,
       linkedBookId: 'book_hadith_muslim',
       linkedZikirKey: 'Er-Rezzâk',
     ),
@@ -742,16 +742,16 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
           en: 'Heartfelt affirmation (tasdiq) is the core pillar of faith; verbal declaration (iqrar) establishes worldly legal status, while one coerced retains faith if the heart is serene',
         ),
         LocalizedText(
-          tr: 'İman yalnızca dille söylemekten ibarettir, kalp tasdiki gerekmez',
-          en: 'Faith is purely verbal with no need for heart conviction',
+          tr: 'İman yalnızca dille ikrar etmekten ibarettir; kalp tasdiki olmadan da sahih kabul edilir',
+          en: 'Faith consists purely of verbal testimony and is valid even without inner conviction',
         ),
         LocalizedText(
-          tr: 'Kalpten inanan kişi günah işlerse hemen kâfir olur',
-          en: 'Any sin immediately negates inner faith',
+          tr: 'Kalpten inanan mümin amelî bir farzı terk eder veya büyük günah işlerse hemen küfre düşer',
+          en: 'A believing person immediately exits faith upon neglecting a deed or committing a major sin',
         ),
         LocalizedText(
-          tr: 'İman akıl ve bilgiden tamamen kopuk bir tahmindir',
-          en: 'Faith is a blind guess severed from reason',
+          tr: 'İman her namaz vaktinde yeniden ikrar edilmedikçe hükümden düşen geçici bir akittir',
+          en: 'Faith is a temporary contract that lapses unless verbally renewed at each prayer time',
         ),
       ],
       correctIndex: 0,
@@ -785,23 +785,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'İman yalnız âhiret ümidinden ibaret olup dünya imtihanına tesiri yoktur',
+          en: 'Faith is solely hope for the Hereafter with no bearing on worldly trials',
+        ),
+        LocalizedText(
+          tr: 'Kul kendi nefsine güvendikçe sebeplerin tam hâkimi ve kâinatın merkezidir',
+          en: 'By relying solely on oneself, a person becomes master over all causes',
+        ),
+        LocalizedText(
           tr: 'Hakikî imanı elde eden adam kâinata meydan okuyabilir',
           en: 'One who attains true faith can challenge the entire universe',
         ),
         LocalizedText(
-          tr: 'İman sadece yaşlılıkta gereken bir tesellidir',
-          en: 'Faith is merely a consolation for old age',
-        ),
-        LocalizedText(
-          tr: 'Kuvvet yalnız bedenî sporla kazanılır',
-          en: 'Strength is gained only through athletics',
-        ),
-        LocalizedText(
-          tr: 'İlim olmadan dünya işleri yürütülemez',
-          en: 'Worldly trades cease without philosophy',
+          tr: 'İlmî delillerden kopuk taklîdî duygu her türlü fikrî şüpheden berîdir',
+          en: 'Blind imitation severed from reflection is immune to intellectual doubt',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: 'İkinci Mebhas\'ın Birinci Noktasında müminin tevekkül ve istinad noktası anlatılır.',
@@ -827,50 +827,50 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     tier: IrfanTier.irfan,
     madhhabScope: IrfanMadhhabScope.comparative,
     stem: LocalizedText(
-      tr: 'Sünen-i Ebû Dâvûd ve Şâfiî/Hanefî usulünde "su bulunamadığında veya kullanılması zarar verdiğinde" başvurulan teyemmümün niyeti ve uzuvları hakkında hangisi doğrudur?',
-      en: 'In Sunan Abi Dawud and comparative jurisprudence, which statement is accurate regarding the intention and limbs wiped in Tayammum (dry ablution)?',
+      tr: 'Diyanet İlmihali ve Sünen-i Ebû Dâvûd ışığında, su bulunamadığında veya kullanılması zarar verdiğinde alınan teyemmümde niyet ve iki vuruş (darp) konusunda hangisi doğrudur?',
+      en: 'According to the Diyanet Catechism and Sunan Abi Dawud, which statement is accurate regarding intention and the two strikes (darb) in Tayammum?',
     ),
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Niyetle birlikte eller temiz toprağa vurulup yüz ve kollar dirseklere kadar mesh edilir; Hanefî\'de iki vuruş sünnet, Şâfiî\'de iki vuruş rükündür',
-          en: 'With intention, hands strike pure earth to wipe face and arms up to elbows; two strikes are Sunnah in Hanafi and obligatory in Shafi\'i',
+          tr: 'Teyemmümde yalnız yüzün ve ayakların topuklarla birlikte toprakla meshedilmesi bütün mezheplerde farzdır',
+          en: 'Wiping the face and feet up to the ankles with pure earth is obligatory in all Sunni schools',
         ),
         LocalizedText(
-          tr: 'Teyemmümde ayaklar da mutlaka toprakla mesh edilir',
-          en: 'The feet must also be wiped with earth in Tayammum',
+          tr: 'Teyemmüm yalnızca cünüplükten temizlenmek içindir; abdestsizliği gidermek maksadıyla kılınacak namaza yetmez',
+          en: 'Tayammum removes major impurity (janabah) only and cannot substitute for minor ablution (wudu)',
         ),
         LocalizedText(
-          tr: 'Teyemmüm yalnız cünüplük hâlinde geçerlidir, abdest yerine geçmez',
-          en: 'Tayammum replaces Ghusl only, never Wudu',
+          tr: 'Hanefî mezhebinde teyemmümde niyet yalnız sünnet olup temiz toprağa tek bir darp bütün uzuvlar için yeterlidir',
+          en: 'In Hanafi fiqh intention is merely Sunnah and a single strike of the earth suffices for all required limbs',
         ),
         LocalizedText(
-          tr: 'Niyet etmeden tozlu rüzgârda yürümek teyemmüm sayılır',
-          en: 'Walking in dust without intention counts as Tayammum',
+          tr: 'Niyetle birlikte temiz toprağa iki darp yapıp 1. darpla yüzü, 2. darpla dirseklere kadar kolları meshetmek Hanefî ve Şâfiî\'de farzdır',
+          en: 'With intention, two strikes upon pure earth to wipe the face and arms up to the elbows are obligatory (fard) in both Hanafi and Shafi\'i fiqh',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
-      tr: 'Mâide Sûresi 6. âyette teyemmümde yüz ve ellerin mesh edileceği bildirilir; niyet her iki mezhepte de şarttır.',
-      en: 'Surah Al-Ma\'idah 5:6 prescribes wiping face and hands; intention is mandatory in both schools.',
+      tr: 'Mâide Sûresi 6. âyette teyemmümde yüz ve ellerin mesh edileceği bildirilir; Diyanet İlmihali\'ne göre Hanefî ve Şâfiî\'de niyet ile iki darp ve mesih farzdır.',
+      en: 'Surah Al-Ma\'idah 5:6 prescribes wiping face and hands; both Hanafi and Shafi\'i schools require intention and two strikes.',
     ),
     hikmet: IrfanHikmetCard(
       explanation: LocalizedText(
-        tr: 'Teyemmüm, İslâm\'ın kolaylık prensibinin ("Allah size güçlük dilemez, temizlemek ister") açık tezahürüdür; hem hadesten hem cenâbetten tahâret sağlar.',
-        en: 'Tayammum embodies Islamic ease ("Allah does not intend to make difficulty for you"), providing valid ritual purity when water is unavailable or harmful.',
+        tr: 'Teyemmüm hem hadesten hem cenâbetten tahâret sağlar. Diyanet İlmihali\'nde belirtildiği üzere Hanefî ve Şâfiî mezheplerinde niyetle beraber temiz toprak cinsine iki darp (vuruş) yapıp yüzü ve dirseklerle birlikte kolları meshetmek farzdır; Mâlikî ve Hanbelî\'de ise bileklere kadar tek darp yeterli görülür.',
+        en: 'Tayammum removes both minor and major ritual impurity. In both Hanafi and Shafi\'i jurisprudence (as taught in the Diyanet Catechism), intention and two strikes wiping the face and forearms including elbows are obligatory (fard), whereas Maliki and Hanbali schools deem one strike to the wrists sufficient.',
       ),
       sourceRef: LocalizedText(
-        tr: 'Mâide Sûresi, 5/6; Sünen-i Ebû Dâvûd, Tahâret 122',
-        en: 'Surah Al-Ma\'idah, 5:6; Sunan Abi Dawud, Taharah 122',
+        tr: 'Mâide Sûresi, 5/6; Sünen-i Ebû Dâvûd, Tahâret 122; Diyanet İlmihali Cilt 1, s. 210-213',
+        en: 'Surah Al-Ma\'idah, 5:6; Sunan Abi Dawud, Taharah 122; Diyanet Catechism Vol. 1, pp. 210-213',
       ),
       hanafiNote: LocalizedText(
-        tr: 'Teyemmümde niyet farzdır; tek bir vuruş farzı düşürse de iki vuruşla yüzü ve dirseklere kadar kolları mesh etmek sünnettir.',
-        en: 'Intention is fard; two strikes wiping face and arms to elbows is the established Sunnah.',
+        tr: 'Hanefî mezhebinde teyemmümde niyet ve iki darp ile yüzün ve dirseklere kadar kolların meshi farzdır; teyemmüm namaz vakti girmeden de alınabilir.',
+        en: 'In Hanafi fiqh, intention and two strikes wiping the face and arms to the elbows are fard; Tayammum may also be performed before the prayer time enters.',
       ),
       shafiiNote: LocalizedText(
-        tr: 'Niyet, tertip ve iki ayrı vuruşla yüzün ve dirseklerle birlikte kolların mesh edilmesi rükündür.',
-        en: 'Intention, sequence, and two separate strikes for face and arms including elbows are obligatory pillars.',
+        tr: 'Şâfiî mezhebinde niyet, tertip ve iki ayrı darp ile yüzün ve dirseklerle birlikte kolların meshi rükündür; her farz namaz için vakit girdikten sonra yenilenir.',
+        en: 'In Shafi\'i fiqh, intention, sequence, and two separate strikes for face and arms including elbows are obligatory pillars, performed after prayer time enters for each fard prayer.',
       ),
       linkedFarzId: 20,
       linkedBookId: 'book_hadith_ebu_davud',
@@ -888,23 +888,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'İbadet ve hayır hizmetlerini önce çevredeki kanaat önderlerinin takdirine arz etmek',
+          en: 'Presenting acts of worship first to win praise from local figures',
+        ),
+        LocalizedText(
           tr: 'Amelinizde rızâ-yı İlâhî olmalı; eğer O razı olsa bütün dünya küsse ehemmiyeti yok',
           en: 'Your sole aim in deeds must be Allah\'s pleasure; if He is pleased, the whole world\'s displeasure matters nothing',
         ),
         LocalizedText(
-          tr: 'Yalnızca kalabalıkların takdirini kazanmaya çalışmak',
-          en: 'Seeking applause from crowds first',
+          tr: 'Kardeşlerinin hizmetini tenkit ederek kendi meşrebini tek hak yol ilan etmek',
+          en: 'Declaring one\'s own approach solely valid by criticizing fellow believers',
         ),
         LocalizedText(
-          tr: 'Kardeşlerinin hizmetini tenkit ederek öne geçmek',
-          en: 'Advancing by criticizing fellow believers',
-        ),
-        LocalizedText(
-          tr: 'İbadetleri başkalarına göstererek teşvik etmekle yetinmek',
-          en: 'Performing deeds primarily for public display',
+          tr: 'Dünyevî şöhret niyetiyle yapılan ibadetleri dahi zâhire bakarak makbul görmek',
+          en: 'Treating ostentation-driven acts as acceptable based purely on outward form',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: '"O razı olduktan ve kabul ettikten sonra, isterse bütün halk..." diye devam eden meşhur düsturdur.',
@@ -919,7 +919,7 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
         tr: 'Risale-i Nur Külliyatı, İhlâs ve Uhuvvet Risaleleri (21. Lem\'a)',
         en: 'Risale-i Nur Collection, Treatise on Sincerity (21st Flash)',
       ),
-      linkedFarzId: 27,
+      linkedFarzId: 26,
       linkedBookId: 'book_rn_ihlas_uhuvvet',
     ),
   ),
@@ -1018,16 +1018,16 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
           en: 'Dying unrepentant upon shirk is unforgivable, whereas sinful believers remain under Allah\'s mercy and will not abide eternally in Hell',
         ),
         LocalizedText(
-          tr: 'Tövbe eden müşriklerin de asla affedilmeyeceği anlamına gelir',
-          en: 'It means even repentant polytheists can never be forgiven',
+          tr: 'Dünyada şirkten tövbe edip imana dönenlerin dahi tevbesinin kabul edilmeyeceğini bildirir',
+          en: 'It implies that even those who repent from polytheism during life cannot be forgiven',
         ),
         LocalizedText(
-          tr: 'Yalnızca malî borçları ifade eder',
-          en: 'It applies only to financial debts',
+          tr: 'Büyük günah işleyen müminlerin imanını tamamen kaybettiğini ve ebedî cehennemlik olduğunu belirtir',
+          en: 'It states that believers who commit grave sins lose faith completely and abide in Hell forever',
         ),
         LocalizedText(
-          tr: 'İmanın amele hiçbir ihtiyacı olmadığını söyler',
-          en: 'It declares deeds completely meaningless',
+          tr: 'İlâhî emir ve yasaklara uymanın âhiret sorumluluğu bakımından hiçbir hükmü olmadığını öğretir',
+          en: 'It teaches that obeying divine commands carries no consequence in the Hereafter',
         ),
       ],
       correctIndex: 0,
@@ -1062,23 +1062,23 @@ const List<IrfanQuestion> kIrfanQuestionsKulliyatIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Kişiye yalnız atalarının soy şeceresini ve kabîle üstünlüğünü öğretir',
+          en: 'Serve only to recount ancestral lineage and tribal precedence',
+        ),
+        LocalizedText(
+          tr: 'Yalnızca iki bayram sabahına mahsus olmak üzere cemaatle yerine getirilir',
+          en: 'May only be observed communally on the two Eid mornings',
+        ),
+        LocalizedText(
+          tr: 'Dünyevî geçim kaygısını artırarak ibadet ve zikir şevkini azaltır',
+          en: 'Increase worldly anxiety and dampen devotion in worship',
+        ),
+        LocalizedText(
           tr: 'Kalbi yumuşatır, gözü yaşartır ve âhireti hatırlatır',
           en: 'Soften the heart, bring tears to the eyes, and remind of the Hereafter',
         ),
-        LocalizedText(
-          tr: 'Yalnızca soy kütüğü yazmak içindir',
-          en: 'Are only for recording family trees',
-        ),
-        LocalizedText(
-          tr: 'Sadece bayram sabahları yapılabilir',
-          en: 'Can only be done on Eid mornings',
-        ),
-        LocalizedText(
-          tr: 'Dünya hırsını artırır',
-          en: 'Increase worldly greed',
-        ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: 'Tefekkür-i mevt (ölümü tefekkür) insanı dünya gafletinden uyandırıp ibadete sevk eder.',

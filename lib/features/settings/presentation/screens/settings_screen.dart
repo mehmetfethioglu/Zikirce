@@ -1630,6 +1630,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 10),
+          _buildContainerCard(
+            colors: colors,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l10n.isTurkish
+                            ? 'Açılışta Doğrudan Zikirmatik’i Aç'
+                            : 'Open Directly on Counter at Startup',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: colors.primaryText),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        l10n.isTurkish
+                            ? 'Uygulama açıldığında minimal özet ekranı yerine doğrudan zikir sayacını açar.'
+                            : 'Opens the dhikr counter directly instead of the minimal home overview at launch.',
+                        style: TextStyle(fontSize: 10.5, color: colors.secondaryTextAlt, height: 1.25),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Switch(
+                  value: settings.isStartOnZikirEnabled,
+                  activeTrackColor: colors.accent,
+                  onChanged: (val) => settingsNotifier.toggleStartOnZikir(val),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 14),
 
           // ==========================================
@@ -1699,8 +1734,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 3),
                       Text(
                         l10n.isTurkish
-                            ? 'Android TV cihazlarda otomatik açılır. Büyük ekran kumanda odağı (D-Pad), Ev Mescidi Vakit Panosu ve Külliyat kitaplarını rahlede açık çift sayfa (kaydırmasız) görünümüyle sunar.'
-                            : 'Auto-enabled on Android TV. Enables 10-foot remote D-Pad navigation, Ambient Prayer Dashboard, and full-screen two-page lectern book spreads.',
+                            ? 'Android TV cihazlarda otomatik açılır. Büyük ekran kumanda odağı (D-Pad), Ev Mescidi Vakit Panosu ve Külliyat kitaplarını rahlede açık çift sayfa (kaydırmasız) görünümüyle sunar. İstediğiniz zaman TV ekranının üst çubuğundaki «TV Modundan Çık» butonuyla normal görünüme dönebilirsiniz.'
+                            : 'Auto-enabled on Android TV. Enables 10-foot remote D-Pad navigation, Ambient Prayer Dashboard, and full-screen two-page lectern book spreads. You can return to mobile mode anytime from the «Exit TV Mode» button in the top bar.',
                         style: TextStyle(
                           fontSize: 10.5,
                           color: colors.secondaryTextAlt,

@@ -1,14 +1,22 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zikirce/core/constants/asset_constants.dart';
 import 'package:zikirce/core/database/zikir_seed_data.dart';
 import 'package:zikirce/core/localization/app_localizations.dart';
 import 'package:zikirce/core/theme/app_theme_colors.dart';
+import 'package:zikirce/features/gamification/providers/gamification_providers.dart';
 import 'package:zikirce/features/irfan/data/irfan_question_bank.dart';
 import 'package:zikirce/features/irfan/data/irfan_repository.dart';
 import 'package:zikirce/features/irfan/domain/irfan_models.dart';
+import 'package:zikirce/features/irfan/presentation/screens/irfan_meydani_screen.dart';
 import 'package:zikirce/features/irfan/presentation/widgets/irfan_poll_confetti_overlay.dart';
 import 'package:zikirce/features/irfan/presentation/widgets/irfan_question_views.dart';
+import 'package:zikirce/features/irfan/presentation/widgets/irfan_seljuk_star_painter.dart';
 import 'package:zikirce/features/irfan/providers/irfan_providers.dart';
 import 'package:zikirce/features/kuran/data/islamic_bookshelf_models.dart';
 
@@ -220,6 +228,104 @@ void main() {
           IrfanQuestionBank.byFarzId(farzId),
           isNotEmpty,
           reason: '32 Farz bağlantısı eksik: Farz #$farzId',
+        );
+      }
+    });
+
+    test('İlmihal & Diyanet İlmihal soru kalitesi ve Poka-Yoke dengesi korunur', () {
+      final ilmihalQuestions = IrfanQuestionBank.allQuestions
+          .where((q) => q.topic == IrfanTopic.ilmihal32Farz)
+          .toList();
+
+      expect(ilmihalQuestions.length, greaterThanOrEqualTo(130));
+      for (final tier in IrfanTier.values) {
+        expect(
+          IrfanQuestionBank.byNode(IrfanTopic.ilmihal32Farz, tier).length,
+          greaterThanOrEqualTo(40),
+          reason: 'Eksik İlmihal seviyesi: $tier',
+        );
+      }
+
+      final indexCounts = <int, int>{0: 0, 1: 0, 2: 0, 3: 0};
+      int mcqCount = 0;
+      int trueCount = 0;
+      int falseCount = 0;
+
+      for (final q in ilmihalQuestions) {
+        switch (q.payload) {
+          case MultipleChoicePayload(:final options, :final correctIndex):
+            mcqCount++;
+            indexCounts[correctIndex] = (indexCounts[correctIndex] ?? 0) + 1;
+
+            for (final opt in options) {
+              expect(
+                opt.tr.trim().length,
+                greaterThanOrEqualTo(4),
+                reason: '${q.id} kısa TR şık: "${opt.tr}"',
+              );
+              expect(
+                opt.en.trim().length,
+                greaterThanOrEqualTo(4),
+                reason: '${q.id} kısa EN şık: "${opt.en}"',
+              );
+            }
+
+            final distractorLens = [
+              for (int i = 0; i < options.length; i++)
+                if (i != correctIndex) options[i].tr.trim().length,
+            ];
+            final avgDistractorLen =
+                distractorLens.reduce((a, b) => a + b) / distractorLens.length;
+            expect(
+              options[correctIndex].tr.trim().length,
+              lessThanOrEqualTo(avgDistractorLen * 2.6),
+              reason: '${q.id} doğru şık dikkat çekici biçimde uzun',
+            );
+          case TrueFalsePayload(:final correctAnswer):
+            if (correctAnswer) {
+              trueCount++;
+            } else {
+              falseCount++;
+            }
+          case MatchingPayload():
+            break;
+        }
+      }
+
+      for (int idx = 0; idx < 4; idx++) {
+        expect(
+          indexCounts[idx]! / mcqCount,
+          greaterThanOrEqualTo(0.15),
+          reason: 'Doğru şık index=$idx oranı düşük',
+        );
+      }
+      expect(trueCount, greaterThan(0));
+      expect(falseCount, greaterThan(0));
+
+      final seenStems = <String, String>{};
+      for (final q in IrfanQuestionBank.allQuestions) {
+        final stemTr = q.stem.tr.trim();
+        expect(
+          seenStems.containsKey(stemTr),
+          isFalse,
+          reason: 'Mükerrer soru kökü (${q.id} vs ${seenStems[stemTr]}): $stemTr',
+        );
+        seenStems[stemTr] = q.id;
+      }
+
+      final ilm14 = IrfanQuestionBank.byId('ilm_i_14');
+      expect(ilm14, isNotNull);
+      expect(ilm14!.hikmet.linkedFarzId, equals(20));
+      expect(
+        ilm14.hikmet.explanation.tr.toLowerCase(),
+        contains('iki darp'),
+      );
+
+      for (int farzId = 1; farzId <= 32; farzId++) {
+        expect(
+          IrfanQuestionBank.byFarzId(farzId).length,
+          greaterThanOrEqualTo(2),
+          reason: '32 Farz minimum kapsam eksik: Farz #$farzId',
         );
       }
     });
@@ -540,7 +646,8 @@ void main() {
         wallet: wallet,
       );
       addTearDown(notifier.dispose);
-      final day = DateTime(2026, 11, 13, 19, 30);
+      final current = DateTime.now();
+      final day = DateTime(current.year, current.month, current.day, 12);
 
       final firstStarted = await notifier.startDailyFive(now: day);
       expect(firstStarted, isTrue);
@@ -587,7 +694,8 @@ void main() {
         wallet: wallet,
       );
       addTearDown(notifier.dispose);
-      final day = DateTime(2026, 11, 13, 20, 0);
+      final current = DateTime.now();
+      final day = DateTime(current.year, current.month, current.day, 12);
 
       expect(await notifier.startSm2Review(now: day), isTrue);
       expect(wallet.diamonds, 4);
@@ -758,6 +866,81 @@ void main() {
       expect(notifier.state.correctCount, 1);
       // Cannot use shield twice on same question
       expect(await notifier.useMistakeShield(), isFalse);
+    });
+  });
+
+  group('İrfan Meydanı Zikirce Logo & Navigasyon İkonu Doğrulaması', () {
+    testWidgets('nav_irfan.svg 8 dilimli Zikirce rozeti silüetini hatasız çizer',
+        (tester) async {
+      final svgContent = File('assets/images/nav_irfan.svg').readAsStringSync();
+      expect(svgContent, contains('A4.55 4.55'));
+      expect(svgContent, isNot(contains('evenodd')));
+
+      await tester.pumpWidget(
+        _wrapTestApp(
+          Center(
+            child: SvgPicture.string(
+              svgContent,
+              width: 24,
+              height: 24,
+              colorFilter: const ColorFilter.mode(
+                Color(0xFF174D35),
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SvgPicture), findsOneWidget);
+    });
+
+    testWidgets('İrfan Meydanı başlığı yanında Zikirce logosu gösterilir',
+        (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            goldCountProvider.overrideWith((ref) async => 100),
+            diamondCountProvider.overrideWith((ref) async => 10),
+            irfanDashboardProvider.overrideWith(
+              (ref) => IrfanRepository(storage: _InMemoryIrfanStorage())
+                  .loadDashboardSummary(sessionId: 'default'),
+            ),
+          ],
+          child: _wrapTestApp(const IrfanMeydaniScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final titleFinder = find.text('İrfan Meydanı');
+      expect(titleFinder, findsOneWidget);
+
+      final headerRowFinder = find.ancestor(
+        of: titleFinder,
+        matching: find.byType(Row),
+      );
+      expect(headerRowFinder, findsWidgets);
+
+      final logoFinder = find.descendant(
+        of: headerRowFinder.first,
+        matching: find.byWidgetPredicate(
+          (w) =>
+              w is Image &&
+              w.image is ResizeImage &&
+              (w.image as ResizeImage).imageProvider ==
+                  const AssetImage(AppAssets.logo),
+        ),
+      );
+      expect(logoFinder, findsOneWidget);
+      expect(
+        find.descendant(
+          of: headerRowFinder.first,
+          matching: find.byType(IrfanSeljukStarBadge),
+        ),
+        findsNothing,
+      );
     });
   });
 }

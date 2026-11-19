@@ -43,17 +43,26 @@ class ZikirceApp extends ConsumerStatefulWidget {
 
 class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObserver {
   StreamSubscription<Uri?>? _widgetClickSub;
+  StreamSubscription<({String prayerName, String dateStr})>? _prayerNotifSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _prayerNotifSub = LocalNotificationService
+        .pendingPrayerNotificationTapped.stream
+        .listen((_) {
+      appRouter.go('/namaz');
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Warm up cloudSyncProvider early so CloudSyncEngine has application-level Ref
       ref.read(cloudSyncProvider.notifier);
       CloudSyncEngine.instance.syncOnAppResume(ref);
       CloudSyncEngine.instance.startPeriodicSync(ref);
       _initWidgetDeepLinkListener();
+      if (LocalNotificationService.consumeInitialPrayerNotificationTap() != null) {
+        appRouter.go('/namaz');
+      }
     });
   }
 
@@ -95,6 +104,7 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _prayerNotifSub?.cancel();
     _widgetClickSub?.cancel();
     CloudSyncEngine.instance.stopPeriodicSync();
     WidgetsBinding.instance.removeObserver(this);

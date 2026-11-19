@@ -7,12 +7,14 @@ import '../../../../core/services/meal_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
 import '../../../../core/services/tafseer_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/quran_tracking_scroll_helper.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 import '../../data/tilavet_secdesi_data.dart';
+import 'quran_tracked_paragraph.dart';
 import 'tafseer_bottom_sheet.dart';
 import 'tilavet_secdesi_guide_sheet.dart';
 import 'zikirce_ayah_stop_marker.dart';
@@ -30,6 +32,8 @@ class MushafPageWidget extends ConsumerStatefulWidget {
   final bool isMealOnlyMode;
   final MushafReadingMode? readingMode;
   final bool? isActivePage;
+  final double viewportTopOverlayInset;
+  final double? viewportBottomOverlayInset;
   final void Function(int surahId, int ayahId, int wordOrder)? onWordTap;
   final void Function(int surahId, int ayahId)? onAyahTapOverride;
 
@@ -39,6 +43,8 @@ class MushafPageWidget extends ConsumerStatefulWidget {
     this.isMealOnlyMode = false,
     this.readingMode,
     this.isActivePage,
+    this.viewportTopOverlayInset = 0.0,
+    this.viewportBottomOverlayInset,
     this.onWordTap,
     this.onAyahTapOverride,
   });
@@ -53,7 +59,8 @@ class MushafPageWidget extends ConsumerStatefulWidget {
 
 class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
   final List<TapGestureRecognizer> _recognizers = [];
-  final GlobalKey _activeMushafWordKey = GlobalKey();
+  final Map<String, GlobalKey<QuranTrackedParagraphState>> _paragraphKeys = {};
+  String? _activeParagraphId;
   static const Set<String> _stopSigns = QuranWordHighlighter.stopSigns;
 
   void _scrollToActiveMushafWord() {
@@ -62,27 +69,44 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     if (!isActivePage) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = _activeMushafWordKey.currentContext;
-      if (ctx == null) return;
-      final renderBox = ctx.findRenderObject() as RenderBox?;
-      if (renderBox == null || !renderBox.hasSize) return;
-
-      final wordOffset = renderBox.localToGlobal(Offset.zero);
-      final wordHeight = renderBox.size.height;
-      final screenHeight = MediaQuery.of(context).size.height;
-      const topSafeZone = 85.0;
-      final bottomSafeZone = screenHeight - 95.0;
-
-      if (wordOffset.dy < topSafeZone ||
-          (wordOffset.dy + wordHeight) > bottomSafeZone) {
-        Scrollable.ensureVisible(
-          ctx,
-          duration: const Duration(milliseconds: 360),
-          curve: Curves.easeOutCubic,
-          alignment: 0.35,
-        );
-      }
+      final paragraphId = _activeParagraphId;
+      final state =
+          paragraphId != null ? _paragraphKeys[paragraphId]?.currentState : null;
+      if (state == null || !state.mounted) return;
+      final wordRect = state.activeWordRect;
+      if (wordRect == null) return;
+      final effectiveBottomInset = widget.viewportBottomOverlayInset ??
+          ((!ref.read(isTvModeProvider) && widget.onWordTap == null)
+              ? 88.0
+              : 0.0);
+      QuranTrackingScrollHelper.ensureContextVisibleInViewport(
+        state.context,
+        targetSubRect: wordRect,
+        topSafePadding: 14.0 + widget.viewportTopOverlayInset,
+        bottomSafePadding: 18.0 + effectiveBottomInset,
+        preferredAlignment: 0.26,
+      );
     });
+  }
+
+  void _maybeScrollIfAudioActiveOnPage() {
+    final isActivePage = widget.isActivePage ??
+        (widget.pageData.pageNo == ref.read(currentMushafPageProvider));
+    if (!isActivePage) return;
+    final audioState = ref.read(kuranAudioNotifierProvider);
+    if (!audioState.isPlaying &&
+        !audioState.isLoading &&
+        audioState.currentWordOrder <= 0) {
+      return;
+    }
+    final hasMatchingAyah = widget.pageData.quranAyats.any(
+      (a) =>
+          a.sureId == audioState.currentSurahId &&
+          a.ayetId == audioState.currentAyahId,
+    );
+    if (hasMatchingAyah) {
+      _scrollToActiveMushafWord();
+    }
   }
 
   /// Cache of loaded custom/comparative meals for this page
@@ -104,15 +128,22 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     super.initState();
     _loadExtendedMealData();
     _loadPageTafseerData();
+    _maybeScrollIfAudioActiveOnPage();
   }
 
   @override
   void didUpdateWidget(covariant MushafPageWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.pageData.pageNo != widget.pageData.pageNo ||
-        oldWidget.effectiveMode != widget.effectiveMode) {
+    final pageOrModeChanged = oldWidget.pageData.pageNo != widget.pageData.pageNo ||
+        oldWidget.effectiveMode != widget.effectiveMode;
+    if (pageOrModeChanged) {
+      _paragraphKeys.clear();
+      _activeParagraphId = null;
       _loadExtendedMealData();
       _loadPageTafseerData();
+    }
+    if (pageOrModeChanged || widget.isActivePage != oldWidget.isActivePage) {
+      _maybeScrollIfAudioActiveOnPage();
     }
   }
 
@@ -266,35 +297,25 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
   static String mapStopCharacter(String char, String fontFamily) =>
       QuranWordHighlighter.mapStopCharacter(char, fontFamily);
 
-  List<InlineSpan> _buildAyahWordSpans({
+  void _buildAyahWordSpans({
+    required QuranSpanAccumulator accumulator,
     required String rawText,
     required TextStyle baseStyle,
     required Color waqfColor,
     required String fontFamily,
     required GestureRecognizer? recognizer,
-    required VoidCallback? onAyahTap,
     void Function(int wordOrder)? onWordTap,
     required bool highlightDivineWords,
     required bool isDark,
+    required bool isArrowTracking,
     required bool isAyahPlaying,
     int? activeWordOrder,
-    int activeWordDurationMs = 500,
-    double playbackSpeed = 1.0,
-    int surahId = 0,
-    int ayahId = 0,
   }) {
     final cleanedText = QuranWordHighlighter.cleanArabicText(rawText).trim();
     final words = cleanedText.isEmpty
         ? const <String>[]
         : cleanedText.split(RegExp(r'\s+'));
-    final spans = <InlineSpan>[];
     final divineColor = QuranWordHighlighter.getDivineWordColor(isDark);
-    final emeraldBg =
-        isDark ? const Color(0xFF059669) : const Color(0xFF10B981);
-    final isArrowTracking = ref.watch(
-      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
-    );
-    final isTvMode = ref.watch(isTvModeProvider);
 
     for (int wIdx = 0; wIdx < words.length; wIdx++) {
       final cleanWord = words[wIdx];
@@ -319,8 +340,6 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       final bool isDivine = highlightDivineWords &&
           QuranWordHighlighter.isDivineWord(pureWord);
 
-      final VoidCallback? effectiveTap =
-          onWordTap != null ? () => onWordTap(wordOrder) : onAyahTap;
       final GestureRecognizer? effectiveRecognizer = onWordTap != null
           ? _createRecognizer(() => onWordTap(wordOrder))
           : recognizer;
@@ -336,7 +355,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
         } else {
           wordStyle = baseStyle.copyWith(
             color: Colors.white,
-            backgroundColor: emeraldBg,
+            backgroundColor: Colors.transparent,
           );
         }
       } else if (isDivine) {
@@ -348,80 +367,32 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       }
 
       if (pureWord.isNotEmpty) {
-        if (isWordActive) {
-          spans.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: GestureDetector(
-                key: _activeMushafWordKey,
-                onTap: effectiveTap,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.bottomCenter,
-                  children: [
-                    Text(
-                      pureWord,
-                      textDirection: TextDirection.rtl,
-                      style: wordStyle.copyWith(
-                        height: 1.0,
-                        backgroundColor: isArrowTracking
-                            ? Colors.transparent
-                            : emeraldBg,
-                      ),
-                    ),
-                    if (isArrowTracking)
-                      Positioned(
-                        bottom: isTvMode ? -13 : -8,
-                        left: 0,
-                        right: 0,
-                        child: QuranWordTrackingPointer(
-                          isDark: isDark,
-                          height: isTvMode ? 12.5 : 8.0,
-                          durationMs: activeWordDurationMs,
-                          playbackSpeed: playbackSpeed,
-                          isPlaying: isAyahPlaying,
-                          wordIdentity: '${surahId}_${ayahId}_$wordOrder',
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        } else {
-          spans.add(
-            TextSpan(
-              text: pureWord,
-              style: wordStyle,
-              recognizer: effectiveRecognizer,
-            ),
-          );
-        }
+        accumulator.addText(
+          pureWord,
+          style: wordStyle,
+          recognizer: effectiveRecognizer,
+          isActiveWord: isWordActive,
+        );
       }
 
       for (int sIdx = 0; sIdx < stops.length; sIdx++) {
         final stop = stops[sIdx];
         final mappedStop = mapStopCharacter(stop, fontFamily);
-        final prefix = sIdx == 0 ? '\u200B' : '\u200A';
-        spans.add(
-          TextSpan(
-            text: '$prefix$mappedStop',
-            style: baseStyle.copyWith(
-              color: waqfColor,
-              fontWeight: FontWeight.normal,
-            ),
-            recognizer: effectiveRecognizer,
+        final prefix = sIdx == 0 ? '\u2060' : '\u2060\u202F';
+        accumulator.addText(
+          '$prefix$mappedStop',
+          style: baseStyle.copyWith(
+            color: waqfColor,
+            fontWeight: FontWeight.normal,
           ),
+          recognizer: effectiveRecognizer,
         );
       }
 
       if (wIdx < words.length - 1) {
-        spans.add(TextSpan(text: ' ', style: baseStyle));
+        accumulator.addText(' ', style: baseStyle);
       }
     }
-
-    return spans;
   }
 
   String _stripHtmlTags(String html) {
@@ -438,6 +409,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
   @override
   Widget build(BuildContext context) {
     _disposeRecognizers();
+    _activeParagraphId = null;
 
     // Listen to meal/comparison setting changes so page updates live
     ref.listen<String>(activeMealSourceProvider, (_, __) {
@@ -468,6 +440,9 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isTvMode = ref.watch(isTvModeProvider);
+    final isArrowTrackingMode = ref.watch(
+      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
+    );
     final audioState = ref.watch(kuranAudioNotifierProvider);
     final audioNotifier = ref.read(kuranAudioNotifierProvider.notifier);
     final fontFamily = ref.watch(quranFontFamilyProvider);
@@ -614,9 +589,220 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                     builder: (context, viewportConstraints) {
                       final isTvMushafFullFit =
                           isTvMode && mode == MushafReadingMode.mushaf;
-                      final pageGroupsWidgets = surahGroups.map((group) {
+                      final pageGroupsWidgets =
+                          surahGroups.asMap().entries.map((groupEntry) {
+                        final groupIdx = groupEntry.key;
+                        final group = groupEntry.value;
                         final firstAyat = group.first;
                         final sureMeta = firstAyat.sure;
+
+                        Widget buildClassicMushafGroup() {
+                          final accumulator = QuranSpanAccumulator();
+                          String? groupActiveWordIdentity;
+                          bool groupIsAyahPlaying = false;
+                          final effectiveFontSize = isTvMode
+                              ? baseFontSize
+                              : (isShortPage
+                                  ? (baseFontSize + 2.0)
+                                  : baseFontSize);
+
+                          for (final ayat in group) {
+                            final isCurrentAyahPlaying = (audioState.isPlaying ||
+                                    audioState.isLoading ||
+                                    audioState.currentWordOrder > 0) &&
+                                audioState.currentSurahId == ayat.sureId &&
+                                audioState.currentAyahId == ayat.ayetId;
+
+                            final meal = widget.pageData.mealAyats
+                                .cast<MealAyatModel?>()
+                                .firstWhere(
+                                  (m) =>
+                                      m?.sureId == ayat.sureId &&
+                                      m?.ayetId == ayat.ayetId,
+                                  orElse: () => null,
+                                );
+
+                            void voidCallback() {
+                              if (widget.onAyahTapOverride != null) {
+                                widget.onAyahTapOverride!(
+                                  ayat.sureId,
+                                  ayat.ayetId,
+                                );
+                                return;
+                              }
+                              _showAyahActionMenu(
+                                context,
+                                ayat,
+                                meal,
+                                audioNotifier,
+                              );
+                            }
+
+                            final recognizer = _createRecognizer(voidCallback);
+                            final secdeItem =
+                                TilavetSecdesiData.getSecdeForVerse(
+                              ayat.sureId,
+                              ayat.ayetId,
+                            );
+                            final isSecdeAyah = secdeItem != null;
+
+                            final baseAyatStyle = TextStyle(
+                              fontFamily: fontFamily,
+                              fontSize: effectiveFontSize,
+                              fontWeight: isBoldArabic
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isCurrentAyahPlaying
+                                  ? (isDark
+                                      ? const Color(0xFFF6F2EA)
+                                      : const Color(0xFF1E1A16))
+                                  : primaryTextColor,
+                              backgroundColor: isCurrentAyahPlaying
+                                  ? (isArrowTrackingMode
+                                      ? (isDark
+                                          ? const Color(0xFF059669)
+                                              .withValues(alpha: 0.10)
+                                          : const Color(0xFF10B981)
+                                              .withValues(alpha: 0.08))
+                                      : (isDark
+                                          ? const Color(0xFF059669)
+                                              .withValues(alpha: 0.14)
+                                          : const Color(0xFF10B981)
+                                              .withValues(alpha: 0.12)))
+                                  : (isSecdeAyah
+                                      ? (isDark
+                                          ? const Color(0xFFB45309)
+                                              .withValues(alpha: 0.16)
+                                          : const Color(0xFFF59E0B)
+                                              .withValues(alpha: 0.12))
+                                      : Colors.transparent),
+                              height: lineHeight,
+                              letterSpacing: -0.1,
+                            );
+
+                            _buildAyahWordSpans(
+                              accumulator: accumulator,
+                              rawText: ayat.ayetText,
+                              baseStyle: baseAyatStyle,
+                              waqfColor: isCurrentAyahPlaying
+                                  ? AppColors.gold400
+                                  : waqfColor,
+                              fontFamily: fontFamily,
+                              recognizer: recognizer,
+                              onWordTap: widget.onWordTap != null
+                                  ? (wordOrder) => widget.onWordTap!(
+                                        ayat.sureId,
+                                        ayat.ayetId,
+                                        wordOrder,
+                                      )
+                                  : null,
+                              highlightDivineWords: highlightDivineWords,
+                              isDark: isDark,
+                              isArrowTracking: isArrowTrackingMode,
+                              isAyahPlaying: isCurrentAyahPlaying,
+                              activeWordOrder: isCurrentAyahPlaying
+                                  ? audioState.currentWordOrder
+                                  : null,
+                            );
+
+                            if (isCurrentAyahPlaying &&
+                                audioState.currentWordOrder > 0) {
+                              groupActiveWordIdentity =
+                                  '${ayat.sureId}_${ayat.ayetId}_${audioState.currentWordOrder}';
+                              groupIsAyahPlaying = audioState.isPlaying;
+                            }
+
+                            accumulator.addText(
+                              '\u2060\u00A0\u2060',
+                              style: baseAyatStyle,
+                            );
+                            accumulator.addWidget(
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: GestureDetector(
+                                  key: ValueKey<String>(
+                                    'mushaf_stop_${ayat.sureId}_${ayat.ayetId}',
+                                  ),
+                                  onTap: voidCallback,
+                                  child: ZikirceAyahStopMarker(
+                                    number: ayat.ayetNumber.isNotEmpty
+                                        ? ayat.ayetNumber
+                                        : QuranWordHighlighter.toArabicDigits(
+                                            ayat.ayetId,
+                                          ),
+                                    isDark: isDark,
+                                    isHighlight: isCurrentAyahPlaying,
+                                    isSecde: isSecdeAyah,
+                                    fontFamily: fontFamily,
+                                    size: isTvMode
+                                        ? (effectiveFontSize * 1.05)
+                                            .clamp(24.0, 48.0)
+                                        : (effectiveFontSize * 1.15)
+                                            .clamp(24.0, 48.0),
+                                  ),
+                                ),
+                              ),
+                            );
+                            if (isSecdeAyah) {
+                              accumulator.addText(
+                                '\u2060\u00A0\u2060',
+                                style: baseAyatStyle,
+                              );
+                              accumulator.addWidget(
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: ZikirceSecdeInlineBadge(
+                                    isDark: isDark,
+                                    compact: true,
+                                    label: 'سَجْدَة • Secde',
+                                    onTap: () => TilavetSecdesiGuideSheet.show(
+                                      context,
+                                      initialSecdeItem: secdeItem,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            accumulator.addText(
+                              '\u2060\u200F  ',
+                              style: baseAyatStyle,
+                            );
+                          }
+
+                          final paragraphId =
+                              'mushaf_grp_${widget.pageData.pageNo}_$groupIdx';
+                          if (accumulator.activeWordRange != null) {
+                            _activeParagraphId = paragraphId;
+                          }
+                          final paragraphKey = _paragraphKeys.putIfAbsent(
+                            paragraphId,
+                            () => GlobalKey<QuranTrackedParagraphState>(),
+                          );
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 4,
+                            ),
+                            child: QuranTrackedParagraph(
+                              key: paragraphKey,
+                              textSpan: TextSpan(children: accumulator.spans),
+                              textAlign: isShortPage
+                                  ? TextAlign.center
+                                  : TextAlign.justify,
+                              textDirection: TextDirection.rtl,
+                              activeWordRange: accumulator.activeWordRange,
+                              isArrowMode: isArrowTrackingMode,
+                              isDark: isDark,
+                              isTvMode: isTvMode,
+                              activeWordDurationMs:
+                                  audioState.activeWordDurationMs,
+                              playbackSpeed: audioState.playbackSpeed,
+                              isPlaying: groupIsAyahPlaying,
+                              activeWordIdentity: groupActiveWordIdentity,
+                            ),
+                          );
+                        }
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -687,6 +873,8 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                   showArabicVerse:
                                       mode == MushafReadingMode.ayatAndMeal,
                                   isDark: isDark,
+                                  isTvMode: isTvMode,
+                                  isArrowTrackingMode: isArrowTrackingMode,
                                   fontFamily: fontFamily,
                                   arabicFontSize: baseFontSize,
                                   mealFontSize: kuranFonts.mealFontSize,
@@ -707,176 +895,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                               })
                             // 3) KLASİK ARAPÇA MUSHAF MODU
                             else
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 2, vertical: 4),
-                                child: Text.rich(
-                                  TextSpan(
-                                    children: group.expand((ayat) {
-                                      final isCurrentAyahPlaying =
-                                          (audioState.isPlaying ||
-                                                  audioState.isLoading ||
-                                                  audioState.currentWordOrder >
-                                                      0) &&
-                                              audioState.currentSurahId ==
-                                                  ayat.sureId &&
-                                              audioState.currentAyahId ==
-                                                  ayat.ayetId;
-
-                                      final meal = widget.pageData.mealAyats
-                                          .cast<MealAyatModel?>()
-                                          .firstWhere(
-                                            (m) =>
-                                                m?.sureId == ayat.sureId &&
-                                                m?.ayetId == ayat.ayetId,
-                                            orElse: () => null,
-                                          );
-
-                                      void voidCallback() {
-                                        if (widget.onAyahTapOverride != null) {
-                                          widget.onAyahTapOverride!(
-                                            ayat.sureId,
-                                            ayat.ayetId,
-                                          );
-                                          return;
-                                        }
-                                        _showAyahActionMenu(
-                                          context,
-                                          ayat,
-                                          meal,
-                                          audioNotifier,
-                                        );
-                                      }
-                                      final recognizer =
-                                          _createRecognizer(voidCallback);
-
-                                      final effectiveFontSize = isTvMode
-                                          ? baseFontSize
-                                          : (isShortPage
-                                              ? (baseFontSize + 2.0)
-                                              : baseFontSize);
-
-                                      final secdeItem =
-                                          TilavetSecdesiData.getSecdeForVerse(
-                                        ayat.sureId,
-                                        ayat.ayetId,
-                                      );
-                                      final isSecdeAyah = secdeItem != null;
-
-                                      final isArrowTrackingMode = ref.watch(
-                                        settingsProvider.select((s) =>
-                                            s.wordTrackingMode == 'arrow'),
-                                      );
-
-                                      final baseAyatStyle = TextStyle(
-                                        fontFamily: fontFamily,
-                                        fontSize: effectiveFontSize,
-                                        fontWeight: isBoldArabic
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        color: isCurrentAyahPlaying
-                                            ? (isDark
-                                                ? const Color(0xFFF6F2EA)
-                                                : const Color(0xFF1E1A16))
-                                            : primaryTextColor,
-                                        backgroundColor: (isCurrentAyahPlaying &&
-                                                !isArrowTrackingMode)
-                                            ? (isDark
-                                                ? const Color(0xFF059669)
-                                                    .withValues(alpha: 0.14)
-                                                : const Color(0xFF10B981)
-                                                    .withValues(alpha: 0.12))
-                                            : (isSecdeAyah
-                                                ? (isDark
-                                                    ? const Color(0xFFB45309)
-                                                        .withValues(alpha: 0.16)
-                                                    : const Color(0xFFF59E0B)
-                                                        .withValues(alpha: 0.12))
-                                                : Colors.transparent),
-                                        height: lineHeight,
-                                        letterSpacing: -0.1,
-                                      );
-
-                                      final textSpans = _buildAyahWordSpans(
-                                        rawText: ayat.ayetText,
-                                        baseStyle: baseAyatStyle,
-                                        waqfColor: isCurrentAyahPlaying
-                                            ? AppColors.gold400
-                                            : waqfColor,
-                                        fontFamily: fontFamily,
-                                        recognizer: recognizer,
-                                        onAyahTap: voidCallback,
-                                        onWordTap: widget.onWordTap != null
-                                            ? (wordOrder) => widget.onWordTap!(
-                                                  ayat.sureId,
-                                                  ayat.ayetId,
-                                                  wordOrder,
-                                                )
-                                            : null,
-                                        highlightDivineWords:
-                                            highlightDivineWords,
-                                        isDark: isDark,
-                                        isAyahPlaying: isCurrentAyahPlaying,
-                                        activeWordOrder: isCurrentAyahPlaying
-                                            ? audioState.currentWordOrder
-                                            : null,
-                                        activeWordDurationMs:
-                                            audioState.activeWordDurationMs,
-                                        playbackSpeed:
-                                            audioState.playbackSpeed,
-                                        surahId: ayat.sureId,
-                                        ayahId: ayat.ayetId,
-                                      );
-
-                                      return [
-                                        ...textSpans,
-                                        const TextSpan(text: '\u200F '),
-                                        WidgetSpan(
-                                          alignment:
-                                              PlaceholderAlignment.middle,
-                                          child: GestureDetector(
-                                            onTap: voidCallback,
-                                            child: ZikirceAyahStopMarker(
-                                              number: ayat.ayetNumber,
-                                              isDark: isDark,
-                                              isHighlight:
-                                                  isCurrentAyahPlaying,
-                                              isSecde: isSecdeAyah,
-                                              fontFamily: fontFamily,
-                                              size: isTvMode
-                                                  ? (effectiveFontSize * 1.05)
-                                                      .clamp(24.0, 48.0)
-                                                  : (effectiveFontSize * 1.15)
-                                                      .clamp(24.0, 48.0),
-                                            ),
-                                          ),
-                                        ),
-                                        if (isSecdeAyah)
-                                          WidgetSpan(
-                                            alignment:
-                                                PlaceholderAlignment.middle,
-                                            child: ZikirceSecdeInlineBadge(
-                                              isDark: isDark,
-                                              compact: true,
-                                              label: 'سَجْدَة • Secde',
-                                              onTap: () =>
-                                                  TilavetSecdesiGuideSheet
-                                                      .show(
-                                                context,
-                                                initialSecdeItem: secdeItem,
-                                              ),
-                                            ),
-                                          ),
-                                        const TextSpan(text: ' \u200F'),
-                                      ];
-                                    }).toList(),
-                                  ),
-                                  textAlign: isShortPage
-                                      ? TextAlign.center
-                                      : TextAlign.justify,
-                                  textDirection: TextDirection.rtl,
-                                ),
-                              ),
+                              buildClassicMushafGroup(),
                             const SizedBox(height: 6),
                           ],
                         );
@@ -1885,12 +1904,124 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     );
   }
 
+  Widget _buildVerseCardArabicParagraph({
+    required BuildContext context,
+    required QuranAyatModel ayat,
+    required bool isDark,
+    required bool isTvMode,
+    required bool isArrowTrackingMode,
+    required String fontFamily,
+    required double arabicFontSize,
+    required double lineHeight,
+    required bool isBoldArabic,
+    required bool highlightDivineWords,
+    required Color waqfColor,
+    required Color primaryTextColor,
+    required bool isCurrentAyahPlaying,
+    required bool isSecdeAyah,
+    required TilavetSecdeItem? secdeItem,
+    required KuranAudioState audioState,
+  }) {
+    final accumulator = QuranSpanAccumulator();
+    final cardBaseStyle = TextStyle(
+      fontFamily: fontFamily,
+      fontSize: arabicFontSize,
+      fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
+      color: primaryTextColor,
+      height: lineHeight,
+    );
+
+    _buildAyahWordSpans(
+      accumulator: accumulator,
+      rawText: ayat.ayetText,
+      baseStyle: cardBaseStyle,
+      waqfColor: waqfColor,
+      fontFamily: fontFamily,
+      recognizer: null,
+      onWordTap: widget.onWordTap != null
+          ? (wordOrder) => widget.onWordTap!(
+                ayat.sureId,
+                ayat.ayetId,
+                wordOrder,
+              )
+          : null,
+      highlightDivineWords: highlightDivineWords,
+      isDark: isDark,
+      isArrowTracking: isArrowTrackingMode,
+      isAyahPlaying: isCurrentAyahPlaying,
+      activeWordOrder: isCurrentAyahPlaying ? audioState.currentWordOrder : null,
+    );
+
+    accumulator.addText('\u2060\u00A0\u2060', style: cardBaseStyle);
+    accumulator.addWidget(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: ZikirceAyahStopMarker(
+          number: ayat.ayetNumber.isNotEmpty
+              ? ayat.ayetNumber
+              : QuranWordHighlighter.toArabicDigits(ayat.ayetId),
+          isDark: isDark,
+          isHighlight: isCurrentAyahPlaying,
+          isSecde: isSecdeAyah,
+          fontFamily: fontFamily,
+          size: (arabicFontSize * 1.1).clamp(24.0, 38.0),
+        ),
+      ),
+    );
+    if (isSecdeAyah && secdeItem != null) {
+      accumulator.addText('\u2060\u00A0\u2060', style: cardBaseStyle);
+      accumulator.addWidget(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: ZikirceSecdeInlineBadge(
+            isDark: isDark,
+            compact: true,
+            label: 'سَجْدَة',
+            onTap: () => TilavetSecdesiGuideSheet.show(
+              context,
+              initialSecdeItem: secdeItem,
+            ),
+          ),
+        ),
+      );
+    }
+    accumulator.addText('\u2060\u200F', style: cardBaseStyle);
+
+    final paragraphId = 'card_${ayat.sureId}_${ayat.ayetId}';
+    if (accumulator.activeWordRange != null) {
+      _activeParagraphId = paragraphId;
+    }
+    final paragraphKey = _paragraphKeys.putIfAbsent(
+      paragraphId,
+      () => GlobalKey<QuranTrackedParagraphState>(),
+    );
+
+    return QuranTrackedParagraph(
+      key: paragraphKey,
+      textSpan: TextSpan(children: accumulator.spans),
+      textAlign: TextAlign.right,
+      textDirection: TextDirection.rtl,
+      activeWordRange: accumulator.activeWordRange,
+      isArrowMode: isArrowTrackingMode,
+      isDark: isDark,
+      isTvMode: isTvMode,
+      activeWordDurationMs: audioState.activeWordDurationMs,
+      playbackSpeed: audioState.playbackSpeed,
+      isPlaying: audioState.isPlaying,
+      activeWordIdentity: (isCurrentAyahPlaying && audioState.currentWordOrder > 0)
+          ? '${ayat.sureId}_${ayat.ayetId}_${audioState.currentWordOrder}'
+          : null,
+    );
+  }
+
   /// Âyet + Meâl veya Detaylı Meâl Kartı
   Widget _buildVerseCardItem({
     required BuildContext context,
     required QuranAyatModel ayat,
     required bool showArabicVerse,
     required bool isDark,
+    required bool isTvMode,
+    required bool isArrowTrackingMode,
     required String fontFamily,
     required double arabicFontSize,
     required double mealFontSize,
@@ -1907,7 +2038,9 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
     required KuranAudioState audioState,
     required KuranAudioNotifier audioNotifier,
   }) {
-    final isCurrentAyahPlaying = audioState.isPlaying &&
+    final isCurrentAyahPlaying = (audioState.isPlaying ||
+            audioState.isLoading ||
+            audioState.currentWordOrder > 0) &&
         audioState.currentSurahId == ayat.sureId &&
         audioState.currentAyahId == ayat.ayetId;
 
@@ -2092,62 +2225,23 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
           // Arapça Âyet Metni (Âyet + Meâl modundaysa)
           if (showArabicVerse) ...[
             const SizedBox(height: 10),
-            Text.rich(
-              TextSpan(
-                children: [
-                  ..._buildAyahWordSpans(
-                    rawText: ayat.ayetText,
-                    baseStyle: TextStyle(
-                      fontFamily: fontFamily,
-                      fontSize: arabicFontSize,
-                      fontWeight:
-                          isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                      color: primaryTextColor,
-                      height: lineHeight,
-                    ),
-                    waqfColor: waqfColor,
-                    fontFamily: fontFamily,
-                    recognizer: null,
-                    onAyahTap: null,
-                    highlightDivineWords: highlightDivineWords,
-                    isDark: isDark,
-                    isAyahPlaying: isCurrentAyahPlaying,
-                    activeWordOrder:
-                        isCurrentAyahPlaying ? audioState.currentWordOrder : null,
-                    activeWordDurationMs: audioState.activeWordDurationMs,
-                    playbackSpeed: audioState.playbackSpeed,
-                    surahId: ayat.sureId,
-                    ayahId: ayat.ayetId,
-                  ),
-                  const TextSpan(text: '\u200F '),
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: ZikirceAyahStopMarker(
-                      number: ayat.ayetNumber,
-                      isDark: isDark,
-                      isHighlight: isCurrentAyahPlaying,
-                      isSecde: isSecdeAyah,
-                      fontFamily: fontFamily,
-                      size: (arabicFontSize * 1.1).clamp(24.0, 38.0),
-                    ),
-                  ),
-                  if (isSecdeAyah)
-                    WidgetSpan(
-                      alignment: PlaceholderAlignment.middle,
-                      child: ZikirceSecdeInlineBadge(
-                        isDark: isDark,
-                        compact: true,
-                        label: 'سَجْدَة',
-                        onTap: () => TilavetSecdesiGuideSheet.show(
-                          context,
-                          initialSecdeItem: secdeItem,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              textAlign: TextAlign.right,
-              textDirection: TextDirection.rtl,
+            _buildVerseCardArabicParagraph(
+              context: context,
+              ayat: ayat,
+              isDark: isDark,
+              isTvMode: isTvMode,
+              isArrowTrackingMode: isArrowTrackingMode,
+              fontFamily: fontFamily,
+              arabicFontSize: arabicFontSize,
+              lineHeight: lineHeight,
+              isBoldArabic: isBoldArabic,
+              highlightDivineWords: highlightDivineWords,
+              waqfColor: waqfColor,
+              primaryTextColor: primaryTextColor,
+              isCurrentAyahPlaying: isCurrentAyahPlaying,
+              isSecdeAyah: isSecdeAyah,
+              secdeItem: secdeItem,
+              audioState: audioState,
             ),
             const SizedBox(height: 8),
             Divider(

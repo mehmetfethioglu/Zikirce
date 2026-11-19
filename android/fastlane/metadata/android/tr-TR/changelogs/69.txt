@@ -1,0 +1,3 @@
+• TV Modu Düzeltmesi (iOS & Android): Telefonlarda TV Modu kapatılamaması sorunu giderildi; üst çubuğa «TV Modundan Çık» butonu, telefona uyumlu düzen ve otomatik dikey ekran dönüşü eklendi.
+• Minimal Bento Ana Sayfa: Yeni sade açılış kartları, ayrı Detaylı İstatistikler ekranı ve doğrudan Zikirmatik ile açılış ayarı.
+• Kelime takipli Mushaf kaydırması iyileştirildi; İrfan Meydanı’na yeni Diyanet İlmihali soruları eklendi.

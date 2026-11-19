@@ -26,6 +26,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/services/cloud_sync_engine.dart';
 import 'core/providers/tv_mode_provider.dart';
 import 'app/app.dart';
+import 'app/router/app_router.dart';
 
 void main(List<String> args) async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -36,22 +37,21 @@ void main(List<String> args) async {
 
   // Detect Android TV / Leanback or user-enabled TV Mode
   final isTvMode = await TvModeService.detectTvModeAtStartup();
+  final isHardwareTv = TvModeService.isHardwareTv;
   if (isTvMode) {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!(prefs.getBool('IsOnboardingCompleted') ?? false)) {
         await prefs.setBool('IsOnboardingCompleted', true);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Main] TV onboarding pref notice: $e');
+    }
   }
 
   // Set preferred orientations & system overlay on mobile / Android TV
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
-    final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
-    final shortestSide = view != null
-        ? view.physicalSize.shortestSide / view.devicePixelRatio
-        : 0.0;
-    final isTablet = shortestSide >= 600;
+    final isTablet = TvModeService.isCurrentDeviceTablet();
 
     await TvModeService.applyOrientationForMode(
       isTvMode: isTvMode,
@@ -81,7 +81,7 @@ void main(List<String> args) async {
   );
   final db = AppDatabase(null, currentSession.dbFileName);
 
-  if (!isTvMode) {
+  if (!isHardwareTv) {
     await Future.wait([
       NotificationDbService.initialize(),
       SoundPoolService.initialize(),
@@ -120,12 +120,26 @@ void main(List<String> args) async {
   // Pre-load theme settings and prayer city before runApp to prevent flickering / race conditions
   final savedThemeKey = await ThemeNotifier.loadSavedThemeKey(activeSessionId);
   final savedLightSubTheme = await ThemeNotifier.loadSavedLightSubTheme(activeSessionId);
-  final savedCity = isTvMode ? 'İstanbul' : await CityNotifier.loadSavedCity(activeSessionId);
+  final savedCity = isHardwareTv ? 'İstanbul' : await CityNotifier.loadSavedCity(activeSessionId);
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final isDefaultSession = activeSessionId == UserSession.defaultSessionId;
+    AppStartupRouteConfig.openDirectlyOnZikir = isDefaultSession
+        ? (prefs.getBool('IsStartOnZikirEnabled') ?? false)
+        : (prefs.getBool('IsStartOnZikirEnabled_$activeSessionId') ??
+            prefs.getBool('IsStartOnZikirEnabled') ??
+            false);
+  } catch (e) {
+    debugPrint('[Main] Start route pref notice: $e');
+  }
 
   // Close the initial startup DB instance so Riverpod's databaseProvider manages the single active connection
   try {
     await db.close();
-  } catch (_) {}
+  } catch (e) {
+    debugPrint('[Main] Initial db.close notice: $e');
+  }
 
   // Initialize Sentry with Crash Monitoring & ANR Watchdog
   await SentryFlutter.init(
@@ -142,7 +156,7 @@ void main(List<String> args) async {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         FlutterNativeSplash.remove();
         AudioSyncService.initialize();
-        if (!isTvMode) {
+        if (!isHardwareTv) {
           TafseerService.initialize();
           if (Platform.isAndroid || Platform.isIOS) {
             try {

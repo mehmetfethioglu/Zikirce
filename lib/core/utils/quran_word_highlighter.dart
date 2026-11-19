@@ -346,7 +346,7 @@ class QuranWordHighlighter {
       for (int sIdx = 0; sIdx < stops.length; sIdx++) {
         final stop = stops[sIdx];
         final mappedStop = mapStopCharacter(stop, effectiveFontFamily);
-        final prefix = sIdx == 0 ? '\u200B' : '\u200A';
+        final prefix = sIdx == 0 ? '\u2060' : '\u2060\u202F';
         spans.add(TextSpan(
           text: '$prefix$mappedStop',
           style: effectiveStyle.copyWith(
@@ -364,7 +364,7 @@ class QuranWordHighlighter {
 
     if (showAyahStopMarker && ayahNumber != null && ayahNumber.isNotEmpty) {
       final formattedNumber = toArabicDigits(ayahNumber);
-      spans.add(const TextSpan(text: '\u200F '));
+      spans.add(const TextSpan(text: '\u2060\u00A0\u2060'));
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
@@ -380,7 +380,7 @@ class QuranWordHighlighter {
           ),
         ),
       );
-      spans.add(const TextSpan(text: ' \u200F'));
+      spans.add(const TextSpan(text: '\u2060\u200F '));
     }
 
     return spans;

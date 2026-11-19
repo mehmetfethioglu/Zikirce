@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/cloud_sync_engine.dart';
@@ -16,11 +18,40 @@ class TvModeService {
   static bool _isTvModeActive = false;
   static bool get isTvModeActive => _isTvModeActive;
 
+  @visibleForTesting
+  static void setHardwareTvForTest(bool value) {
+    _isHardwareTv = value;
+  }
+
+  @visibleForTesting
+  static void setTvModeActiveForTest(bool value) {
+    _isTvModeActive = value;
+  }
+
+  @visibleForTesting
+  static bool? testIsIosOverride;
+
+  /// Mevcut cihaz ekranının tablet (>= 600dp shortestSide) olup olmadığını tespit eder
+  static bool isCurrentDeviceTablet() {
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+      if (view == null || view.devicePixelRatio <= 0) {
+        return false;
+      }
+      final shortestSide = view.physicalSize.shortestSide / view.devicePixelRatio;
+      return shortestSide >= 600;
+    } catch (e) {
+      debugPrint('[TvModeService] isCurrentDeviceTablet error: $e');
+      return false;
+    }
+  }
+
   /// Uygulama açılışında (main.dart) donanımsal TV olup olmadığını tespit eder
   static Future<bool> detectTvModeAtStartup() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (Platform.isAndroid) {
+      if (testIsIosOverride == false ||
+          (testIsIosOverride == null && Platform.isAndroid)) {
         final hwTv = await _channel.invokeMethod<bool>('isTelevision') ?? false;
         _isHardwareTv = hwTv;
       }
@@ -31,7 +62,8 @@ class TvModeService {
       }
       _isTvModeActive = _isHardwareTv;
       return _isHardwareTv;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[TvModeService] detectTvModeAtStartup error: $e');
       _isTvModeActive = _isHardwareTv;
       return _isHardwareTv;
     }
@@ -43,12 +75,22 @@ class TvModeService {
     required bool isTablet,
   }) async {
     _isTvModeActive = isTvMode;
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
+    if (testIsIosOverride == null &&
+        (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      return;
+    }
+    final effectiveIsIos = testIsIosOverride ?? Platform.isIOS;
     if (isTvMode) {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
+      if (effectiveIsIos && !isTablet) {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+        ]);
+      } else {
+        await SystemChrome.setPreferredOrientations([
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+      }
     } else if (isTablet) {
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.portraitUp,
@@ -71,7 +113,7 @@ class TvModeNotifier extends StateNotifier<bool> {
   TvModeNotifier(super.initialState);
 
   Future<void> setTvMode(bool enabled) async {
-    if (state == enabled) return;
+    if (state == enabled && enabled) return;
     state = enabled;
     TvModeService._isTvModeActive = enabled;
     try {
@@ -79,9 +121,11 @@ class TvModeNotifier extends StateNotifier<bool> {
       await prefs.setBool(TvModeService.prefsKey, enabled);
       await TvModeService.applyOrientationForMode(
         isTvMode: enabled,
-        isTablet: true,
+        isTablet: TvModeService.isCurrentDeviceTablet(),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[TvModeNotifier] setTvMode($enabled) error: $e');
+    }
   }
 
   Future<void> toggleTvMode() => setTvMode(!state);

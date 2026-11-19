@@ -1,0 +1,3 @@
+• TV Mode Fix (iOS & Android): Fixed an issue where TV Mode could not be closed on phones; added a one-tap "Exit TV Mode" button in the top bar, responsive phone layout, and automatic portrait orientation restore.
+• Minimal Bento Home: Redesigned calm home cards, a dedicated Detailed Statistics screen, and an option to launch directly on the Dhikr counter.
+• Improved word-tracked Mushaf auto-scrolling and added new Catechism questions to Arena of Wisdom.

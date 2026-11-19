@@ -370,23 +370,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'İhram, Arafat vakfesi, Ziyaret tavafı',
-          en: 'Ihram, Standing at Arafat, Tawaf al-Ziyarah',
-        ),
-        LocalizedText(
           tr: 'Umre, Kudüm tavafı, Veda tavafı',
           en: 'Umrah, Arrival Tawaf, Farewell Tawaf',
+        ),
+        LocalizedText(
+          tr: 'İhram, Arafat vakfesi, Ziyaret tavafı',
+          en: 'Ihram, Standing at Arafat, Tawaf al-Ziyarah',
         ),
         LocalizedText(
           tr: 'Zemzem içmek, Ravza ziyareti, Kurban',
           en: 'Drinking Zamzam, Visiting Rawdah, Sacrifice',
         ),
         LocalizedText(
-          tr: 'Medine ziyareti, Terviye günü, İtikâf',
-          en: 'Visiting Madinah, Day of Tarwiyah, I\'tikaf',
+          tr: 'Müzdelife vakfesi, Sa\'y, Taşlama',
+          en: 'Muzdalifah standing, Sa\'y, Ramy al-Jamarat',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: 'Peygamberimiz (s.a.v.) "Hac Arafat\'tır" buyurmuştur; ihram şart, ziyaret tavafı ve vakfe rükündür.',
@@ -420,23 +420,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Alındaki saç bitiminden çene altına ve iki kulak yumuşağı arasına kadar',
-          en: 'From hairline to beneath the chin, and from earlobe to earlobe',
-        ),
-        LocalizedText(
           tr: 'Yalnızca yanaklar, burun ucu ve dudak çevresi',
           en: 'Only the cheeks, tip of the nose, and around the lips',
         ),
         LocalizedText(
-          tr: 'Kaş hizasından üst dudağa kadar olan bölge',
+          tr: 'Kaş hizasından üst dudağa kadar olan orta bölge',
           en: 'From the eyebrows down to the upper lip',
         ),
         LocalizedText(
-          tr: 'Ense kökünden omuz başlarına kadar tüm baş',
-          en: 'From the nape of the neck to the shoulders',
+          tr: 'Ense kökünden kulak arkasına ve omuz başlarına kadar',
+          en: 'From the nape of the neck behind ears to shoulders',
+        ),
+        LocalizedText(
+          tr: 'Alındaki saç bitiminden çene altına ve iki kulak yumuşağı arasına kadar',
+          en: 'From hairline to beneath the chin, and from earlobe to earlobe',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: 'Saç kesim sınırından çene altına, sağ kulak yumuşağından sol kulak yumuşağına kadardır.',
@@ -643,23 +643,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Hayır, niyet edildikten sonra üzerinden su geçmesi guslü geçerli kılar',
+          en: 'No, passing water over the surface after intention validates Ghusl',
+        ),
+        LocalizedText(
+          tr: 'Yalnızca Cuma ve bayram gusüllerinde su geçmesi şartı aranır',
+          en: 'Water penetration is required only for Friday and Eid Ghusl',
+        ),
+        LocalizedText(
           tr: 'Evet, suyun bedenin her noktasına ulaşması şart olduğundan mâni olur',
           en: 'Yes, because water must reach every part of the skin and nails',
         ),
         LocalizedText(
-          tr: 'Hayır, üstünden su geçmesi yeterlidir',
-          en: 'No, passing water over the barrier suffices',
-        ),
-        LocalizedText(
-          tr: 'Sadece Cuma guslünde mâni olur',
-          en: 'Only during Friday Ghusl',
-        ),
-        LocalizedText(
-          tr: 'Yalnızca kış aylarında muaf tutulur',
-          en: 'Exempted during winter months',
+          tr: 'Sadece cünüplük guslünde engel sayılır, diğer gusüllerde mâni değildir',
+          en: 'It prevents validity only in Janabah Ghusl, not recommended Ghusls',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: 'Guslün bütün mezheplerde ittifak edilen farzı, bedende iğne ucu kadar kuru yer kalmamasıdır.',
@@ -688,10 +688,22 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     ),
     payload: MultipleChoicePayload(
       options: [
-        LocalizedText(tr: 'Bütün mezheplerde farzdır', en: 'Obligatory (fard) in all schools'),
-        LocalizedText(tr: 'Menduptur', en: 'Merely recommended (mandub)'),
-        LocalizedText(tr: 'Mübahtır', en: 'Permissible (mubah)'),
-        LocalizedText(tr: 'Sadece yolculara vaciptir', en: 'Required only for travelers'),
+        LocalizedText(
+          tr: 'Bütün Ehl-i Sünnet mezheplerinde farzdır',
+          en: 'Obligatory (fard) in all Sunni schools',
+        ),
+        LocalizedText(
+          tr: 'Abdestte olduğu gibi Hanefî\'de sünnet, Şâfiî\'de farzdır',
+          en: 'Sunnah in Hanafi fiqh and fard in Shafi\'i fiqh, just like Wudu',
+        ),
+        LocalizedText(
+          tr: 'Yalnızca gusül yerine alınan teyemmümde vacip sayılır',
+          en: 'Wajib only when Tayammum replaces Ghusl rather than Wudu',
+        ),
+        LocalizedText(
+          tr: 'Nâfile namazlarda mendup, farz namazlarda ise müstehaptır',
+          en: 'Recommended in voluntary prayers and preferred in obligatory ones',
+        ),
       ],
       correctIndex: 0,
     ),
@@ -961,16 +973,16 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
           en: 'Its seat is the heart; made after time enters, connected to the opening Takbir',
         ),
         LocalizedText(
-          tr: 'Yalnızca dille yüksek sesle söylenmesi şarttır, kalp gerekmez',
-          en: 'Only loud verbal utterance counts, without heart awareness',
+          tr: 'Kalp hatırlamasa dahi yalnız dille yüksek sesle telaffuz edilmesi yeterlidir',
+          en: 'Outward verbal utterance suffices even without conscious heart awareness',
         ),
         LocalizedText(
-          tr: 'Selâm verdikten sonra yapılır',
-          en: 'Made after concluding with Taslim',
+          tr: 'Namazın bütün rükünleri bittikten sonra son oturuşta Tahiyyât\'tan önce yapılır',
+          en: 'Made in the final sitting before At-Tahiyyat once all pillars conclude',
         ),
         LocalizedText(
-          tr: 'Bir gün önceden yapılması bütün farzlar için zorunludur',
-          en: 'Must be made the night before for all prayers',
+          tr: 'Bütün farz namazlar için bir önceki akşamdan niyet edilmesi zorunludur',
+          en: 'Must be made the preceding night for every obligatory daily prayer',
         ),
       ],
       correctIndex: 0,
@@ -1072,23 +1084,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
-          tr: 'Hanefîlerde Kur\'ân\'dan kolay gelen miktar farz, Fâtiha vaciptir; Şâfiîlerde her rekâtta Fâtiha okumak farzdır (rükündür)',
-          en: 'In Hanafi fiqh reciting some Qur\'an is fard and Fatihah is wajib; in Shafi\'i fiqh reciting Fatihah in every rak\'ah is fard',
-        ),
-        LocalizedText(
           tr: 'Her iki mezhepte de Fâtiha okumak sadece nâfile namazlarda sünnettir',
           en: 'In both schools Fatihah is merely Sunnah in voluntary prayers',
         ),
         LocalizedText(
-          tr: 'Hanefîlerde imama uyan cemaatin yüksek sesle sûre okuması farzdır',
-          en: 'In Hanafi fiqh followers behind an imam must recite aloud',
+          tr: 'Hanefîlerde Kur\'ân\'dan kolay gelen miktar farz, Fâtiha vaciptir; Şâfiîlerde her rekâtta Fâtiha okumak farzdır (rükündür)',
+          en: 'In Hanafi fiqh reciting some Qur\'an is fard and Fatihah is wajib; in Shafi\'i fiqh reciting Fatihah in every rak\'ah is fard',
         ),
         LocalizedText(
-          tr: 'Şâfiîlerde yalnız ilk rekâtta bir âyet okumak yeterlidir, Fâtiha okunmaz',
-          en: 'In Shafi\'i fiqh only one verse in the first rak\'ah suffices without Fatihah',
+          tr: 'Hanefîlerde imama uyan cemaatin cehrî namazlarda yüksek sesle sûre okuması farzdır',
+          en: 'In Hanafi fiqh followers behind an imam must recite aloud in vocal prayers',
+        ),
+        LocalizedText(
+          tr: 'Şâfiîlerde yalnız ilk rekâtta kısa bir âyet okumak yeterlidir, Fâtiha okunmaz',
+          en: 'In Shafi\'i fiqh only one short verse in the first rak\'ah suffices without Fatihah',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 1,
     ),
     hint: LocalizedText(
       tr: 'Hanefîler Müzzemmil 20. âyeti mutlak delil alıp Fâtiha hadisini vacip sayar; Şâfiîler "Fâtiha\'sız namaz olmaz" hadisiyle Fâtiha\'yı bizzat rükün kabul eder.',
@@ -1126,23 +1138,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Alnı secdeye koyup üç kez "Sübhâne Rabbiye\'l-A\'lâ" diye tesbih etmek',
+          en: 'Placing the forehead on the ground and saying "Subhana Rabbiyal-A\'la" thrice',
+        ),
+        LocalizedText(
+          tr: 'Diz üstü oturup sağ şehadet parmağıyla işaret ederek Ettehiyyâtü okumak',
+          en: 'Sitting on the knees and reciting At-Tahiyyat during tashahhud',
+        ),
+        LocalizedText(
+          tr: 'Elleri kulak hizasına kaldırıp üçüncü rekâtta Kunut duası okumak',
+          en: 'Raising hands toward the ears and reciting Qunut in the third rak\'ah',
+        ),
+        LocalizedText(
           tr: 'Eller dizleri kavrayıp sırt düz olacak şekilde eğilmek ve "Sübhâne Rabbiye\'l-Azîm" demek',
           en: 'Grasping the knees with a level back and saying "Subhana Rabbiyal-\'Azim"',
         ),
-        LocalizedText(
-          tr: 'Alnı yere koyup "Sübhâne Rabbiye\'l-A\'lâ" demek',
-          en: 'Placing the forehead on the ground and saying "Subhana Rabbiyal-A\'la"',
-        ),
-        LocalizedText(
-          tr: 'Diz üstü oturup Ettehiyyâtü okumak',
-          en: 'Sitting on the knees and reciting At-Tahiyyat',
-        ),
-        LocalizedText(
-          tr: 'Elleri kulak hizasına kaldırıp Kunut okumak',
-          en: 'Raising hands to the ears and reciting Qunut',
-        ),
       ],
-      correctIndex: 0,
+      correctIndex: 3,
     ),
     hint: LocalizedText(
       tr: 'Azîm (Yüce/Büyük) ismi rükûda, A\'lâ (En Yüce) ismi ise secdede tesbih edilir.',
@@ -1177,16 +1189,16 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
           en: 'Seven bones/parts (forehead with nose, two palms, two knees, toes of both feet)',
         ),
         LocalizedText(
-          tr: 'Üç uzuv (yalnız alın ve iki el)',
-          en: 'Three parts (only forehead and two hands)',
+          tr: 'Beş uzuv (alın-burun, iki avuç içi ve iki diz kapağı)',
+          en: 'Five bones/parts (forehead with nose, two palms, and two kneecaps)',
         ),
         LocalizedText(
-          tr: 'Dört uzuv (iki dirsek ve iki topuk)',
-          en: 'Four parts (two elbows and two heels)',
+          tr: 'Dört uzuv (iki dirsek, iki diz ve ayak topuklarının ucu)',
+          en: 'Four bones/parts (two elbows, two knees, and tips of the heels)',
         ),
         LocalizedText(
-          tr: 'Beş uzuv (çene, iki omuz ve iki diz)',
-          en: 'Five parts (chin, two shoulders, and two knees)',
+          tr: 'Altı uzuv (çene, iki omuz, iki dirsek ve göğüs ucu)',
+          en: 'Six parts (chin, two shoulders, two elbows, and upper chest)',
         ),
       ],
       correctIndex: 0,
@@ -1212,7 +1224,7 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     id: 'ilm_i_10',
     topic: IrfanTopic.ilmihal32Farz,
     tier: IrfanTier.irfan,
-    madhhabScope: IrfanMadhhabScope.hanafi,
+    madhhabScope: IrfanMadhhabScope.comparative,
     stem: LocalizedText(
       tr: 'Namazın son rekâtının sonunda selâmdan önce "Ettehiyyâtü" okuyacak kadar oturmaya (Ka\'de-i Ahîre) Hanefî ve Şâfiî mezheplerinde ne hüküm verilir?',
       en: 'What is the ruling on the final sitting (Qa\'dah al-Akhirah) at the end of Salah before Taslim?',
@@ -1220,23 +1232,23 @@ const List<IrfanQuestion> kIrfanQuestionsIlmihal = [
     payload: MultipleChoicePayload(
       options: [
         LocalizedText(
+          tr: 'Sünnet-i müekkede olup terkinde sehiv secdesi gerekmez',
+          en: 'An emphasized Sunnah requiring no prostration of forgetfulness',
+        ),
+        LocalizedText(
+          tr: 'Hanefî mezhebinde yalnızca vitir ve akşamda vaciptir',
+          en: 'Wajib exclusively in Maghrib and Witr within Hanafi fiqh',
+        ),
+        LocalizedText(
           tr: 'Namazın içindeki son farzdır (rükündür)',
           en: 'It is the final obligatory pillar (fard/rukn) of Salah',
         ),
         LocalizedText(
-          tr: 'Yalnızca sabah namazında müstehaptır',
-          en: 'Merely recommended only in Fajr prayer',
-        ),
-        LocalizedText(
-          tr: 'Terk edilirse namaz bozulmaz, sehiv de gerekmez',
-          en: 'Omitting it neither invalidates Salah nor requires prostration',
-        ),
-        LocalizedText(
-          tr: 'Sadece Cuma namazına mahsustur',
-          en: 'Specific only to Jumu\'ah prayer',
+          tr: 'Yalnızca cuma ve bayram namazlarında rükün sayılır',
+          en: 'Counts as an integral pillar solely in Friday and Eid prayers',
         ),
       ],
-      correctIndex: 0,
+      correctIndex: 2,
     ),
     hint: LocalizedText(
       tr: '32 Farz\'ın 32\'ncisi, yani namazın içindeki 6 farzın sonuncusudur.',

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -15,10 +16,12 @@ import '../../../../core/services/meal_service.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
+import '../../../../core/utils/quran_tracking_scroll_helper.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/presentation/widgets/besmele_playback_banner.dart';
 import '../../../kuran/presentation/widgets/mushaf_page_widget.dart';
 import '../../../kuran/presentation/widgets/desktop_mushaf_nav_button.dart';
+import '../../../kuran/presentation/widgets/synchronized_arabic_ayah_wrap.dart';
 import '../../../kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../kuran/data/tilavet_secdesi_data.dart';
@@ -290,7 +293,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
     final verse = _pageVerses[_currentVerseIndex];
     final ms = _currentEffectivePositionMs();
-    final words = _parseAyahWords(verse.ayetText);
+    final words = QuranAyahWordParser.parse(verse.ayetText);
     final pureWords = words.map((w) => w.pureWord).toList();
     final activeWord = AudioSyncService.getActiveWordOrder(
       verse.sureId,
@@ -473,25 +476,17 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
   void _scrollToActiveWord() {
     if (_isMushafView) return;
+    final hasSecdeBanner =
+        TilavetSecdesiData.getSecdeForPage(_currentPage) != null &&
+            !_dismissedBannerForCurrentPage;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = _activeWordKey.currentContext;
-      if (ctx != null) {
-        final renderBox = ctx.findRenderObject() as RenderBox?;
-        if (renderBox != null && renderBox.hasSize) {
-          final wordOffset = renderBox.localToGlobal(Offset.zero);
-          final screenHeight = MediaQuery.of(context).size.height;
-          // Keep active word in comfortable reading zone (between 70px and screenHeight - 200px)
-          if (wordOffset.dy < 70 || wordOffset.dy > screenHeight - 200) {
-            Scrollable.ensureVisible(
-              ctx,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              alignment: 0.35,
-            );
-          }
-        }
-      }
+      QuranTrackingScrollHelper.ensureContextVisibleInViewport(
+        _activeWordKey.currentContext,
+        topSafePadding: hasSecdeBanner ? 68.0 : 14.0,
+        bottomSafePadding: 18.0,
+        preferredAlignment: 0.26,
+      );
     });
   }
 
@@ -642,8 +637,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               playbackProgress: 0.0,
             ));
       } else {
-        final pureWords =
-            _parseAyahWords(verse.ayetText).map((w) => w.pureWord).toList();
+        final pureWords = QuranAyahWordParser.parse(verse.ayetText)
+            .map((w) => w.pureWord)
+            .toList();
         final initialWord = seekMs > 0
             ? AudioSyncService.getActiveWordOrder(
                 verse.sureId,
@@ -680,12 +676,13 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             ));
       }
 
-      if (!meta.isBesmele &&
-          (wasPlayingBesmele || prevVerseIndex != _currentVerseIndex)) {
+      if (!meta.isBesmele) {
         if (!_isMushafView) {
-          _scrollToActiveVerse();
+          _scrollToActiveVerse(preferActiveWord: seekMs > 0);
         }
-        _prefetchUpcomingVerses(_currentVerseIndex);
+        if (wasPlayingBesmele || prevVerseIndex != _currentVerseIndex) {
+          _prefetchUpcomingVerses(_currentVerseIndex);
+        }
       }
       _syncNowPlaying();
     } catch (e) {
@@ -798,19 +795,21 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     );
   }
 
-  void _scrollToActiveVerse() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _verseKeys[_currentVerseIndex];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
-          alignment: 0.0,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-        );
-      }
-    });
+  void _scrollToActiveVerse({bool preferActiveWord = false}) {
+    if (_isMushafView) return;
+    final hasSecdeBanner =
+        TilavetSecdesiData.getSecdeForPage(_currentPage) != null &&
+            !_dismissedBannerForCurrentPage;
+    QuranTrackingScrollHelper.scrollToVerseCard(
+      scrollController: _scrollController,
+      verseKeys: _verseKeys,
+      targetIndex: _currentVerseIndex,
+      totalCount: _pageVerses.length,
+      activeWordKey: _activeWordKey,
+      preferActiveWord: preferActiveWord,
+      topSafePadding: hasSecdeBanner ? 68.0 : 14.0,
+      bottomSafePadding: 18.0,
+    );
   }
 
   Future<void> _handlePageCompleted() async {
@@ -1081,7 +1080,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   void _onWordTapped(int verseIndex, int wordOrder) {
     if (verseIndex < 0 || verseIndex >= _pageVerses.length) return;
     final verse = _pageVerses[verseIndex];
-    final words = _parseAyahWords(verse.ayetText);
+    final words = QuranAyahWordParser.parse(verse.ayetText);
     final pureWords = words.map((w) => w.pureWord).toList();
     final ts = AudioSyncService.getWordTimestamp(
       verse.sureId,
@@ -1109,6 +1108,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         });
         _player.seek(Duration(milliseconds: seekTarget));
         if (!_isPlaying) _player.play();
+        _scrollToActiveWord();
       }
     } else {
       final seekTarget =
@@ -1863,6 +1863,12 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           data: (data) => MushafPageWidget(
             pageData: data,
             isActivePage: pageNum == _currentPage,
+            viewportTopOverlayInset:
+                (TilavetSecdesiData.getSecdeForPage(pageNum) != null &&
+                        !_dismissedBannerForCurrentPage)
+                    ? 62.0
+                    : 0.0,
+            viewportBottomOverlayInset: 0.0,
             onWordTap: (surahId, ayahId, wordOrder) {
               final vIdx = _pageVerses.indexWhere(
                 (v) => v.sureId == surahId && v.ayetId == ayahId,
@@ -1890,13 +1896,16 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   Widget _buildAyahListView() {
     final fontFamily = ref.watch(quranFontFamilyProvider);
     final fontSize = ref.watch(quranFontSizeProvider);
-    final lineHeight = ref.watch(quranLineHeightProvider);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
     final kuranFonts = ref.watch(kuranFontSettingsProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isArrowTracking = ref.watch(
+      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
+    );
 
     return ListView.builder(
       controller: _scrollController,
+      scrollCacheExtent: const ScrollCacheExtent.pixels(1800),
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       itemCount: _pageVerses.length,
@@ -2075,18 +2084,22 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
               // Arabic Words Synchronized Text (hidden when Sadece Meal mode is active)
               if (!_isMealOnlyView)
-                Directionality(
-                  textDirection: TextDirection.rtl,
-                  child: _buildSynchronizedArabicAyahText(
-                    verse: verse,
-                    verseIndex: index,
-                    isActiveVerse: isActive,
-                    fontFamily: fontFamily,
-                    fontSize: fontSize,
-                    lineHeight: lineHeight,
-                    isDark: isDark,
-                    isBoldArabic: isBoldArabic,
-                  ),
+                SynchronizedArabicAyahWrap(
+                  verse: verse,
+                  verseIndex: index,
+                  isActiveVerse: isActive,
+                  activeWordOrder: isActive ? _activeWordOrder : 0,
+                  activeWordDurationMs: _activeWordDurationMs,
+                  playbackSpeed: _playbackSpeed,
+                  isPlaying: _isPlaying,
+                  isDark: isDark,
+                  fontFamily: fontFamily,
+                  fontSize: fontSize,
+                  isBoldArabic: isBoldArabic,
+                  isArrowTracking: isArrowTracking,
+                  activeWordKey: isActive ? _activeWordKey : null,
+                  onWordTap: _onWordTapped,
+                  onAyahMarkerTap: () => _prepareAndPlayVerse(index),
                 ),
 
               // Turkish Meal Text
@@ -2123,208 +2136,19 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     );
   }
 
-  static const Set<String> _stopSigns = QuranWordHighlighter.stopSigns;
-
-  static String mapStopCharacter(String char, String fontFamily) =>
-      QuranWordHighlighter.mapStopCharacter(char, fontFamily);
-
-  List<_CleanWordInfo> _parseAyahWords(String ayetText) {
-    final normalized = QuranWordHighlighter.cleanArabicText(ayetText);
-
-    final rawWords = normalized.split(RegExp(r'\s+'));
-    final result = <_CleanWordInfo>[];
-
-    for (final w in rawWords) {
-      final cleanWord = w.trim();
-      if (cleanWord.isEmpty) continue;
-
-      final cleanWordBuf = StringBuffer();
-      final stops = <String>[];
-
-      for (int cIdx = 0; cIdx < cleanWord.length; cIdx++) {
-        final char = cleanWord[cIdx];
-        if (_stopSigns.contains(char)) {
-          stops.add(char);
-        } else {
-          cleanWordBuf.write(char);
-        }
-      }
-
-      final pureWord = cleanWordBuf.toString();
-      result.add(_CleanWordInfo(pureWord: pureWord, stops: stops));
-    }
-    return result;
-  }
-
-  Widget _buildSynchronizedArabicAyahText({
-    required QuranAyatModel verse,
-    required int verseIndex,
-    required bool isActiveVerse,
-    required String fontFamily,
-    required double fontSize,
-    required double lineHeight,
-    required bool isDark,
-    required bool isBoldArabic,
-  }) {
-    final cleanWordsData = _parseAyahWords(verse.ayetText);
-    final divineColor = QuranWordHighlighter.getDivineWordColor(isDark);
-    final waqfColor =
-        isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F);
-    final isArrowTracking = ref.watch(
-      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
-    );
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (int wIdx = 0; wIdx < cleanWordsData.length; wIdx++) ...[
-            Builder(
-              builder: (context) {
-                final wordOrder = wIdx + 1;
-                final isWordActive =
-                    isActiveVerse && _activeWordOrder == wordOrder;
-
-                final wordData = cleanWordsData[wIdx];
-                final pureWord = wordData.pureWord;
-                final stops = wordData.stops;
-                final isDivine = pureWord.isNotEmpty &&
-                    QuranWordHighlighter.isDivineWord(pureWord);
-
-                final activeArrowTextColor =
-                    QuranWordHighlighter.getDiyanetTrackingWordColor(isDark);
-                final activeArrowShadows =
-                    QuranWordHighlighter.getDiyanetTrackingShadows(isDark);
-
-                return Row(
-                  key: isWordActive ? _activeWordKey : null,
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (pureWord.isNotEmpty)
-                      InkWell(
-                        onTap: () => _onWordTapped(verseIndex, wordOrder),
-                        borderRadius: BorderRadius.circular(10),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 45),
-                          padding: isArrowTracking
-                              ? const EdgeInsets.fromLTRB(5, 2, 5, 8)
-                              : const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: (!isArrowTracking && isWordActive)
-                                ? (isDark
-                                    ? const Color(0xFF059669)
-                                    : const Color(0xFF10B981))
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              if (!isArrowTracking && isWordActive)
-                                BoxShadow(
-                                  color: const Color(0xFF10B981)
-                                      .withValues(alpha: 0.6),
-                                  blurRadius: 12,
-                                  spreadRadius: 1,
-                                  offset: const Offset(0, 2),
-                                ),
-                            ],
-                          ),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.bottomCenter,
-                            children: [
-                              Text(
-                                pureWord,
-                                style: TextStyle(
-                                  fontFamily: fontFamily,
-                                  fontSize: fontSize,
-                                  fontWeight: isBoldArabic
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isWordActive
-                                      ? (isArrowTracking
-                                          ? activeArrowTextColor
-                                          : Colors.white)
-                                      : (isDivine
-                                          ? divineColor
-                                          : (isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1E2B27))),
-                                  shadows: (isWordActive && isArrowTracking)
-                                      ? activeArrowShadows
-                                      : null,
-                                  height: 1.6,
-                                  letterSpacing: -0.1,
-                                ),
-                              ),
-                              if (isArrowTracking && isWordActive)
-                                Positioned(
-                                  bottom: -6,
-                                  left: 0,
-                                  right: 0,
-                                  child: QuranWordTrackingPointer(
-                                    isDark: isDark,
-                                    height: 7.5,
-                                    durationMs: _activeWordDurationMs,
-                                    playbackSpeed: _playbackSpeed,
-                                    isPlaying: _isPlaying,
-                                    wordIdentity:
-                                        '${verse.sureId}_${verse.ayetId}_$wordOrder',
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    if (stops.isNotEmpty) ...[
-                      for (final stop in stops) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                          child: Text(
-                            mapStopCharacter(stop, fontFamily),
-                            style: TextStyle(
-                              fontFamily: fontFamily,
-                              fontSize: fontSize * 0.85,
-                              fontWeight: FontWeight.normal,
-                              color: waqfColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                );
-              },
-            ),
-          ],
-          // Ayah Stop Rosette Marker
-          Padding(
-            padding: const EdgeInsets.only(top: 4, right: 4),
-            child: GestureDetector(
-              onTap: () => _prepareAndPlayVerse(verseIndex),
-              child: ZikirceAyahStopMarker(
-                number: verse.ayetNumber,
-                size: 28,
-                isDark: isDark,
-                isHighlight: isActiveVerse,
-                isSecde: TilavetSecdesiData.isSecdeVerse(
-                  verse.sureId,
-                  verse.ayetId,
-                ),
-                fontFamily: fontFamily,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMukabeleBottomBar(
       Color bg, Color titleColor, Color gold, bool isDark) {
+    final activeVerse =
+        (_pageVerses.isNotEmpty && _currentVerseIndex < _pageVerses.length)
+            ? _pageVerses[_currentVerseIndex]
+            : null;
+    final surahLabel = activeVerse != null
+        ? (activeVerse.sure?.sureNameTurkish ?? '${activeVerse.sureId}. Sûre')
+        : '';
+    final totalWords = activeVerse != null
+        ? QuranAyahWordParser.parse(activeVerse.ayetText).length
+        : 0;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
@@ -2393,10 +2217,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 Text(
                   _isPlayingBesmele
                       ? 'Besmele-i Şerif'
-                      : (_pageVerses.isNotEmpty &&
-                              _currentVerseIndex < _pageVerses.length
-                          ? '${_pageVerses[_currentVerseIndex].ayetId}. Âyet'
+                      : (activeVerse != null
+                          ? '$surahLabel • ${activeVerse.ayetId}. Âyet'
                           : 'Sayfa $_currentPage'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: titleColor,
                     fontWeight: FontWeight.bold,
@@ -2406,7 +2231,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 Text(
                   _isPlayingBesmele
                       ? 'Dinleme Başlangıcı'
-                      : (_isMushafView ? 'Mushaf Modu' : 'Liste Modu'),
+                      : (_activeWordOrder > 0 && totalWords > 0
+                          ? 'Kelime $_activeWordOrder / $totalWords • ${_isMushafView ? 'Mushaf' : 'Liste'}'
+                          : (_isMushafView ? 'Mushaf Modu' : 'Liste Modu')),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       color: gold, fontSize: 10.5, fontWeight: FontWeight.w600),
                 ),
@@ -2440,11 +2269,4 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       ),
     );
   }
-}
-
-class _CleanWordInfo {
-  final String pureWord;
-  final List<String> stops;
-
-  const _CleanWordInfo({required this.pureWord, required this.stops});
 }

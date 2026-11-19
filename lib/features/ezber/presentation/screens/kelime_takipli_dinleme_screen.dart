@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../../core/constants/surah_data_provider.dart';
@@ -8,8 +9,10 @@ import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/ios_now_playing_service.dart';
 import '../../../../core/services/quran_page_repository.dart';
+import '../../../../core/utils/quran_tracking_scroll_helper.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
 import '../../../kuran/presentation/widgets/besmele_playback_banner.dart';
+import '../../../kuran/presentation/widgets/synchronized_arabic_ayah_wrap.dart';
 import '../../../kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
 import '../../../kuran/data/tilavet_secdesi_data.dart';
 import '../../../kuran/presentation/widgets/tilavet_secdesi_guide_sheet.dart';
@@ -24,12 +27,6 @@ import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
 
 enum TalimTargetType { page, surah, juz, ashr }
-
-class _CleanWordInfo {
-  final String pureWord;
-  final List<String> stops;
-  const _CleanWordInfo({required this.pureWord, required this.stops});
-}
 
 class _PlaylistItemMeta {
   final int verseIndex;
@@ -320,7 +317,7 @@ class _KelimeTakipliDinlemeScreenState
 
     final currentVerse = _verses[_currentVerseIndex];
     final ms = _currentEffectivePositionMs();
-    final words = _parseAyahWords(currentVerse.ayetText);
+    final words = QuranAyahWordParser.parse(currentVerse.ayetText);
     final pureWords = words.map((w) => w.pureWord).toList();
 
     final activeWord = AudioSyncService.getActiveWordOrder(
@@ -878,8 +875,9 @@ class _KelimeTakipliDinlemeScreenState
       _resetVerseClock(seekMs: seekMs, isPlaying: true);
       _isAdvancingWindowsItem = false;
       if (!meta.isBesmele && mounted) {
-        final pureWords =
-            _parseAyahWords(verse.ayetText).map((w) => w.pureWord).toList();
+        final pureWords = QuranAyahWordParser.parse(verse.ayetText)
+            .map((w) => w.pureWord)
+            .toList();
         final initialWord = seekMs > 0
             ? AudioSyncService.getActiveWordOrder(
                 verse.sureId,
@@ -903,10 +901,11 @@ class _KelimeTakipliDinlemeScreenState
       }
       unawaited(_player.play());
 
-      if (!meta.isBesmele &&
-          (prevVerseIndex != _currentVerseIndex || wasPlayingBesmele)) {
+      if (!meta.isBesmele) {
         _scrollToActiveVerse();
-        _prefetchUpcomingVerses(_currentVerseIndex);
+        if (prevVerseIndex != _currentVerseIndex || wasPlayingBesmele) {
+          _prefetchUpcomingVerses(_currentVerseIndex);
+        }
       }
       _syncNowPlaying();
     } catch (e) {
@@ -1030,40 +1029,28 @@ class _KelimeTakipliDinlemeScreenState
   }
 
   void _scrollToActiveVerse() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final key = _verseKeys[_currentVerseIndex];
-      if (key?.currentContext != null) {
-        Scrollable.ensureVisible(
-          key!.currentContext!,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOutCubic,
-          alignment: 0.0,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-        );
-      }
-    });
+    if (!mounted || _verses.isEmpty) return;
+    QuranTrackingScrollHelper.scrollToVerseCard(
+      scrollController: _scrollController,
+      verseKeys: _verseKeys,
+      targetIndex: _currentVerseIndex,
+      totalCount: _verses.length,
+      activeWordKey: _activeWordKey,
+      preferActiveWord: _activeWordOrder > 1,
+      topSafePadding: 14.0,
+      bottomSafePadding: 18.0,
+    );
   }
 
   void _scrollToActiveWord() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final ctx = _activeWordKey.currentContext;
-      if (ctx != null) {
-        final renderBox = ctx.findRenderObject() as RenderBox?;
-        if (renderBox != null && renderBox.hasSize) {
-          final wordOffset = renderBox.localToGlobal(Offset.zero);
-          final screenHeight = MediaQuery.of(context).size.height;
-          // Keep active word in comfortable reading zone (between 70px and screenHeight - 200px)
-          if (wordOffset.dy < 70 || wordOffset.dy > screenHeight - 200) {
-            Scrollable.ensureVisible(
-              ctx,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic,
-              alignment: 0.35,
-            );
-          }
-        }
-      }
+      QuranTrackingScrollHelper.ensureContextVisibleInViewport(
+        _activeWordKey.currentContext,
+        topSafePadding: 14.0,
+        bottomSafePadding: 18.0,
+        preferredAlignment: 0.26,
+      );
     });
   }
 
@@ -1125,7 +1112,7 @@ class _KelimeTakipliDinlemeScreenState
 
   void _onWordTapped(int verseIndex, int wordOrder) {
     final verse = _verses[verseIndex];
-    final words = _parseAyahWords(verse.ayetText);
+    final words = QuranAyahWordParser.parse(verse.ayetText);
     final pureWords = words.map((w) => w.pureWord).toList();
     final ts = AudioSyncService.getWordTimestamp(
       verse.sureId,
@@ -1153,6 +1140,7 @@ class _KelimeTakipliDinlemeScreenState
         });
         _player.seek(Duration(milliseconds: seekTarget));
         if (!_isPlaying) _player.play();
+        _scrollToActiveWord();
       }
     } else {
       final seekTarget = ts != null ? (ts.startTime - 25.0).clamp(0.0, 999999.0).toInt() : 0;
@@ -1305,6 +1293,11 @@ class _KelimeTakipliDinlemeScreenState
     final secondaryTextColor = isDark ? const Color(0xFF8B949E) : const Color(0xFF6B7280);
     final borderStroke = isDark ? const Color(0xFF30363D) : const Color(0xFFE5E7EB);
     const accentTeal = Color(0xFF0D9488);
+    final fontFamily = ref.watch(arabicFontFamilyProvider);
+    final isBoldArabic = ref.watch(isBoldArabicProvider);
+    final isArrowTracking = ref.watch(
+      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
+    );
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -1431,13 +1424,13 @@ class _KelimeTakipliDinlemeScreenState
                 Expanded(
                   child: ListView.builder(
                     controller: _scrollController,
+                    scrollCacheExtent: const ScrollCacheExtent.pixels(1800),
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                     itemCount: _verses.length,
                     itemBuilder: (context, vIdx) {
                       final verse = _verses[vIdx];
                       final isCurrentVerse = vIdx == _currentVerseIndex;
                       final mealText = _meals['${verse.sureId}_${verse.ayetId}'];
-                      final fontFamily = ref.watch(arabicFontFamilyProvider);
                       final showPageDivider = (widget.targetType != TalimTargetType.page) &&
                           (vIdx == 0 || _verses[vIdx - 1].page != verse.page);
                       final secdeItem = TilavetSecdesiData.getSecdeForVerse(
@@ -1581,12 +1574,23 @@ class _KelimeTakipliDinlemeScreenState
                             const SizedBox(height: 12),
 
                             // Word-by-Word Interactive Arabic Text
-                            _buildWordInteractiveVerse(
+                            SynchronizedArabicAyahWrap(
                               verse: verse,
                               verseIndex: vIdx,
-                              isCurrentVerse: isCurrentVerse,
+                              isActiveVerse: isCurrentVerse,
+                              activeWordOrder: isCurrentVerse ? _activeWordOrder : 0,
+                              activeWordDurationMs: _activeWordDurationMs,
+                              playbackSpeed: _playbackSpeed,
+                              isPlaying: _isPlaying,
                               isDark: isDark,
                               fontFamily: fontFamily,
+                              fontSize: _fontSize,
+                              isBoldArabic: isBoldArabic,
+                              isArrowTracking: isArrowTracking,
+                              maskingMode: _maskingMode,
+                              activeWordKey: isCurrentVerse ? _activeWordKey : null,
+                              onWordTap: _onWordTapped,
+                              onAyahMarkerTap: () => _prepareAndPlayVerse(vIdx),
                             ),
 
                             // Turkish Meal
@@ -1634,203 +1638,6 @@ class _KelimeTakipliDinlemeScreenState
     );
   }
 
-  static const Set<String> _stopSigns = QuranWordHighlighter.stopSigns;
-
-  static String mapStopCharacter(String char, String fontFamily) =>
-      QuranWordHighlighter.mapStopCharacter(char, fontFamily);
-
-  List<_CleanWordInfo> _parseAyahWords(String ayetText) {
-    final normalized = QuranWordHighlighter.cleanArabicText(ayetText);
-
-    final rawWords = normalized.split(RegExp(r'\s+'));
-    final result = <_CleanWordInfo>[];
-
-    for (final w in rawWords) {
-      final cleanWord = w.trim();
-      if (cleanWord.isEmpty) continue;
-
-      final cleanWordBuf = StringBuffer();
-      final stops = <String>[];
-
-      for (int cIdx = 0; cIdx < cleanWord.length; cIdx++) {
-        final char = cleanWord[cIdx];
-        if (_stopSigns.contains(char)) {
-          stops.add(char);
-        } else {
-          cleanWordBuf.write(char);
-        }
-      }
-
-      final pureWord = cleanWordBuf.toString();
-      result.add(_CleanWordInfo(pureWord: pureWord, stops: stops));
-    }
-    return result;
-  }
-
-  /// Builds the words with individual interactive highlighters
-  Widget _buildWordInteractiveVerse({
-    required QuranAyatModel verse,
-    required int verseIndex,
-    required bool isCurrentVerse,
-    required bool isDark,
-    required String fontFamily,
-  }) {
-    final cleanWordsData = _parseAyahWords(verse.ayetText);
-    final divineColor = QuranWordHighlighter.getDivineWordColor(isDark);
-    final waqfColor = isDark ? const Color(0xFFFF5252) : const Color(0xFFD32F2F);
-    final isBoldArabic = ref.watch(isBoldArabicProvider);
-    final isArrowTracking = ref.watch(
-      settingsProvider.select((s) => s.wordTrackingMode == 'arrow'),
-    );
-
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (int wIdx = 0; wIdx < cleanWordsData.length; wIdx++) ...[
-            Builder(
-              builder: (context) {
-                final wordOrder = wIdx + 1;
-                final isWordActive = isCurrentVerse &&
-                    _activeWordOrder == wordOrder;
-                final isMasked = _maskingMode &&
-                    isCurrentVerse &&
-                    _isPlaying &&
-                    wordOrder > _activeWordOrder;
-
-                final wordData = cleanWordsData[wIdx];
-                final pureWord = wordData.pureWord;
-                final stops = wordData.stops;
-                final isDivine = pureWord.isNotEmpty && QuranWordHighlighter.isDivineWord(pureWord);
-
-                final activeArrowTextColor =
-                    QuranWordHighlighter.getDiyanetTrackingWordColor(isDark);
-                final activeArrowShadows =
-                    QuranWordHighlighter.getDiyanetTrackingShadows(isDark);
-
-                return Row(
-                  key: isWordActive ? _activeWordKey : null,
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (pureWord.isNotEmpty)
-                      InkWell(
-                        onTap: () => _onWordTapped(verseIndex, wordOrder),
-                        borderRadius: BorderRadius.circular(10),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 45),
-                          padding: isArrowTracking
-                              ? const EdgeInsets.fromLTRB(5, 2, 5, 8)
-                              : const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: (!isArrowTracking && isWordActive)
-                                ? (isDark ? const Color(0xFF059669) : const Color(0xFF10B981))
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: [
-                              if (!isArrowTracking && isWordActive)
-                                BoxShadow(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.6),
-                                  blurRadius: 12,
-                                  spreadRadius: 1,
-                                  offset: const Offset(0, 2),
-                                ),
-                            ],
-                          ),
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            alignment: Alignment.bottomCenter,
-                            children: [
-                              Text(
-                                isMasked ? '••••' : pureWord,
-                                style: TextStyle(
-                                  fontFamily: fontFamily,
-                                  fontSize: _fontSize,
-                                  fontWeight: isBoldArabic
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isWordActive
-                                      ? (isArrowTracking
-                                          ? activeArrowTextColor
-                                          : Colors.white)
-                                      : (isDivine
-                                          ? divineColor
-                                          : (isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1E2B27))),
-                                  shadows: (isWordActive && isArrowTracking)
-                                      ? activeArrowShadows
-                                      : null,
-                                  height: 1.6,
-                                  letterSpacing: -0.1,
-                                ),
-                              ),
-                              if (isArrowTracking && isWordActive)
-                                Positioned(
-                                  bottom: -6,
-                                  left: 0,
-                                  right: 0,
-                                  child: QuranWordTrackingPointer(
-                                    isDark: isDark,
-                                    height: 7.5,
-                                    durationMs: _activeWordDurationMs,
-                                    playbackSpeed: _playbackSpeed,
-                                    isPlaying: _isPlaying,
-                                    wordIdentity:
-                                        '${verse.sureId}_${verse.ayetId}_$wordOrder',
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    if (stops.isNotEmpty) ...[
-                      for (final stop in stops) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                          child: Text(
-                            mapStopCharacter(stop, fontFamily),
-                            style: TextStyle(
-                              fontFamily: fontFamily,
-                              fontSize: _fontSize * 0.85,
-                              fontWeight: FontWeight.normal,
-                              color: waqfColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ],
-                );
-              },
-            ),
-          ],
-          // Ayah Stop Rosette Marker
-          Padding(
-            padding: const EdgeInsets.only(top: 4, right: 4),
-            child: GestureDetector(
-              onTap: () => _prepareAndPlayVerse(verseIndex),
-              child: ZikirceAyahStopMarker(
-                number: verse.ayetNumber,
-                size: 28,
-                isDark: isDark,
-                isHighlight: isCurrentVerse,
-                isSecde: TilavetSecdesiData.isSecdeVerse(
-                  verse.sureId,
-                  verse.ayetId,
-                ),
-                fontFamily: fontFamily,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Floating Glassmorphism Player Control Bar
   Widget _buildBottomAudioControlBar({
     required Color cardBg,
@@ -1843,6 +1650,9 @@ class _KelimeTakipliDinlemeScreenState
     final currentVerse = _verses.isNotEmpty && _currentVerseIndex < _verses.length
         ? _verses[_currentVerseIndex]
         : null;
+    final totalWords = currentVerse != null
+        ? QuranAyahWordParser.parse(currentVerse.ayetText).length
+        : 0;
 
     final repeatLabel = _repeatMode == 1
         ? '1x'
@@ -1924,7 +1734,7 @@ class _KelimeTakipliDinlemeScreenState
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_activeWordOrder > 0) ...[
+                      if (!_isPlayingBesmele && _activeWordOrder > 0 && totalWords > 0) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -1932,7 +1742,7 @@ class _KelimeTakipliDinlemeScreenState
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'Kelime: $_activeWordOrder',
+                            'Kelime: $_activeWordOrder / $totalWords',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,

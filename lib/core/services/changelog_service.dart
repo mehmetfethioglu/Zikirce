@@ -51,11 +51,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 68;
-  static const String currentVersionName = '2.3.0';
+  static const int currentVersionCode = 69;
+  static const String currentVersionName = '2.3.1';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 69,
+      versionName: '2.3.1',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'TV Modundan Çıkış & Telefon Ekranı Düzeltmesi (iOS & Android)',
+          titleEn: 'TV Mode Exit & Phone Layout Fix (iOS & Android)',
+          descTr: 'iOS ve Android telefonlarda TV Modu açıldığında kapatılamaması hatası giderildi. Zikirce TV üst çubuğuna tek dokunuşla çalışan «TV Modundan Çık» butonu, Android geri tuşu ile çıkış desteği, telefon ekranlarına tam uyumlu taşmasız düzen ve çıkışta otomatik dikey ekran dönüşü eklendi.',
+          descEn: 'Fixed an issue where TV Mode could not be turned off on iOS and Android phones. Added a one-tap "Exit TV Mode" button in the Zikirce TV top bar, Android back-button exit support, overflow-free responsive phone layout, and automatic portrait orientation restoration.',
+          icon: Icons.tv_off_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Minimal Bento Ana Sayfa & Detaylı İstatistikler',
+          titleEn: 'Minimal Bento Home & Detailed Statistics',
+          descTr: 'Açılış ekranı sade Bento kartlarıyla (Günlük Zikir halkası, 7 günlük seri ritmi, tek dokunuşla 5 vakit namaz kapsülleri) yenilendi; tüm grafik, ısı haritası ve rozetler ayrı Detaylı İstatistikler ekranına taşındı. Ayarlar > Ekran altına doğrudan Zikirmatik ile açılış seçeneği eklendi.',
+          descEn: 'Redesigned the home screen with calm Bento cards (Daily Dhikr ring, 7-day streak rhythm, one-tap 5 daily prayer capsules) and moved charts, heatmap, and badges to a dedicated Detailed Statistics screen, plus an optional start-on-dhikr setting.',
+          icon: Icons.home_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Kelime Takipli Mushaf Kaydırma & Diyanet İlmihali Genişlemesi',
+          titleEn: 'Word-Tracked Mushaf Scrolling & Catechism Expansion',
+          descTr: 'Mushaf, Mukabele Hatim ve Ezber ekranlarında senkronize Arapça kelime takibi ve akıcı satır kaydırma iyileştirildi; İrfan Meydanı’na Diyanet İslam İlmihali soruları eklendi.',
+          descEn: 'Improved synchronized Arabic word highlighting and smooth auto-scrolling across Mushaf, Mukabele Khatm, and Memorization screens, and expanded Arena of Wisdom with new Catechism questions.',
+          icon: Icons.menu_book_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 68,
       versionName: '2.3.0',

@@ -2,12 +2,16 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/database/app_database.dart';
+import '../../../core/database/zikir_seed_data.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/session/session_providers.dart';
 import '../../../../core/session/user_session.dart';
 import 'package:drift/drift.dart';
 import '../../zikir/providers/zikir_providers.dart';
 import '../../gamification/providers/gamification_providers.dart';
+import '../../gamification/services/golden_day_service.dart';
+import '../../namaz_vakitleri/providers/prayer_providers.dart';
 
 /// Modern ve dengeli zikir dağılımı renk paleti
 const List<Color> kDistributionPalette = [
@@ -448,5 +452,442 @@ final zikirHistoryListProvider = StreamProvider<List<DynamicZikirHistoryItem>>((
 
     historyList.sort((a, b) => b.rawCount.compareTo(a.rawCount));
     return historyList;
+  });
+});
+
+// ===========================================================================
+// PROFİL ÖZETİ (DASHBOARD PROFILE SUMMARY)
+// ===========================================================================
+
+/// Ana sayfa profil kartında kullanıcı verilerine göre dinamik özet sunar.
+class DashboardProfileSummary {
+  final String summaryTr;
+  final String summaryEn;
+  final String formattedToday;
+  final String formattedThisWeek;
+  final String formattedDailyAverage;
+  final String formattedTotal;
+  final String formattedQuranToday;
+  final String formattedQuranTotal;
+  final int currentStreak;
+  final bool isGoldCompleted;
+
+  const DashboardProfileSummary({
+    required this.summaryTr,
+    required this.summaryEn,
+    required this.formattedToday,
+    required this.formattedThisWeek,
+    required this.formattedDailyAverage,
+    required this.formattedTotal,
+    required this.formattedQuranToday,
+    required this.formattedQuranTotal,
+    required this.currentStreak,
+    required this.isGoldCompleted,
+  });
+}
+
+/// Kullanıcı istatistiklerinden profil kartı için dinamik özet metni üretir.
+DashboardProfileSummary buildDashboardProfileSummary({
+  required QuickStatsData quickStats,
+  required int currentStreak,
+  required int totalZikirFallback,
+  DailyGoalsStatus? goalsStatus,
+}) {
+  final effectiveTotal = max(quickStats.totalCount, totalZikirFallback);
+  final formattedTotal = formatCompactNumber(effectiveTotal);
+  final isGoldCompleted = goalsStatus?.isGoldCompleted ?? false;
+  final todayZikir = max(quickStats.todayCount, goalsStatus?.todayZikirCount ?? 0);
+  final todayQuran = max(quickStats.quranTodayCount, goalsStatus?.todayKuranPages ?? 0);
+  final completedGoals = goalsStatus?.completedGoalsCount ?? 0;
+  final totalActiveGoals = goalsStatus?.totalActiveGoals ?? 0;
+
+  final String summaryTr;
+  final String summaryEn;
+
+  if (isGoldCompleted) {
+    summaryTr =
+        'Altın Gün tamamlandı! $currentStreak günlük serinle bu hafta ${quickStats.formattedThisWeek}, toplamda $formattedTotal zikir birikimine ulaştın.';
+    summaryEn =
+        'Golden Day completed! With a $currentStreak-day streak, you reached ${quickStats.formattedThisWeek} this week and $formattedTotal total dhikrs.';
+  } else if (todayZikir > 0 || todayQuran > 0) {
+    final String activityTr;
+    final String activityEn;
+    if (todayZikir > 0 && todayQuran > 0) {
+      activityTr =
+          'Bugün ${formatCompactNumber(todayZikir)} zikir ve $todayQuran sayfa Kur’an okudun';
+      activityEn =
+          'Today you logged ${formatCompactNumber(todayZikir)} dhikrs and $todayQuran Quran pages';
+    } else if (todayZikir > 0) {
+      activityTr = 'Bugün ${formatCompactNumber(todayZikir)} zikir çektin';
+      activityEn = 'Today you completed ${formatCompactNumber(todayZikir)} dhikrs';
+    } else {
+      activityTr = 'Bugün $todayQuran sayfa Kur’an okudun';
+      activityEn = 'Today you read $todayQuran Quran pages';
+    }
+
+    if (totalActiveGoals > 0 && completedGoals > 0) {
+      summaryTr =
+          '$activityTr ve $completedGoals/$totalActiveGoals günlük hedefini tamamladın; bu hafta ${quickStats.formattedThisWeek}, toplamda $formattedTotal zikirdesin.';
+      summaryEn =
+          '$activityEn and met $completedGoals/$totalActiveGoals daily goals, reaching ${quickStats.formattedThisWeek} this week and $formattedTotal total.';
+    } else {
+      summaryTr =
+          '$activityTr; günlük ${quickStats.formattedDailyAverage} ortalamayla bu hafta ${quickStats.formattedThisWeek}, toplamda $formattedTotal zikre ulaştın.';
+      summaryEn =
+          '$activityEn; averaging ${quickStats.formattedDailyAverage}/day with ${quickStats.formattedThisWeek} this week and $formattedTotal total dhikrs.';
+    }
+  } else if (effectiveTotal > 0 || quickStats.quranTotalCount > 0 || currentStreak > 0) {
+    if (currentStreak > 0) {
+      summaryTr =
+          '$currentStreak günlük serin devam ediyor; günlük ${quickStats.formattedDailyAverage} ortalamayla toplam $formattedTotal zikir birikimin bulunuyor.';
+      summaryEn =
+          'Your $currentStreak-day streak is active with $formattedTotal total dhikrs at a ${quickStats.formattedDailyAverage} daily average.';
+    } else {
+      summaryTr =
+          'Toplamda $formattedTotal zikir birikimin hazır; bugünkü ilk virdinle yeni serini başlatabilirsin.';
+      summaryEn =
+          'You have $formattedTotal total dhikrs recorded; start a fresh streak with today’s first session.';
+    }
+  } else {
+    summaryTr =
+        'Manevi yolculuğun başlıyor; ilk zikrin veya Kur’an okumanla özetin burada canlanacak.';
+    summaryEn =
+        'Your spiritual journey starts here; log your first dhikr or reading to see live insights.';
+  }
+
+  return DashboardProfileSummary(
+    summaryTr: summaryTr,
+    summaryEn: summaryEn,
+    formattedToday: formatCompactNumber(todayZikir),
+    formattedThisWeek: quickStats.formattedThisWeek,
+    formattedDailyAverage: quickStats.formattedDailyAverage,
+    formattedTotal: formattedTotal,
+    formattedQuranToday: formatCompactNumber(todayQuran),
+    formattedQuranTotal: quickStats.formattedQuranTotal,
+    currentStreak: currentStreak,
+    isGoldCompleted: isGoldCompleted,
+  );
+}
+
+final dashboardProfileSummaryProvider = Provider<DashboardProfileSummary>((ref) {
+  final quickStats = ref.watch(
+        quickStatsProvider.select((a) => a.valueOrNull),
+      ) ??
+      const QuickStatsData(
+        todayCount: 0,
+        thisWeekCount: 0,
+        dailyAverage: 0,
+        totalCount: 0,
+        formattedToday: '0',
+        formattedThisWeek: '0',
+        formattedDailyAverage: '0',
+        formattedTotal: '0',
+      );
+  final currentStreak = ref.watch(
+    userStreakStreamProvider.select((a) => a.valueOrNull?.currentStreak ?? 0),
+  );
+  final goalsStatus = ref.watch(
+    dailyGoalsStatusProvider.select((a) => a.valueOrNull),
+  );
+  final totalZikirFallback = ref.watch(
+    totalZikirCountProvider.select((a) => a.valueOrNull ?? 0),
+  );
+
+  return buildDashboardProfileSummary(
+    quickStats: quickStats,
+    currentStreak: currentStreak,
+    totalZikirFallback: totalZikirFallback,
+    goalsStatus: goalsStatus,
+  );
+});
+
+// ===========================================================================
+// FAVORİ ZİKİRLER KARUSELİ (ÇOKTAN AZA SIRALI)
+// ===========================================================================
+
+/// Favori zikirler yatay kaydırılabilir kartı için öğe modeli.
+class FavoriteZikirCardItem {
+  final int id;
+  final String name;
+  final String arabic;
+  final String category;
+  final String virtueSummary;
+  final int currentCount;
+  final int target;
+  final int effectiveTotal;
+  final bool isFavorite;
+  final bool isActive;
+  final bool isPracticed;
+
+  const FavoriteZikirCardItem({
+    required this.id,
+    required this.name,
+    required this.arabic,
+    this.category = 'Genel',
+    this.virtueSummary = '',
+    required this.currentCount,
+    required this.target,
+    required this.effectiveTotal,
+    required this.isFavorite,
+    required this.isActive,
+    required this.isPracticed,
+  });
+}
+
+String _extractConciseVirtueSummary(String name, String? arabic) {
+  final raw = ZikirSeedData.getVirtueForZikir(name, arabic: arabic);
+  if (raw == null) return '';
+  var text = raw.split(' — ').first.trim();
+  if (text.startsWith('Anlamı:')) {
+    text = text.substring('Anlamı:'.length).trim();
+  }
+  if (text.startsWith('"') && text.endsWith('"') && text.length > 2) {
+    text = text.substring(1, text.length - 1).trim();
+  }
+  return text;
+}
+
+/// Çekilen zikirleri çoktan aza sıralar; hiç çekim yoksa seçili ve favori başlangıç zikirlerini döndürür.
+List<FavoriteZikirCardItem> buildFavoriteZikirCardItems({
+  required List<Zikir> zikirs,
+  required Map<int, int> logTotalsByZikirId,
+  int? activeZikirId,
+}) {
+  if (zikirs.isEmpty) return const [];
+
+  final items = zikirs.map((z) {
+    final effectiveTotal = max(z.totalCount, logTotalsByZikirId[z.id] ?? 0);
+    final isPracticed = effectiveTotal > 0 || z.currentCount > 0;
+    return FavoriteZikirCardItem(
+      id: z.id,
+      name: z.name,
+      arabic: z.arabic ?? '',
+      category: z.category,
+      virtueSummary: _extractConciseVirtueSummary(z.name, z.arabic),
+      currentCount: z.currentCount,
+      target: max(1, z.target),
+      effectiveTotal: effectiveTotal,
+      isFavorite: z.isFavorite,
+      isActive: activeZikirId != null && z.id == activeZikirId,
+      isPracticed: isPracticed,
+    );
+  }).toList();
+
+  final practiced = items.where((i) => i.isPracticed).toList();
+  if (practiced.isNotEmpty) {
+    practiced.sort((a, b) {
+      final byTotal = b.effectiveTotal.compareTo(a.effectiveTotal);
+      if (byTotal != 0) return byTotal;
+      final byCurrent = b.currentCount.compareTo(a.currentCount);
+      if (byCurrent != 0) return byCurrent;
+      return a.id.compareTo(b.id);
+    });
+    return practiced.take(7).toList();
+  }
+
+  items.sort((a, b) {
+    if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+    if (a.isFavorite != b.isFavorite) return a.isFavorite ? -1 : 1;
+    return a.id.compareTo(b.id);
+  });
+  return items.take(6).toList();
+}
+
+final _zikirLogTotalsStreamProvider = StreamProvider<Map<int, int>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db.customSelect(
+    'SELECT zikir_id, COALESCE(SUM(count), 0) as log_sum FROM zikir_logs GROUP BY zikir_id',
+    readsFrom: {db.zikirLogs},
+  ).watch().map((rows) {
+    final map = <int, int>{};
+    for (final row in rows) {
+      map[row.read<int>('zikir_id')] = row.read<int>('log_sum');
+    }
+    return map;
+  }).handleError((Object error, StackTrace stackTrace) {
+    debugPrint('[_zikirLogTotalsStreamProvider] Error loading zikir log totals: $error');
+    return <int, int>{};
+  });
+});
+
+final dashboardFavoriteZikirsProvider = Provider<List<FavoriteZikirCardItem>>((ref) {
+  final zikirs = ref.watch(
+    zikirListStreamProvider.select((a) => a.valueOrNull ?? const <Zikir>[]),
+  );
+  final logTotals = ref.watch(
+    _zikirLogTotalsStreamProvider.select((a) => a.valueOrNull ?? const <int, int>{}),
+  );
+  final activeId = ref.watch(selectedZikirIdProvider);
+
+  return buildFavoriteZikirCardItems(
+    zikirs: zikirs,
+    logTotalsByZikirId: logTotals,
+    activeZikirId: activeId,
+  );
+});
+
+// ===========================================================================
+// SON 7 GÜN AKTİVİTE TRENDLERİ (ROLLING LAST 7 DAYS)
+// ===========================================================================
+
+String _formatDateKey(DateTime date) {
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+}
+
+/// Son 7 günlük aktivite trend grafiğindeki tek gün noktası.
+class Last7DaysPoint {
+  final String dateStr;
+  final String dayShortTr;
+  final String dayShortEn;
+  final String dateLabelTr;
+  final String dateLabelEn;
+  final int count;
+  final bool isToday;
+
+  const Last7DaysPoint({
+    required this.dateStr,
+    required this.dayShortTr,
+    required this.dayShortEn,
+    required this.dateLabelTr,
+    required this.dateLabelEn,
+    required this.count,
+    required this.isToday,
+  });
+}
+
+/// Her zaman [bugün - 6 gün .. bugün] aralığını tutan son 7 gün trend özeti.
+class Last7DaysTrendData {
+  final List<Last7DaysPoint> days;
+  final int sevenDayTotal;
+  final int dailyAverage;
+  final int peakCount;
+  final int? trendDeltaPercent;
+
+  const Last7DaysTrendData({
+    required this.days,
+    required this.sevenDayTotal,
+    required this.dailyAverage,
+    required this.peakCount,
+    required this.trendDeltaPercent,
+  });
+}
+
+/// Verilen referans tarihinden geriye dönük tam 7 günlük aktivite trendini hesaplar.
+Last7DaysTrendData buildLast7DaysTrendData({
+  required DateTime anchorDate,
+  required Map<String, int> countsByDate,
+  Map<String, int> previousWeekCountsByDate = const {},
+}) {
+  const trDays = ['', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  const enDays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const trMonths = [
+    '',
+    'Oca',
+    'Şub',
+    'Mar',
+    'Nis',
+    'May',
+    'Haz',
+    'Tem',
+    'Ağu',
+    'Eyl',
+    'Eki',
+    'Kas',
+    'Ara',
+  ];
+  const enMonths = [
+    '',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  final anchorDay = DateTime(anchorDate.year, anchorDate.month, anchorDate.day);
+  final days = <Last7DaysPoint>[];
+  int sevenDayTotal = 0;
+  int peakCount = 0;
+
+  for (int i = 0; i < 7; i++) {
+    final target = anchorDay.subtract(Duration(days: 6 - i));
+    final key = _formatDateKey(target);
+    final count = countsByDate[key] ?? 0;
+    sevenDayTotal += count;
+    if (count > peakCount) peakCount = count;
+
+    days.add(
+      Last7DaysPoint(
+        dateStr: key,
+        dayShortTr: trDays[target.weekday],
+        dayShortEn: enDays[target.weekday],
+        dateLabelTr: '${target.day} ${trMonths[target.month]}',
+        dateLabelEn: '${enMonths[target.month]} ${target.day}',
+        count: count,
+        isToday: i == 6,
+      ),
+    );
+  }
+
+  int prevTotal = 0;
+  for (int i = 7; i < 14; i++) {
+    final prevTarget = anchorDay.subtract(Duration(days: i));
+    final prevKey = _formatDateKey(prevTarget);
+    prevTotal += previousWeekCountsByDate[prevKey] ?? countsByDate[prevKey] ?? 0;
+  }
+
+  final int? deltaPercent = prevTotal > 0
+      ? (((sevenDayTotal - prevTotal) / prevTotal) * 100).round()
+      : null;
+
+  return Last7DaysTrendData(
+    days: days,
+    sevenDayTotal: sevenDayTotal,
+    dailyAverage: (sevenDayTotal / 7).round(),
+    peakCount: max(1, peakCount),
+    trendDeltaPercent: deltaPercent,
+  );
+}
+
+final last7DaysTrendProvider = StreamProvider<Last7DaysTrendData>((ref) {
+  final db = ref.watch(databaseProvider);
+  ref.watch(currentDateProvider);
+
+  final now = DateTime.now();
+  final anchorDay = DateTime(now.year, now.month, now.day);
+  final windowStart = anchorDay.subtract(const Duration(days: 13));
+  final startKey = _formatDateKey(windowStart);
+  final todayKey = _formatDateKey(anchorDay);
+
+  return db.customSelect(
+    'SELECT date_str, COALESCE(SUM(count), 0) as day_sum '
+    'FROM zikir_logs WHERE date_str >= ? AND date_str <= ? GROUP BY date_str',
+    variables: [
+      Variable.withString(startKey),
+      Variable.withString(todayKey),
+    ],
+    readsFrom: {db.zikirLogs},
+  ).watch().map((rows) {
+    final countsByDate = <String, int>{};
+    for (final row in rows) {
+      countsByDate[row.read<String>('date_str')] = row.read<int>('day_sum');
+    }
+    return buildLast7DaysTrendData(
+      anchorDate: anchorDay,
+      countsByDate: countsByDate,
+    );
+  }).handleError((Object error, StackTrace stackTrace) {
+    debugPrint('[last7DaysTrendProvider] Error loading 7-day trend: $error');
+    return buildLast7DaysTrendData(
+      anchorDate: anchorDay,
+      countsByDate: const {},
+    );
   });
 });

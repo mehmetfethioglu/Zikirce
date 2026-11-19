@@ -27,7 +27,6 @@ class ZikirDistributionDonut extends ConsumerWidget {
       onTap: onTap ?? () => ZikirDistributionSheet.show(context),
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        height: double.infinity,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: colors.cardBackground,
@@ -43,7 +42,7 @@ class ZikirDistributionDonut extends ConsumerWidget {
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Header Row with Title and Expand/Detail Indicator
             Row(
@@ -134,6 +133,7 @@ class ZikirDistributionDonut extends ConsumerWidget {
               ),
             ),
 
+            const SizedBox(height: 10),
             if (items.isNotEmpty)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

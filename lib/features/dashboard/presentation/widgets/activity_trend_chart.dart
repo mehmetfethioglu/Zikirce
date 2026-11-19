@@ -110,47 +110,51 @@ class _ActivityTrendChartState extends ConsumerState<ActivityTrendChart> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: weekDays.map((item) {
+                children: List.generate(weekDays.length, (index) {
+                  final item = weekDays[index];
                   final count = item.count;
                   final day = item.day;
-                  final color = item.color;
+                  final isToday = index == (DateTime.now().weekday - 1).clamp(0, 6);
+                  final barColor = count > 0
+                      ? (isToday ? colors.accent : colors.accent.withValues(alpha: 0.52))
+                      : colors.borderStroke.withValues(alpha: 0.5);
+                  final valueColor = count > 0
+                      ? (isToday ? colors.accentText : colors.accent.withValues(alpha: 0.85))
+                      : colors.secondaryTextAlt.withValues(alpha: 0.6);
                   final heightFactor = (count / (maxVal * 1.15)).clamp(0.12, 1.0);
 
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      // Value above bar matching bar color
                       Text(
                         count > 0 ? (count >= 1000 ? formatCompactNumber(count) : '$count') : '0',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: count > 0 ? color : colors.secondaryTextAlt.withValues(alpha: 0.6),
+                          color: valueColor,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      // Colored Rounded Bar
                       Container(
                         width: 22,
                         height: 90 * heightFactor,
                         decoration: BoxDecoration(
-                          color: count > 0 ? color : colors.borderStroke.withValues(alpha: 0.5),
+                          color: barColor,
                           borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       const SizedBox(height: 6),
-                      // Day text label
                       Text(
                         day,
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: colors.secondaryTextAlt,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.w500,
+                          color: isToday ? colors.primaryText : colors.secondaryTextAlt,
                         ),
                       ),
                     ],
                   );
-                }).toList(),
+                }),
               ),
             ),
           ] else if (_selectedPeriod == TrendPeriod.month) ...[

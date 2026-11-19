@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/asset_constants.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/session/session_providers.dart';
@@ -11,7 +12,6 @@ import '../../../namaz_vakitleri/presentation/screens/fiqh_library_screen.dart';
 import '../../domain/irfan_models.dart';
 import '../../providers/irfan_providers.dart';
 import '../widgets/irfan_daily_hero_card.dart';
-import '../widgets/irfan_seljuk_star_painter.dart';
 import '../widgets/irfan_session_entry_sheet.dart';
 import '../widgets/irfan_sm2_review_banner.dart';
 import '../widgets/irfan_topic_map_grid.dart';
@@ -250,11 +250,7 @@ class _IrfanHeaderBar extends StatelessWidget {
 
     return Row(
       children: [
-        IrfanSeljukStarBadge(
-          size: 34,
-          color: colors.accent,
-          accentColor: const Color(0xFFD4A574),
-        ),
+        const _IrfanHeaderLogoBadge(),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -272,6 +268,29 @@ class _IrfanHeaderBar extends StatelessWidget {
         const SizedBox(width: 8),
         const _IrfanCurrencySummaryBar(),
       ],
+    );
+  }
+}
+
+class _IrfanHeaderLogoBadge extends StatelessWidget {
+  const _IrfanHeaderLogoBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Image.asset(
+      AppAssets.logo,
+      width: 36,
+      height: 36,
+      cacheWidth: 144,
+      cacheHeight: 144,
+      filterQuality: FilterQuality.medium,
+      fit: BoxFit.contain,
+      errorBuilder: (_, __, ___) => Icon(
+        Icons.auto_awesome_rounded,
+        size: 28,
+        color: colors.accent,
+      ),
     );
   }
 }
