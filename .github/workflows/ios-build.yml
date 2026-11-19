@@ -6,7 +6,7 @@ on:
     branches: [ main ]
     paths-ignore:
       - '.github/workflows/playstore-release.yml'
-      - 'android/fastlane/**'
+      - 'android/**'
       - 'scripts/play_console_publish.py'
       - 'docs/**'
 
