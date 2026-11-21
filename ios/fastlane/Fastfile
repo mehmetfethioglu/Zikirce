@@ -1,0 +1,141 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build and upload Hasibu to Apple TestFlight"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["APP_STORE_KEY_ID"],
+      issuer_id: ENV["APP_STORE_ISSUER_ID"],
+      key_content: ENV["APP_STORE_PRIVATE_KEY"],
+      is_key_content_base64: false,
+      in_house: false
+    )
+
+    keychain_name = "ci_keychain"
+    keychain_password = "temporary_ci_password_123"
+
+    create_keychain(
+      name: keychain_name,
+      password: keychain_password,
+      default_keychain: true,
+      unlock: true,
+      timeout: 3600
+    )
+
+    raw_path = File.expand_path("~/Library/Keychains/#{keychain_name}")
+    keychain_path = File.exist?("#{raw_path}-db") ? "#{raw_path}-db" : raw_path
+
+    wwdr_path = File.expand_path("~/AppleWWDRCAG3.cer")
+    sh("curl -f -s -S -o '#{wwdr_path}' https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer") rescue nil
+    if File.exist?(wwdr_path)
+      import_certificate(
+        certificate_path: wwdr_path,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        log_output: false
+      )
+      File.delete(wwdr_path) rescue nil
+    end
+
+    if ENV["BUILD_CERTIFICATE_BASE64"] && !ENV["BUILD_CERTIFICATE_BASE64"].strip.empty?
+      UI.message("P12 sertifikasi GitHub Secrets uzerinden ice aktariliyor...")
+      require "base64"
+      p12_path = File.expand_path("~/build_cert.p12")
+      File.binwrite(p12_path, Base64.decode64(ENV["BUILD_CERTIFICATE_BASE64"].strip))
+
+      import_certificate(
+        certificate_path: p12_path,
+        certificate_password: ENV["P12_PASSWORD"] || "",
+        keychain_path: keychain_path,
+        keychain_password: keychain_password,
+        log_output: true
+      )
+      File.delete(p12_path) rescue nil
+    else
+      get_certificates(
+        api_key: api_key,
+        keychain_path: keychain_path,
+        keychain_password: keychain_password
+      )
+    end
+
+    [keychain_path, raw_path, "#{raw_path}-db"].uniq.each do |kpath|
+      next unless File.exist?(kpath)
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild:,xcodebuild: -s -k '#{keychain_password}' '#{kpath}'") rescue nil
+      sh("security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k '#{keychain_password}' '#{kpath}'") rescue nil
+    end
+    sh("security list-keychains -d user -s '#{keychain_path}' $(security list-keychains -d user | tr -d '\"')") rescue nil
+    sh("security find-identity -v -p codesigning '#{keychain_path}'") rescue nil
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: "com.akarworks.hasibu",
+      force: true
+    )
+
+    profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    profile_data = sh("security cms -D -i '#{profile_path}'")
+    team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1]
+    UI.message("Extracted Apple Development Team ID: #{team_id}")
+
+    runner_profile_name = lane_context[SharedValues::SIGH_NAME]
+
+    update_project_team(
+      path: "Runner.xcodeproj",
+      teamid: team_id
+    )
+
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      targets: ["Runner"],
+      team_id: team_id,
+      bundle_identifier: "com.akarworks.hasibu",
+      profile_name: runner_profile_name,
+      code_sign_identity: "Apple Distribution"
+    )
+
+    ENV["VERBOSE_SCRIPT_LOGGING"] = "1"
+
+    begin
+      build_app(
+        workspace: "Runner.xcworkspace",
+        scheme: "Runner",
+        clean: false,
+        export_method: "app-store",
+        output_directory: "../build/ios/ipa",
+        output_name: "Hasibu.ipa",
+        codesigning_identity: "Apple Distribution",
+        export_options: {
+          signingStyle: "manual",
+          provisioningProfiles: {
+            "com.akarworks.hasibu" => runner_profile_name
+          }
+        }
+      )
+    rescue => ex
+      log_path = File.expand_path("~/Library/Logs/gym/Runner-Runner.log")
+      if File.exist?(log_path)
+        UI.error("=== DETAILED GYM LOG OUTPUT ===")
+        File.readlines(log_path).last(150).each do |line|
+          UI.error(line.chomp)
+        end
+      end
+      raise ex
+    end
+
+    changelog_text = <<~CHANGELOG
+      Hasibu v1.0.10 TestFlight Surumu:
+      • Temiz sifir kurulum veritabani (ornek/sahsi veri icermez).
+      • Google ile dogrudan OAuth 2.0 girisi ve sifreli bulut yedekleme.
+      • PDKS, vardiya, izin, dijital ozelik arsivi ve yonetim kokpiti.
+    CHANGELOG
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "../build/ios/ipa/Hasibu.ipa",
+      skip_waiting_for_build_processing: true,
+      changelog: changelog_text
+    )
+  end
+end

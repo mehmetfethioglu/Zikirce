@@ -1,10 +1,57 @@
+import 'package:flutter/foundation.dart';
+
 import '../domain/pdks_models.dart';
 import 'tenfei_zk_client.dart';
 
 /// İş yerindeki mevcut personel2020 veritabanından ve Tenfei D35 (192.168.9.150:4370)
 /// kayıtlarından çıkarılmış gerçek şube, bölüm, vardiya ve aktif personel tohum verileri.
+/// [DB-06] Gerçek personel verileri (`00064`, `01406` vb.) yalnızca `if (kDebugMode)`
+/// altında yüklenir; canlı (release) derlemelerde yüklenmesi engellenir.
 class WorkplaceSeedData {
-  static const List<Branch> branches = <Branch>[
+  @visibleForTesting
+  static const List<Branch> releaseBranches = <Branch>[
+    Branch(
+      id: 1,
+      code: 'MERKEZ',
+      name: 'Merkez Şube',
+      hasTerminal: false,
+      terminalIp: '',
+      terminalPort: 4370,
+      machineNo: 1,
+      terminalCommKey: 0,
+      qrSecret: 'HASIBU-QR-INIT-01',
+      latitude: 0.0,
+      longitude: 0.0,
+      geofenceRadiusMeters: 150,
+    ),
+  ];
+
+  @visibleForTesting
+  static const List<ShiftPlan> releaseShifts = <ShiftPlan>[
+    ShiftPlan(
+      id: 1,
+      name: 'Standart Mesai (08:30 - 18:00)',
+      startTime: '08:30',
+      endTime: '18:00',
+      toleranceMinutes: 15,
+    ),
+  ];
+
+  @visibleForTesting
+  static const List<Department> releaseDepartments = <Department>[
+    Department(id: 1, name: 'Genel', branchId: 1, isProductionLine: false),
+  ];
+
+  static List<Branch> get branches =>
+      kDebugMode ? _debugBranches : releaseBranches;
+
+  static List<ShiftPlan> get shifts =>
+      kDebugMode ? _debugShifts : releaseShifts;
+
+  static List<Department> get departments =>
+      kDebugMode ? _debugDepartments : releaseDepartments;
+
+  static const List<Branch> _debugBranches = <Branch>[
     Branch(
       id: 1,
       code: 'MERKEZ',
@@ -13,6 +60,8 @@ class WorkplaceSeedData {
       terminalIp: '192.168.9.150',
       terminalPort: 4370,
       machineNo: 1,
+      terminalCommKey: 437029,
+      qrSecret: 'HSB-TOTP-MERKEZ-01',
       latitude: 37.1674,
       longitude: 38.7955,
       geofenceRadiusMeters: 200,
@@ -25,6 +74,8 @@ class WorkplaceSeedData {
       terminalIp: '192.168.10.150',
       terminalPort: 4370,
       machineNo: 2,
+      terminalCommKey: 437038,
+      qrSecret: 'HSB-TOTP-DEVTEYSTI-38',
       latitude: 37.1582,
       longitude: 38.7741,
       geofenceRadiusMeters: 120,
@@ -37,6 +88,8 @@ class WorkplaceSeedData {
       terminalIp: '192.168.11.150',
       terminalPort: 4370,
       machineNo: 3,
+      terminalCommKey: 437039,
+      qrSecret: 'HSB-TOTP-YENISEHIR-39',
       latitude: 37.1712,
       longitude: 38.7988,
       geofenceRadiusMeters: 120,
@@ -49,13 +102,15 @@ class WorkplaceSeedData {
       terminalIp: '192.168.12.150',
       terminalPort: 4370,
       machineNo: 4,
+      terminalCommKey: 437040,
+      qrSecret: 'HSB-TOTP-KARAKOPRU-40',
       latitude: 37.2325,
       longitude: 38.8124,
       geofenceRadiusMeters: 120,
     ),
   ];
 
-  static const List<ShiftPlan> shifts = <ShiftPlan>[
+  static const List<ShiftPlan> _debugShifts = <ShiftPlan>[
     ShiftPlan(
       id: 1,
       name: 'Üretim Sabah (06:00 - 15:00)',
@@ -86,7 +141,7 @@ class WorkplaceSeedData {
     ),
   ];
 
-  static const List<Department> departments = <Department>[
+  static const List<Department> _debugDepartments = <Department>[
     Department(id: 1, name: 'MUHASEBE', branchId: 1, isProductionLine: false),
     Department(id: 6, name: 'YAĞLAMA', branchId: 1, isProductionLine: true),
     Department(id: 7, name: 'KENAR AÇMA', branchId: 1, isProductionLine: true),
@@ -116,7 +171,16 @@ class WorkplaceSeedData {
     Department(id: 40, name: 'ŞUBE KARAKÖPRÜ', branchId: 40, isProductionLine: false),
   ];
 
-  static const List<Employee> activeEmployees = <Employee>[
+  /// [DB-06] Gerçek personel verileri yalnızca `kDebugMode` açıkken yüklenir;
+  /// canlı (release) derlemelerde boş liste döner.
+  static List<Employee> get activeEmployees {
+    if (kDebugMode) {
+      return _debugEmployees;
+    }
+    return const <Employee>[];
+  }
+
+  static const List<Employee> _debugEmployees = <Employee>[
     Employee(id: 2052, cardNo: '00007', fullName: 'MEHMET AKAR', title: 'YÖNETİM', departmentId: 37, branchId: 1, shiftId: 2, hireDate: '2023-09-26', annualLeaveEntitlement: 20, usedAnnualLeave: 2, kpiScore: 99.0),
     Employee(id: 1907, cardNo: '00003', fullName: 'MUSTAFA SÖNMEZ', title: 'SEVKİYAT', departmentId: 19, branchId: 1, shiftId: 1, hireDate: '2018-01-28', annualLeaveEntitlement: 20, usedAnnualLeave: 4, kpiScore: 95.0),
     Employee(id: 2051, cardNo: '00006', fullName: 'HALİL UYAR', title: 'SEVKİYAT', departmentId: 19, branchId: 1, shiftId: 1, hireDate: '2023-09-19', annualLeaveEntitlement: 14, usedAnnualLeave: 3, kpiScore: 92.0),
@@ -309,6 +373,9 @@ class WorkplaceSeedData {
   ];
 
   static List<AttendanceLog> buildInitialAttendanceLogs() {
+    if (!kDebugMode) {
+      return const <AttendanceLog>[];
+    }
     final result = <AttendanceLog>[];
     for (final line in <String>[
       ...rawLogs20261017,
@@ -418,6 +485,9 @@ class WorkplaceSeedData {
   }
 
   static List<LeaveRecord> buildInitialLeaves() {
+    if (!kDebugMode) {
+      return const <LeaveRecord>[];
+    }
     return const <LeaveRecord>[
       LeaveRecord(
         id: 'leave_1846_2026-10-19',
@@ -444,15 +514,18 @@ class WorkplaceSeedData {
   }
 
   static List<PersonnelDocument> buildInitialPersonnelDocuments() {
+    if (!kDebugMode) {
+      return const <PersonnelDocument>[];
+    }
     final docs = <PersonnelDocument>[
       const PersonnelDocument(
         id: 'doc_2144_saglik',
         employeeId: 2144,
         category: PersonnelDocumentCategory.saglikRaporu,
         title: 'Gıda Üretim & Hijyen Ağır İş Sağlık Raporu',
-        filePath: 'Dijital_Arsiv/00064_OSGB_Saglik_Raporu.pdf',
+        filePath: 'Dijital_Arsiv/00064_OSGB_Saglik_Raporu.pdf.hasibu_doc',
         uploadDate: '2025-12-22',
-        notes: 'OSGB İşyeri Hekimi onaylı.',
+        notes: 'OSGB İşyeri Hekimi onaylı (AES-256 .hasibu_doc).',
       ),
     ];
 
@@ -463,9 +536,10 @@ class WorkplaceSeedData {
           employeeId: emp.id,
           category: PersonnelDocumentCategory.kimlikFotokopisi,
           title: 'T.C. Kimlik Kartı Dijital Kopyası',
-          filePath: 'Dijital_Arsiv/${emp.cardNo}_Kimlik_Fotokopisi.pdf',
+          filePath:
+              'Dijital_Arsiv/${emp.cardNo}_Kimlik_Fotokopisi.pdf.hasibu_doc',
           uploadDate: emp.hireDate,
-          notes: 'İşe girişte aslı gibidir onaylandı.',
+          notes: 'İşe girişte aslı gibidir onaylandı (AES-256 .hasibu_doc).',
         ),
       );
       docs.add(
@@ -474,9 +548,10 @@ class WorkplaceSeedData {
           employeeId: emp.id,
           category: PersonnelDocumentCategory.sgkIseGirisBildirgesi,
           title: 'SGK 4A İşe Giriş Bildirgesi',
-          filePath: 'Dijital_Arsiv/${emp.cardNo}_SGK_Ise_Giris_Bildirgesi.pdf',
+          filePath:
+              'Dijital_Arsiv/${emp.cardNo}_SGK_Ise_Giris_Bildirgesi.pdf.hasibu_doc',
           uploadDate: emp.hireDate,
-          notes: 'Barkodlu e-Devlet SGK bildirgesi.',
+          notes: 'Barkodlu e-Devlet SGK bildirgesi (AES-256 .hasibu_doc).',
         ),
       );
     }
@@ -484,6 +559,9 @@ class WorkplaceSeedData {
   }
 
   static List<HrRequest> buildInitialHrRequests() {
+    if (!kDebugMode) {
+      return const <HrRequest>[];
+    }
     return const <HrRequest>[
       HrRequest(
         id: 'req_2144_overtime_20261019',

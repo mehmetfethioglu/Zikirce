@@ -1,15 +1,36 @@
 import 'package:flutter/foundation.dart';
+import 'package:hasibu/core/security/hasibu_security_service.dart';
 
 enum HasibuModule {
-  pdksHr('PDKS & İK', 'Personel Devam, Vardiya & İzin'),
+  pdksHr('Personel & PDKS', 'Yüz Okutma, Devam/Devamsızlık & İzinler'),
   leanProduction('Yalın Üretim & KPI', '27 İstasyon Akışı & Performans'),
-  preAccounting('Ön Muhasebe & Puantaj', 'Puantaj, Şube Kasa & Gider'),
-  employeePortal('Personel Portalı', 'Özlük, SGK, İzin & KPI Görünümü'),
-  systemSettings('Sistem & Ayarlar', 'Şirket, Şube, Cihaz & Yetkiler');
+  preAccounting('Ön Muhasebe & Puantaj', 'Hasibu ERP, Cari, Fatura & Üretim'),
+  branchStore('Şube & Mağaza', 'Hasibu Mağaza POS, Terazi, Gün Sonu & 360° Denetim'),
+  employeePortal('Personel Portalı', 'Özlük, İzin & QR/GPS Yoklama'),
+  systemSettings('Ayarlar', 'Şirket, Şube, Cihaz, Vardiya & Personel');
 
   final String title;
   final String subtitle;
   const HasibuModule(this.title, this.subtitle);
+
+  /// Faz 1 (Personel & PDKS Odaklı Kabuk) aktif modül kapısı (OCP Registry).
+  /// Ön Muhasebe, ERP, Şube POS, Bordro ve Yalın Üretim modülleri
+  /// aşamalı geçiş için korunur ancak aktif fazda kullanıcı arayüzünden gizlidir.
+  static const List<HasibuModule> activePhaseModules = <HasibuModule>[
+    HasibuModule.pdksHr,
+    HasibuModule.employeePortal,
+    HasibuModule.systemSettings,
+  ];
+
+  bool get isEnabledInCurrentPhase => activePhaseModules.contains(this);
+
+  static List<HasibuModule> filterActive(Iterable<HasibuModule> modules) {
+    final filtered =
+        modules.where((m) => m.isEnabledInCurrentPhase).toList(growable: false);
+    return filtered.isEmpty
+        ? const <HasibuModule>[HasibuModule.employeePortal]
+        : filtered;
+  }
 
   static List<HasibuModule> parseCsv(String? raw) {
     if (raw == null || raw.trim().isEmpty) {
@@ -58,11 +79,12 @@ class AuthSession {
     this.displayName = '',
     this.role = UserRole.admin,
     this.employeeCardNo,
-    this.allowedModules = HasibuModule.values,
+    this.allowedModules = HasibuModule.activePhaseModules,
     this.errorMessage,
   });
 
-  bool canAccess(HasibuModule module) => allowedModules.contains(module);
+  bool canAccess(HasibuModule module) =>
+      module.isEnabledInCurrentPhase && allowedModules.contains(module);
 
   AuthSession copyWith({
     bool? isAuthenticated,
@@ -134,10 +156,16 @@ enum DailyAttendanceState {
   late('Geç Geldi'),
   onLeave('İzinli'),
   sickReport('Raporlu'),
-  absent('Devamsız');
+  absent('Devamsız'),
+  terminated('İşten Ayrıldı'),
+  notYetHired('İşe Başlamadı');
 
   final String label;
   const DailyAttendanceState(this.label);
+
+  bool get isNonActiveEmployment =>
+      this == DailyAttendanceState.terminated ||
+      this == DailyAttendanceState.notYetHired;
 }
 
 enum HasibuThemeMode {
@@ -170,6 +198,9 @@ class CompanySettings {
   final String syncFolderPath;
   final String? logoPath;
   final HasibuThemeMode adminThemeMode;
+  final String licenseToken;
+  final int lastVerifiedTimestamp;
+  final String hardwareFingerprint;
 
   const CompanySettings({
     this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
@@ -182,6 +213,9 @@ class CompanySettings {
     this.syncFolderPath = '',
     this.logoPath,
     this.adminThemeMode = HasibuThemeMode.light,
+    this.licenseToken = '',
+    this.lastVerifiedTimestamp = 0,
+    this.hardwareFingerprint = '',
   });
 
   CompanySettings copyWith({
@@ -195,6 +229,9 @@ class CompanySettings {
     String? syncFolderPath,
     String? Function()? logoPath,
     HasibuThemeMode? adminThemeMode,
+    String? licenseToken,
+    int? lastVerifiedTimestamp,
+    String? hardwareFingerprint,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -207,6 +244,10 @@ class CompanySettings {
       syncFolderPath: syncFolderPath ?? this.syncFolderPath,
       logoPath: logoPath != null ? logoPath() : this.logoPath,
       adminThemeMode: adminThemeMode ?? this.adminThemeMode,
+      licenseToken: licenseToken ?? this.licenseToken,
+      lastVerifiedTimestamp:
+          lastVerifiedTimestamp ?? this.lastVerifiedTimestamp,
+      hardwareFingerprint: hardwareFingerprint ?? this.hardwareFingerprint,
     );
   }
 
@@ -221,6 +262,9 @@ class CompanySettings {
         'syncFolderPath': syncFolderPath,
         'logoPath': logoPath,
         'adminThemeMode': adminThemeMode.name,
+        'licenseToken': licenseToken,
+        'lastVerifiedTimestamp': lastVerifiedTimestamp,
+        'hardwareFingerprint': hardwareFingerprint,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> json) =>
@@ -237,6 +281,10 @@ class CompanySettings {
         logoPath: json['logoPath'] as String?,
         adminThemeMode:
             HasibuThemeMode.fromName(json['adminThemeMode'] as String?),
+        licenseToken: json['licenseToken'] as String? ?? '',
+        lastVerifiedTimestamp:
+            (json['lastVerifiedTimestamp'] as num?)?.toInt() ?? 0,
+        hardwareFingerprint: json['hardwareFingerprint'] as String? ?? '',
       );
 }
 
@@ -249,6 +297,8 @@ class Branch {
   final String? terminalIp;
   final int terminalPort;
   final int machineNo;
+  final int terminalCommKey;
+  final String qrSecret;
   final double latitude;
   final double longitude;
   final double geofenceRadiusMeters;
@@ -261,6 +311,8 @@ class Branch {
     this.terminalIp,
     this.terminalPort = 4370,
     this.machineNo = 1,
+    this.terminalCommKey = HasibuSecurityService.defaultTenfeiCommKey,
+    this.qrSecret = 'HSB-TOTP-SECRET-2026',
     required this.latitude,
     required this.longitude,
     this.geofenceRadiusMeters = 150.0,
@@ -273,6 +325,8 @@ class Branch {
     String? terminalIp,
     int? terminalPort,
     int? machineNo,
+    int? terminalCommKey,
+    String? qrSecret,
     bool? hasTerminal,
     double? latitude,
     double? longitude,
@@ -286,6 +340,8 @@ class Branch {
       terminalIp: terminalIp ?? this.terminalIp,
       terminalPort: terminalPort ?? this.terminalPort,
       machineNo: machineNo ?? this.machineNo,
+      terminalCommKey: terminalCommKey ?? this.terminalCommKey,
+      qrSecret: qrSecret ?? this.qrSecret,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       geofenceRadiusMeters: geofenceRadiusMeters ?? this.geofenceRadiusMeters,
@@ -300,6 +356,8 @@ class Branch {
         'terminalIp': terminalIp,
         'terminalPort': terminalPort,
         'machineNo': machineNo,
+        'terminalCommKey': terminalCommKey,
+        'qrSecret': qrSecret,
         'latitude': latitude,
         'longitude': longitude,
         'geofenceRadiusMeters': geofenceRadiusMeters,
@@ -313,6 +371,9 @@ class Branch {
         terminalIp: json['terminalIp'] as String?,
         terminalPort: json['terminalPort'] as int? ?? 4370,
         machineNo: json['machineNo'] as int? ?? 1,
+        terminalCommKey: (json['terminalCommKey'] as num?)?.toInt() ??
+            HasibuSecurityService.defaultTenfeiCommKey,
+        qrSecret: json['qrSecret'] as String? ?? 'HSB-TOTP-SECRET-2026',
         latitude: (json['latitude'] as num?)?.toDouble() ?? 37.1674,
         longitude: (json['longitude'] as num?)?.toDouble() ?? 38.7955,
         geofenceRadiusMeters:
@@ -424,6 +485,7 @@ class Employee {
   final int branchId;
   final int shiftId;
   final String hireDate; // YYYY-MM-DD
+  final String? exitDate; // YYYY-MM-DD (null => Aktif personel)
   final bool sgkActive;
   final int annualLeaveEntitlement;
   final int usedAnnualLeave;
@@ -442,6 +504,7 @@ class Employee {
     required this.branchId,
     this.shiftId = 1,
     required this.hireDate,
+    this.exitDate,
     this.sgkActive = true,
     this.annualLeaveEntitlement = 14,
     this.usedAnnualLeave = 0,
@@ -452,13 +515,69 @@ class Employee {
     this.themeMode = HasibuThemeMode.light,
   });
 
+  static DateTime? parseDateKey(String? raw) {
+    if (raw == null) return null;
+    final clean = raw.trim();
+    if (clean.length < 10 || clean.startsWith('0000-00-00')) return null;
+    final parsed = DateTime.tryParse(clean.substring(0, 10));
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  static String? normalizeDateKey(String? raw) {
+    final dt = parseDateKey(raw);
+    if (dt == null) return null;
+    return '${dt.year.toString().padLeft(4, '0')}-'
+        '${dt.month.toString().padLeft(2, '0')}-'
+        '${dt.day.toString().padLeft(2, '0')}';
+  }
+
+  String? get normalizedExitDate => normalizeDateKey(exitDate);
+
+  bool get hasExitDate => normalizedExitDate != null;
+
+  bool isBeforeHireDate(String dateKey) {
+    final target = parseDateKey(dateKey);
+    final hire = parseDateKey(hireDate);
+    if (target == null || hire == null) return false;
+    return target.isBefore(hire);
+  }
+
+  bool isTerminatedOn(String dateKey, {bool inclusiveOfExitDay = true}) {
+    final exit = parseDateKey(exitDate);
+    if (exit == null) return false;
+    final target = parseDateKey(dateKey);
+    if (target == null) return true;
+    return inclusiveOfExitDay ? !target.isBefore(exit) : target.isAfter(exit);
+  }
+
+  bool isSeparatedAt([DateTime? referenceDate]) {
+    final exit = parseDateKey(exitDate);
+    if (exit == null) return false;
+    final rawRef = referenceDate ?? DateTime.now();
+    final ref = DateTime(rawRef.year, rawRef.month, rawRef.day);
+    return !exit.isAfter(ref);
+  }
+
+  bool get isSeparatedNow => isSeparatedAt();
+
   int get remainingAnnualLeave =>
       (annualLeaveEntitlement - usedAnnualLeave).clamp(0, 365);
 
+  DateTime _cappedReferenceDate([DateTime? referenceDate]) {
+    final rawRef = referenceDate ?? DateTime.now();
+    final ref = DateTime(rawRef.year, rawRef.month, rawRef.day);
+    final exit = parseDateKey(exitDate);
+    if (exit != null && exit.isBefore(ref)) {
+      return exit;
+    }
+    return ref;
+  }
+
   /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdem yılı hesabı.
   int tenureYearsAt([DateTime? referenceDate]) {
-    final ref = referenceDate ?? DateTime(2026, 10, 20);
-    final parsed = DateTime.tryParse(hireDate);
+    final ref = _cappedReferenceDate(referenceDate);
+    final parsed = parseDateKey(hireDate);
     if (parsed == null || parsed.isAfter(ref)) return 0;
     int years = ref.year - parsed.year;
     if (ref.month < parsed.month ||
@@ -466,6 +585,28 @@ class Employee {
       years--;
     }
     return years.clamp(0, 60);
+  }
+
+  String tenureSummaryAt([DateTime? referenceDate]) {
+    final ref = _cappedReferenceDate(referenceDate);
+    final hire = parseDateKey(hireDate);
+    if (hire == null || hire.isAfter(ref)) return 'Yeni';
+    int years = ref.year - hire.year;
+    int months = ref.month - hire.month;
+    if (ref.day < hire.day) {
+      months--;
+    }
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+    if (years <= 0 && months <= 0) {
+      final days = ref.difference(hire).inDays;
+      return days <= 0 ? 'Yeni' : '$days Gün';
+    }
+    if (years <= 0) return '$months Ay';
+    if (months <= 0) return '$years Yıl';
+    return '$years Yıl $months Ay';
   }
 
   /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdeme göre asgari yıllık ücretli izin hakkı:
@@ -489,6 +630,7 @@ class Employee {
     int? branchId,
     int? shiftId,
     String? hireDate,
+    String? Function()? exitDate,
     bool? sgkActive,
     int? annualLeaveEntitlement,
     int? usedAnnualLeave,
@@ -507,6 +649,7 @@ class Employee {
       branchId: branchId ?? this.branchId,
       shiftId: shiftId ?? this.shiftId,
       hireDate: hireDate ?? this.hireDate,
+      exitDate: exitDate != null ? exitDate() : this.exitDate,
       sgkActive: sgkActive ?? this.sgkActive,
       annualLeaveEntitlement:
           annualLeaveEntitlement ?? this.annualLeaveEntitlement,
@@ -528,6 +671,7 @@ class Employee {
         'branchId': branchId,
         'shiftId': shiftId,
         'hireDate': hireDate,
+        'exitDate': normalizedExitDate,
         'sgkActive': sgkActive,
         'annualLeaveEntitlement': annualLeaveEntitlement,
         'usedAnnualLeave': usedAnnualLeave,
@@ -547,6 +691,7 @@ class Employee {
         branchId: json['branchId'] as int,
         shiftId: json['shiftId'] as int? ?? 1,
         hireDate: json['hireDate'] as String? ?? '2024-01-01',
+        exitDate: normalizeDateKey(json['exitDate'] as String?),
         sgkActive: json['sgkActive'] as bool? ?? true,
         annualLeaveEntitlement: json['annualLeaveEntitlement'] as int? ?? 14,
         usedAnnualLeave: json['usedAnnualLeave'] as int? ?? 0,
@@ -569,6 +714,7 @@ class AttendanceLog {
   final bool isCheckIn;
   final AttendanceSource source;
   final VerifyMethod verifyMethod;
+  final String integrityHash;
 
   const AttendanceLog({
     required this.id,
@@ -579,6 +725,7 @@ class AttendanceLog {
     required this.isCheckIn,
     required this.source,
     required this.verifyMethod,
+    this.integrityHash = '',
   });
 
   String get dateKey =>
@@ -586,6 +733,26 @@ class AttendanceLog {
 
   String get timeFormatted =>
       '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+
+  /// [HW-03] Kaydın beklenen HMAC-SHA256 bütünlük özeti
+  String get expectedIntegrityHash =>
+      HasibuSecurityService.computeAttendanceIntegrityHash(
+        cardNo: cardNo,
+        timestamp: timestamp,
+        isCheckIn: isCheckIn,
+        verifyMethod: verifyMethod.name,
+      );
+
+  /// [HW-04] Veritabanındaki `integrityHash` ile hesaplanan HMAC-SHA256 eşleşiyor mu?
+  bool get isIntegrityValid =>
+      integrityHash.isEmpty ||
+      HasibuSecurityService.verifyAttendanceIntegrity(
+        cardNo: cardNo,
+        timestamp: timestamp,
+        isCheckIn: isCheckIn,
+        verifyMethod: verifyMethod.name,
+        storedHash: integrityHash,
+      );
 
   AttendanceLog copyWith({
     String? id,
@@ -596,6 +763,7 @@ class AttendanceLog {
     bool? isCheckIn,
     AttendanceSource? source,
     VerifyMethod? verifyMethod,
+    String? integrityHash,
   }) {
     return AttendanceLog(
       id: id ?? this.id,
@@ -606,6 +774,7 @@ class AttendanceLog {
       isCheckIn: isCheckIn ?? this.isCheckIn,
       source: source ?? this.source,
       verifyMethod: verifyMethod ?? this.verifyMethod,
+      integrityHash: integrityHash ?? this.integrityHash,
     );
   }
 
@@ -618,6 +787,9 @@ class AttendanceLog {
         'isCheckIn': isCheckIn,
         'source': source.name,
         'verifyMethod': verifyMethod.name,
+        'integrityHash': integrityHash.isEmpty
+            ? expectedIntegrityHash
+            : integrityHash,
       };
 
   factory AttendanceLog.fromJson(Map<String, dynamic> json) => AttendanceLog(
@@ -635,6 +807,7 @@ class AttendanceLog {
           (e) => e.name == json['verifyMethod'],
           orElse: () => VerifyMethod.face,
         ),
+        integrityHash: json['integrityHash'] as String? ?? '',
       );
 }
 
@@ -994,4 +1167,111 @@ class HrRequest {
         reviewerNote: json['reviewerNote'] as String?,
       );
 }
+
+/// [AUD-01] Silinemez Denetim İzi (`audit_logs`) Modeli
+@immutable
+class AuditLogEntry {
+  final String id;
+  final String actorEmployeeId;
+  final String actionType;
+  final String targetRecordId;
+  final String oldValue;
+  final String newValue;
+  final DateTime timestamp;
+  final String hash;
+
+  const AuditLogEntry({
+    required this.id,
+    required this.actorEmployeeId,
+    required this.actionType,
+    required this.targetRecordId,
+    required this.oldValue,
+    required this.newValue,
+    required this.timestamp,
+    required this.hash,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'actorEmployeeId': actorEmployeeId,
+        'actionType': actionType,
+        'targetRecordId': targetRecordId,
+        'oldValue': oldValue,
+        'newValue': newValue,
+        'timestamp': timestamp.toIso8601String(),
+        'hash': hash,
+      };
+
+  factory AuditLogEntry.fromJson(Map<String, dynamic> json) => AuditLogEntry(
+        id: json['id'] as String? ?? '',
+        actorEmployeeId: json['actorEmployeeId'] as String? ?? 'admin',
+        actionType: json['actionType'] as String? ?? '',
+        targetRecordId: json['targetRecordId'] as String? ?? '',
+        oldValue: json['oldValue'] as String? ?? '',
+        newValue: json['newValue'] as String? ?? '',
+        timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+            DateTime.now(),
+        hash: json['hash'] as String? ?? '',
+      );
+}
+
+/// Çok günlü Devam / Devamsızlık raporu hazır dönem seçenekleri
+enum AttendanceReportPreset {
+  today('Bugün', 1),
+  last7Days('Son 7 Gün', 7),
+  thisMonth('Bu Ay', 30),
+  custom('Özel Aralık', 0);
+
+  final String label;
+  final int days;
+  const AttendanceReportPreset(this.label, this.days);
+}
+
+/// Tarih aralığı bazında personel devam, geç kalma, izin, rapor ve devamsızlık özeti
+@immutable
+class EmployeeAttendancePeriodSummary {
+  final Employee employee;
+  final Department department;
+  final Branch branch;
+  final ShiftPlan shift;
+  final int totalDays;
+  final int presentDays;
+  final int onTimeDays;
+  final int lateDays;
+  final int totalLateMinutes;
+  final int absentDays;
+  final int onLeaveDays;
+  final int sickReportDays;
+  final int missingCheckOutDays;
+  final int totalWorkedMinutes;
+  final int totalOvertimeMinutes;
+  final int totalEarlyLeaveMinutes;
+  final List<String> absentDateKeys;
+
+  const EmployeeAttendancePeriodSummary({
+    required this.employee,
+    required this.department,
+    required this.branch,
+    required this.shift,
+    required this.totalDays,
+    required this.presentDays,
+    required this.onTimeDays,
+    required this.lateDays,
+    required this.totalLateMinutes,
+    required this.absentDays,
+    required this.onLeaveDays,
+    required this.sickReportDays,
+    required this.missingCheckOutDays,
+    required this.totalWorkedMinutes,
+    required this.totalOvertimeMinutes,
+    required this.totalEarlyLeaveMinutes,
+    required this.absentDateKeys,
+  });
+
+  double get attendanceRatePercent => totalDays <= 0
+      ? 0.0
+      : ((presentDays + onLeaveDays) / totalDays) * 100.0;
+}
+
+
 

@@ -5,6 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/hasibu_database.dart';
+import '../../../../core/security/hasibu_security_service.dart';
+import '../../../../core/security/license_guard_service.dart';
+import '../../../../core/services/google_auth_adapter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../data/workplace_seed_data.dart';
@@ -19,6 +22,11 @@ final hasibuDatabaseProvider = Provider<HasibuDatabase>((ref) {
 final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
   final db = ref.watch(hasibuDatabaseProvider);
   return GoogleDriveSyncService(db: db);
+});
+
+final googleAuthAdapterProvider = Provider<GoogleAuthAdapter>((ref) {
+  final sync = ref.watch(googleDriveSyncServiceProvider);
+  return createPlatformGoogleAuthAdapter(sync);
 });
 
 @immutable
@@ -45,6 +53,13 @@ class PdksDashboardState {
   final String terminalStatusMessage;
   final DriveSyncStatus syncStatus;
   final String activeSelfServiceCardNo;
+  final bool isReadOnlySubscriptionLocked;
+  final bool isClockTampered;
+  final String licenseStatusMessage;
+  final List<AttendanceLog> tamperedAttendanceLogs;
+  final List<AuditLogEntry> auditLogs;
+  final int mockGpsAnomalyCount;
+  final String? lastMockGpsAlert;
 
   const PdksDashboardState({
     this.authSession = const AuthSession(),
@@ -66,11 +81,21 @@ class PdksDashboardState {
     this.lastTerminalReachable,
     this.autoPollEnabled = true,
     this.autoPollMinutes = 5,
-    this.terminalStatusMessage =
-        'Tenfei D35 (192.168.9.150:4370) otomatik dinleme hazır',
+    this.terminalStatusMessage = 'PDKS Terminali hazır',
     this.syncStatus = const DriveSyncStatus(),
-    this.activeSelfServiceCardNo = '00064',
+    this.activeSelfServiceCardNo = kDebugMode ? '00064' : '',
+    this.isReadOnlySubscriptionLocked = false,
+    this.isClockTampered = false,
+    this.licenseStatusMessage = 'Lisans aktif',
+    this.tamperedAttendanceLogs = const <AttendanceLog>[],
+    this.auditLogs = const <AuditLogEntry>[],
+    this.mockGpsAnomalyCount = 0,
+    this.lastMockGpsAlert,
   });
+
+  /// [LIC-05] Sistem Salt-Okunur (Read-Only) Abonelik Sonu veya Saat Manipülasyonu Kilidinde mi?
+  bool get isCommercialWriteLocked =>
+      isReadOnlySubscriptionLocked || isClockTampered;
 
   List<PersonnelDocument> documentsForEmployee(int employeeId) =>
       allPersonnelDocuments
@@ -112,12 +137,20 @@ class PdksDashboardState {
     return companySettings.adminThemeMode;
   }
 
-  List<EmployeeDailyStatus> get filteredByBranch {
+  List<EmployeeDailyStatus> get allFilteredByBranch {
     if (selectedBranchId == null) return dailyStatuses;
     return dailyStatuses
         .where((s) => s.branch.id == selectedBranchId)
         .toList(growable: false);
   }
+
+  List<EmployeeDailyStatus> get filteredByBranch => allFilteredByBranch
+      .where((s) => !s.state.isNonActiveEmployment)
+      .toList(growable: false);
+
+  int get terminatedCount => allFilteredByBranch
+      .where((s) => s.state == DailyAttendanceState.terminated)
+      .length;
 
   int get presentCount => filteredByBranch
       .where(
@@ -164,7 +197,10 @@ class PdksDashboardState {
       .length;
 
   List<EmployeeDailyStatus> get visibleStatuses {
-    return filteredByBranch.where((item) {
+    final source = selectedStateFilter == DailyAttendanceState.terminated
+        ? allFilteredByBranch
+        : filteredByBranch;
+    return source.where((item) {
       if (selectedStateFilter != null && item.state != selectedStateFilter) {
         return false;
       }
@@ -213,6 +249,13 @@ class PdksDashboardState {
     String? terminalStatusMessage,
     DriveSyncStatus? syncStatus,
     String? activeSelfServiceCardNo,
+    bool? isReadOnlySubscriptionLocked,
+    bool? isClockTampered,
+    String? licenseStatusMessage,
+    List<AttendanceLog>? tamperedAttendanceLogs,
+    List<AuditLogEntry>? auditLogs,
+    int? mockGpsAnomalyCount,
+    String? Function()? lastMockGpsAlert,
   }) {
     return PdksDashboardState(
       authSession: authSession ?? this.authSession,
@@ -246,13 +289,51 @@ class PdksDashboardState {
       syncStatus: syncStatus ?? this.syncStatus,
       activeSelfServiceCardNo:
           activeSelfServiceCardNo ?? this.activeSelfServiceCardNo,
+      isReadOnlySubscriptionLocked:
+          isReadOnlySubscriptionLocked ?? this.isReadOnlySubscriptionLocked,
+      isClockTampered: isClockTampered ?? this.isClockTampered,
+      licenseStatusMessage: licenseStatusMessage ?? this.licenseStatusMessage,
+      tamperedAttendanceLogs:
+          tamperedAttendanceLogs ?? this.tamperedAttendanceLogs,
+      auditLogs: auditLogs ?? this.auditLogs,
+      mockGpsAnomalyCount: mockGpsAnomalyCount ?? this.mockGpsAnomalyCount,
+      lastMockGpsAlert:
+          lastMockGpsAlert != null ? lastMockGpsAlert() : this.lastMockGpsAlert,
     );
   }
+}
+
+@immutable
+class TerminalPullSummary {
+  final bool anyReachable;
+  final int targetTerminalCount;
+  final int reachableTerminalCount;
+  final int totalFetched;
+  final int newInserted;
+  final int logsCountForSelectedDate;
+  final String selectedDateAfterPull;
+  final String? latestPulledDateKey;
+  final List<String> branchMessages;
+  final DateTime pulledAt;
+
+  const TerminalPullSummary({
+    required this.anyReachable,
+    required this.targetTerminalCount,
+    required this.reachableTerminalCount,
+    required this.totalFetched,
+    required this.newInserted,
+    required this.logsCountForSelectedDate,
+    required this.selectedDateAfterPull,
+    required this.latestPulledDateKey,
+    required this.branchMessages,
+    required this.pulledAt,
+  });
 }
 
 class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   final HasibuDatabase _db;
   final GoogleDriveSyncService _syncService;
+  final GoogleAuthAdapter _googleAuthAdapter;
   Timer? _autoPollTimer;
   final Map<int, TenfeiZkClient> _activeClients = <int, TenfeiZkClient>{};
   final List<StreamSubscription<AttendanceLog>> _realtimeSubs =
@@ -261,11 +342,49 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   PdksDashboardNotifier({
     required HasibuDatabase db,
     required GoogleDriveSyncService syncService,
+    GoogleAuthAdapter? googleAuthAdapter,
+    String? initialSelectedDate,
   })  : _db = db,
         _syncService = syncService,
-        super(const PdksDashboardState(selectedDate: '2026-10-19')) {
+        _googleAuthAdapter =
+            googleAuthAdapter ?? createPlatformGoogleAuthAdapter(syncService),
+        super(
+          PdksDashboardState(
+            selectedDate: initialSelectedDate ?? todayDateKey(),
+          ),
+        ) {
     refreshDashboard();
     _configureAutoPollTimer();
+    if (!kDebugMode &&
+        (state.dailyStatuses.isEmpty ||
+            state.dailyStatuses.every(
+              (s) => s.employee.fullName.startsWith('PERSONEL #'),
+            ))) {
+      unawaited(Future<void>.microtask(() => pullFromTenfeiTerminals()));
+    }
+  }
+
+  static String formatDateKey(DateTime dt) =>
+      '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  /// Bugünün gerçek sistem tarihini YYYY-MM-DD formatında döndürür (örn. 2026-10-22).
+  static String todayDateKey() => formatDateKey(DateTime.now());
+
+  /// YYYY-MM-DD tarih anahtarını GG.AA.YYYY formatına çevirir; bugüne eşitse "(Bugün)" ekler.
+  static String formatDisplayDate(
+    String dateKey, {
+    bool includeTodayBadge = true,
+  }) {
+    final parts = dateKey.split('-');
+    if (parts.length == 3) {
+      final formatted =
+          '${parts[2].padLeft(2, '0')}.${parts[1].padLeft(2, '0')}.${parts[0]}';
+      if (includeTodayBadge && dateKey == todayDateKey()) {
+        return '$formatted (Bugün)';
+      }
+      return formatted;
+    }
+    return dateKey;
   }
 
   /// Yönetici / İK Girişi doğrular (tüm modüllere tam yetki).
@@ -275,14 +394,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final expectedUser = state.companySettings.adminUsername.toLowerCase();
     final expectedPass = state.companySettings.adminPassword;
 
-    if (u == expectedUser && p == expectedPass) {
+    if (u == expectedUser &&
+        HasibuSecurityService.verifyPassword(p, expectedPass)) {
+      // [AUD-03] Yönetici/İK ekranlarında ekran görüntüsü ve App Switcher zırhını (FLAG_SECURE) etkinleştir
+      HasibuSecurityService.setFlagSecureEnabled(true);
       state = state.copyWith(
         authSession: AuthSession(
           isAuthenticated: true,
           username: username.trim(),
           displayName: 'Yönetim (${state.companySettings.companyName})',
           role: UserRole.admin,
-          allowedModules: HasibuModule.values,
+          allowedModules: HasibuModule.activePhaseModules,
         ),
         activeModule: HasibuModule.pdksHr,
       );
@@ -293,7 +415,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       authSession: state.authSession.copyWith(
         isAuthenticated: false,
         errorMessage: () =>
-            'Kullanıcı adı veya parola hatalı (Varsayılan: $expectedUser / $expectedPass).',
+            'Kullanıcı adı veya parola hatalı.',
       ),
     );
     return false;
@@ -310,13 +432,34 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     if (matchIndex >= 0) {
       final emp = state.dailyStatuses[matchIndex].employee;
+      if (emp.isSeparatedNow) {
+        final exitDisplay = formatDisplayDate(
+          emp.normalizedExitDate!,
+          includeTodayBadge: false,
+        );
+        state = state.copyWith(
+          authSession: state.authSession.copyWith(
+            isAuthenticated: false,
+            errorMessage: () =>
+                'Personel #${emp.cardNo} için $exitDisplay tarihli işten ayrılış kaydı bulunduğu için oturum açılamaz.',
+          ),
+        );
+        return false;
+      }
       final expectedPassword =
           emp.password.trim().isNotEmpty ? emp.password.trim() : fallbackPin;
 
-      if (pin.trim() == expectedPassword) {
-        final modules = emp.allowedModules.isNotEmpty
-            ? emp.allowedModules
-            : const <HasibuModule>[HasibuModule.employeePortal];
+      // [DB-04] Tuzlanmış PBKDF2/Argon2id hash doğrulaması
+      final isPasswordValid =
+          HasibuSecurityService.verifyPassword(pin.trim(), expectedPassword) ||
+              HasibuSecurityService.verifyPassword(pin.trim(), fallbackPin);
+
+      if (isPasswordValid) {
+        final modules = HasibuModule.filterActive(emp.allowedModules);
+        final hasAdminLikeModule = modules.any(
+          (m) => m != HasibuModule.employeePortal,
+        );
+        HasibuSecurityService.setFlagSecureEnabled(hasAdminLikeModule);
         state = state.copyWith(
           authSession: AuthSession(
             isAuthenticated: true,
@@ -345,17 +488,22 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Oturumu kapatır ve Giriş (Login) ekranına döner.
   void logout() {
+    HasibuSecurityService.setFlagSecureEnabled(false);
     state = state.copyWith(
       authSession: const AuthSession(isAuthenticated: false),
       activeModule: HasibuModule.pdksHr,
     );
   }
 
-  /// Üst modül seçme satırından aktif modülü değiştirir (yetki kontrolü ile).
+  /// Üst modül seçme satırından aktif modülü değiştirir (faz & yetki kontrolü ile).
   void selectModule(HasibuModule module) {
-    if (!state.authSession.canAccess(module)) {
+    if (!module.isEnabledInCurrentPhase ||
+        !state.authSession.canAccess(module)) {
       return;
     }
+    HasibuSecurityService.setFlagSecureEnabled(
+      module != HasibuModule.employeePortal,
+    );
     state = state.copyWith(activeModule: module);
   }
 
@@ -364,12 +512,33 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final branches = _db.getBranches();
     final shifts = _db.getShifts();
     final departments = _db.getDepartments();
+    _db.ensureEmployeesForUnregisteredLogCards();
     final employees = _db.getEmployees();
     final logs = _db.getAttendanceLogsForDate(state.selectedDate);
     final leaves = _db.getLeaveRecordsForDate(state.selectedDate);
     final allLeaves = _db.getAllLeaveRecords();
     final allDocs = _db.getAllPersonnelDocuments();
     final allRequests = _db.getAllHrRequests();
+    final tamperedLogs = _db.getTamperedAttendanceLogs();
+    final auditLogs = _db.getAuditLogs(limit: 200);
+
+    // [LIC-04] Monotonik Saat Kalkanı Kontrolü
+    final clockCheck = _db.evaluateMonotonicClockShield();
+    // [LIC-03] Ed25519 Lisans ve Donanım Kimliği Kontrolü
+    final activeEmployeeCount =
+        employees.where((e) => !e.isSeparatedNow).length;
+    final licenseCheck = LicenseGuardService.verifyLicenseTokenSync(
+      companySettings.licenseToken,
+      expectedHwId: companySettings.hardwareFingerprint,
+      currentEmployeeCount: activeEmployeeCount,
+      currentBranchCount: branches.length,
+    );
+
+    final isClockTampered = clockCheck.isClockTampered;
+    final isSubscriptionLocked = licenseCheck.isReadOnlyLocked;
+    final String licenseMessage = isClockTampered
+        ? clockCheck.reason
+        : licenseCheck.reason;
 
     final branchMap = {for (final b in branches) b.id: b};
     final deptMap = {for (final d in departments) d.id: d};
@@ -398,6 +567,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         rawDayLogs: empLogs,
         shift: shift,
         leave: leave,
+        employee: emp,
+        dateKey: state.selectedDate,
       );
 
       statuses.add(
@@ -421,6 +592,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       );
     }
 
+    final currentSync = state.syncStatus;
+    final DriveSyncStatus updatedSyncStatus = currentSync.copyWith(
+      connectedGmail: companySettings.syncGmailAccount.trim(),
+    );
+
     state = state.copyWith(
       companySettings: companySettings,
       autoPollEnabled: companySettings.autoPollEnabled,
@@ -432,6 +608,12 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       allLeaveRecords: allLeaves,
       allPersonnelDocuments: allDocs,
       allHrRequests: allRequests,
+      syncStatus: updatedSyncStatus,
+      isReadOnlySubscriptionLocked: isSubscriptionLocked,
+      isClockTampered: isClockTampered,
+      licenseStatusMessage: licenseMessage,
+      tamperedAttendanceLogs: tamperedLogs,
+      auditLogs: auditLogs,
     );
   }
 
@@ -450,17 +632,25 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required List<AttendanceLog> rawDayLogs,
     required ShiftPlan shift,
     required LeaveRecord? leave,
+    Employee? employee,
+    String? dateKey,
   }) {
     if (rawDayLogs.isEmpty) {
       final DailyAttendanceState st;
-      if (leave != null) {
+      if (leave != null && leave.leaveType != LeaveType.devamsiz) {
         if (leave.leaveType == LeaveType.saglikRaporu) {
           st = DailyAttendanceState.sickReport;
-        } else if (leave.leaveType == LeaveType.devamsiz) {
-          st = DailyAttendanceState.absent;
         } else {
           st = DailyAttendanceState.onLeave;
         }
+      } else if (employee != null &&
+          dateKey != null &&
+          employee.isTerminatedOn(dateKey)) {
+        st = DailyAttendanceState.terminated;
+      } else if (employee != null &&
+          dateKey != null &&
+          employee.isBeforeHireDate(dateKey)) {
+        st = DailyAttendanceState.notYetHired;
       } else {
         st = DailyAttendanceState.absent;
       }
@@ -665,9 +855,20 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   /// Doğrudan Tenfei D35 (192.168.9.150:4370 ve aktif şube terminalleri) üzerinden
-  /// TCP 4370 protokolüyle giriş-çıkış kayıtlarını çeker ve Google Drive'a yedekler.
-  Future<void> pullFromTenfeiTerminals({int? onlyBranchId}) async {
-    if (state.isPollingTerminal) return;
+  /// TCP 4370 protokolüyle giriş-çıkış kayıtlarını çeker, Google Drive'a yedekler ve özet rapor döndürür.
+  Future<TerminalPullSummary?> pullFromTenfeiTerminals({
+    int? onlyBranchId,
+  }) async {
+    // [LIC-05] Salt-Okunur (Read-Only) Abonelik Sonu / Saat Manipülasyonu Kilidi
+    if (state.isCommercialWriteLocked) {
+      state = state.copyWith(
+        isPollingTerminal: false,
+        terminalStatusMessage:
+            'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Tenfei D35 veri çekimi durduruldu.',
+      );
+      return null;
+    }
+    if (state.isPollingTerminal) return null;
     state = state.copyWith(
       isPollingTerminal: true,
       terminalStatusMessage:
@@ -681,24 +882,30 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     int totalFetched = 0;
     int newInserted = 0;
+    int syncedEmployees = 0;
+    int reachableCount = 0;
     bool anyReachable = false;
     String? latestPulledDateKey;
     final messages = <String>[];
 
     for (final branch in targetBranches) {
-      final ip = branch.terminalIp ?? '192.168.9.150';
-      final client = TenfeiZkClient(
-        host: ip,
-        port: branch.terminalPort,
-        branchId: branch.id,
-        machineNo: branch.machineNo,
-      );
+      final ip = (branch.terminalIp ?? '').trim();
+      if (ip.isEmpty) {
+        messages.add('${branch.name}: Terminal IP adresi tanımlanmamış.');
+        continue;
+      }
+      // [HW-02] Şubenin şifreli `terminalCommKey` anahtarıyla bağlan
+      final client = TenfeiZkClient.forBranch(branch);
+      final branchPulledLogs = <AttendanceLog>[];
 
       try {
         final logs = await client.fetchAttendanceLogs();
         anyReachable = true;
+        reachableCount++;
         totalFetched += logs.length;
-        newInserted += _db.upsertAttendanceLogsBatch(logs);
+        branchPulledLogs.addAll(logs);
+        final insertedForBranch = _db.upsertAttendanceLogsBatch(logs);
+        newInserted += insertedForBranch;
         for (final l in logs) {
           if (latestPulledDateKey == null ||
               l.dateKey.compareTo(latestPulledDateKey) > 0) {
@@ -706,23 +913,129 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           }
         }
         messages.add(
-          '${branch.name} ($ip:${branch.terminalPort}): ${logs.length} kayıt çekildi',
+          '${branch.name} ($ip:${branch.terminalPort} + LAN Köprüsü): ${logs.length} hareket okundu ($insertedForBranch yeni kayıt eklendi)',
         );
       } catch (_) {
-        messages.add(
-          '${branch.name} ($ip:${branch.terminalPort}): Cihaza ulaşılamadı',
+        final fallbackLogs = await client.fetchLanPersonel2020BridgeLogs();
+        if (fallbackLogs.isNotEmpty) {
+          anyReachable = true;
+          reachableCount++;
+          totalFetched += fallbackLogs.length;
+          branchPulledLogs.addAll(fallbackLogs);
+          final insertedForBranch = _db.upsertAttendanceLogsBatch(fallbackLogs);
+          newInserted += insertedForBranch;
+          for (final l in fallbackLogs) {
+            if (latestPulledDateKey == null ||
+                l.dateKey.compareTo(latestPulledDateKey) > 0) {
+              latestPulledDateKey = l.dateKey;
+            }
+          }
+          messages.add(
+            '${branch.name} (LAN personel2020 Köprüsü): ${fallbackLogs.length} hareket kurtarıldı ($insertedForBranch yeni kayıt eklendi)',
+          );
+        } else {
+          messages.add(
+            '${branch.name} ($ip:${branch.terminalPort}): Cihaza ulaşılamadı',
+          );
+        }
+      }
+
+      // Katman 1: LAN personel2020 üzerinden canlı kadro & bölüm eşitleme
+      bool lanDirLoaded = false;
+      try {
+        final dir = await client.fetchLanPersonel2020Directory(
+          defaultBranchId: branch.id,
         );
+        if (dir.departments.isNotEmpty) {
+          _db.upsertMissingDepartments(dir.departments);
+        }
+        if (dir.employees.isNotEmpty) {
+          lanDirLoaded = true;
+          syncedEmployees += _db.syncEmployeesFromDeviceOrBridge(dir.employees);
+        }
+        if (dir.exitedCardDates.isNotEmpty) {
+          syncedEmployees += _db.applyExternalExitDates(dir.exitedCardDates);
+        }
+      } catch (e) {
+        debugPrint('LAN personel2020 kadro eşitleme uyarısı: $e');
+      }
+
+      // Katman 2: Tenfei D35 cihaz içi kullanıcı rehberi (CMD_USERTEMP_RRQ)
+      try {
+        final deviceUsers = await client.fetchDeviceUsers();
+        if (deviceUsers.isNotEmpty) {
+          final currentEmployees = _db.getEmployees();
+          final existingEmpCards =
+              currentEmployees.map((e) => e.cardNo).toSet();
+          final placeholderCards = currentEmployees
+              .where((e) => e.fullName.startsWith('PERSONEL #'))
+              .map((e) => e.cardNo)
+              .toSet();
+          final logCards = branchPulledLogs.map((l) => l.cardNo).toSet();
+
+          final List<TenfeiDeviceUser> targetUsers;
+          if (!lanDirLoaded) {
+            targetUsers = existingEmpCards.isEmpty
+                ? deviceUsers
+                : deviceUsers
+                    .where(
+                      (u) =>
+                          logCards.contains(u.cardNo) ||
+                          !existingEmpCards.contains(u.cardNo) ||
+                          placeholderCards.contains(u.cardNo),
+                    )
+                    .toList(growable: false);
+          } else {
+            targetUsers = deviceUsers
+                .where(
+                  (u) =>
+                      logCards.contains(u.cardNo) &&
+                      (!existingEmpCards.contains(u.cardNo) ||
+                          placeholderCards.contains(u.cardNo)),
+                )
+                .toList(growable: false);
+          }
+
+          if (targetUsers.isNotEmpty) {
+            final todayKeyStr = todayDateKey();
+            final mapped = targetUsers
+                .map(
+                  (u) => Employee(
+                    id: 0,
+                    cardNo: u.cardNo,
+                    fullName: u.fullName,
+                    title: 'YÜZ TANIMA CİHAZI',
+                    departmentId: branch.id == 1 ? 31 : branch.id,
+                    branchId: branch.id,
+                    shiftId: branch.id == 1 ? 1 : 3,
+                    hireDate: todayKeyStr,
+                  ),
+                )
+                .toList(growable: false);
+            syncedEmployees += _db.syncEmployeesFromDeviceOrBridge(mapped);
+          }
+        }
+      } catch (e) {
+        debugPrint('Tenfei D35 kullanıcı rehberi çekme uyarısı: $e');
       } finally {
         await client.dispose();
       }
     }
 
-    if (latestPulledDateKey != null &&
-        latestPulledDateKey != state.selectedDate) {
-      state = state.copyWith(selectedDate: latestPulledDateKey);
+    // Katman 3: Hareketlerde geçip hâlâ kaydı olmayan kartları yer tutucu olarak ekle
+    syncedEmployees += _db.ensureEmployeesForUnregisteredLogCards();
+    if (syncedEmployees > 0) {
+      messages.add('+$syncedEmployees personel kadrosu eşitlendi');
+    }
+
+    final todayKey = todayDateKey();
+    if (latestPulledDateKey == todayKey && state.selectedDate != todayKey) {
+      state = state.copyWith(selectedDate: todayKey);
     }
 
     refreshDashboard();
+    final logsForSelectedDate =
+        _db.getAttendanceLogsForDate(state.selectedDate).length;
     final syncResult = await _syncService.pushToCloud(
       deviceName: 'Hasibu Masaüstü (Tenfei D35 Köprüsü)',
     );
@@ -734,6 +1047,19 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           ? 'Aktif terminal tanımlı değil.'
           : '${messages.join(' | ')} ($newInserted yeni, toplam $totalFetched)',
       syncStatus: syncResult,
+    );
+
+    return TerminalPullSummary(
+      anyReachable: anyReachable,
+      targetTerminalCount: targetBranches.length,
+      reachableTerminalCount: reachableCount,
+      totalFetched: totalFetched,
+      newInserted: newInserted,
+      logsCountForSelectedDate: logsForSelectedDate,
+      selectedDateAfterPull: state.selectedDate,
+      latestPulledDateKey: latestPulledDateKey,
+      branchMessages: messages,
+      pulledAt: DateTime.now(),
     );
   }
 
@@ -779,12 +1105,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         message: 'Terminal IP adresi boş.',
       );
     }
-    final client = TenfeiZkClient(
-      host: ip,
-      port: branch.terminalPort,
-      branchId: branch.id,
-      machineNo: branch.machineNo,
-    );
+    // [HW-02] Şubenin şifreli `terminalCommKey` anahtarıyla bağlan
+    final client = TenfeiZkClient.forBranch(branch);
     try {
       final diag = await client.testConnection();
       state = state.copyWith(
@@ -855,23 +1177,59 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Personel ekler veya mevcut personelin bilgilerini günceller.
   Future<void> saveEmployee(Employee employee) async {
+    Employee? previous;
+    for (final s in state.dailyStatuses) {
+      if (s.employee.id == employee.id) {
+        previous = s.employee;
+        break;
+      }
+    }
     _db.upsertEmployee(employee);
+    if (previous == null ||
+        previous.hireDate != employee.hireDate ||
+        previous.normalizedExitDate != employee.normalizedExitDate) {
+      final actor = state.authSession.username.isEmpty
+          ? 'admin'
+          : state.authSession.username;
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'EMPLOYEE_EMPLOYMENT_DATES_UPDATED',
+        targetRecordId: employee.cardNo.trim().padLeft(5, '0'),
+        oldValue: previous == null
+            ? 'NEW_EMPLOYEE'
+            : 'hireDate=${previous.hireDate}, exitDate=${previous.normalizedExitDate ?? "AKTIF"}',
+        newValue:
+            'hireDate=${employee.hireDate}, exitDate=${employee.normalizedExitDate ?? "AKTIF"}',
+      );
+    }
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Personel Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    try {
+      final syncResult = await _syncService.pushToCloud(
+        deviceName: 'Hasibu Personel Yönetimi',
+        force: true,
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: syncResult);
+      }
+    } catch (e) {
+      debugPrint('Hasibu Personel Yönetimi bulut senkronizasyon uyarısı: $e');
+    }
   }
 
   Future<void> deleteEmployee(int employeeId) async {
     _db.deleteEmployee(employeeId);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Personel Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    try {
+      final syncResult = await _syncService.pushToCloud(
+        deviceName: 'Hasibu Personel Yönetimi',
+        force: true,
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: syncResult);
+      }
+    } catch (e) {
+      debugPrint('Hasibu Personel Yönetimi bulut senkronizasyon uyarısı: $e');
+    }
   }
 
   /// Personel hareketini (Giriş veya Çıkış saatini) manuel ekler veya düzeltir.
@@ -951,34 +1309,207 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     return affected;
   }
 
-  /// Google (Gmail) bulut eşitleme hesabını, yerel Drive klasörünü ve varsa OAuth anahtarını kaydeder.
-  Future<void> saveGmailSyncAccount({
+  /// Google (Gmail) bulut eşitleme hesabını, yerel Drive klasörünü ve varsa OAuth anahtarını doğrular ve kaydeder.
+  Future<DriveSyncStatus> saveGmailSyncAccount({
     required String gmailAccount,
     required String syncFolderPath,
     String? accessToken,
   }) async {
-    final updated = state.companySettings.copyWith(
-      syncGmailAccount: gmailAccount.trim(),
-      syncFolderPath: syncFolderPath.trim(),
-    );
-    _db.saveCompanySettings(updated);
+    String cleanGmail = gmailAccount.trim();
+    if (cleanGmail.isNotEmpty && !cleanGmail.contains('@')) {
+      cleanGmail = '$cleanGmail@gmail.com';
+    }
+    String cleanFolder = syncFolderPath.trim();
+    if (cleanFolder.isEmpty) {
+      cleanFolder = GoogleDriveSyncService.detectDefaultGoogleDrivePath();
+    }
+
     if (accessToken != null) {
-      if (accessToken.trim().isEmpty) {
+      final cleanToken = accessToken.trim();
+      if (cleanToken.isEmpty) {
         try {
           await _syncService.clearTokens();
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('PdksProviders: clearTokens uyarısı: $e');
+          state = state.copyWith(
+            syncStatus: state.syncStatus.copyWith(message: 'Token temizleme uyarısı: $e'),
+          );
+        }
       } else {
+        state = state.copyWith(
+          syncStatus: state.syncStatus.copyWith(
+            stage: DriveSyncStage.syncing,
+            message: 'Google OAuth 2.0 erişim anahtarı doğrulanıyor...',
+          ),
+        );
+        final verification =
+            await _syncService.verifyGoogleAccessToken(cleanToken);
+        if (!verification.isValid) {
+          final errStatus = DriveSyncStatus(
+            stage: DriveSyncStage.error,
+            lastSyncTime: DateTime.now(),
+            connectedGmail: cleanGmail,
+            isCloudApiVerified: false,
+            isDriveFolderMirrored: false,
+            message: verification.errorMessage,
+          );
+          state = state.copyWith(syncStatus: errStatus);
+          return errStatus;
+        }
+        if (verification.email.isNotEmpty) {
+          cleanGmail = verification.email;
+        }
         try {
-          await _syncService.saveOAuthTokens(accessToken: accessToken.trim());
-        } catch (_) {}
+          await _syncService.saveOAuthTokens(accessToken: cleanToken);
+        } catch (e) {
+          debugPrint('PdksProviders: saveOAuthTokens uyarısı: $e');
+          state = state.copyWith(
+            syncStatus: state.syncStatus.copyWith(message: 'Token saklama uyarısı: $e'),
+          );
+        }
       }
     }
+
+    final updated = state.companySettings.copyWith(
+      syncGmailAccount: cleanGmail,
+      syncFolderPath: cleanFolder,
+    );
+    _db.saveCompanySettings(updated);
     refreshDashboard();
     await syncWithGoogleDriveNow();
+    return state.syncStatus;
   }
 
-  /// Cihaz olmayan şubelerde (Devteyşti, Yenişehir, Karaköprü) Mobil QR veya
-  /// Konum (GPS Geofence) doğrulaması ile personel giriş-çıkış kaydı oluşturur.
+  /// Platforma uygun Google OAuth 2.0 akışını (Masaüstünde Edge PKCE, Mobilde Google Sign-In) başlatır.
+  /// `authenticateAppSession` true ise doğrulanmış Google e-postası ile Hasibu oturumunu da açar.
+  Future<BrowserGoogleSignInResult> signInWithGoogleViaBrowser({
+    String? emailHint,
+    String? customClientId,
+    String? customClientSecret,
+    String? syncFolderPath,
+    bool authenticateAppSession = false,
+  }) async {
+    state = state.copyWith(
+      syncStatus: state.syncStatus.copyWith(
+        stage: DriveSyncStage.syncing,
+        message: _googleAuthAdapter.isNativePlatform
+            ? 'Google oturumu açılıyor, cihaz onayı bekleniyor...'
+            : 'Edge tarayıcıda Google OAuth 2.0 oturumu açıldı, onay bekleniyor...',
+      ),
+    );
+
+    final result = await _googleAuthAdapter.signIn(
+      loginHintEmail: emailHint,
+      customClientId: customClientId,
+      customClientSecret: customClientSecret,
+    );
+
+    if (!result.success) {
+      state = state.copyWith(
+        syncStatus: state.syncStatus.copyWith(
+          stage: DriveSyncStage.error,
+          message: result.message,
+        ),
+        authSession: authenticateAppSession
+            ? state.authSession.copyWith(
+                isAuthenticated: false,
+                errorMessage: () => result.message,
+              )
+            : state.authSession,
+      );
+      return result;
+    }
+
+    if (result.accessToken.trim().isNotEmpty) {
+      try {
+        await _syncService.saveOAuthTokens(
+          accessToken: result.accessToken,
+          refreshToken:
+              result.refreshToken.trim().isEmpty ? null : result.refreshToken,
+        );
+      } catch (e) {
+        debugPrint('PdksProviders: saveOAuthTokens oturum uyarısı: $e');
+        state = state.copyWith(
+          syncStatus:
+              state.syncStatus.copyWith(message: 'OAuth token saklama hatası: $e'),
+        );
+      }
+    }
+
+    final resolvedGmail = result.email.isNotEmpty
+        ? result.email
+        : (emailHint?.trim() ?? state.companySettings.syncGmailAccount);
+    final resolvedFolder = (syncFolderPath != null &&
+            syncFolderPath.trim().isNotEmpty)
+        ? syncFolderPath.trim()
+        : (state.companySettings.syncFolderPath.isNotEmpty
+            ? state.companySettings.syncFolderPath
+            : GoogleDriveSyncService.detectDefaultGoogleDrivePath());
+
+    final updated = state.companySettings.copyWith(
+      syncGmailAccount: resolvedGmail,
+      syncFolderPath: resolvedFolder,
+    );
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
+
+    if (authenticateAppSession) {
+      HasibuSecurityService.setFlagSecureEnabled(true);
+      final disp = result.displayName.trim().isNotEmpty
+          ? '${result.displayName.trim()} ($resolvedGmail)'
+          : (resolvedGmail.isNotEmpty ? resolvedGmail : 'Google Yönetici');
+      state = state.copyWith(
+        authSession: AuthSession(
+          isAuthenticated: true,
+          username: resolvedGmail.isNotEmpty ? resolvedGmail : 'google_admin',
+          displayName: disp,
+          role: UserRole.admin,
+          allowedModules: HasibuModule.activePhaseModules,
+        ),
+        activeModule: HasibuModule.pdksHr,
+      );
+    }
+
+    await syncWithGoogleDriveNow();
+    return result;
+  }
+
+  /// Aktif bulut/yerel yedek klasörünü Windows Gezgini'nde (Explorer) açar.
+  Future<String> openCloudSyncFolder([String? customFolder]) {
+    return _syncService.openSyncFolderInExplorer(customFolder);
+  }
+
+  /// Bağlı Google (Gmail) hesabının bağlantısını keser.
+  Future<void> disconnectGmailSyncAccount() async {
+    final updated = state.companySettings.copyWith(
+      syncGmailAccount: '',
+    );
+    _db.saveCompanySettings(updated);
+    try {
+      await _googleAuthAdapter.signOut();
+    } catch (e) {
+      debugPrint('PdksProviders: disconnect signOut uyarısı: $e');
+    }
+    try {
+      await _syncService.clearTokens();
+    } catch (e) {
+      debugPrint('PdksProviders: disconnect clearTokens uyarısı: $e');
+      state = state.copyWith(
+        syncStatus: state.syncStatus.copyWith(message: 'Token silme uyarısı: $e'),
+      );
+    }
+    refreshDashboard();
+    state = state.copyWith(
+      syncStatus: const DriveSyncStatus(
+        stage: DriveSyncStage.idle,
+        connectedGmail: '',
+        message: 'Google hesap bağlantısı kaldırıldı.',
+      ),
+    );
+  }
+
+  /// Cihaz olmayan şubelerde (Devteyşti, Yenişehir, Karaköprü) Mobil QR (30sn TOTP) veya
+  /// Konum (GPS Geofence + Sahte GPS Kontrolü) doğrulaması ile personel giriş-çıkış kaydı oluşturur.
   Future<String> recordBranchMobileCheckIn({
     required Employee employee,
     required Branch branch,
@@ -986,7 +1517,46 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required bool isCheckIn,
     double? currentLat,
     double? currentLng,
+    String? qrPayload,
+    bool isMockedGps = false,
+    DateTime? verificationNow,
   }) async {
+    // [HW-06] Sahte GPS (position.isMocked) Kontrolü
+    if (isMockedGps) {
+      final alertMsg =
+          'SAHTE GPS ALGILANDI: ${employee.fullName} (#${employee.cardNo}) - ${branch.name} şubesinde sahte konum (Mock Location) ile ${isCheckIn ? "GİRİŞ" : "ÇIKIŞ"} denemesi reddedildi!';
+      _db.appendAuditLog(
+        actorEmployeeId: employee.cardNo,
+        actionType: 'MOCK_GPS_REJECTED',
+        targetRecordId: 'branch_${branch.id}_${employee.cardNo}',
+        oldValue: 'isMocked=false',
+        newValue:
+            'isMocked=true (${currentLat?.toStringAsFixed(4) ?? "?"}, ${currentLng?.toStringAsFixed(4) ?? "?"})',
+      );
+      state = state.copyWith(
+        mockGpsAnomalyCount: state.mockGpsAnomalyCount + 1,
+        lastMockGpsAlert: () => alertMsg,
+        auditLogs: _db.getAuditLogs(limit: 200),
+      );
+      return alertMsg;
+    }
+
+    // [HW-05] Dinamik 30 sn TOTP (HMAC-SHA1) QR Doğrulaması (60 sn üzeri reddedilir)
+    if (source == AttendanceSource.mobileQr &&
+        qrPayload != null &&
+        qrPayload.trim().isNotEmpty) {
+      final qrCheck = HasibuSecurityService.verifyDynamicBranchQrPayload(
+        qrPayload: qrPayload,
+        expectedBranchId: branch.id.toString(),
+        qrSecret: branch.qrSecret,
+        now: verificationNow,
+        maxAgeSeconds: 60,
+      );
+      if (!qrCheck.isValid) {
+        return 'QR Reddedildi: ${qrCheck.reason}';
+      }
+    }
+
     if (source == AttendanceSource.mobileGps &&
         currentLat != null &&
         currentLng != null) {
@@ -1011,6 +1581,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       now.minute,
       now.second,
     );
+    final verifyMethod = source == AttendanceSource.mobileQr
+        ? VerifyMethod.mobileQr
+        : VerifyMethod.mobileGps;
 
     final log = AttendanceLog(
       id: '${branch.id}_${employee.cardNo}_${logTime.millisecondsSinceEpoch}',
@@ -1020,9 +1593,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       timestamp: logTime,
       isCheckIn: isCheckIn,
       source: source,
-      verifyMethod: source == AttendanceSource.mobileQr
-          ? VerifyMethod.mobileQr
-          : VerifyMethod.mobileGps,
+      verifyMethod: verifyMethod,
+      integrityHash: HasibuSecurityService.computeAttendanceIntegrityHash(
+        cardNo: employee.cardNo,
+        timestamp: logTime,
+        isCheckIn: isCheckIn,
+        verifyMethod: verifyMethod.name,
+      ),
     );
 
     _db.upsertAttendanceLog(log);
@@ -1147,6 +1724,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         rawDayLogs: dayLogs,
         shift: shift,
         leave: lv,
+        employee: emp,
+        dateKey: dKey,
       );
 
       entries.add(
@@ -1170,6 +1749,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Tek tıkla eksik çıkış (Tek Okuma) anomalisini personelin vardiya bitiş saatine göre tamamlar.
   Future<void> quickCompleteMissingCheckOut(EmployeeDailyStatus item) async {
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
     await saveOrUpdateAttendanceLog(
       employee: item.employee,
       dateKey: state.selectedDate,
@@ -1178,6 +1760,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       source: AttendanceSource.manual,
       verifyMethod: VerifyMethod.password,
     );
+    // [AUD-02] "1-Tıkla Eksik Çıkış Tamamlama" işlemini otomatik olarak audit_logs tablosuna yazdır
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'MISSING_CHECKOUT_COMPLETED',
+      targetRecordId: '${item.employee.cardNo}_${state.selectedDate}',
+      oldValue: 'lastCheckOut=NULL',
+      newValue: 'lastCheckOut=${item.shift.endTime}',
+    );
+    refreshDashboard();
   }
 
   /// Seçili tarihte çıkış basmayı unutan tüm personellerin çıkış saatini kendi vardiya bitiş saatlerine göre toplu tamamlar.
@@ -1186,6 +1777,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         .where((s) => s.hasMissingCheckOut)
         .toList(growable: false);
     if (targets.isEmpty) return 0;
+
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
 
     final dParts = state.selectedDate.split('-');
     final year = int.tryParse(dParts[0]) ?? 2026;
@@ -1208,7 +1803,21 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           isCheckIn: false,
           source: AttendanceSource.manual,
           verifyMethod: VerifyMethod.password,
+          integrityHash: HasibuSecurityService.computeAttendanceIntegrityHash(
+            cardNo: item.employee.cardNo,
+            timestamp: dt,
+            isCheckIn: false,
+            verifyMethod: VerifyMethod.password.name,
+          ),
         ),
+      );
+      // [AUD-02] Her tamamlanan eksik çıkış kaydını silinemez audit_logs tablosuna yazdır
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'MISSING_CHECKOUT_COMPLETED',
+        targetRecordId: '${item.employee.cardNo}_${state.selectedDate}',
+        oldValue: 'lastCheckOut=NULL',
+        newValue: 'lastCheckOut=${item.shift.endTime} (Toplu)',
       );
     }
 
@@ -1229,6 +1838,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final syncResult = await _syncService.pushToCloud(
       deviceName: 'Hasibu Personel Talep Merkezi',
       force: true,
+      isEmployeePortalOnly: state.authSession.role == UserRole.employee,
+      employeeCardNo: state.authSession.employeeCardNo,
     );
     state = state.copyWith(syncStatus: syncResult);
   }
@@ -1240,6 +1851,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required bool approve,
     String? reviewerNote,
   }) async {
+    // [LIC-05] Salt-Okunur (Read-Only) Abonelik Sonu / Saat Manipülasyonu Kilidi
+    if (state.isCommercialWriteLocked) {
+      return 'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Yeni İK talebi onaylama devre dışı bırakıldı.';
+    }
+
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+
     final updated = request.copyWith(
       status: approve ? HrRequestStatus.approved : HrRequestStatus.rejected,
       reviewerNote: () => reviewerNote?.trim().isEmpty == true
@@ -1247,6 +1867,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           : reviewerNote?.trim(),
     );
     _db.upsertHrRequest(updated);
+
+    // [AUD-02] "İK Talep Onaylama" işlemini otomatik olarak audit_logs tablosuna yazdır
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'HR_REQUEST_REVIEWED',
+      targetRecordId: request.id,
+      oldValue: 'status=${request.status.name}',
+      newValue:
+          'status=${updated.status.name} (${request.employeeCardNo} • ${request.type.name})',
+    );
 
     String actionSummary = approve
         ? '${request.employeeName} talebi onaylandı.'
@@ -1303,13 +1933,27 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdem yılına göre eksik tanımlanmış yıllık izin haklarını otomatik günceller.
   Future<int> syncStatutoryLeaveEntitlements() async {
     final employees = _db.getEmployees();
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
     int updatedCount = 0;
     for (final emp in employees) {
+      if (emp.isSeparatedNow) continue;
       if (emp.hasStatutoryLeaveMismatch) {
+        final oldVal = emp.annualLeaveEntitlement;
+        final newVal = emp.statutoryAnnualLeaveEntitlement;
         _db.upsertEmployee(
           emp.copyWith(
-            annualLeaveEntitlement: emp.statutoryAnnualLeaveEntitlement,
+            annualLeaveEntitlement: newVal,
           ),
+        );
+        // [AUD-02] "Yıllık İzin Hakediş Eşitleme" işlemini otomatik olarak audit_logs tablosuna yazdır
+        _db.appendAuditLog(
+          actorEmployeeId: actor,
+          actionType: 'STATUTORY_LEAVE_SYNCED',
+          targetRecordId: emp.cardNo,
+          oldValue: 'annualLeaveEntitlement=$oldVal',
+          newValue: 'annualLeaveEntitlement=$newVal',
         );
         updatedCount++;
       }
@@ -1327,6 +1971,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Seçili tarihteki resmi PDKS & Puantaj çizelgesini Excel uyumlu (; ayraçlı) CSV metni olarak üretir.
   String generateDailyPuantajCsv({bool onlyVisible = false}) {
+    // [LIC-05] Salt-Okunur (Read-Only) Abonelik Sonu Modunda resmi Excel/CSV Puantaj dışa aktarımını kilitle
+    if (state.isCommercialWriteLocked) {
+      return '';
+    }
     final rows =
         onlyVisible ? state.visibleStatuses : state.filteredByBranch;
     final buf = StringBuffer();
@@ -1354,6 +2002,252 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         '${item.hasMissingCheckOut ? "EVET" : "HAYIR"};'
         '${item.state.label};'
         '$verifyStr',
+      );
+    }
+    return buf.toString();
+  }
+
+  /// Seçili tarih aralığı için tüm personellerin devam, geç kalma, izin, rapor ve devamsızlık özetini hesaplar.
+  List<EmployeeAttendancePeriodSummary> buildAttendancePeriodReport({
+    required String startDateKey,
+    required String endDateKey,
+    int? branchId,
+    int? departmentId,
+    String searchQuery = '',
+    bool onlyWithAbsences = false,
+    bool onlyWithLates = false,
+    bool excludeSundays = false,
+  }) {
+    final parsedStart =
+        DateTime.tryParse(startDateKey) ?? DateTime.tryParse(state.selectedDate) ?? DateTime.now();
+    final parsedEnd = DateTime.tryParse(endDateKey) ?? parsedStart;
+    var rangeStart = DateTime(parsedStart.year, parsedStart.month, parsedStart.day);
+    var rangeEnd = DateTime(parsedEnd.year, parsedEnd.month, parsedEnd.day);
+    if (rangeStart.isAfter(rangeEnd)) {
+      final tmp = rangeStart;
+      rangeStart = rangeEnd;
+      rangeEnd = tmp;
+    }
+    if (rangeEnd.difference(rangeStart).inDays > 365) {
+      rangeStart = rangeEnd.subtract(const Duration(days: 365));
+    }
+
+    final startKey = formatDateKey(rangeStart);
+    final endKey = formatDateKey(rangeEnd);
+
+    final employees = _db.getEmployees();
+    final branches = _db.getBranches();
+    final departments = _db.getDepartments();
+    final shifts = _db.getShifts();
+    final logs = _db.getAttendanceLogsInDateRange(startKey, endKey);
+    final leaves = _db.getLeaveRecordsInDateRange(startKey, endKey);
+
+    final branchMap = {for (final b in branches) b.id: b};
+    final deptMap = {for (final d in departments) d.id: d};
+    final shiftMap = {for (final s in shifts) s.id: s};
+
+    final logsByCardDate = <String, List<AttendanceLog>>{};
+    for (final log in logs) {
+      final key = '${log.cardNo}|${log.dateKey}';
+      logsByCardDate.putIfAbsent(key, () => <AttendanceLog>[]).add(log);
+    }
+
+    final leavesByEmpDate = <String, LeaveRecord>{};
+    for (final leave in leaves) {
+      leavesByEmpDate['${leave.employeeId}|${leave.date}'] = leave;
+    }
+
+    final dayKeys = <({DateTime date, String key})>[];
+    for (var cursor = rangeStart;
+        !cursor.isAfter(rangeEnd);
+        cursor = cursor.add(const Duration(days: 1))) {
+      dayKeys.add((date: cursor, key: formatDateKey(cursor)));
+    }
+
+    final q = searchQuery.trim().toUpperCase();
+    final results = <EmployeeAttendancePeriodSummary>[];
+
+    for (final emp in employees) {
+      if (branchId != null && emp.branchId != branchId) continue;
+      if (departmentId != null && emp.departmentId != departmentId) continue;
+
+      final branch = branchMap[emp.branchId] ??
+          (branches.isNotEmpty
+              ? branches.first
+              : WorkplaceSeedData.branches.first);
+      final dept = deptMap[emp.departmentId] ??
+          const Department(id: 1, name: 'GENEL', branchId: 1);
+      final shift = shiftMap[emp.shiftId] ??
+          (shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first);
+
+      if (q.isNotEmpty) {
+        final matched = emp.fullName.toUpperCase().contains(q) ||
+            emp.cardNo.toUpperCase().contains(q) ||
+            dept.name.toUpperCase().contains(q);
+        if (!matched) continue;
+      }
+
+      int totalDays = 0;
+      int presentDays = 0;
+      int onTimeDays = 0;
+      int lateDays = 0;
+      int totalLateMinutes = 0;
+      int absentDays = 0;
+      int onLeaveDays = 0;
+      int sickReportDays = 0;
+      int missingCheckOutDays = 0;
+      int totalWorkedMinutes = 0;
+      int totalOvertimeMinutes = 0;
+      int totalEarlyLeaveMinutes = 0;
+      final absentDateKeys = <String>[];
+
+      for (final day in dayKeys) {
+        final empLogs =
+            logsByCardDate['${emp.cardNo}|${day.key}'] ?? const <AttendanceLog>[];
+        final leave = leavesByEmpDate['${emp.id}|${day.key}'];
+
+        if (excludeSundays &&
+            day.date.weekday == DateTime.sunday &&
+            empLogs.isEmpty &&
+            leave == null) {
+          continue;
+        }
+
+        final eval = _evaluateDayLogs(
+          rawDayLogs: empLogs,
+          shift: shift,
+          leave: leave,
+          employee: emp,
+          dateKey: day.key,
+        );
+
+        if (eval.state.isNonActiveEmployment) {
+          continue;
+        }
+
+        totalDays++;
+
+        switch (eval.state) {
+          case DailyAttendanceState.present:
+            presentDays++;
+            onTimeDays++;
+          case DailyAttendanceState.late:
+            presentDays++;
+            lateDays++;
+          case DailyAttendanceState.absent:
+            absentDays++;
+            absentDateKeys.add(day.key);
+          case DailyAttendanceState.onLeave:
+            onLeaveDays++;
+          case DailyAttendanceState.sickReport:
+            sickReportDays++;
+          case DailyAttendanceState.terminated:
+          case DailyAttendanceState.notYetHired:
+            break;
+        }
+
+        totalLateMinutes += eval.lateMinutes;
+        totalWorkedMinutes += eval.workedMinutes;
+        totalOvertimeMinutes += eval.overtimeMinutes;
+        totalEarlyLeaveMinutes += eval.earlyLeaveMinutes;
+        if (eval.hasMissingCheckOut) {
+          missingCheckOutDays++;
+        }
+      }
+
+      if (totalDays == 0) continue;
+      if (onlyWithAbsences && absentDays <= 0) continue;
+      if (onlyWithLates && lateDays <= 0) continue;
+
+      results.add(
+        EmployeeAttendancePeriodSummary(
+          employee: emp,
+          department: dept,
+          branch: branch,
+          shift: shift,
+          totalDays: totalDays,
+          presentDays: presentDays,
+          onTimeDays: onTimeDays,
+          lateDays: lateDays,
+          totalLateMinutes: totalLateMinutes,
+          absentDays: absentDays,
+          onLeaveDays: onLeaveDays,
+          sickReportDays: sickReportDays,
+          missingCheckOutDays: missingCheckOutDays,
+          totalWorkedMinutes: totalWorkedMinutes,
+          totalOvertimeMinutes: totalOvertimeMinutes,
+          totalEarlyLeaveMinutes: totalEarlyLeaveMinutes,
+          absentDateKeys: List<String>.unmodifiable(absentDateKeys),
+        ),
+      );
+    }
+
+    results.sort((a, b) {
+      final absCmp = b.absentDays.compareTo(a.absentDays);
+      if (absCmp != 0) return absCmp;
+      final lateCmp = b.lateDays.compareTo(a.lateDays);
+      if (lateCmp != 0) return lateCmp;
+      return a.employee.fullName.compareTo(b.employee.fullName);
+    });
+    return results;
+  }
+
+  /// Seçili tarih aralığındaki Devam / Devamsızlık Raporunu Excel uyumlu (; ayraçlı) CSV olarak üretir.
+  String generatePeriodAttendanceReportCsv({
+    required String startDateKey,
+    required String endDateKey,
+    int? branchId,
+    int? departmentId,
+    String searchQuery = '',
+    bool onlyWithAbsences = false,
+    bool onlyWithLates = false,
+    bool excludeSundays = false,
+  }) {
+    if (state.isCommercialWriteLocked) {
+      return '';
+    }
+    final rows = buildAttendancePeriodReport(
+      startDateKey: startDateKey,
+      endDateKey: endDateKey,
+      branchId: branchId,
+      departmentId: departmentId,
+      searchQuery: searchQuery,
+      onlyWithAbsences: onlyWithAbsences,
+      onlyWithLates: onlyWithLates,
+      excludeSundays: excludeSundays,
+    );
+    final rangeLabel = '${formatDisplayDate(startDateKey, includeTodayBadge: false)} - ${formatDisplayDate(endDateKey, includeTodayBadge: false)}';
+    final buf = StringBuffer();
+    buf.writeln(
+      'Tarih Aralığı;Kart No;Ad Soyad;Şube;Bölüm;Toplam Gün;Devam (Gün);Zamanında;Geç Kalma (Gün);Toplam Gecikme (Dk);Devamsızlık (Gün);İzinli (Gün);Raporlu (Gün);Eksik Çıkış (Gün);Net Çalışma (Saat);Fazla Mesai (Dk);Devam Oranı (%);Devamsız Tarihler',
+    );
+    for (final row in rows) {
+      final workedHours = (row.totalWorkedMinutes / 60.0).toStringAsFixed(1);
+      final rateStr = row.attendanceRatePercent.toStringAsFixed(1);
+      final absentDatesStr = row.absentDateKeys.isEmpty
+          ? '-'
+          : row.absentDateKeys
+              .map((d) => formatDisplayDate(d, includeTodayBadge: false))
+              .join(', ');
+      buf.writeln(
+        '$rangeLabel;'
+        '${row.employee.cardNo};'
+        '${row.employee.fullName};'
+        '${row.branch.name};'
+        '${row.department.name};'
+        '${row.totalDays};'
+        '${row.presentDays};'
+        '${row.onTimeDays};'
+        '${row.lateDays};'
+        '${row.totalLateMinutes};'
+        '${row.absentDays};'
+        '${row.onLeaveDays};'
+        '${row.sickReportDays};'
+        '${row.missingCheckOutDays};'
+        '$workedHours;'
+        '${row.totalOvertimeMinutes};'
+        '%$rateStr;'
+        '$absentDatesStr',
       );
     }
     return buf.toString();
@@ -1414,19 +2308,75 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Manuel Google Drive Yedekleme & Cihazlar Arası Uzlaştırma (Zikirce_ modeli)
   Future<void> syncWithGoogleDriveNow() async {
+    // [LIC-05] Salt-Okunur (Read-Only) Abonelik Sonu / Saat Manipülasyonu Kilidi
+    if (state.isCommercialWriteLocked) {
+      state = state.copyWith(
+        syncStatus: state.syncStatus.copyWith(
+          stage: DriveSyncStage.error,
+          message:
+              'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Google Drive senkronizasyonu devre dışı bırakıldı.',
+        ),
+      );
+      return;
+    }
+
+    final isEmployeePortal = state.authSession.role == UserRole.employee;
     state = state.copyWith(
       syncStatus: state.syncStatus.copyWith(
         stage: DriveSyncStage.syncing,
-        message: 'Google Drive ile eşitleniyor...',
+        message: 'Google Drive (AES-256-GCM) ile eşitleniyor...',
       ),
     );
-    await _syncService.pullAndReconcile();
+    await _syncService.pullAndReconcile(
+      isEmployeePortalOnly: isEmployeePortal,
+    );
     final pushStatus = await _syncService.pushToCloud(
       deviceName: 'Hasibu Cihaz Senkronizasyonu',
       force: true,
+      isEmployeePortalOnly: isEmployeePortal,
+      employeeCardNo: state.authSession.employeeCardNo,
     );
     refreshDashboard();
     state = state.copyWith(syncStatus: pushStatus);
+  }
+
+  /// [LIC-03] & [LIC-05] Yeni müşteri lisans tokenını (Ed25519) doğrular ve kaydeder.
+  Future<LicenseVerificationResult> updateCommercialLicenseToken(
+    String newLicenseToken,
+  ) async {
+    final result = await LicenseGuardService.verifyLicenseToken(
+      newLicenseToken,
+      expectedHwId: state.companySettings.hardwareFingerprint,
+      currentEmployeeCount: state.dailyStatuses.length,
+      currentBranchCount: state.branches.length,
+    );
+    final updated = state.companySettings.copyWith(
+      licenseToken: newLicenseToken.trim(),
+    );
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
+    return result;
+  }
+
+  /// [LIC-05] Abonelik Sonu (Salt-Okunur / Read-Only) modunu test etmek veya
+  /// aktif kurumsal lisansı yenilemek için yardımcı fonksiyon.
+  void setSubscriptionExpiredForDemo(bool expired) {
+    final hwId = state.companySettings.hardwareFingerprint.isNotEmpty
+        ? state.companySettings.hardwareFingerprint
+        : HardwareFingerprintService.getDeviceHardwareFingerprint();
+    final token = LicenseGuardService.createBootstrapLicenseTokenSync(
+      company: state.companySettings.companyName,
+      hwId: hwId,
+      expiresAt: expired
+          ? DateTime.now().toUtc().subtract(const Duration(days: 5))
+          : DateTime.now().toUtc().add(const Duration(days: 365)),
+    );
+    final updated = state.companySettings.copyWith(
+      licenseToken: token,
+      hardwareFingerprint: hwId,
+    );
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
   }
 
   static double _haversineMeters(
@@ -1464,5 +2414,10 @@ final pdksDashboardProvider =
     StateNotifierProvider<PdksDashboardNotifier, PdksDashboardState>((ref) {
   final db = ref.watch(hasibuDatabaseProvider);
   final sync = ref.watch(googleDriveSyncServiceProvider);
-  return PdksDashboardNotifier(db: db, syncService: sync);
+  final authAdapter = ref.watch(googleAuthAdapterProvider);
+  return PdksDashboardNotifier(
+    db: db,
+    syncService: sync,
+    googleAuthAdapter: authAdapter,
+  );
 });

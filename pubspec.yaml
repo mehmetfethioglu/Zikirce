@@ -1,7 +1,7 @@
 name: hasibu
 description: "Hasibu - Yalın Üretim, Çok Şubeli PDKS (Tenfei D35), İK ve Ön Muhasebe Platformu"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.10+11
 
 environment:
   sdk: ^3.5.0
@@ -15,15 +15,17 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^2.5.1
   sqlite3: ^2.4.4
-  sqlite3_flutter_libs: ^0.5.24
+  sqlcipher_flutter_libs: ^0.6.4
   path_provider: ^2.1.4
   path: ^1.9.0
   shared_preferences: ^2.3.2
   flutter_secure_storage: ^9.2.2
+  cryptography: ^2.7.0
   dio: ^5.7.0
   intl: ^0.20.2
   crypto: ^3.0.5
   qr_flutter: ^4.1.0
+  google_sign_in: ^7.2.0
 
 dependency_overrides:
   path_provider_android: 2.2.15
@@ -37,12 +39,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icon/hasibu_icon.png
+    - assets/icon/hasibu_icon_alt.png
+    - assets/icon/hasibu_logo.svg
 
 msix_config:
   display_name: Hasibu
   publisher_display_name: Akarworks
   identity_name: com.akarworks.hasibu
-  msix_version: 1.0.0.0
-  logo_path: android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+  msix_version: 1.0.10.0
+  logo_path: assets/icon/hasibu_icon.png
   architecture: arm64
   capabilities: internetClient
+  install_certificate: false

@@ -2,290 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/pdks_models.dart';
+import '../providers/accounting_providers.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_accounting_views.dart';
 import 'hasibu_settings_view.dart';
 
-/// Hasibu Kurumsal Oturum Açma (Login Gate) Ekranı.
-/// Yönetici girişi tüm üst modülleri açar; Personel girişi ise personele
-/// tanımlanan kişisel parola, kişisel tema (`themeMode`) ve yetki alanlarına (`allowedModules`) göre açılır.
-/// Üst bölümde şirket logosu yer alır ve doğrudan login ekranından logo eklenip değiştirilebilir.
-class HasibuLoginScreen extends ConsumerStatefulWidget {
-  const HasibuLoginScreen({super.key});
-
-  @override
-  ConsumerState<HasibuLoginScreen> createState() => _HasibuLoginScreenState();
-}
-
-class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
-  UserRole _selectedRole = UserRole.admin;
-  late final TextEditingController _usernameOrCardCtrl;
-  late final TextEditingController _passwordOrPinCtrl;
-  bool _obscurePassword = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _usernameOrCardCtrl = TextEditingController(text: 'admin');
-    _passwordOrPinCtrl = TextEditingController(text: '123');
-  }
-
-  @override
-  void dispose() {
-    _usernameOrCardCtrl.dispose();
-    _passwordOrPinCtrl.dispose();
-    super.dispose();
-  }
-
-  void _switchRole(UserRole role) {
-    setState(() {
-      _selectedRole = role;
-      if (role == UserRole.admin) {
-        _usernameOrCardCtrl.text = 'admin';
-        _passwordOrPinCtrl.text = '123';
-      } else {
-        _usernameOrCardCtrl.text = '00064';
-        _passwordOrPinCtrl.text = '1234';
-      }
-    });
-  }
-
-  void _submitLogin() {
-    final notifier = ref.read(pdksDashboardProvider.notifier);
-    if (_selectedRole == UserRole.admin) {
-      notifier.loginAsAdmin(
-        username: _usernameOrCardCtrl.text,
-        password: _passwordOrPinCtrl.text,
-      );
-    } else {
-      notifier.loginAsEmployee(
-        cardNo: _usernameOrCardCtrl.text,
-        pin: _passwordOrPinCtrl.text,
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final companySettings = ref.watch(
-      pdksDashboardProvider.select((s) => s.companySettings),
-    );
-    final errorMsg = ref.watch(
-      pdksDashboardProvider.select((s) => s.authSession.errorMessage),
-    );
-    final pal = HasibuPalette.of(context);
-
-    return Scaffold(
-      backgroundColor: pal.bg,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: pal.card,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: pal.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: pal.isDark ? 0.28 : 0.05),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      TextButton.icon(
-                        key: const ValueKey('login_company_logo_button'),
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                        ),
-                        onPressed: () => showCompanyLogoDialog(context, ref),
-                        icon: const Icon(
-                          Icons.add_photo_alternate_outlined,
-                          size: 16,
-                        ),
-                        label: const Text(
-                          'Şirket Logosu Ekle',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const UserThemeSelectorBar(compact: true),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Center(
-                    child: CompanyLogoBadge(
-                      key: const ValueKey('login_company_logo_badge'),
-                      settings: companySettings,
-                      size: 64,
-                      borderRadius: 16,
-                      onTap: () => showCompanyLogoDialog(context, ref),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    companySettings.companyName,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: pal.textPrimary,
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'PDKS • Yalın Üretim • İK • Ön Muhasebe',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: pal.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  SegmentedButton<UserRole>(
-                    segments: const [
-                      ButtonSegment<UserRole>(
-                        value: UserRole.admin,
-                        icon: Icon(Icons.shield_outlined, size: 18),
-                        label: Text('Yönetici Girişi'),
-                      ),
-                      ButtonSegment<UserRole>(
-                        value: UserRole.employee,
-                        icon: Icon(Icons.badge_outlined, size: 18),
-                        label: Text('Personel Girişi'),
-                      ),
-                    ],
-                    selected: {_selectedRole},
-                    onSelectionChanged: (sel) => _switchRole(sel.first),
-                  ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    key: const ValueKey('login_username_field'),
-                    controller: _usernameOrCardCtrl,
-                    onSubmitted: (_) => _submitLogin(),
-                    decoration: InputDecoration(
-                      labelText: _selectedRole == UserRole.admin
-                          ? 'Kullanıcı Adı'
-                          : 'Personel Kart / Sicil No (örn. 00064)',
-                      prefixIcon: Icon(
-                        _selectedRole == UserRole.admin
-                            ? Icons.person_outline_rounded
-                            : Icons.credit_card_rounded,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const ValueKey('login_password_field'),
-                    controller: _passwordOrPinCtrl,
-                    obscureText: _obscurePassword,
-                    onSubmitted: (_) => _submitLogin(),
-                    decoration: InputDecoration(
-                      labelText: _selectedRole == UserRole.admin
-                          ? 'Yönetici Parolası'
-                          : 'Kişisel Personel Parolası',
-                      prefixIcon: const Icon(
-                        Icons.lock_outline_rounded,
-                        size: 20,
-                      ),
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (errorMsg != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDC2626).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: const Color(0xFFDC2626).withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        errorMsg,
-                        style: const TextStyle(
-                          color: Color(0xFFDC2626),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  FilledButton.icon(
-                    key: const ValueKey('login_submit_button'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: pal.isDark
-                          ? const Color(0xFF0284C7)
-                          : const Color(0xFF0F172A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: _submitLogin,
-                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                    label: const Text(
-                      'Oturum Aç',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    _selectedRole == UserRole.admin
-                        ? 'Varsayılan Yönetici: admin / 123'
-                        : 'Örnek Personel: Kart No 00064 / Parola: 1234',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: pal.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+export 'hasibu_login_screen.dart';
 
 // ============================================================================
 // YALIN ÜRETİM & KPI MODÜLÜ EKRANLARI
@@ -297,8 +19,10 @@ class LeanProductionStationsView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final departments =
         ref.watch(pdksDashboardProvider.select((s) => s.departments));
-    final statuses =
-        ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
+    final statuses = ref
+        .watch(pdksDashboardProvider.select((s) => s.dailyStatuses))
+        .where((s) => !s.state.isNonActiveEmployment)
+        .toList(growable: false);
     final pal = HasibuPalette.of(context);
 
     final prodDepts = departments
@@ -445,8 +169,10 @@ class LeanKpiLeaderboardView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final statuses =
-        ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
+    final statuses = ref
+        .watch(pdksDashboardProvider.select((s) => s.dailyStatuses))
+        .where((s) => !s.state.isNonActiveEmployment)
+        .toList(growable: false);
     final pal = HasibuPalette.of(context);
     final sorted = List<EmployeeDailyStatus>.from(statuses)
       ..sort((a, b) => b.employee.kpiScore.compareTo(a.employee.kpiScore));
@@ -525,11 +251,21 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final statuses =
-        ref.watch(pdksDashboardProvider.select((s) => s.dailyStatuses));
+    final statuses = ref
+        .watch(pdksDashboardProvider.select((s) => s.dailyStatuses))
+        .where((s) => !s.state.isNonActiveEmployment)
+        .toList(growable: false);
     final selectedDate =
         ref.watch(pdksDashboardProvider.select((s) => s.selectedDate));
+    final puantajRows =
+        ref.watch(accountingProvider.select((s) => s.puantajRows));
+    final periodKey =
+        ref.watch(accountingProvider.select((s) => s.selectedPeriodKey));
     final pal = HasibuPalette.of(context);
+
+    final puantajByCard = {
+      for (final r in puantajRows) r.cardNo: r,
+    };
 
     final int normalCount = statuses
         .where((s) => s.state == DailyAttendanceState.present)
@@ -547,12 +283,16 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
         statuses.where((s) => s.state == DailyAttendanceState.absent).length;
     final int totalLateMins =
         statuses.fold<int>(0, (sum, item) => sum + item.lateMinutes);
+    final double totalTreasurySubsidy = puantajRows.fold<double>(
+      0.0,
+      (sum, r) => sum + r.sgkTreasurySubsidyTl,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
         Text(
-          'Ön Muhasebe & Günlük Puantaj Tahakkuk Özeti ($selectedDate)',
+          'Ön Muhasebe & GMS.NET Günlük Puantaj Tahakkuk Özeti ($selectedDate)',
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
@@ -579,20 +319,26 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
             _AccountingSummaryBox(
               title: 'Ücretli İzin / Rapor',
               value: '$paidLeaveCount Personel',
-              subtitle: 'Bordroda ücretli izinli',
+              subtitle: 'Bordroda ücretli izinli (01-İstirahat)',
               color: const Color(0xFF0284C7),
             ),
             _AccountingSummaryBox(
               title: 'Devamsızlık Kesintisi',
               value: '$unpaidAbsentCount Personel',
-              subtitle: 'Günlük yevmiye kesintisi adayları',
+              subtitle: 'Günlük yevmiye kesintisi (15-Devamsız)',
               color: const Color(0xFFDC2626),
+            ),
+            _AccountingSummaryBox(
+              title: 'SGK Teşvik Kazancı',
+              value: '${totalTreasurySubsidy.toStringAsFixed(0)} ₺',
+              subtitle: '5510 / 6111 / 17103 Hazine İndirimi',
+              color: const Color(0xFF7C3AED),
             ),
           ],
         ),
         const SizedBox(height: 20),
         Text(
-          'Personel Bazlı Puantaj & Bordro Durum Çizelgesi',
+          'Personel Bazlı GMS.NET Puantaj & Bordro Durum Çizelgesi',
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -601,55 +347,79 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
         ),
         const SizedBox(height: 10),
         for (final item in statuses)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: pal.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: pal.border),
-            ),
-            child: ListTile(
-              onTap: () => showEmployeeHistoryAndDossierDialog(
-                context,
-                ref,
-                item.employee,
-                initialTabIndex: 0,
-              ),
-              leading: EmployeeProfileAvatar(
-                employee: item.employee,
-                size: 38,
-              ),
-              title: Text(
-                '${item.employee.fullName} (#${item.employee.cardNo})',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13.5,
-                  color: pal.textPrimary,
+          Builder(
+            builder: (context) {
+              final pRow = puantajByCard[item.employee.cardNo];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: pal.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: pal.border),
                 ),
-              ),
-              subtitle: Text(
-                '${item.branch.name} • ${item.department.name} • SGK: ${item.employee.sgkActive ? "Aktif" : "Pasif"}',
-                style: TextStyle(fontSize: 12, color: pal.textSecondary),
-              ),
-              trailing: Text(
-                item.state == DailyAttendanceState.present
-                    ? 'TAM YEVMİYE'
-                    : item.state == DailyAttendanceState.late
-                        ? 'GEÇ MESAI (-${item.lateMinutes} dk)'
-                        : item.state == DailyAttendanceState.absent
-                            ? 'YEVMİYE KESİNTİSİ'
-                            : 'İZİNLİ / RAPORLU',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  color: item.state == DailyAttendanceState.absent
-                      ? const Color(0xFFDC2626)
-                      : item.state == DailyAttendanceState.late
-                          ? const Color(0xFFD97706)
-                          : const Color(0xFF059669),
+                child: ListTile(
+                  onTap: () {
+                    if (pRow != null) {
+                      showGmsPayrollEnvelopeDialog(
+                        context,
+                        ref,
+                        row: pRow,
+                        periodKey: periodKey,
+                      );
+                    } else {
+                      showEmployeeHistoryAndDossierDialog(
+                        context,
+                        ref,
+                        item.employee,
+                        initialTabIndex: 0,
+                      );
+                    }
+                  },
+                  leading: EmployeeProfileAvatar(
+                    employee: item.employee,
+                    size: 38,
+                  ),
+                  title: Text(
+                    '${item.employee.fullName} (#${item.employee.cardNo})',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      color: pal.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${item.branch.name} • ${item.department.name} • SGK: ${item.employee.sgkActive ? "Aktif" : "Pasif"}'
+                    '${pRow != null ? " • Kanun: ${pRow.sgkLaw.code} • Eksik Gün: ${pRow.missingDayReason.code} • Net: ${pRow.gmsNetBankPayableTl.toStringAsFixed(0)} ₺" : ""}',
+                    style: TextStyle(fontSize: 12, color: pal.textSecondary),
+                  ),
+                  trailing: Text(
+                    switch (item.state) {
+                      DailyAttendanceState.present => 'TAM YEVMİYE',
+                      DailyAttendanceState.late =>
+                        'GEÇ MESAI (-${item.lateMinutes} dk)',
+                      DailyAttendanceState.absent => 'YEVMİYE KESİNTİSİ',
+                      DailyAttendanceState.onLeave ||
+                      DailyAttendanceState.sickReport =>
+                        'İZİNLİ / RAPORLU',
+                      DailyAttendanceState.terminated => 'İŞTEN AYRILDI',
+                      DailyAttendanceState.notYetHired => 'KADRO DIŞI',
+                    },
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      color: switch (item.state) {
+                        DailyAttendanceState.absent => const Color(0xFFDC2626),
+                        DailyAttendanceState.late => const Color(0xFFD97706),
+                        DailyAttendanceState.terminated ||
+                        DailyAttendanceState.notYetHired =>
+                          const Color(0xFF64748B),
+                        _ => const Color(0xFF059669),
+                      },
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
       ],
     );

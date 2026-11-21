@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local OAuth secrets / dart-defines / release signing (never commit)
+dart_defines.local.json
+client_secret_*.json
+android/key.properties
+android/app/*.keystore
+android/app/*.jks
+android/fastlane/play-store-credentials.json

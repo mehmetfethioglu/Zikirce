@@ -53,6 +53,30 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# [WIN-SQLITE] sqlcipher_flutter_libs Windows ARM64 derlemesinde harici OpenSSL zorunluluğunu
+# baypas etmek için yerleşik ARM64 sqlite3.dll ve hafif eklenti gövdesi kullanılır.
+macro(add_subdirectory dir)
+  if("${dir}" MATCHES "sqlcipher_flutter_libs")
+    add_library(sqlcipher_flutter_libs_plugin SHARED
+      "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/sqlcipher_flutter_libs/windows/sqlite3_flutter_libs_plugin.cpp"
+    )
+    apply_standard_settings(sqlcipher_flutter_libs_plugin)
+    target_link_libraries(sqlcipher_flutter_libs_plugin PRIVATE flutter flutter_wrapper_plugin)
+    target_include_directories(sqlcipher_flutter_libs_plugin INTERFACE
+      "${CMAKE_CURRENT_SOURCE_DIR}/flutter/ephemeral/.plugin_symlinks/sqlcipher_flutter_libs/windows/include"
+    )
+    set_target_properties(sqlcipher_flutter_libs_plugin PROPERTIES
+      CXX_VISIBILITY_PRESET hidden)
+    target_compile_definitions(sqlcipher_flutter_libs_plugin PRIVATE FLUTTER_PLUGIN_IMPL)
+
+    set(sqlcipher_flutter_libs_bundled_libraries
+      "${CMAKE_CURRENT_SOURCE_DIR}/sqlite3.dll"
+    )
+  else()
+    _add_subdirectory(${ARGV})
+  endif()
+endmacro()
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)

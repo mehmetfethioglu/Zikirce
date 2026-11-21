@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'features/pdks/presentation/screens/hasibu_enterprise_modules_view.dart';
+import 'features/pdks/presentation/screens/hasibu_login_screen.dart';
 import 'features/pdks/presentation/screens/hasibu_settings_view.dart';
 import 'features/pdks/presentation/screens/hasibu_shell_screen.dart';
 import 'screens/mobil_arayuz_iyilestirme_screen.dart';

@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Tahrir Design Language: Midnight Navy to Warm Espresso-Bronze Atmospheric Background -->
+    <linearGradient id="bgGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#070D19"/>
+      <stop offset="55%" stop-color="#111622"/>
+      <stop offset="100%" stop-color="#261910"/>
+    </linearGradient>
+
+    <radialGradient id="warmGlow" cx="72%" cy="28%" r="65%">
+      <stop offset="0%" stop-color="#D99B26" stop-opacity="0.22"/>
+      <stop offset="60%" stop-color="#C85A32" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#070D19" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Tahrir Brushed Champagne Gold & Amber Gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF5E0"/>
+      <stop offset="42%" stop-color="#E2A432"/>
+      <stop offset="78%" stop-color="#C47124"/>
+      <stop offset="100%" stop-color="#8F4316"/>
+    </linearGradient>
+
+    <!-- Warm Ivory Ledger Page Gradient -->
+    <linearGradient id="ivoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFBF2"/>
+      <stop offset="60%" stop-color="#EFE0C6"/>
+      <stop offset="100%" stop-color="#D4B88C"/>
+    </linearGradient>
+
+    <!-- Translucent Frosted Ledger Grid Plate -->
+    <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF7E8" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#C9A87C" stop-opacity="0.12"/>
+    </linearGradient>
+
+    <filter id="softShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#02050B" flood-opacity="0.65"/>
+    </filter>
+  </defs>
+
+  <!-- Full-bleed Canvas (Clean like Tahrir) -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  <rect width="512" height="512" rx="112" fill="url(#warmGlow)"/>
+
+  <g filter="url(#softShadow)">
+    <!-- Back Translucent Ledger Sheet (Left Wing - Structured Accounting Grid) -->
+    <rect x="108" y="138" width="112" height="248" rx="18"
+          fill="url(#glassGrad)" stroke="#E5D6BD" stroke-opacity="0.28" stroke-width="2"/>
+    <!-- Subtle Ledger Grid Lines (Tahrir Left-Page Homage) -->
+    <line x1="146" y1="138" x2="146" y2="386" stroke="#F7EEDB" stroke-opacity="0.22" stroke-width="2"/>
+    <line x1="108" y1="196" x2="220" y2="196" stroke="#F7EEDB" stroke-opacity="0.22" stroke-width="2"/>
+    <line x1="108" y1="252" x2="220" y2="252" stroke="#F7EEDB" stroke-opacity="0.22" stroke-width="2"/>
+    <line x1="108" y1="308" x2="220" y2="308" stroke="#F7EEDB" stroke-opacity="0.22" stroke-width="2"/>
+
+    <!-- Foreground Sculptural Warm Ivory Pillar (Left Stem of 'H' / Defter) -->
+    <path d="M 142 116
+             C 142 104, 150 96, 162 96
+             L 206 96
+             C 218 96, 226 104, 226 116
+             L 226 376
+             C 226 388, 218 396, 206 396
+             L 162 396
+             C 150 396, 142 388, 142 376 Z"
+          fill="url(#ivoryGrad)"/>
+
+    <!-- Right Sculptural Gold Pillar & Ascent Nib (Right Stem of 'H' / Mizan & Bereket) -->
+    <path d="M 292 146
+             L 342 92
+             C 350 84, 362 84, 370 92
+             L 394 120
+             C 400 127, 404 136, 404 146
+             L 404 376
+             C 404 388, 396 396, 384 396
+             L 312 396
+             C 300 396, 292 388, 292 376 Z"
+          fill="url(#goldGrad)"/>
+
+    <!-- Golden Equilibrium Ribbon (Mizan / Balance Wave Bridging the 'H') -->
+    <path d="M 132 292
+             C 182 316, 232 298, 272 252
+             C 314 204, 356 176, 412 186
+             C 374 222, 336 258, 286 292
+             C 234 326, 178 334, 132 292 Z"
+          fill="url(#goldGrad)"/>
+
+    <!-- Precision Fulcrum / Mizan Diamond Node at the Center of Balance -->
+    <polygon points="259,188 277,208 259,228 241,208" fill="url(#ivoryGrad)"/>
+  </g>
+</svg>

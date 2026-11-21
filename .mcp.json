@@ -8,6 +8,13 @@
       "env": {
         "PYTHONIOENCODING": "utf-8"
       }
+    },
+    "notebooklm-mcp": {
+      "command": "C:/Users/theak/AppData/Roaming/Python/Python312-arm64/Scripts/notebooklm-mcp.exe",
+      "args": [],
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }

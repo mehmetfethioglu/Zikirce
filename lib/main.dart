@@ -10,7 +10,14 @@ import 'router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final db = await HasibuDatabase.openDefault();
+  HasibuDatabase db;
+  try {
+    db = await HasibuDatabase.openDefault().timeout(
+      const Duration(milliseconds: 3500),
+    );
+  } catch (_) {
+    db = HasibuDatabase.inMemory();
+  }
 
   runApp(
     ProviderScope(
@@ -92,26 +99,26 @@ class HasibuApp extends ConsumerWidget {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF0B1120),
-      cardColor: const Color(0xFF111827),
-      dividerColor: const Color(0xFF1E293B),
+      scaffoldBackgroundColor: const Color(0xFF000000),
+      cardColor: const Color(0xFF09090B),
+      dividerColor: const Color(0xFF1F1F23),
       colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF38BDF8),
+        seedColor: const Color(0xFF10B981),
         primary: const Color(0xFF38BDF8),
-        secondary: const Color(0xFF0284C7),
-        surface: const Color(0xFF111827),
+        secondary: const Color(0xFF10B981),
+        surface: const Color(0xFF09090B),
         brightness: Brightness.dark,
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: const Color(0xFF09090B),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: const Color(0xFF000000),
         surfaceTintColor: Colors.transparent,
-        indicatorColor: const Color(0xFF1E293B),
-        height: 64,
+        indicatorColor: const Color(0xFF18181B),
+        height: 60,
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
         ),
@@ -119,22 +126,22 @@ class HasibuApp extends ConsumerWidget {
       inputDecorationTheme: InputDecorationTheme(
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: const Color(0xFF111114),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
-          vertical: 12,
+          vertical: 11,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: Color(0xFF242429)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: Color(0xFF242429)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFF38BDF8), width: 1.5),
+          borderSide: const BorderSide(color: Color(0xFF10B981), width: 1.5),
         ),
       ),
     );
@@ -147,7 +154,7 @@ class HasibuApp extends ConsumerWidget {
     );
 
     return MaterialApp(
-      title: 'Hasibu • Yalın Üretim, PDKS & İK',
+      title: 'Hasibu • Personel & PDKS Yönetimi',
       debugShowCheckedModeBanner: false,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,

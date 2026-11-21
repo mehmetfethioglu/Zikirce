@@ -1,10 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/security/hasibu_security_service.dart';
 import '../features/pdks/domain/pdks_models.dart';
 import '../features/pdks/presentation/providers/pdks_providers.dart';
 import '../features/pdks/presentation/screens/hasibu_settings_view.dart';
 import '../providers/mobil_arayuz_iyilestirme_provider.dart';
+
+/// [HW-06] Mobil saha konum verisi (Sahte GPS `position.isMocked` denetimi için)
+class MobileGpsPosition {
+  final double latitude;
+  final double longitude;
+  final bool isMocked;
+
+  const MobileGpsPosition({
+    required this.latitude,
+    required this.longitude,
+    this.isMocked = false,
+  });
+}
 
 /// Modern Mobil Kullanıcı Arayüzü Ekranı
 /// Tek elle rahat kullanım, responsive kart hiyerarşisi ve akıcı dokunmatik etkileşim.
@@ -105,9 +119,7 @@ class MobilArayuzIyilestirmeScreen extends ConsumerWidget {
         onRefresh: () async {
           await ref.read(mobileUiProvider.notifier).triggerMobileRefresh(
             onRefreshCallback: () async {
-              await ref
-                  .read(pdksDashboardProvider.notifier)
-                  .pullFromTenfeiTerminals();
+              await pullTerminalAndShowPopup(context, ref);
             },
           );
         },
@@ -216,8 +228,8 @@ class _MobileTopHeaderSection extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.terminalStatusMessage));
     final isPolling =
         ref.watch(pdksDashboardProvider.select((s) => s.isPollingTerminal));
-
-    final dates = const ['2026-10-20', '2026-10-19', '2026-10-17'];
+    final mockGpsCount =
+        ref.watch(pdksDashboardProvider.select((s) => s.mockGpsAnomalyCount));
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
@@ -265,24 +277,118 @@ class _MobileTopHeaderSection extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-          // Tarih Seçici Yatay Liste
+          // Takvim Tarih Seçici & Canlı Veri Çekme Şeridi
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final d in dates) ...[
-                  ChoiceChip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(
-                      d == '2026-10-20' ? '$d (Bugün)' : d,
-                      style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-                    ),
-                    selected: selectedDate == d,
-                    onSelected: (_) => ref
-                        .read(pdksDashboardProvider.notifier)
-                        .setSelectedDate(d),
+                ActionChip(
+                  key: const ValueKey('mobile_calendar_date_picker_button'),
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(
+                    Icons.calendar_month_rounded,
+                    size: 15,
+                    color: Color(0xFF0284C7),
                   ),
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        PdksDashboardNotifier.formatDisplayDate(selectedDate),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.arrow_drop_down_rounded, size: 16),
+                    ],
+                  ),
+                  onPressed: () => pickPdksDateWithCalendar(context, ref),
+                ),
+                if (selectedDate != PdksDashboardNotifier.todayDateKey()) ...[
                   const SizedBox(width: 6),
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: const Icon(
+                      Icons.today_rounded,
+                      size: 14,
+                      color: Color(0xFF10B981),
+                    ),
+                    label: const Text(
+                      'Bugüne Dön',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onPressed: () => ref
+                        .read(pdksDashboardProvider.notifier)
+                        .setSelectedDate(PdksDashboardNotifier.todayDateKey()),
+                  ),
+                ],
+                const SizedBox(width: 6),
+                ActionChip(
+                  key: const ValueKey('mobile_terminal_pull_button'),
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(
+                    Icons.sync_rounded,
+                    size: 15,
+                    color: Color(0xFF0284C7),
+                  ),
+                  label: const Text(
+                    'Veri Çek',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onPressed: isPolling
+                      ? null
+                      : () => pullTerminalAndShowPopup(context, ref),
+                ),
+                const SizedBox(width: 6),
+                ActionChip(
+                  key: const ValueKey('mobile_qr_gps_checkin_button'),
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(
+                    Icons.qr_code_scanner_rounded,
+                    size: 15,
+                    color: Color(0xFF10B981),
+                  ),
+                  label: const Text(
+                    'Saha QR/GPS Giriş',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  onPressed: () => _showMobileQrGpsCheckInSheet(context, ref),
+                ),
+                if (mockGpsCount > 0) ...[
+                  const SizedBox(width: 6),
+                  ActionChip(
+                    key: const ValueKey('mobile_mock_gps_anomaly_chip'),
+                    visualDensity: VisualDensity.compact,
+                    backgroundColor:
+                        const Color(0xFFDC2626).withValues(alpha: 0.16),
+                    avatar: const Icon(
+                      Icons.gps_off_rounded,
+                      size: 15,
+                      color: Color(0xFFDC2626),
+                    ),
+                    label: Text(
+                      'Sahte GPS Anomalisi ($mockGpsCount)',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFFDC2626),
+                      ),
+                    ),
+                    onPressed: () => ref
+                        .read(pdksDashboardProvider.notifier)
+                        .setAnomalyFilter(PdksAnomalyFilter.missingCheckOut),
+                  ),
                 ],
               ],
             ),
@@ -293,6 +399,138 @@ class _MobileTopHeaderSection extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// [HW-06] Mobil konumda `position.isMocked` (Sahte GPS) ve Dinamik TOTP QR kontrolü yapar.
+  static Future<String> submitMobilePositionCheckIn({
+    required WidgetRef ref,
+    required Employee employee,
+    required Branch branch,
+    required bool isCheckIn,
+    required MobileGpsPosition position,
+    String? totpQrCode,
+  }) async {
+    return ref.read(pdksDashboardProvider.notifier).recordBranchMobileCheckIn(
+          employee: employee,
+          branch: branch,
+          source: totpQrCode != null && totpQrCode.trim().isNotEmpty
+              ? AttendanceSource.mobileQr
+              : AttendanceSource.mobileGps,
+          isCheckIn: isCheckIn,
+          currentLat: position.latitude,
+          currentLng: position.longitude,
+          isMockedGps: position.isMocked,
+          qrPayload: totpQrCode,
+        );
+  }
+
+  Future<void> _showMobileQrGpsCheckInSheet(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final state = ref.read(pdksDashboardProvider);
+    if (state.dailyStatuses.isEmpty || state.branches.isEmpty) return;
+    Employee selectedEmp = state.dailyStatuses.first.employee;
+    Branch selectedBranch = state.branches.first;
+    bool isCheckIn = true;
+    bool simulateMockedGps = false;
+    final totpCode =
+        HasibuSecurityService.generateTotpCode(selectedBranch.qrSecret);
+    final qrCtrl = TextEditingController(text: totpCode);
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final currentTotp =
+              HasibuSecurityService.generateTotpCode(selectedBranch.qrSecret);
+          return AlertDialog(
+            title: const Text('Mobil Saha QR / GPS Yoklama (TOTP + Anti-Spoof)'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<int>(
+                    isExpanded: true,
+                    initialValue: selectedBranch.id,
+                    decoration: const InputDecoration(labelText: 'Şube'),
+                    items: [
+                      for (final b in state.branches)
+                        DropdownMenuItem(value: b.id, child: Text(b.name)),
+                    ],
+                    onChanged: (v) {
+                      if (v == null) return;
+                      setDialogState(() {
+                        selectedBranch =
+                            state.branches.firstWhere((b) => b.id == v);
+                        qrCtrl.text = HasibuSecurityService.generateTotpCode(
+                          selectedBranch.qrSecret,
+                        );
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: qrCtrl,
+                    decoration: InputDecoration(
+                      labelText: '30sn Dinamik TOTP QR Kodu',
+                      helperText: 'Aktif Şube TOTP: $currentTotp (max 60sn)',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Sahte Konum (position.isMocked) Testi',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: const Text(
+                      'Açıkken hareket reddedilir ve anomali çipine düşürülür.',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    value: simulateMockedGps,
+                    onChanged: (v) =>
+                        setDialogState(() => simulateMockedGps = v),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Kapat'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final position = MobileGpsPosition(
+                    latitude: selectedBranch.latitude,
+                    longitude: selectedBranch.longitude,
+                    isMocked: simulateMockedGps,
+                  );
+                  final res = await submitMobilePositionCheckIn(
+                    ref: ref,
+                    employee: selectedEmp,
+                    branch: selectedBranch,
+                    isCheckIn: isCheckIn,
+                    position: position,
+                    totpQrCode: qrCtrl.text.trim(),
+                  );
+                  if (dialogCtx.mounted) {
+                    Navigator.of(dialogCtx).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(res)),
+                    );
+                  }
+                },
+                child: const Text('Kaydı Gönder'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    qrCtrl.dispose();
   }
 }
 
@@ -588,7 +826,7 @@ class _MobileEmployeeSliverList extends ConsumerWidget {
   }
 }
 
-/// Ferah Görünüm Kartı
+/// Ferah Görünüm Kartı (Sadeleştirilmiş Tek Satır — Detaylar Dokununca Açılan Pencerede)
 class _MobileComfortableEmployeeCard extends ConsumerWidget {
   final EmployeeDailyStatus item;
 
@@ -603,19 +841,21 @@ class _MobileComfortableEmployeeCard extends ConsumerWidget {
       DailyAttendanceState.onLeave => const Color(0xFF0284C7),
       DailyAttendanceState.sickReport => const Color(0xFF7C3AED),
       DailyAttendanceState.absent => const Color(0xFFDC2626),
+      DailyAttendanceState.terminated => const Color(0xFF64748B),
+      DailyAttendanceState.notYetHired => const Color(0xFF94A3B8),
     };
 
-    final String checkInText;
-    if (item.firstCheckIn != null) {
-      final outPart = item.lastCheckOut != null &&
-              item.lastCheckOut!.id != item.firstCheckIn!.id
-          ? ' • Çıkış: ${item.lastCheckOut!.timeFormatted}'
-          : '';
-      checkInText =
-          'Giriş: ${item.firstCheckIn!.timeFormatted}$outPart (${item.firstCheckIn!.verifyMethod.label})';
-    } else {
-      checkInText = item.leaveRecord?.note ?? 'Giriş Yok';
-    }
+    final String timeBrief = item.firstCheckIn != null
+        ? (item.lastCheckOut != null &&
+                item.lastCheckOut!.id != item.firstCheckIn!.id
+            ? '${item.firstCheckIn!.timeFormatted} - ${item.lastCheckOut!.timeFormatted}'
+            : item.firstCheckIn!.timeFormatted)
+        : (item.state == DailyAttendanceState.terminated &&
+                item.employee.hasExitDate
+            ? 'Çıkış: ${PdksDashboardNotifier.formatDisplayDate(item.employee.normalizedExitDate!, includeTodayBadge: false)}'
+            : (item.state == DailyAttendanceState.notYetHired
+                ? 'İşe Başlamadı'
+                : (item.leaveRecord?.note ?? 'Giriş Yok')));
 
     return Material(
       color: pal.card,
@@ -630,115 +870,72 @@ class _MobileComfortableEmployeeCard extends ConsumerWidget {
           initialTabIndex: 0,
         ),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: pal.border),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  EmployeeProfileAvatar(
-                    employee: item.employee,
-                    size: 40,
-                    borderColor: badgeColor.withValues(alpha: 0.4),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                item.employee.fullName,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13.5,
-                                  color: pal.textPrimary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: badgeColor.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                item.state.label,
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: badgeColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${item.department.name} • Kart #${item.employee.cardNo}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: pal.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: pal.textMuted,
-                  ),
-                ],
+              EmployeeProfileAvatar(
+                employee: item.employee,
+                size: 40,
+                borderColor: badgeColor.withValues(alpha: 0.4),
               ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: pal.subtle,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      item.firstCheckIn != null
-                          ? Icons.access_time_filled_rounded
-                          : Icons.event_busy_rounded,
-                      size: 14,
-                      color: badgeColor,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        checkInText,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: pal.textPrimary,
-                        ),
+                    Text(
+                      item.employee.fullName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: pal.textPrimary,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      'Vardiya: ${item.shift.startTime}-${item.shift.endTime}',
+                      '${item.department.name} • $timeBrief',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                         color: pal.textSecondary,
                       ),
                     ),
                   ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  item.state.label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: pal.textSecondary,
               ),
             ],
           ),
@@ -763,6 +960,8 @@ class _MobileCompactEmployeeTile extends ConsumerWidget {
       DailyAttendanceState.onLeave => const Color(0xFF0284C7),
       DailyAttendanceState.sickReport => const Color(0xFF7C3AED),
       DailyAttendanceState.absent => const Color(0xFFDC2626),
+      DailyAttendanceState.terminated => const Color(0xFF64748B),
+      DailyAttendanceState.notYetHired => const Color(0xFF94A3B8),
     };
 
     final time = item.firstCheckIn?.timeFormatted ?? '-';
@@ -788,8 +987,8 @@ class _MobileCompactEmployeeTile extends ConsumerWidget {
           child: Row(
             children: [
               Container(
-                width: 7,
-                height: 7,
+                width: 8,
+                height: 8,
                 decoration: BoxDecoration(
                   color: badgeColor,
                   shape: BoxShape.circle,
@@ -799,21 +998,28 @@ class _MobileCompactEmployeeTile extends ConsumerWidget {
               Expanded(
                 child: Text(
                   item.employee.fullName,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                     color: pal.textPrimary,
                   ),
                 ),
               ),
-              Text(
-                item.department.name,
-                style: TextStyle(fontSize: 11, color: pal.textSecondary),
+              const SizedBox(width: 8),
+              Flexible(
+                flex: 0,
+                child: Text(
+                  item.department.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: pal.textSecondary),
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(
                   color: badgeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(4),
@@ -844,36 +1050,54 @@ class _MobileBottomNavigationBar extends ConsumerWidget {
     final pal = HasibuPalette.of(context);
     final activeModule =
         ref.watch(pdksDashboardProvider.select((s) => s.activeModule));
-    final allowedModules = ref.watch(
-      pdksDashboardProvider.select((s) => s.authSession.allowedModules),
+    final allowedModules = HasibuModule.filterActive(
+      ref.watch(
+        pdksDashboardProvider.select((s) => s.authSession.allowedModules),
+      ),
     );
 
     return Container(
+      height: 58,
       decoration: BoxDecoration(
         color: pal.card,
         border: Border(top: BorderSide(color: pal.border, width: 1)),
       ),
-      child: NavigationBar(
-        height: 60,
-        backgroundColor: pal.card,
-        indicatorColor: const Color(0xFF0284C7).withValues(alpha: 0.15),
-        selectedIndex: allowedModules.contains(activeModule)
-            ? allowedModules.indexOf(activeModule)
-            : 0,
-        onDestinationSelected: (idx) {
-          if (idx >= 0 && idx < allowedModules.length) {
-            ref
-                .read(pdksDashboardProvider.notifier)
-                .selectModule(allowedModules[idx]);
-          }
-        },
-        destinations: [
+      child: Row(
+        children: [
           for (final m in allowedModules)
-            NavigationDestination(
-              icon: Icon(_moduleIcon(m), color: pal.textSecondary, size: 20),
-              selectedIcon:
-                  Icon(_moduleIcon(m), color: const Color(0xFF0284C7), size: 20),
-              label: _shortModuleTitle(m),
+            Expanded(
+              child: InkWell(
+                onTap: () => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .selectModule(m),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _moduleIcon(m),
+                      color: m == activeModule
+                          ? const Color(0xFF0284C7)
+                          : pal.textSecondary,
+                      size: 20,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _shortModuleTitle(m),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: m == activeModule
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                        color: m == activeModule
+                            ? const Color(0xFF0284C7)
+                            : pal.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
       ),
@@ -888,6 +1112,8 @@ class _MobileBottomNavigationBar extends ConsumerWidget {
         return Icons.precision_manufacturing_rounded;
       case HasibuModule.preAccounting:
         return Icons.account_balance_wallet_rounded;
+      case HasibuModule.branchStore:
+        return Icons.storefront_rounded;
       case HasibuModule.employeePortal:
         return Icons.badge_rounded;
       case HasibuModule.systemSettings:
@@ -898,13 +1124,15 @@ class _MobileBottomNavigationBar extends ConsumerWidget {
   static String _shortModuleTitle(HasibuModule m) {
     switch (m) {
       case HasibuModule.pdksHr:
-        return 'PDKS & İK';
+        return 'PDKS';
       case HasibuModule.leanProduction:
-        return 'Yalın Üretim';
+        return 'Üretim';
       case HasibuModule.preAccounting:
-        return 'Ön Muhasebe';
+        return 'Muhasebe';
+      case HasibuModule.branchStore:
+        return 'Şube POS';
       case HasibuModule.employeePortal:
-        return 'Portalım';
+        return 'Portal';
       case HasibuModule.systemSettings:
         return 'Ayarlar';
     }
