@@ -30,6 +30,7 @@ platform :ios do
     if File.exist?(wwdr_path)
       import_certificate(
         certificate_path: wwdr_path,
+        keychain_name: keychain_name,
         keychain_path: keychain_path,
         keychain_password: keychain_password,
         log_output: false
@@ -46,6 +47,7 @@ platform :ios do
       import_certificate(
         certificate_path: p12_path,
         certificate_password: ENV["P12_PASSWORD"] || "",
+        keychain_name: keychain_name,
         keychain_path: keychain_path,
         keychain_password: keychain_password,
         log_output: true
@@ -75,7 +77,7 @@ platform :ios do
 
     profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
     profile_data = sh("security cms -D -i '#{profile_path}'")
-    team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1]
+    team_id = profile_data[/<key>TeamIdentifier<\/key>\s*<array>\s*<string>([^<]+)<\/string>/m, 1] || "9LZTZ73KP5"
     UI.message("Extracted Apple Development Team ID: #{team_id}")
 
     runner_profile_name = lane_context[SharedValues::SIGH_NAME]
@@ -106,6 +108,7 @@ platform :ios do
         output_directory: "../build/ios/ipa",
         output_name: "Hasibu.ipa",
         codesigning_identity: "Apple Distribution",
+        xcargs: "CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=#{team_id}",
         export_options: {
           signingStyle: "manual",
           provisioningProfiles: {
