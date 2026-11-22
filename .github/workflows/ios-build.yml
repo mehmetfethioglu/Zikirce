@@ -4,6 +4,12 @@ on:
   workflow_dispatch:
   push:
     branches: [ cuedeck-ios ]
+    paths-ignore:
+      - '.github/workflows/appstore-release.yml'
+      - 'docs/**'
+      - 'android/**'
+      - 'app_store_privacy_support/**'
+      - 'marketing/**'
 
 jobs:
   build-ios:
