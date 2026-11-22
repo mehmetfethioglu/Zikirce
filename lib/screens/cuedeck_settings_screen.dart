@@ -9,6 +9,7 @@ import '../providers/cuedeck_providers.dart';
 import '../widgets/modals/cue_pro_paywall_sheet.dart';
 import '../widgets/modals/google_oauth_sheet.dart';
 import '../widgets/modals/tv_discovery_pairing_sheets.dart';
+import '../widgets/modals/wake_on_lan_setup_sheet.dart';
 import '../widgets/planner/watch_planner_widgets.dart';
 import '../widgets/remote/cue_ad_banner.dart';
 import '../widgets/remote/quick_launch_app_dock.dart';
@@ -471,6 +472,46 @@ class _CueDeckSettingsScreenState
                                 ),
                               ),
                             ],
+                            if (!device.isIrBlaster) ...<Widget>[
+                              const SizedBox(height: 4),
+                              InkWell(
+                                key: const Key('settings_edit_mac_button'),
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  showWakeOnLanSetupSheet(context);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    children: <Widget>[
+                                      Icon(
+                                        Icons.power_settings_new_rounded,
+                                        size: 13,
+                                        color: goldText,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          device.hasValidMac
+                                              ? '⚡ WoL MAC: ${device.macAddress} • Düzenle'
+                                              : '⚡ WoL MAC ekle (kapalı TV açmak için)',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: goldText,
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (localNetworkPermissionDenied) ...<Widget>[
                               const SizedBox(height: 8),
                               Container(
@@ -641,9 +682,13 @@ class _CueDeckSettingsScreenState
                                     ),
                                     onPressed: () {
                                       HapticFeedback.mediumImpact();
-                                      ref
-                                          .read(cueDeckProvider.notifier)
-                                          .wakeUpSelectedTv();
+                                      if (device.hasValidMac) {
+                                        ref
+                                            .read(cueDeckProvider.notifier)
+                                            .wakeUpSelectedTv();
+                                      } else {
+                                        showWakeOnLanSetupSheet(context);
+                                      }
                                     },
                                     child: const Text(
                                       '⚡ TV Uyandır (WoL)',

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cuedeck/models/cue_models.dart';
 import 'package:cuedeck/providers/cuedeck_providers.dart';
@@ -7,6 +8,7 @@ import 'package:cuedeck/services/adb_tv_service.dart';
 import 'package:cuedeck/services/crypto/tv_secret_vault.dart';
 import 'package:cuedeck/services/cue_monetization_service.dart';
 import 'package:cuedeck/services/cue_notification_service.dart';
+import 'package:cuedeck/services/discovery/tv_discovery_helpers.dart';
 import 'package:cuedeck/services/drivers/arcelik_vestel_upnp_driver.dart';
 import 'package:cuedeck/services/drivers/lg_webos_driver.dart';
 import 'package:cuedeck/services/drivers/roku_philips_vidaa_driver.dart';
@@ -16,6 +18,7 @@ import 'package:cuedeck/services/drivers/youtube_dial_beam_service.dart';
 import 'package:cuedeck/services/share/cue_share_intent_service.dart';
 import 'package:cuedeck/widgets/modals/cue_pro_paywall_sheet.dart';
 import 'package:cuedeck/widgets/modals/share_to_tv_beam_sheet.dart';
+import 'package:cuedeck/widgets/modals/wake_on_lan_setup_sheet.dart';
 import 'package:cuedeck/widgets/remote/g10_remote_chassis.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -125,6 +128,24 @@ class _HealingTestAdbTvService extends _TestAdbTvService {
     }
     return device.copyWith(isOnline: true);
   }
+}
+
+class _OfflineNoTvTestAdbTvService extends _TestAdbTvService {
+  @override
+  Future<bool> pingTv(
+    String ip, {
+    int port = 5555,
+    Duration timeout = const Duration(milliseconds: 220),
+    bool warmupRetry = false,
+  }) async =>
+      false;
+
+  @override
+  Future<List<TvDevice>> discoverDevices({
+    String preferredIp = '',
+    bool forceFullSubnetScan = false,
+  }) async =>
+      const <TvDevice>[];
 }
 
 void main() {
@@ -835,6 +856,456 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(container.read(cueDeckProvider).isMuted, isFalse);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
+
+  test(
+    'TvNetworkValidators normalizes MACs and rejects all-zero, broadcast, and malformed values',
+    () {
+      expect(
+        TvNetworkValidators.normalizeMacAddress('aa:bb:cc:11:22:33'),
+        'AA:BB:CC:11:22:33',
+      );
+      expect(
+        TvNetworkValidators.normalizeMacAddress('aa-bb-cc-11-22-33'),
+        'AA:BB:CC:11:22:33',
+      );
+      expect(
+        TvNetworkValidators.normalizeMacAddress('aabb.cc11.2233'),
+        'AA:BB:CC:11:22:33',
+      );
+      expect(
+        TvNetworkValidators.normalizeMacAddress('aabbcc112233'),
+        'AA:BB:CC:11:22:33',
+      );
+      expect(
+        TvNetworkValidators.normalizeMacAddress('00:00:00:00:00:00'),
+        isEmpty,
+      );
+      expect(
+        TvNetworkValidators.normalizeMacAddress('ff:ff:ff:ff:ff:ff'),
+        isEmpty,
+      );
+      expect(TvNetworkValidators.normalizeMacAddress('bad-mac'), isEmpty);
+
+      expect(TvNetworkValidators.isValidMacAddress('AA:BB:CC:11:22:33'), isTrue);
+      expect(TvNetworkValidators.isValidMacAddress('aa-bb-cc-11-22-33'), isTrue);
+      expect(TvNetworkValidators.isValidMacAddress('00:00:00:00:00:00'), isFalse);
+      expect(TvNetworkValidators.isValidMacAddress('FF:FF:FF:FF:FF:FF'), isFalse);
+      expect(TvNetworkValidators.isValidMacAddress('AABBCC112233'), isFalse);
+
+      const wolOnlyDev = TvDevice(
+        name: 'Offline TV',
+        ip: '',
+        port: 5555,
+        macAddress: 'AA:BB:CC:11:22:33',
+      );
+      expect(wolOnlyDev.hasValidMac, isTrue);
+      expect(wolOnlyDev.hasControlTarget, isTrue);
+      expect(wolOnlyDev.displayEndpoint, 'WoL • AA:BB:CC:11:22:33');
+      expect(
+        wolOnlyDev.protocolBadgeLabel,
+        'Wake-on-LAN • Kapalı TV Uyandırma',
+      );
+    },
+  );
+
+  test(
+    'TvDiscoveryHelpers extracts MAC addresses from SSDP, XML, JSON (excluding bssid), mDNS TXT, and ADB shell output',
+    () {
+      // 1. SSDP WAKEUP header
+      const ssdp = 'HTTP/1.1 200 OK\r\n'
+          'ST: urn:dial-multiscreen-org:service:dial:1\r\n'
+          'WAKEUP: MAC=aa:bb:cc:11:22:33;Timeout=10\r\n\r\n';
+      expect(
+        TvDiscoveryHelpers.extractMacFromSsdpResponse(ssdp),
+        'AA:BB:CC:11:22:33',
+      );
+
+      // 2. Roku XML (ethernet vs wifi preference) & UPnP XML
+      const rokuEthXml = '<device-info>'
+          '<network-type>ethernet</network-type>'
+          '<wifi-mac>11:22:33:44:55:66</wifi-mac>'
+          '<ethernet-mac>AA:BB:CC:DD:EE:01</ethernet-mac>'
+          '</device-info>';
+      expect(
+        TvDiscoveryHelpers.extractMacFromXmlMetadata(rokuEthXml),
+        'AA:BB:CC:DD:EE:01',
+      );
+      const rokuWifiXml = '<device-info>'
+          '<network-type>wifi</network-type>'
+          '<ethernet-mac>AA:BB:CC:DD:EE:01</ethernet-mac>'
+          '<wifi-mac>11:22:33:44:55:66</wifi-mac>'
+          '</device-info>';
+      expect(
+        TvDiscoveryHelpers.extractMacFromXmlMetadata(rokuWifiXml),
+        '11:22:33:44:55:66',
+      );
+      const upnpXml = '<root><device><macAddress>de:ad:be:ef:00:01</macAddress></device></root>';
+      expect(
+        TvDiscoveryHelpers.extractMacFromXmlMetadata(upnpXml),
+        'DE:AD:BE:EF:00:01',
+      );
+
+      // 3. JSON metadata (Samsung wifiMac, Cast mac_address, ignore bssid)
+      expect(
+        TvDiscoveryHelpers.extractMacFromJsonMetadata(<String, Object?>{
+          'device': <String, Object?>{'wifiMac': '12:34:56:ab:cd:ef'},
+        }),
+        '12:34:56:AB:CD:EF',
+      );
+      expect(
+        TvDiscoveryHelpers.extractMacFromJsonMetadata(<String, Object?>{
+          'bssid': '99:88:77:66:55:44',
+          'mac_address': '22:33:44:55:66:77',
+        }),
+        '22:33:44:55:66:77',
+      );
+      expect(
+        TvDiscoveryHelpers.extractMacFromJsonMetadata(<String, Object?>{
+          'bssid': '99:88:77:66:55:44',
+          'name': 'Living Room TV',
+        }),
+        isEmpty,
+      );
+
+      // 4. mDNS TXT packet with deviceid=AA:BB:CC:DD:EE:FF
+      final txtPayload = ascii.encode('deviceid=aa:bb:cc:dd:ee:ff');
+      final mdnsPacket = Uint8List.fromList(<int>[
+        0x00, 0x00, 0x84, 0x00,
+        0x00, 0x00, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00,
+        4, ...ascii.encode('tv01'), 5, ...ascii.encode('local'), 0x00,
+        0x00, 0x10, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x78,
+        0x00, (txtPayload.length + 1),
+        txtPayload.length, ...txtPayload,
+      ]);
+      expect(
+        TvDiscoveryHelpers.extractMacFromMdnsPacket(mdnsPacket),
+        'AA:BB:CC:DD:EE:FF',
+      );
+
+      // 5. ADB shell output
+      expect(
+        TvDiscoveryHelpers.extractMacFromShellOutput(
+          'Xiaomi\nMiTV\nmtk\n11\nMAC=12:34:56:78:9a:bc\n',
+        ),
+        '12:34:56:78:9A:BC',
+      );
+    },
+  );
+
+  test(
+    'All TV drivers and AdbTvService fall back to Wake-on-LAN on TvKeyCommand.power for offline / MAC-only devices',
+    () async {
+      final prevOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = prevOverrides);
+
+      final vault = EncryptedTvSecretVault();
+      final upnp = UpnpDlnaDriver(ssdpLocationUrls: <String, String>{});
+      final arcelik = ArcelikGrundigDriver(
+        openLanSocket: (host, port, {required Duration timeout}) =>
+            Socket.connect(host, port, timeout: timeout),
+        upnpFallback: upnp,
+        dialAppUrls: <String, String>{},
+      );
+      final vestel = VestelSmartCenterDriver(arcelikDelegate: arcelik);
+      final philips = PhilipsJointSpaceDriver(vault: vault);
+      final sony = SonyBraviaIrccDriver(vault: vault);
+      final vidaa = VidaaSmartDriver(vault: vault, allowWebSocketFallback: false);
+      final roku = RokuEcpDriver();
+      final samsung = SamsungTizenDriver(vault: vault);
+      final lg = LgWebOsDriver(vault: vault);
+      final adb = AdbTvService(secretVault: vault);
+
+      addTearDown(() {
+        arcelik.dispose();
+        vidaa.dispose();
+        samsung.dispose();
+        lg.dispose();
+        adb.dispose();
+      });
+
+      const mac = 'AA:BB:CC:11:22:33';
+      // Empty-IP (MAC-only) offline devices + unreachable localhost closed port
+      for (final driver in [
+        philips,
+        sony,
+        vidaa,
+        vestel,
+        arcelik,
+        upnp,
+        roku,
+        samsung,
+        lg,
+      ]) {
+        final macOnlyDevice = TvDevice(
+          name: 'Offline ${driver.protocol.name}',
+          ip: '',
+          port: driver.protocol.defaultPort,
+          protocol: driver.protocol,
+          macAddress: mac,
+        );
+        expect(
+          await driver.sendKey(macOnlyDevice, TvKeyCommand.power),
+          isTrue,
+          reason: '${driver.protocol.name} should WoL-wake on empty-IP power key',
+        );
+        expect(
+          await driver.sendKey(macOnlyDevice, TvKeyCommand.volUp),
+          isFalse,
+          reason: '${driver.protocol.name} must not WoL-wake on non-power keys',
+        );
+      }
+
+      // Also verify closed local port (offline TV with saved IP + MAC) falls back to WoL
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      final closedPort = server.port;
+      await server.close();
+
+      final offlineResults = await Future.wait<bool>(<Future<bool>>[
+        philips.sendKey(
+          TvDevice(
+            name: 'Offline Philips',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.philipsJointSpace1925,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        sony.sendKey(
+          TvDevice(
+            name: 'Offline Sony',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.sonyBraviaIrcc,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        vidaa.sendKey(
+          TvDevice(
+            name: 'Offline VIDAA',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.vidaaSmart36669,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        vestel.sendKey(
+          TvDevice(
+            name: 'Offline Vestel',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.vestelSmart56789,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        arcelik.sendKey(
+          TvDevice(
+            name: 'Offline Arcelik',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.arcelikGrundig8085,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        upnp.sendKey(
+          TvDevice(
+            name: 'Offline UPnP',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.upnpDlnaControl,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        adb.sendKeyCommand(
+          TvDevice(
+            name: 'Offline ADB',
+            ip: '127.0.0.1',
+            port: closedPort,
+            protocol: TvConnectionProtocol.adbPort5555,
+            macAddress: mac,
+          ),
+          TvKeyCommand.power,
+        ),
+        () async {
+          final adb6466 = AdbTvService(secretVault: vault);
+          try {
+            return await adb6466.sendKeyCommand(
+              TvDevice(
+                name: 'Offline 6466',
+                ip: '127.0.0.1',
+                port: closedPort,
+                protocol: TvConnectionProtocol.remotePort6466,
+                macAddress: mac,
+              ),
+              TvKeyCommand.power,
+            );
+          } finally {
+            adb6466.dispose();
+          }
+        }(),
+      ]);
+      expect(offlineResults, everyElement(isTrue));
+
+      const macOnlyAdb = TvDevice(
+        name: 'MAC Only TV',
+        ip: '',
+        port: 5555,
+        protocol: TvConnectionProtocol.adbPort5555,
+        macAddress: mac,
+      );
+      expect(
+        await adb.sendKeyCommand(macOnlyAdb, TvKeyCommand.power),
+        isTrue,
+      );
+      expect(
+        await adb.sendKeyCommand(macOnlyAdb, TvKeyCommand.home),
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
+    'WakeOnLanSetupSheet validates invalid MAC, saves normalized MAC + optional IP, and updates CueDeckNotifier',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adbTvServiceProvider.overrideWithValue(
+              _OfflineNoTvTestAdbTvService(),
+            ),
+            cueNotificationServiceProvider.overrideWithValue(
+              _TestCueNotificationService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => Center(
+                  child: ElevatedButton(
+                    key: const Key('open_wol_sheet_btn'),
+                    onPressed: () => showWakeOnLanSetupSheet(context),
+                    child: const Text('Open WoL'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byKey(const Key('open_wol_sheet_btn'))),
+      );
+      expect(container.read(cueDeckProvider).selectedDevice.hasValidMac, isFalse);
+      expect(
+        container.read(cueDeckProvider).selectedDevice.hasControlTarget,
+        isFalse,
+      );
+
+      await tester.tap(find.byKey(const Key('open_wol_sheet_btn')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('wake_on_lan_setup_sheet')), findsOneWidget);
+
+      // Invalid MAC should display inline error without closing or saving
+      await tester.enterText(find.byKey(const Key('wol_mac_input')), 'not-a-mac');
+      await tester.tap(find.byKey(const Key('wol_save_and_wake_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('wol_error_text')), findsOneWidget);
+      expect(find.byKey(const Key('wake_on_lan_setup_sheet')), findsOneWidget);
+      expect(container.read(cueDeckProvider).selectedDevice.hasValidMac, isFalse);
+
+      // Valid MAC + optional IP should save normalized MAC, wake, and close sheet
+      await tester.enterText(
+        find.byKey(const Key('wol_mac_input')),
+        'aa-bb-cc-11-22-33',
+      );
+      await tester.enterText(
+        find.byKey(const Key('wol_ip_input')),
+        '192.168.1.77',
+      );
+      await tester.tap(find.byKey(const Key('wol_save_and_wake_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('wake_on_lan_setup_sheet')), findsNothing);
+      final savedDevice = container.read(cueDeckProvider).selectedDevice;
+      expect(savedDevice.macAddress, 'AA:BB:CC:11:22:33');
+      expect(savedDevice.ip, '192.168.1.77');
+      expect(savedDevice.hasValidMac, isTrue);
+      expect(savedDevice.hasControlTarget, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
+
+  testWidgets(
+    'CueDeckNotifier preserves manually saved MAC address across network rescans',
+    (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adbTvServiceProvider.overrideWithValue(_TestAdbTvService()),
+            cueNotificationServiceProvider.overrideWithValue(
+              _TestCueNotificationService(),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(Scaffold)),
+      );
+      final notifier = container.read(cueDeckProvider.notifier);
+
+      await notifier.scanNetworkForTvs();
+      await tester.pumpAndSettle();
+
+      expect(container.read(cueDeckProvider).selectedDevice.ip, '192.168.1.40');
+      expect(
+        container.read(cueDeckProvider).selectedDevice.macAddress,
+        isEmpty,
+      );
+
+      final saved = await notifier.saveSelectedTvMacAddress('aa:bb:cc:44:55:66');
+      expect(saved, isTrue);
+      expect(
+        container.read(cueDeckProvider).selectedDevice.macAddress,
+        'AA:BB:CC:44:55:66',
+      );
+
+      await notifier.scanNetworkForTvs();
+      await tester.pumpAndSettle();
+      expect(
+        container.read(cueDeckProvider).selectedDevice.ip,
+        '192.168.1.40',
+      );
+      expect(
+        container.read(cueDeckProvider).selectedDevice.macAddress,
+        'AA:BB:CC:44:55:66',
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 300));

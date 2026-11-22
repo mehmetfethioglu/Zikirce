@@ -1,10 +1,14 @@
-CueDeckは、複数メーカーのテレビを一つの画面で操作できるユニバーサル・スマートTVリモコン＆視聴スケジュール管理アプリです。
+CueDeckは、複数メーカーのテレビを一つの画面で操作でき、赤外線なしのWake-on-LAN電源オン・YouTubeリンク送信・視聴スケジュール管理を統合したユニバーサル・スマートTVリモコンです。
+
+赤外線なしでの電源オン（Wake-on-LAN）
+• ユニバーサルWake-on-LAN：IR送信機がないスマートフォンからでも、電源オフ状態の対応テレビをネットワーク経由で起動できます。
+• 自動・手動MACアドレス設定：SSDP、mDNS、XML/JSON、ADBからMACを自動取得し、リモコン・設定画面からの手動MAC登録にも対応。
 
 対応テレビ・通信方式
 • Google TV / Android TV（ADB 5555および6桁PIN 6466ペアリング対応）
 • Samsung Tizen（常時WebSocket 8002/8001、トークン永続化、キーボード入力、Wake-on-LAN電源オン）
 • LG webOS（Magic Remoteカーソル、スクロールホイール、十字キー、client-key保存）
-• Roku ECP、Philips JointSpace、Hisense VIDAA、Sony Bravia IRCC-IP、Arçelik / Vestel、UPnP/DLNA
+• Philips JointSpace v6（PIN＋Digest）、Hisense VIDAA（MQTT TLS）、Roku ECP、Sony Bravia IRCC-IP、Arçelik / Vestel、UPnP/DLNA
 • 赤外線（IR）ブラスター：Wi-Fi不要で7メーカーのテレビを直接操作（Android IR搭載端末対応）
 
 主な特長

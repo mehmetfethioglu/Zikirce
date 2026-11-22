@@ -1,34 +1,34 @@
-name: App Store Connect — Create v2.0.0, Attach Build 25 & Submit for Review
+name: App Store Connect — Create v2.1.0, Attach Build 28 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 2.0.0)"
+        description: "App Store Version String (e.g. 2.1.0)"
         required: false
-        default: "2.0.0"
+        default: "2.1.0"
       build_number:
-        description: "TestFlight Build Number (e.g. 25)"
+        description: "TestFlight Build Number (e.g. 28)"
         required: false
-        default: "25"
+        default: "28"
 
 jobs:
   submit-appstore:
-    name: Submit v2.0.0 (Build 25) to App Store Connect
+    name: Submit v2.1.0 (Build 28) to App Store Connect
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '2.0.0' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '25' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '2.1.0' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '28' }}
 
     steps:
       - name: Install PyJWT and Cryptography
         run: pip install pyjwt cryptography requests
 
-      - name: Ensure Bundle ID, Configure v2.0.0 Release Notes, Attach Build 25 & Submit to Review
+      - name: Sync 8-Locale ASO, Attach Build 28 (Icon), Configure v2.1.0 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, jwt, requests
@@ -36,9 +36,13 @@ jobs:
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
-          target_version = os.environ.get("TARGET_VERSION", "1.9.5").strip()
-          target_build = os.environ.get("TARGET_BUILD", "17").strip()
+          target_version = os.environ.get("TARGET_VERSION", "2.1.0").strip()
+          target_build = os.environ.get("TARGET_BUILD", "28").strip()
           bundle_id_str = "com.akarworks.cuedeck"
+
+          PRIVACY_URL = "https://mehmetfethioglu.github.io/cuedeck-indir/"
+          SUPPORT_URL = "https://mehmetfethioglu.github.io/cuedeck-indir/support.html"
+          MARKETING_URL = "https://mehmetfethioglu.github.io/cuedeck-indir/indir.html"
 
           def make_headers():
               now = int(time.time())
@@ -78,33 +82,20 @@ jobs:
                   )
                   print("  Bundle ID registration status:", reg.status_code, reg.text[:300])
               else:
-                  print(f"✅ Bundle ID '{bundle_id_str}' is already registered in Apple Developer Portal (id: {b_data[0]['id']}).")
+                  print(f"✅ Bundle ID '{bundle_id_str}' registered (id: {b_data[0]['id']}).")
 
           # 1. Find App ID for com.akarworks.cuedeck in App Store Connect
           r = requests.get(f"{BASE}/apps?filter[bundleId]={bundle_id_str}", headers=make_headers())
           r.raise_for_status()
           apps = r.json().get("data", [])
           if not apps:
-              print("=" * 80)
-              print("⚠️ ACTION REQUIRED: 'com.akarworks.cuedeck' App Store Connect kaydı henüz oluşturulmamış!")
-              print("Bundle ID ('com.akarworks.cuedeck') Apple Developer Portal'a otomatik olarak kaydedildi.")
-              print("Apple güvenlik politikası gereği ilk uygulama kartı App Store Connect web arayüzünden 1 kez açılmalıdır:")
-              print("👉 1. https://appstoreconnect.apple.com/apps adresine gidin ve (+) 'New App' butonuna tıklayın.")
-              print("👉 2. Aşağıdaki bilgileri seçip 'Create' butonuna basın (30 saniye):")
-              print("      • Platforms: iOS")
-              print("      • Name: CueDeck")
-              print("      • Primary Language: Turkish (Türkçe)")
-              print("      • Bundle ID: com.akarworks.cuedeck")
-              print("      • SKU: cuedeck-001")
-              print("      • User Access: Full Access")
-              print("👉 3. Oluşturduktan sonra bu GitHub Action iş akışını tekrar tetikleyin.")
-              print("=" * 80)
+              print("❌ App com.akarworks.cuedeck not found in App Store Connect!")
               sys.exit(1)
 
           app_id = apps[0]["id"]
           print(f"✅ Found App ID: {app_id}")
 
-          # 2. Find or create App Store Version (default 1.9.1)
+          # 2. Find or create App Store Version (target_version)
           r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
           r.raise_for_status()
           versions = r.json().get("data", [])
@@ -118,7 +109,7 @@ jobs:
               if v_str == target_version:
                   target_version_id = v["id"]
                   break
-              if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "INVALID_BINARY"):
+              if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"):
                   editable_version = v
 
           if not target_version_id and editable_version:
@@ -165,42 +156,272 @@ jobs:
 
           print(f"✅ Target App Store Version ID for {target_version}: {target_version_id}")
 
-          # 3. Set What's New (Release Notes) for TR and EN
+          # 3. Define 8-Locale ASO Metadata (Apple Poka-Yoke verified: Title<=30, Subtitle<=30, Keywords<=100 bytes)
           whats_new_tr = (
               f"CueDeck v{target_version} (Build {target_build}) Yenilikleri:\n"
-              "• Evrensel Smart TV Sürücüleri: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP desteği.\n"
-              "• Paylaş → CueDeck (Share-to-TV): YouTube video ve oynatma listelerini evrensel DIAL v2 ile doğrudan TV'de başlatın veya akşam saatinize planlayın.\n"
-              "• 3 Gün Ücretsiz Denemeli Yıllık Pro, Haftalık ve Ömür Boyu Pro seçenekleri (temel kumanda tuşlarında kesinti yok)."
+              "• Kapalı TV Uyandırma (Wake-on-LAN): IR vericisi olmayan iPhone'lardan kapalı TV'leri ağ üzerinden açın.\n"
+              "• Manuel MAC Kurulumu & Otomatik MAC Keşfi: Kumanda, Ayarlar ve ağ taramadan MAC kaydedin; Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arçelik/Vestel ve Android/Google TV'lerden otomatik MAC algılama.\n"
+              "• Tüm sürücülerde Güç tuşuna otomatik Wake-on-LAN yedeklemesi eklendi."
           )
-
           whats_new_en = (
               f"What's New in CueDeck v{target_version} (Build {target_build}):\n"
-              "• Universal Smart TV Drivers: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Remote cursor + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP.\n"
-              "• Share to TV Beam: Launch YouTube videos and playlists directly on your Smart TV via Universal DIAL v2 or schedule for tonight.\n"
-              "• Flexible Weekly, Annual (3-Day Free Trial), and Lifetime Pro plans with uninterrupted core remote keys."
+              "• Wake Turned-Off TVs (Wake-on-LAN): Power on compatible TVs from iPhones without an IR blaster.\n"
+              "• Manual MAC Setup & Auto Discovery: Save your TV's MAC in one tap; automatic MAC extraction across Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arcelik/Vestel, and Android/Google TV.\n"
+              "• Automatic Power-key Wake-on-LAN fallback across every TV driver."
           )
 
+          ASO_LOCALES = {
+              "tr": {
+                  "aliases": ["tr", "tr-TR"],
+                  "name": "CueDeck: Evrensel TV Kumanda",
+                  "subtitle": "Samsung LG Android IR Touchpad",
+                  "keywords": "televizyon,akıllı,tizen,webos,roku,arçelik,vestel,kızılötesi,wol,uyandır,youtube,klavye,mouse",
+                  "promo": "IR olmadan iPhone'dan kapalı TV aç (Wake-on-LAN)! Samsung, LG, Philips, VIDAA, Roku ve Android TV tek kumandada.",
+                  "whatsNew": whats_new_tr,
+                  "desc": (
+                      "CueDeck, evinizdeki tüm televizyonları tek bir akıcı kumandada, kapalı TV uyandırma (Wake-on-LAN) motorunda ve akıllı izleme planlayıcısında birleştiren evrensel Smart TV kumandasıdır.\n\n"
+                      "KAPALI TV UYANDIRMA (IR GEREKTİRMEZ)\n"
+                      "• Evrensel Wake-on-LAN (WoL): Kızılötesi vericisi olmayan iPhone ve iPad cihazlardan bile uyumlu Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel ve Android/Google TV'leri ağ üzerinden açın.\n"
+                      "• Otomatik & Manuel MAC Kurulumu: TV MAC adresini SSDP, mDNS, XML/JSON ve ADB ile otomatik algılar veya kumanda/Ayarlar üzerinden manuel girerek tek dokunuşla («⚡ TV Uyandır») uyandırmanızı sağlar.\n\n"
+                      "DESTEKLENEN TELEVİZYON PROTOKOLLERİ\n"
+                      "• Samsung Tizen (8002/8001 WebSocket, Token, IME Klavye, Wake-on-LAN)\n"
+                      "• LG webOS (Magic Mouse imleç, tekerlek, yön tuşları, client-key)\n"
+                      "• Google TV & Android TV (Port 6466 6 haneli PIN & ADB Port 5555)\n"
+                      "• Philips JointSpace v6 (PIN + Digest), Hisense VIDAA (MQTT TLS), Roku ECP, Sony IRCC-IP ve Arçelik/Vestel/UPnP\n\n"
+                      "ÖNE ÇIKAN ÖZELLİKLER\n"
+                      "• Paylaş → CueDeck (Share-to-TV): YouTube video ve oynatma listelerini DIAL v2 ile TV'de açın veya akşam saatinize planlayın.\n"
+                      "• Hassas Touchpad, Canlı Telefon Klavyesi, Türkçe Sesli Komut ve Google Drive Yedekleme.\n"
+                      "• Temel kumanda tuşlarında kesinti yok; günlük 3 Share-to-TV ışınlama ve 2 özel izleme planı dahildir."
+                  ),
+              },
+              "en-US": {
+                  "aliases": ["en-US", "en-GB"],
+                  "name": "CueDeck: Universal TV Remote",
+                  "subtitle": "Samsung LG Roku Android & IR",
+                  "keywords": "smart,control,tizen,webos,sony,philips,vidaa,wol,wake,power,touchpad,keyboard,youtube,cast",
+                  "promo": "Wake turned-off TVs from iPhone via Wake-on-LAN! Control Samsung, LG, Roku, Philips, VIDAA & Android TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck is a universal Smart TV remote control, Wake-on-LAN power-on hub, Share-to-TV link launcher, and personal watch planner built for multi-brand living rooms.\n\n"
+                      "WAKE TURNED-OFF TVs FROM IPHONE (NO IR NEEDED)\n"
+                      "• Universal Wake-on-LAN (WoL): Power on compatible turned-off Smart TVs from iPhone and iPad using subnet Wake-on-LAN magic packets and automatic Power-key fallback.\n"
+                      "• Auto & Manual MAC Setup: Automatically extracts TV MAC addresses via SSDP, mDNS, XML/JSON, and ADB—or enter your TV's MAC manually in one tap.\n\n"
+                      "UNIVERSAL SMART TV SUPPORT\n"
+                      "• Samsung Tizen (8002/8001 WebSocket, token vault, live keyboard, Wake-on-LAN)\n"
+                      "• LG webOS (Magic Remote cursor, scroll wheel, D-Pad, persistent client-key)\n"
+                      "• Google TV & Android TV (Port 6466 6-digit PIN + ADB Port 5555 Turbo)\n"
+                      "• Philips JointSpace v6 (PIN + Digest), Hisense/Toshiba VIDAA (MQTT TLS), Roku ECP, Sony Bravia IRCC-IP, Arcelik/Vestel & UPnP/DLNA\n\n"
+                      "KEY FEATURES\n"
+                      "• Share to CueDeck: Beam YouTube videos and playlists to your TV immediately via DIAL v2 or schedule for tonight.\n"
+                      "• Precision Touchpad, Live Phone Keyboard, Voice Search & AES-256-GCM Backup.\n"
+                      "• Core navigation keys always stay responsive without blocking interstitials."
+                  ),
+              },
+              "de-DE": {
+                  "aliases": ["de-DE"],
+                  "name": "CueDeck: TV Fernbedienung",
+                  "subtitle": "Samsung LG Roku Android & IR",
+                  "keywords": "fernseher,smart,tizen,webos,philips,sony,vidaa,wol,einschalten,infrarot,touchpad,tastatur,youtube",
+                  "promo": "TV per Wake-on-LAN vom iPhone einschalten! Samsung, LG, Philips, VIDAA, Roku & Android TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck ist Ihre universelle Smart-TV-Fernbedienung mit Wake-on-LAN-Start ohne Infrarot, YouTube-Direktübertragung und persönlichem Serien-Planer.\n\n"
+                      "• TV ohne IR einschalten: Wecken Sie kompatible ausgeschaltete TVs per Wake-on-LAN (automatische & manuelle MAC-Einrichtung).\n"
+                      "• Unterstützt Samsung Tizen, LG webOS (Magic Mouse), Google TV / Android TV (6466 PIN & 5555), Philips v6, Hisense VIDAA, Roku, Sony & UPnP.\n"
+                      "• Teilen → CueDeck (DIAL v2), Präzisions-Touchpad, Live-Tastatur & OLED Echt-Schwarz-Design."
+                  ),
+              },
+              "es-ES": {
+                  "aliases": ["es-ES", "es-MX"],
+                  "name": "CueDeck: Control Universal TV",
+                  "subtitle": "Samsung LG Roku Android e IR",
+                  "keywords": "mando,tele,inteligente,tizen,webos,sony,philips,vidaa,wol,encender,infrarrojo,raton,teclado,youtube",
+                  "promo": "Enciende tu TV apagado desde iPhone con Wake-on-LAN. Compatible con Samsung, LG, Roku, Philips y Android TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck combina un control remoto universal para Smart TV, encendido Wake-on-LAN sin infrarrojo, envío directo de YouTube y planificador de series.\n\n"
+                      "• Enciende tu TV apagado con Wake-on-LAN: Detección automática o registro manual de MAC.\n"
+                      "• Compatible con Samsung Tizen, LG webOS (Magic Remote), Google TV / Android TV (PIN 6466 y ADB 5555), Philips v6, Hisense VIDAA, Roku, Sony y UPnP.\n"
+                      "• Compartir → CueDeck (DIAL v2), Touchpad táctil, teclado del teléfono y tema Negro OLED."
+                  ),
+              },
+              "fr-FR": {
+                  "aliases": ["fr-FR"],
+                  "name": "CueDeck: Télécommande Smart TV",
+                  "subtitle": "Samsung LG Roku Android & IR",
+                  "keywords": "telecommande,tizen,webos,sony,philips,vidaa,wol,allumer,infrarouge,souris,clavier,youtube,cast",
+                  "promo": "Allumez votre TV éteinte depuis l'iPhone via Wake-on-LAN ! Samsung, LG, Roku, Philips, VIDAA & Android TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck réunit une télécommande universelle Smart TV, l'allumage Wake-on-LAN sans infrarouge, le partage YouTube DIAL v2 et un planificateur de visionnage.\n\n"
+                      "• Wake-on-LAN Universel : Détection automatique ou saisie manuelle d'adresse MAC pour allumer votre téléviseur.\n"
+                      "• Prise en charge Samsung Tizen, LG webOS (Magic Remote), Google TV / Android TV (PIN 6466 & ADB 5555), Philips v6, VIDAA, Roku, Sony et UPnP."
+                  ),
+              },
+              "ja": {
+                  "aliases": ["ja"],
+                  "name": "CueDeck: スマートテレビ リモコン",
+                  "subtitle": "Samsung LG Sony Android IR操作",
+                  "keywords": "テレビ,マウス,キーボード,赤外線,wol,電源,起動,動画,タイマー,共有",
+                  "promo": "iPhoneからWake-on-LANで電源オフのテレビを起動！Samsung、LG、Sony、Philips、Android TV対応。",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeckは、赤外線なしのWake-on-LAN電源オン・YouTube共有・視聴スケジュール管理を統合したスマートTVリモコンです。\n\n"
+                      "• 自動＆手動MAC登録によるWake-on-LAN電源オン\n"
+                      "• Samsung Tizen、LG webOS（Magic Mouse）、Google TV / Android TV（PIN 6466 & ADB 5555）、Philips v6、VIDAA、Roku、Sony IRCC対応。"
+                  ),
+              },
+              "pt-BR": {
+                  "aliases": ["pt-BR"],
+                  "name": "CueDeck: Controle Universal TV",
+                  "subtitle": "Samsung LG Roku Android e IR",
+                  "keywords": "remoto,smart,televisao,tizen,webos,sony,philips,vidaa,wol,ligar,infravermelho,mouse,teclado,youtube",
+                  "promo": "Ligue sua TV desligada pelo iPhone via Wake-on-LAN! Compatível com Samsung, LG, Roku, Philips e Android TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck é o controle remoto universal para Smart TV com ativação Wake-on-LAN sem infravermelho, envio de YouTube e planejador pessoal.\n\n"
+                      "• Wake-on-LAN Universal: Detecção automática e cadastro manual de MAC para ligar TVs compatíveis.\n"
+                      "• Compatível com Samsung Tizen, LG webOS (Magic Remote), Google TV / Android TV (PIN 6466 e ADB 5555), Philips v6, VIDAA, Roku, Sony e UPnP."
+                  ),
+              },
+              "ar-SA": {
+                  "aliases": ["ar-SA", "ar"],
+                  "name": "CueDeck: ريموت التلفاز الذكي",
+                  "subtitle": "سامسونج إل جي أندرويد وIR",
+                  "keywords": "تلفزيون,tizen,webos,wol,تشغيل,يوتيوب,ماوس,كيبورد,بث,مؤقت,تحكم",
+                  "promo": "شغّل التلفاز المغلق من الآيفون عبر Wake-on-LAN! يدعم سامسونج وإل جي وفيليبس وأندرويد TV.",
+                  "whatsNew": whats_new_en,
+                  "desc": (
+                      "CueDeck تطبيق تحكم شامل للتلفاز الذكي مع تشغيل التلفاز المغلق عبر Wake-on-LAN بدون أشعة تحت حمراء وإرسال روابط يوتيوب ومنظم المشاهدة.\n\n"
+                      "• تشغيل التلفاز المغلق: اكتشاف تلقائي أو إدخال يدوي لعنوان MAC.\n"
+                      "• يدعم سامسونج Tizen وإل جي webOS وGoogle TV وAndroid TV وPhilips v6 وVIDAA وRoku وSony."
+                  ),
+              },
+          }
+
+          for loc_key, cfg in ASO_LOCALES.items():
+              assert len(cfg["name"]) <= 30, f"{loc_key} name > 30"
+              assert len(cfg["subtitle"]) <= 30, f"{loc_key} subtitle > 30"
+              assert len(cfg["keywords"].encode("utf-8")) <= 100, f"{loc_key} keywords > 100 bytes"
+
+          # 3a. Sync 8-locale appInfoLocalizations (Name, Subtitle, Privacy Policy URL)
+          ai_r = requests.get(f"{BASE}/apps/{app_id}/appInfos", headers=make_headers())
+          ai_r.raise_for_status()
+          app_infos = ai_r.json().get("data", [])
+          if app_infos:
+              editable_states = ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "IN_REVIEW")
+              chosen_ai = next((x for x in app_infos if x["attributes"].get("appStoreState") in editable_states), app_infos[0])
+              app_info_id = chosen_ai["id"]
+              print(f"ℹ️ Using appInfo {app_info_id} (state={chosen_ai['attributes'].get('appStoreState')})")
+
+              ail_r = requests.get(f"{BASE}/appInfos/{app_info_id}/appInfoLocalizations", headers=make_headers())
+              ail_r.raise_for_status()
+              existing_ail = {x["attributes"]["locale"]: x["id"] for x in ail_r.json().get("data", [])}
+              print("  Existing appInfoLocalizations:", list(existing_ail.keys()))
+
+              for loc_key, cfg in ASO_LOCALES.items():
+                  matched_loc = next((a for a in cfg["aliases"] if a in existing_ail), None)
+                  attrs = {
+                      "name": cfg["name"],
+                      "subtitle": cfg["subtitle"],
+                      "privacyPolicyUrl": PRIVACY_URL,
+                  }
+                  if matched_loc:
+                      lid = existing_ail[matched_loc]
+                      resp = requests.patch(
+                          f"{BASE}/appInfoLocalizations/{lid}",
+                          headers=make_headers(),
+                          json={"data": {"type": "appInfoLocalizations", "id": lid, "attributes": attrs}},
+                      )
+                      print(f"  PATCH appInfoLoc {matched_loc}: {resp.status_code}")
+                      if resp.status_code >= 400:
+                          print("   detail:", resp.text[:250])
+                  else:
+                      resp = requests.post(
+                          f"{BASE}/appInfoLocalizations",
+                          headers=make_headers(),
+                          json={
+                              "data": {
+                                  "type": "appInfoLocalizations",
+                                  "attributes": {"locale": loc_key, **attrs},
+                                  "relationships": {"appInfo": {"data": {"type": "appInfos", "id": app_info_id}}},
+                              }
+                          },
+                      )
+                      print(f"  POST appInfoLoc {loc_key}: {resp.status_code}")
+                      if resp.status_code >= 400:
+                          print("   detail:", resp.text[:250])
+
+          # 3b. Sync 8-locale appStoreVersionLocalizations (Keywords, Description, Promo, Support/Marketing URL, WhatsNew)
           loc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
           loc_r.raise_for_status()
-          locs = loc_r.json().get("data", [])
-          for loc in locs:
-              locale = loc["attributes"]["locale"]
-              loc_id = loc["id"]
-              text = whats_new_tr if locale.startswith("tr") else whats_new_en
-              pr = requests.patch(
-                  f"{BASE}/appStoreVersionLocalizations/{loc_id}",
-                  headers=make_headers(),
-                  json={
-                      "data": {
-                          "type": "appStoreVersionLocalizations",
-                          "id": loc_id,
-                          "attributes": {"whatsNew": text},
-                      }
-                  },
-              )
-              print(f"📝 Updated whatsNew for locale '{locale}': status {pr.status_code}")
+          existing_vloc = {x["attributes"]["locale"]: x["id"] for x in loc_r.json().get("data", [])}
+          print("  Existing appStoreVersionLocalizations:", list(existing_vloc.keys()))
 
-          # 4. Wait for Build (default 13) to finish Apple processing and attach to Version
+          for loc_key, cfg in ASO_LOCALES.items():
+              matched_loc = next((a for a in cfg["aliases"] if a in existing_vloc), None)
+              attrs_with_wn = {
+                  "description": cfg["desc"],
+                  "keywords": cfg["keywords"],
+                  "promotionalText": cfg["promo"],
+                  "supportUrl": SUPPORT_URL,
+                  "marketingUrl": MARKETING_URL,
+                  "whatsNew": cfg["whatsNew"],
+              }
+              attrs_no_wn = {k: v for k, v in attrs_with_wn.items() if k != "whatsNew"}
+              if matched_loc:
+                  lid = existing_vloc[matched_loc]
+                  pr = requests.patch(
+                      f"{BASE}/appStoreVersionLocalizations/{lid}",
+                      headers=make_headers(),
+                      json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": attrs_with_wn}},
+                  )
+                  if pr.status_code == 409:
+                      pr = requests.patch(
+                          f"{BASE}/appStoreVersionLocalizations/{lid}",
+                          headers=make_headers(),
+                          json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": attrs_no_wn}},
+                      )
+                  print(f"  PATCH versionLoc {matched_loc}: {pr.status_code}")
+                  if pr.status_code >= 400:
+                      print("   detail:", pr.text[:250])
+              else:
+                  pr = requests.post(
+                      f"{BASE}/appStoreVersionLocalizations",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "appStoreVersionLocalizations",
+                              "attributes": {"locale": loc_key, **attrs_with_wn},
+                              "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}}},
+                          }
+                      },
+                  )
+                  if pr.status_code == 409:
+                      pr = requests.post(
+                          f"{BASE}/appStoreVersionLocalizations",
+                          headers=make_headers(),
+                          json={
+                              "data": {
+                                  "type": "appStoreVersionLocalizations",
+                                  "attributes": {"locale": loc_key, **attrs_no_wn},
+                                  "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}}},
+                              }
+                          },
+                      )
+                  print(f"  POST versionLoc {loc_key}: {pr.status_code}")
+                  if pr.status_code >= 400:
+                      print("   detail:", pr.text[:250])
+
+          # Inspect screenshot sets on primary localization
+          loc_r2 = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
+          if loc_r2.status_code == 200 and loc_r2.json().get("data"):
+              first_loc = loc_r2.json()["data"][0]
+              ss_r = requests.get(f"{BASE}/appStoreVersionLocalizations/{first_loc['id']}/appScreenshotSets", headers=make_headers())
+              if ss_r.status_code == 200:
+                  print(f"📸 Screenshot sets on {first_loc['attributes']['locale']}: {len(ss_r.json().get('data', []))}")
+
+          # 4. Wait for Build 28 to finish Apple processing and attach to Version 2.1.0 (displays App Icon)
           build_id = None
           for attempt in range(24):
               br = requests.get(
@@ -212,9 +433,12 @@ jobs:
               if b_list:
                   b = b_list[0]
                   state = b["attributes"].get("processingState")
-                  print(f"📦 Build {target_build} found (id: {b['id']}, state: {state})")
+                  icon_tok = b["attributes"].get("iconAssetToken")
+                  print(f"📦 Build {target_build} found (id: {b['id']}, state: {state}, iconAssetToken: {bool(icon_tok)})")
                   if state == "VALID":
                       build_id = b["id"]
+                      if icon_tok:
+                          print(f"🎨 Build iconAssetToken templateUrl: {icon_tok.get('templateUrl')}")
                       break
                   elif state in ("FAILED", "INVALID"):
                       print(f"❌ Build {target_build} state is invalid/failed!")
@@ -224,7 +448,6 @@ jobs:
               time.sleep(25)
 
           if build_id:
-              # Set export compliance usesNonExemptEncryption = false
               requests.patch(
                   f"{BASE}/builds/{build_id}",
                   headers=make_headers(),
@@ -241,7 +464,7 @@ jobs:
                   headers=make_headers(),
                   json={"data": {"type": "builds", "id": build_id}},
               )
-              print(f"🔗 Attached Build {target_build} ({build_id}) to Version {target_version}: status {att.status_code}")
+              print(f"🔗 Attached Build {target_build} ({build_id}) to Version {target_version}: status {att.status_code} {att.text[:250]}")
 
               # 5. Submit for App Store Review via reviewSubmissions API
               sub_create = requests.post(
@@ -272,7 +495,7 @@ jobs:
                           }
                       },
                   )
-                  print("  Added item to reviewSubmission:", item_res.status_code)
+                  print("  Added item to reviewSubmission:", item_res.status_code, item_res.text[:300])
                   confirm = requests.patch(
                       f"{BASE}/reviewSubmissions/{sub_id}",
                       headers=make_headers(),
@@ -284,9 +507,9 @@ jobs:
                           }
                       },
                   )
-                  print(f"🚀 Submitted Version {target_version} (Build {target_build}) for App Store Review:", confirm.status_code, confirm.text[:300])
+                  print(f"🚀 Submitted Version {target_version} (Build {target_build}) for App Store Review:", confirm.status_code, confirm.text[:600])
               else:
-                  print("ℹ️ reviewSubmissions note:", sub_create.status_code, sub_create.text[:400])
+                  print("ℹ️ reviewSubmissions note:", sub_create.status_code, sub_create.text[:600])
           else:
-              print(f"⚠️ Build {target_build} is still in Apple TestFlight processing queue; Version {target_version} and TR/EN Release Notes are saved and ready in App Store Connect!")
+              print(f"⚠️ Build {target_build} not VALID yet; Version {target_version} and 8-locale ASO metadata saved in App Store Connect!")
           EOF

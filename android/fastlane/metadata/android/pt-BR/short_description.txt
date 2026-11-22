@@ -1,1 +1,1 @@
-Controle para Samsung, LG, Roku, Android TV e IR. Envie vídeos do YouTube à TV.
+Controle Samsung, LG, Roku, Android TV, WoL e IR. Ligue a TV e envie YouTube.

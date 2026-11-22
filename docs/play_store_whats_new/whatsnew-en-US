@@ -1,0 +1,5 @@
+v2.1.0:
+• Wake Turned-Off TVs (Wake-on-LAN): Power on compatible TVs from iPhones and Android phones without an IR blaster.
+• Manual MAC Setup: Save your TV's MAC address and wake it with one tap from the remote, Settings, or Network Discovery.
+• Multi-Brand Auto MAC Discovery: Automatic MAC extraction across Samsung, LG, Roku, Philips, VIDAA, Sony, Arcelik/Vestel, and Android/Google TV.
+• Automatic Power-key Wake-on-LAN fallback added across all TV drivers.

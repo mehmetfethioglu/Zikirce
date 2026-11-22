@@ -146,15 +146,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v2.0.0 (Build 25) Yenilikleri:
-      • Evrensel Smart TV Sürücüleri: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Mouse + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP desteği.
-      • Paylaş → CueDeck: YouTube video ve oynatma listelerini tek dokunuşla TV'de başlatın veya akşam saatinize planlayın.
-      • 3 Gün Ücretsiz Denemeli Yıllık Pro, Haftalık ve Ömür Boyu Pro seçenekleri.
+      CueDeck v2.1.0 (Build 28) Yenilikleri:
+      • Kapalı TV Uyandırma (Wake-on-LAN): IR vericisi olmayan iPhone ve Android telefonlardan kapalı TV'leri açın.
+      • Manuel MAC Kurulumu & Otomatik MAC Keşfi: Kumanda, Ayarlar ve ağ taramadan MAC kaydedin; Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arçelik/Vestel ve Android/Google TV'lerden otomatik MAC algılama.
+      • Tüm sürücülerde Güç tuşuna otomatik Wake-on-LAN yedeklemesi eklendi.
 
-      What's New in CueDeck v2.0.0 (Build 25):
-      • Universal Smart TV Drivers: Samsung Tizen (Token + Wake-on-LAN), LG webOS (Magic Remote cursor + D-Pad), Roku, Philips, VIDAA, Sony, Arçelik/Vestel & UPnP.
-      • Share to TV: Launch YouTube videos and playlists directly on your TV or schedule for tonight.
-      • Flexible Weekly, Annual (3-Day Free Trial), and Lifetime Pro plans.
+      What's New in CueDeck v2.1.0 (Build 28):
+      • Wake Turned-Off TVs (Wake-on-LAN): Power on compatible TVs from iPhones and Android phones without an IR blaster.
+      • Manual MAC Setup & Multi-Brand Auto Discovery: Save your TV's MAC in one tap; automatic MAC extraction across Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arcelik/Vestel, and Android/Google TV.
+      • Automatic Power-key Wake-on-LAN fallback added across every driver.
     CHANGELOG
 
     begin

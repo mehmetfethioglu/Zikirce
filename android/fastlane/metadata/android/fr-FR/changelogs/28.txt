@@ -1,0 +1,5 @@
+v2.1.0:
+• Allumer la TV éteinte (Wake-on-LAN) : Réveillez vos TV compatibles depuis iPhone et Android sans émetteur IR.
+• Saisie manuelle MAC : Enregistrez l'adresse MAC depuis la télécommande, les Paramètres ou la Recherche réseau.
+• Détection automatique MAC sur Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel et Android TV.
+• Repli Wake-on-LAN automatique sur le bouton Alimentation pour tous les pilotes.

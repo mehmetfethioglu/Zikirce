@@ -1,1 +1,1 @@
-Samsung・LG・Roku・Android TV・IR対応リモコン。YouTubeをワンタップでTV送信＆視聴予定管理。
+Samsung・LG・Roku・Android TV・WoL・IR対応。遠隔電源オン＆YouTube送信。

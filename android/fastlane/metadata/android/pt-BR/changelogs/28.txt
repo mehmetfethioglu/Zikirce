@@ -1,0 +1,5 @@
+v2.1.0:
+• Ligar TV desligada (Wake-on-LAN): Acorde TVs compatíveis pelo iPhone ou Android sem emissor IR.
+• Cadastro manual de MAC: Salve o endereço MAC e ligue com um toque pelo controle, Configurações ou Busca na rede.
+• Detecção automática de MAC para Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel e Android TV.
+• Fallback automático de Wake-on-LAN no botão Ligar em todos os drivers.

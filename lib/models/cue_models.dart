@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../domain/tv_network_validators.dart';
+
 /// Supported streaming platforms and TV apps with Android TV package identifiers
 /// and verified leanback/main launcher activities.
 enum StreamingPlatform {
@@ -446,20 +448,29 @@ class TvDevice {
 
   bool get hasValidIp => ip.trim().isNotEmpty;
 
+  bool get hasValidMac => TvNetworkValidators.isValidMacAddress(macAddress);
+
   bool get hasControlTarget =>
-      hasValidIp || (isIrBlaster && irBrandCode.trim().isNotEmpty);
+      hasValidIp ||
+      hasValidMac ||
+      (isIrBlaster && irBrandCode.trim().isNotEmpty);
 
   String get displayEndpoint {
     if (isIrBlaster) {
       final brand = irBrandCode.trim().isNotEmpty ? irBrandCode.trim() : 'IR';
       return 'Kızılötesi ($brand)';
     }
-    return hasValidIp ? '${ip.trim()}:$port' : 'Henüz TV bağlanmadı';
+    if (hasValidIp) return '${ip.trim()}:$port';
+    if (hasValidMac) return 'WoL • ${macAddress.trim()}';
+    return 'Henüz TV bağlanmadı';
   }
 
   String get protocolBadgeLabel {
     if (isIrBlaster) {
       return 'Kızılötesi (IR) • Wi-Fi Gerektirmez';
+    }
+    if (!hasValidIp && hasValidMac) {
+      return 'Wake-on-LAN • Kapalı TV Uyandırma';
     }
     if (!hasValidIp) return 'Bağlı Değil';
     switch (protocol) {

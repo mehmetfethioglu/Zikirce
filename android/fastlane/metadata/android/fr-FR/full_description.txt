@@ -1,10 +1,14 @@
-CueDeck réunit une télécommande universelle Smart TV, le partage instantané de liens vidéo vers votre téléviseur et un planificateur de visionnage.
+CueDeck réunit une télécommande universelle Smart TV, l'allumage Wake-on-LAN sans infrarouge, le partage instantané de liens vidéo vers votre téléviseur et un planificateur de visionnage.
+
+ALLUMER UNE TV ÉTEINTE SANS INFRAROUGE (WoL)
+• Wake-on-LAN Universel : Allumez les téléviseurs compatibles depuis des smartphones sans émetteur IR grâce au Wake-on-LAN ciblé et au repli automatique sur la touche Alimentation.
+• Détection & Saisie Manuelle MAC : Extraction automatique de l'adresse MAC via SSDP, mDNS, XML/JSON et ADB, ou saisie manuelle en un geste.
 
 TÉLÉVISEURS PRIS EN CHARGE
 • Google TV et Android TV (ADB Turbo 5555 et appairage par code PIN 6466)
 • Samsung Tizen Smart TV (WebSocket persistant 8002/8001, jeton enregistré, clavier et Wake-on-LAN)
 • LG webOS Smart TV (Pointeur Magic Remote, molette tactile, touches directionnelles et client-key)
-• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel et UPnP/DLNA
+• Philips JointSpace v6 (PIN + HTTP Digest), Hisense VIDAA (MQTT TLS), Roku ECP, Sony Bravia IRCC-IP, Arçelik / Vestel et UPnP/DLNA
 • Infrarouge (IR) : Contrôle sans Wi-Fi sur les smartphones Android équipés d'un émetteur IR (7 profils)
 
 FONCTIONNALITÉS CLÉS

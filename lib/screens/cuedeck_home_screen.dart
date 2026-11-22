@@ -18,6 +18,8 @@ export '../widgets/modals/share_to_tv_beam_sheet.dart'
     show ShareToTvBeamSheet, showShareToTvBeamSheet;
 export '../widgets/modals/tv_discovery_pairing_sheets.dart'
     show showIrBlasterBrandPickerSheet, showTvDiscoveryModal;
+export '../widgets/modals/wake_on_lan_setup_sheet.dart'
+    show WakeOnLanSetupSheet, showWakeOnLanSetupSheet;
 export '../widgets/planner/watch_planner_widgets.dart'
     show AddWatchCueSheet, WatchCueCard, WatchPlanMasteryHeader;
 export '../widgets/remote/g10_remote_chassis.dart'

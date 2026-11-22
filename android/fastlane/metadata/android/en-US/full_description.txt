@@ -1,18 +1,22 @@
-CueDeck is a universal Smart TV remote control, Share-to-TV link launcher, and personal watch planner built for multi-brand living rooms.
+CueDeck is a universal Smart TV remote control, Wake-on-LAN power-on hub, Share-to-TV link launcher, and personal watch planner built for multi-brand living rooms.
+
+WAKE TURNED-OFF TVs WITHOUT AN IR BLASTER
+• Universal Wake-on-LAN (WoL): Power on compatible turned-off Smart TVs from phones without an IR emitter using targeted subnet Wake-on-LAN magic packets and automatic Power-key fallback.
+• Auto & Manual MAC Setup: Automatically extracts TV MAC addresses via SSDP, mDNS, XML/JSON, and ADB—or enter your TV's MAC manually in one tap from the remote, Settings, or Network Discovery.
 
 UNIVERSAL SMART TV & IR SUPPORT
 • Google TV & Android TV (ADB Turbo Port 5555 + Standard Port 6466 6-digit PIN pairing)
-• Samsung Tizen Smart TV (Persistent WebSocket 8002/8001, token vault, live IME text input, and Wake-on-LAN power-on)
+• Samsung Tizen Smart TV (Persistent WebSocket 8002/8001, token vault, live IME text input, and Wake-on-LAN)
 • LG webOS Smart TV (Persistent client-key registration, Magic Remote pointer movement, scroll wheel, click, and D-Pad keys)
-• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Grundig / Vestel, and UPnP/DLNA TVs
+• Philips JointSpace v6 (PIN + HTTP Digest), Hisense/Toshiba VIDAA (MQTT TLS + PIN), Roku ECP, Sony Bravia IRCC-IP, Arçelik / Grundig / Vestel, and UPnP/DLNA TVs
 • Zero-Wi-Fi IR Blaster Mode: Direct hardware ConsumerIrManager control on supported Android phones across 7 TV brands
 
 KEY FEATURES
 • Share to CueDeck (Share-to-TV Beam): Share any YouTube video, playlist, Netflix, or browser link straight to CueDeck to Launch on TV Now via universal DIAL v2 or Schedule Tonight.
 • Precision Touchpad & Knurled Scroll Wheel: Move the TV cursor smoothly, left/right click, and scroll long lists with haptic detents.
-• Live Phone Keyboard: Type queries and URLs directly onto TV search boxes in real time.
+• Live Phone Keyboard & Voice Search: Type queries and URLs directly onto TV search boxes in real time.
 • Personal Watch Planner: Track YouTube playlists and episodes with scheduled clock alarms and encrypted Google Drive / JSON backup.
-• Customizable 6 App Shortcuts & True Black OLED / Classic White Themes.
+• Customizable 6 App Shortcuts, Alternative Profile Switcher & True Black OLED / Classic White Themes.
 
 FLEXIBLE ACCESS
 • Core remote navigation keys always respond without blocking interstitials.

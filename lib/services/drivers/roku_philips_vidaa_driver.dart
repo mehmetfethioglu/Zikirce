@@ -152,14 +152,19 @@ class RokuEcpDriver implements TvRemoteDriver {
 
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
+    final cleanIp = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     final ok = await _postPath(
-      device.ip.trim(),
+      cleanIp,
       device.port,
       '/keypress/${mapKey(command)}',
     );
-    if (!ok &&
-        command == TvKeyCommand.power &&
-        TvNetworkValidators.isValidMacAddress(device.macAddress)) {
+    if (!ok && command == TvKeyCommand.power && device.hasValidMac) {
       return wakeOnLan(device);
     }
     return ok;
@@ -336,11 +341,17 @@ class SonyBraviaIrccDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
-    if (!TvNetworkValidators.isValidIp(ip)) return false;
+    if (!TvNetworkValidators.isValidIp(ip)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     final port = device.port > 0 ? device.port : 80;
     final psk = await _vault.readSecret(pskStorageKey(ip));
     final client = HttpClient()
       ..connectionTimeout = const Duration(milliseconds: 520);
+    var ok = false;
     try {
       final req = await client
           .postUrl(Uri.parse('http://$ip:$port/sony/IRCC'))
@@ -358,13 +369,17 @@ class SonyBraviaIrccDriver implements TvRemoteDriver {
       req.add(bytes);
       final resp = await req.close().timeout(const Duration(milliseconds: 600));
       await resp.drain<void>();
-      return resp.statusCode >= 200 && resp.statusCode < 400;
+      ok = resp.statusCode >= 200 && resp.statusCode < 400;
     } catch (e) {
       _log?.call('Sony IRCC hatası: $e');
-      return false;
+      ok = false;
     } finally {
       client.close(force: true);
     }
+    if (!ok && command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeOnLan(device);
+    }
+    return ok;
   }
 
   @override

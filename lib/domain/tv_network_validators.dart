@@ -37,9 +37,26 @@ class TvNetworkValidators {
   static bool isValidPairingPinCode(String pin) =>
       _safeHexPinRegex.hasMatch(pin.trim());
 
+  /// Normalizes a MAC address string (colon, hyphen, dot, or bare 12-hex) into
+  /// uppercase colon-separated `AA:BB:CC:DD:EE:FF`, rejecting invalid, all-zero,
+  /// and broadcast (`FF:FF:FF:FF:FF:FF`) addresses.
+  static String normalizeMacAddress(String mac) {
+    final cleanHex = mac.trim().replaceAll(RegExp(r'[:\-\.\s]'), '').toUpperCase();
+    if (cleanHex.length != 12 || !RegExp(r'^[0-9A-F]{12}$').hasMatch(cleanHex)) {
+      return '';
+    }
+    if (cleanHex == '000000000000' || cleanHex == 'FFFFFFFFFFFF') {
+      return '';
+    }
+    final octets = <String>[
+      for (var i = 0; i < 12; i += 2) cleanHex.substring(i, i + 2),
+    ];
+    return octets.join(':');
+  }
+
   /// Validates a standard colon- or hyphen-separated MAC address (`AA:BB:CC:DD:EE:FF`).
   static bool isValidMacAddress(String mac) =>
-      _safeMacRegex.hasMatch(mac.trim());
+      _safeMacRegex.hasMatch(mac.trim()) && normalizeMacAddress(mac).isNotEmpty;
 
   static bool isSafeUrl(String url) => _safeUrlRegex.hasMatch(url);
 

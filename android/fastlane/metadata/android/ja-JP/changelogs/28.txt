@@ -1,0 +1,5 @@
+v2.1.0:
+• 赤外線なしで電源オフTVを起動（Wake-on-LAN）：IR非搭載のiPhoneやAndroid端末から対応テレビを遠隔起動できます。
+• 手動MAC登録：リモコン、設定、ネットワーク検索からMACアドレスを保存してワンタップで起動。
+• Samsung・LG・Roku・Philips・VIDAA・Sony・Arçelik/Vestel・Android TVからの自動MAC取得に対応。
+• 全ドライバーの電源ボタンにWake-on-LAN自動フォールバックを追加。

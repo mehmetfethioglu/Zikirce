@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/cue_models.dart';
 import '../../providers/cuedeck_providers.dart';
+import 'wake_on_lan_setup_sheet.dart';
 
 /// Opens the modern network device discovery modal popup so the user can view
 /// all discovered TVs on the Wi-Fi network, select IR Blaster fallback, or pair.
@@ -279,6 +280,28 @@ class _TvDiscoveryModalSheetState extends ConsumerState<TvDiscoveryModalSheet> {
             icon: const Icon(Icons.settings_remote_rounded, size: 16),
             label: const Text(
               '📡 Kızılötesi (IR) Kumanda — Wi-Fi Olmadan Kontrol',
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            key: const Key('discovery_wake_wol_button'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryText,
+              side: BorderSide(color: cardBorder),
+              visualDensity: VisualDensity.compact,
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+              showWakeOnLanSetupSheet(context);
+            },
+            icon: Icon(
+              Icons.power_settings_new_rounded,
+              size: 16,
+              color: goldText,
+            ),
+            label: const Text(
+              '⚡ TV Kapalı mı? MAC ile Uyandır (WoL)',
               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
             ),
           ),

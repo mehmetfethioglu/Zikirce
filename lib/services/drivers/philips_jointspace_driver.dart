@@ -633,17 +633,26 @@ class PhilipsJointSpaceDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
-    if (!TvNetworkValidators.isValidIp(ip)) return false;
+    if (!TvNetworkValidators.isValidIp(ip)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
 
     final creds = await _readStoredCreds(ip);
     final body = jsonEncode(<String, String>{'key': mapKey(command)});
-    return _sendPostWithFallback(
+    final ok = await _sendPostWithFallback(
       device,
       path: '/6/input/key',
       jsonBody: body,
       creds: creds,
       tryV1Fallback: true,
     );
+    if (!ok && command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeOnLan(device);
+    }
+    return ok;
   }
 
   @override

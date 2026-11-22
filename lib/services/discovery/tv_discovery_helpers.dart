@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../domain/tv_network_validators.dart';
+
 /// Pure mDNS / DNS-SD packet builders and record decoders (Layer 1).
 class TvDiscoveryHelpers {
   TvDiscoveryHelpers._();
@@ -141,5 +143,138 @@ class TvDiscoveryHelpers {
       pos += rdLen;
     }
     return out;
+  }
+
+  /// Extracts and normalizes a Wake-on-LAN MAC address from an SSDP response
+  /// (`WAKEUP: MAC=...;Timeout=...`, `X-MAC-ADDRESS:`, or `MAC:`).
+  static String extractMacFromSsdpResponse(String rawSsdp) {
+    final patterns = <RegExp>[
+      RegExp(
+        r'WAKEUP:\s*[^;\r\n]*MAC=([0-9A-Fa-f:\-\.]{12,17})',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'X-MAC-ADDRESS:\s*([0-9A-Fa-f:\-\.]{12,17})',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'(?:^|\r?\n)MAC:\s*([0-9A-Fa-f:\-\.]{12,17})',
+        caseSensitive: false,
+      ),
+    ];
+    for (final regex in patterns) {
+      final match = regex.firstMatch(rawSsdp);
+      if (match != null) {
+        final normalized = TvNetworkValidators.normalizeMacAddress(
+          match.group(1) ?? '',
+        );
+        if (normalized.isNotEmpty) return normalized;
+      }
+    }
+    return '';
+  }
+
+  /// Extracts and normalizes a MAC address from Roku ECP, UPnP, or Smart TV XML metadata.
+  static String extractMacFromXmlMetadata(String xml) {
+    final networkType = RegExp(
+      r'<network-type(?:\s[^>]*)?>([^<]+)</network-type>',
+      caseSensitive: false,
+    ).firstMatch(xml)?.group(1)?.toLowerCase() ?? '';
+    final preferEthernet = networkType.contains('ethernet');
+
+    final tags = <String>[
+      if (preferEthernet) ...<String>['ethernet-mac', 'wifi-mac']
+      else ...<String>['wifi-mac', 'ethernet-mac'],
+      'wifiMac',
+      'wiredMac',
+      'macAddress',
+      'mac-address',
+      'wakeOnLanMac',
+      'X_MAC',
+      'wlanMac',
+      'lanMac',
+      'mac',
+    ];
+    for (final tag in tags) {
+      final match = RegExp(
+        '<$tag(?:\\s[^>]*)?>([^<]+)</$tag>',
+        caseSensitive: false,
+      ).firstMatch(xml);
+      if (match != null) {
+        final normalized = TvNetworkValidators.normalizeMacAddress(
+          match.group(1) ?? '',
+        );
+        if (normalized.isNotEmpty) return normalized;
+      }
+    }
+    return '';
+  }
+
+  /// Extracts and normalizes a TV MAC address from Samsung `8001/api/v2/` or
+  /// Google Cast `8008/setup/eureka_info` JSON metadata without reading router `bssid`.
+  static String extractMacFromJsonMetadata(Map<dynamic, dynamic> json) {
+    final candidates = <Map<dynamic, dynamic>>[
+      if (json['device'] is Map) json['device'] as Map<dynamic, dynamic>,
+      json,
+    ];
+    const keys = <String>[
+      'wifiMac',
+      'wiredMac',
+      'ethernet_mac_address',
+      'mac_address',
+      'wifi_mac_address',
+      'macAddress',
+      'mac',
+    ];
+    for (final map in candidates) {
+      for (final key in keys) {
+        final raw = map[key]?.toString() ?? '';
+        if (raw.isEmpty) continue;
+        final normalized = TvNetworkValidators.normalizeMacAddress(raw);
+        if (normalized.isNotEmpty) return normalized;
+      }
+    }
+    return '';
+  }
+
+  /// Extracts and normalizes a MAC address from mDNS TXT records (`deviceid=...`, `mac=...`).
+  static String extractMacFromMdnsPacket(Uint8List packet) {
+    final tokenRegex = RegExp(
+      r'(?:deviceid|wifimac|ethmac|wolmac|mac)=([0-9A-Fa-f:\-\.]{12,17})',
+      caseSensitive: false,
+    );
+    for (final line in describeDnsRecords(packet)) {
+      if (!line.startsWith('TXT ')) continue;
+      for (final match in tokenRegex.allMatches(line)) {
+        final normalized = TvNetworkValidators.normalizeMacAddress(
+          match.group(1) ?? '',
+        );
+        if (normalized.isNotEmpty) return normalized;
+      }
+    }
+    return '';
+  }
+
+  /// Extracts and normalizes a MAC address from ADB shell output (`MAC=...` or standalone MAC line).
+  static String extractMacFromShellOutput(String shellOutput) {
+    final lines = shellOutput
+        .split(RegExp(r'\r?\n'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty);
+    final macLineRegex = RegExp(r'^MAC=(.+)$', caseSensitive: false);
+    for (final line in lines) {
+      final m = macLineRegex.firstMatch(line);
+      if (m != null) {
+        final normalized = TvNetworkValidators.normalizeMacAddress(
+          m.group(1) ?? '',
+        );
+        if (normalized.isNotEmpty) return normalized;
+      }
+    }
+    for (final line in lines) {
+      final normalized = TvNetworkValidators.normalizeMacAddress(line);
+      if (normalized.isNotEmpty) return normalized;
+    }
+    return '';
   }
 }

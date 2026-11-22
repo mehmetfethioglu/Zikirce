@@ -1,1 +1,1 @@
-Samsung, LG, Android TV ve IR kumanda. YouTube linkini TV'ye ışınla ve planla.
+Samsung, LG, Android TV, WoL & IR kumanda. Kapalı TV aç ve YouTube'a ışınla.

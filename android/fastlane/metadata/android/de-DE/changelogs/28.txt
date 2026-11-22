@@ -1,0 +1,5 @@
+v2.1.0:
+• TV ohne IR einschalten (Wake-on-LAN): Ausgeschaltete Fernseher auch mit iPhones und Android-Geräten ohne IR-Sender wecken.
+• Manuelle MAC-Einrichtung: MAC-Adresse direkt über Fernbedienung, Einstellungen oder Suche speichern.
+• Automatische MAC-Erkennung für Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel & Android TV.
+• Automatischer Wake-on-LAN-Fallback auf der Ein/Aus-Taste für alle Treiber.

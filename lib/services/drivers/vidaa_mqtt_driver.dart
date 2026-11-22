@@ -741,6 +741,13 @@ class VidaaSmartDriver implements TvRemoteDriver {
 
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
+    final cleanIp = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     final mqttOk = await _publishMqtt(
       device: device,
       service: 'remote_service',
@@ -748,8 +755,13 @@ class VidaaSmartDriver implements TvRemoteDriver {
       payload: mapKey(command),
     );
     if (mqttOk) return true;
-    if (!allowWebSocketFallback) return false;
-    return _sendKeyViaWsFallback(device, command);
+    final wsOk =
+        allowWebSocketFallback && await _sendKeyViaWsFallback(device, command);
+    if (wsOk) return true;
+    if (command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeOnLan(device);
+    }
+    return false;
   }
 
   @override

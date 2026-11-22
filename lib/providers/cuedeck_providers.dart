@@ -294,6 +294,22 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     return <TvDevice>[updated, ...others];
   }
 
+  TvDevice _preserveKnownMac(TvDevice incoming) {
+    if (incoming.hasValidMac || incoming.isIrBlaster) return incoming;
+    if (incoming.hasValidIp) {
+      final selected = state.selectedDevice;
+      if (selected.ip == incoming.ip && selected.hasValidMac) {
+        return incoming.copyWith(macAddress: selected.macAddress);
+      }
+      for (final d in state.discoveredDevices) {
+        if (d.ip == incoming.ip && d.hasValidMac) {
+          return incoming.copyWith(macAddress: d.macAddress);
+        }
+      }
+    }
+    return incoming;
+  }
+
   /// Silently verifies the selected TV socket/port, restores dropped connections,
   /// upgrades DIAL/UPnP endpoints if a native protocol responds, and optionally
   /// rescans the local subnet if the TV changed IP.
@@ -307,7 +323,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     _healingConnection = true;
     try {
       final service = ref.read(adbTvServiceProvider);
-      final refreshed = await service.verifyOrReconnectDevice(current);
+      final refreshed = _preserveKnownMac(
+        await service.verifyOrReconnectDevice(current),
+      );
       if (!ref.mounted) return false;
       if (refreshed.isOnline) {
         final protocolUpgraded = refreshed.port != current.port ||
@@ -327,8 +345,11 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
       if (allowSubnetRescan &&
           !Platform.environment.containsKey('FLUTTER_TEST')) {
-        final discovered = await service.discoverDevices(preferredIp: current.ip);
+        final rawDiscovered = await service.discoverDevices(
+          preferredIp: current.ip,
+        );
         if (!ref.mounted) return false;
+        final discovered = rawDiscovered.map(_preserveKnownMac).toList();
         if (discovered.isNotEmpty) {
           TvDevice? rebound;
           if (current.macAddress.trim().isNotEmpty) {
@@ -356,6 +377,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
             }
           }
           if (rebound != null) {
+            if (!rebound.hasValidMac && current.hasValidMac) {
+              rebound = rebound.copyWith(macAddress: current.macAddress);
+            }
             state = state.copyWith(
               selectedDevice: rebound,
               discoveredDevices: discovered,
@@ -913,8 +937,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     );
 
     final service = ref.read(adbTvServiceProvider);
-    final devices = await service.discoverDevices(preferredIp: targetIp);
+    final rawDevices = await service.discoverDevices(preferredIp: targetIp);
     if (!ref.mounted) return;
+    final devices = rawDevices.map(_preserveKnownMac).toList();
 
     TvDevice selected;
     if (devices.isNotEmpty) {
@@ -929,12 +954,14 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         ),
       );
     } else if (hasCustomIp) {
-      selected = TvDevice(
-        name: 'Akıllı TV ($cleanCustom)',
-        ip: cleanCustom,
-        port: 5555,
-        boardInfo: 'Ağda yanıt alınamadı • TV\'nin açık olduğundan emin olun',
-        isOnline: false,
+      selected = _preserveKnownMac(
+        TvDevice(
+          name: 'Akıllı TV ($cleanCustom)',
+          ip: cleanCustom,
+          port: 5555,
+          boardInfo: 'Ağda yanıt alınamadı • TV\'nin açık olduğundan emin olun',
+          isOnline: false,
+        ),
       );
     } else if (state.selectedDevice.hasControlTarget) {
       selected = state.selectedDevice.isIrBlaster
@@ -1012,10 +1039,64 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     final ok = await ref.read(adbTvServiceProvider).wakeUpTv(device);
     state = state.copyWith(
       lastCommandStatus: ok
-          ? '⚡ TV uyandırma (Wake-on-LAN) paketi gönderildi'
+          ? '⚡ TV uyandırma (Wake-on-LAN) paketi gönderildi${device.hasValidMac ? ' (${device.macAddress})' : ''}'
           : '⚠️ TV uyandırma için geçerli MAC adresi bulunamadı',
     );
     return ok;
+  }
+
+  /// Validates, normalizes, and persists a TV MAC address for offline Wake-on-LAN
+  /// power-on, optionally storing a target IP and sending a WoL magic packet immediately.
+  Future<bool> saveSelectedTvMacAddress(
+    String rawMac, {
+    String? optionalIp,
+    bool wakeImmediately = false,
+  }) async {
+    final normalizedMac = TvNetworkValidators.normalizeMacAddress(rawMac);
+    if (normalizedMac.isEmpty) {
+      state = state.copyWith(
+        lastCommandStatus: '⚠️ Geçersiz MAC adresi (Örn: AA:BB:CC:DD:EE:FF)',
+      );
+      return false;
+    }
+
+    final cleanIp = optionalIp?.trim() ?? '';
+    final validOptIp = TvNetworkValidators.isValidIp(cleanIp) ? cleanIp : '';
+    final current = state.selectedDevice;
+
+    final TvDevice updated;
+    if (!current.isIrBlaster && (current.hasValidIp || current.hasValidMac)) {
+      updated = current.copyWith(
+        macAddress: normalizedMac,
+        ip: current.hasValidIp
+            ? current.ip
+            : (validOptIp.isNotEmpty ? validOptIp : current.ip),
+      );
+    } else {
+      updated = TvDevice(
+        name: validOptIp.isNotEmpty
+            ? 'Akıllı TV ($validOptIp)'
+            : 'Akıllı TV (Wake-on-LAN)',
+        ip: validOptIp,
+        port: 5555,
+        boardInfo: 'Wake-on-LAN MAC Kayıtlı • TV açıldığında ağdan eşleştirin',
+        isOnline: false,
+        macAddress: normalizedMac,
+      );
+    }
+
+    state = state.copyWith(
+      selectedDevice: updated,
+      discoveredDevices: updated.hasValidIp
+          ? _mergeDeviceIntoDiscovered(updated)
+          : state.discoveredDevices,
+      lastCommandStatus: '✓ TV MAC adresi kaydedildi ($normalizedMac)',
+    );
+    await _persistState(triggerAutoBackup: false);
+    if (wakeImmediately) {
+      return wakeUpSelectedTv();
+    }
+    return true;
   }
 
   /// Generates a full diagnostic report for the currently selected TV.
@@ -1086,23 +1167,24 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       await activateIrBlasterBrand(device.irBrandCode);
       return true;
     }
-    if (!device.hasValidIp) return false;
+    final targetDevice = _preserveKnownMac(device);
+    if (!targetDevice.hasValidIp) return false;
     state = state.copyWith(
       isScanning: true,
-      selectedDevice: device,
+      selectedDevice: targetDevice,
       lastCommandStatus:
-          '🔌 Bağlanılıyor: ${device.name} (${device.ip}:${device.port})...',
+          '🔌 Bağlanılıyor: ${targetDevice.name} (${targetDevice.ip}:${targetDevice.port})...',
     );
 
     final service = ref.read(adbTvServiceProvider);
 
     // Interactive handshake for Samsung Tizen (8002 token), LG webOS (client-key), Philips v6, VIDAA, Sony IRCC
-    if (device.protocol == TvConnectionProtocol.samsungTizen8001 ||
-        device.protocol == TvConnectionProtocol.lgWebOs3000 ||
-        device.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
-        device.protocol == TvConnectionProtocol.vidaaSmart36669 ||
-        device.protocol == TvConnectionProtocol.sonyBraviaIrcc) {
-      final pairedSmart = await service.pairWithTv(device);
+    if (targetDevice.protocol == TvConnectionProtocol.samsungTizen8001 ||
+        targetDevice.protocol == TvConnectionProtocol.lgWebOs3000 ||
+        targetDevice.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+        targetDevice.protocol == TvConnectionProtocol.vidaaSmart36669 ||
+        targetDevice.protocol == TvConnectionProtocol.sonyBraviaIrcc) {
+      final pairedSmart = _preserveKnownMac(await service.pairWithTv(targetDevice));
       final updatedList = <TvDevice>[
         pairedSmart,
         ...state.discoveredDevices.where((d) => d.ip != pairedSmart.ip),
@@ -1119,8 +1201,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return pairedSmart.isOnline;
     }
 
-    if (device.protocol.isNonAndroidSmartTv) {
-      final smartConnected = device.copyWith(isOnline: true, isPaired: true);
+    if (targetDevice.protocol.isNonAndroidSmartTv) {
+      final smartConnected = _preserveKnownMac(
+        targetDevice.copyWith(isOnline: true, isPaired: true),
+      );
       final updatedList = <TvDevice>[
         smartConnected,
         ...state.discoveredDevices.where((d) => d.ip != smartConnected.ip),
@@ -1136,13 +1220,15 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return true;
     }
 
-    if (device.protocol == TvConnectionProtocol.remotePort6466 &&
-        device.port == 6466) {
-      if (device.isPaired) {
-        final updatedDevice = device.copyWith(
-          isOnline: true,
-          isPaired: true,
-          boardInfo: 'Google TV • Port 6466 PIN Eşleşti ✓',
+    if (targetDevice.protocol == TvConnectionProtocol.remotePort6466 &&
+        targetDevice.port == 6466) {
+      if (targetDevice.isPaired) {
+        final updatedDevice = _preserveKnownMac(
+          targetDevice.copyWith(
+            isOnline: true,
+            isPaired: true,
+            boardInfo: 'Google TV • Port 6466 PIN Eşleşti ✓',
+          ),
         );
         final updatedList = <TvDevice>[
           updatedDevice,
@@ -1159,13 +1245,15 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         return true;
       }
 
-      final session = await service.startPin6467PairingSession(device);
+      final session = await service.startPin6467PairingSession(targetDevice);
       final adbOpen = session['adb5555Open'] == true;
       if (adbOpen) {
-        final paired = await service.pairWithTv(
-          device.copyWith(
-            port: 5555,
-            protocol: TvConnectionProtocol.adbPort5555,
+        final paired = _preserveKnownMac(
+          await service.pairWithTv(
+            targetDevice.copyWith(
+              port: 5555,
+              protocol: TvConnectionProtocol.adbPort5555,
+            ),
           ),
         );
         final updatedList = <TvDevice>[
@@ -1186,11 +1274,13 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
       final pinShown =
           session['pinDisplayed'] == true || session['pinTriggered'] == true;
-      final updatedDevice = device.copyWith(
-        isOnline: device.isPaired,
-        boardInfo: pinShown
-            ? 'TV ekranında 6 haneli PIN gösteriliyor • PIN girin'
-            : device.boardInfo,
+      final updatedDevice = _preserveKnownMac(
+        targetDevice.copyWith(
+          isOnline: targetDevice.isPaired,
+          boardInfo: pinShown
+              ? 'TV ekranında 6 haneli PIN gösteriliyor • PIN girin'
+              : targetDevice.boardInfo,
+        ),
       );
       final updatedList = <TvDevice>[
         updatedDevice,
@@ -1208,7 +1298,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return updatedDevice.isOnline;
     }
 
-    final pairedDevice = await service.pairWithTv(device);
+    final pairedDevice = _preserveKnownMac(await service.pairWithTv(targetDevice));
     final updatedList = <TvDevice>[
       pairedDevice,
       ...state.discoveredDevices.where((d) => d.ip != pairedDevice.ip),
@@ -1689,13 +1779,18 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
 
     if (ok) {
+      final wokeOfflineByWol =
+          !initialDevice.isOnline &&
+          command == TvKeyCommand.power &&
+          initialDevice.hasValidMac;
       state = state.copyWith(
-        selectedDevice: initialDevice.isOnline
+        selectedDevice: (initialDevice.isOnline || wokeOfflineByWol)
             ? initialDevice
             : initialDevice.copyWith(isOnline: true),
         isMuted: _nextMuteState(command),
-        lastCommandStatus:
-            '✓ TV: ${command.label} (${initialDevice.displayEndpoint})',
+        lastCommandStatus: wokeOfflineByWol
+            ? '⚡ TV uyandırma (Wake-on-LAN) paketi gönderildi (${initialDevice.macAddress})'
+            : '✓ TV: ${command.label} (${initialDevice.displayEndpoint})',
       );
       return;
     }

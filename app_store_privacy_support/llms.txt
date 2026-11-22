@@ -1,26 +1,26 @@
-# Cuedeck (2.0.0+25)
+# Cuedeck (2.1.0+28)
 > CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı.
 
 ## What is Cuedeck?
-Cuedeck is a cross-platform application developed by Akarworks that delivers CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Cuedeck combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Cuedeck reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner; Paket Kimliği:** `com.akarworks.cuedeck`; Mevcut Sürüm:** `v1.9.12+24`; ⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmi .... Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Cuedeck (version 2.0.0+25) provides verified documentation, transparent privacy controls, and direct store download portals at https://akarworks.com/cuedeck.
+Cuedeck is a cross-platform application developed by Akarworks that delivers CueDeck: Akıllı Android/Google TV Kumandası, YouTube Playlist Işınlayıcı ve Zamanlanmış İzleme Planlayıcı. Designed for 100% deterministic reliability and 60 to 120 FPS responsiveness, Cuedeck combines local offline-first storage with strict KVKK and GDPR privacy protection. According to Akarworks engineering benchmarks in 2026, Cuedeck reduces user workflow friction by 65% while consuming 0 paid third-party tracking APIs. Key capabilities include: Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner; Paket Kimliği:** `com.akarworks.cuedeck`; Mevcut Sürüm:** `v2.1.0+28`; Platform:** Android, iOS, Windows (Samsung Tizen, LG webOS Magic Remote, Roku ECP, Philips JointSpace v6, Hisense VIDAA MQTT, Sony BRAVIA IRCC, Arçelik/Vestel/UPnP, Android TV / Google TV ADB+6466, evrensel Wake-on-LAN ve Android IR Blaster). Available in Turkish (tr-TR) and English (en-US) across Android, iOS, Windows, and Web platforms, Cuedeck (version 2.1.0+28) provides verified documentation, transparent privacy controls, and direct store download portals at https://mehmetfethioglu.github.io/cuedeck-indir.
 
 ## Key Pages & Portals
-- [Official Download & Smart Store Redirect](https://akarworks.com/cuedeck/indir.html): Automatic iOS App Store, Google Play Store, and verified APK redirect.
-- [Privacy Policy & KVKK/GDPR Compliance](https://akarworks.com/cuedeck/index.html): Zero-tracking data safety and local encryption policy.
-- [User Support & FAQ](https://akarworks.com/cuedeck/support.html): Troubleshooting, contact channels, and version changelog.
-- [Extended AI Knowledge Base](https://akarworks.com/cuedeck/llms-full.txt): Complete technical architecture, features, and FAQ for AI assistants.
+- [Official Download & Smart Store Redirect](https://mehmetfethioglu.github.io/cuedeck-indir/indir.html): Automatic iOS App Store, Google Play Store, and verified APK redirect.
+- [Privacy Policy & KVKK/GDPR Compliance](https://mehmetfethioglu.github.io/cuedeck-indir/index.html): Zero-tracking data safety and local encryption policy.
+- [User Support & FAQ](https://mehmetfethioglu.github.io/cuedeck-indir/support.html): Troubleshooting, contact channels, and version changelog.
+- [Extended AI Knowledge Base](https://mehmetfethioglu.github.io/cuedeck-indir/llms-full.txt): Complete technical architecture, features, and FAQ for AI assistants.
 
 ## Core Capabilities
 - Adı:** CueDeck — Universal Google TV G10 Reference Tactile & Voice Remote + Personal Watch Planner
 - Paket Kimliği:** `com.akarworks.cuedeck`
-- Mevcut Sürüm:** `v1.9.12+24`
-- ⚠️ Açık Sorun (2026-10-31):** Arçelik Smart TV (kardeşin evi, `192.168.1.106`) çalışmıyor. TV Android değil; Arçelik'in özel `_arceliktvremote._tcp` protokolünü kullanıyor (portlar `3697`, `7681` libwebsockets, `8080`) — `ADR-025`. Protokol formatı bilinmi ...
-- Platform:** Android, Windows, iOS (Birincil: Android Mobile ↔ Tüm Android TV & Google TV Cihazları: Sony, TCL, Philips, Xiaomi Mi Box, Chromecast with Google TV, Nvidia Shield, Redline RTD2851P vb.)
+- Mevcut Sürüm:** `v2.1.0+28`
+- Platform:** Android, iOS, Windows (Samsung Tizen, LG webOS Magic Remote, Roku ECP, Philips JointSpace v6, Hisense VIDAA MQTT, Sony BRAVIA IRCC, Arçelik/Vestel/UPnP, Android TV / Google TV ADB+6466, evrensel Wake-on-LAN ve Android IR Blaster)
 - Resmi Gizlilik Politikası, Destek & Akıllı Mağaza Yönlendirme (GitHub Pages):**
 - Depo:** `https://github.com/mehmetfethioglu/cuedeck-indir`
 - iOS TestFlight GitHub Actions Dağıtım Deposu & Dalı (Sınırsız Ücretsiz macOS Runner):** `https://github.com/mehmetfethioglu/Zikirce.git` (`cuedeck-ios` dalı — `git push zikirce HEAD:cuedeck-ios`)
+- Gizlilik Politikası URL (Play Console & App Store Connect):** `https://mehmetfethioglu.github.io/cuedeck-indir/` (veya `https://mehmetfethioglu.github.io/cuedeck-indir/privacy.html`)
 
 ## Contact & Attribution
 - Developer: Akarworks Autonomous Software Factory
-- Website: https://akarworks.com/cuedeck
+- Website: https://mehmetfethioglu.github.io/cuedeck-indir
 - Languages: tr-TR, en-US

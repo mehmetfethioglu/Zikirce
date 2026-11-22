@@ -26,5 +26,5 @@ Allow: /
 User-agent: Applebot-Extended
 Allow: /
 
-Sitemap: https://akarworks.com/cuedeck/sitemap.xml
-# AI Knowledge Discovery: https://akarworks.com/cuedeck/llms.txt
+Sitemap: https://mehmetfethioglu.github.io/cuedeck-indir/sitemap.xml
+# AI Knowledge Discovery: https://mehmetfethioglu.github.io/cuedeck-indir/llms.txt

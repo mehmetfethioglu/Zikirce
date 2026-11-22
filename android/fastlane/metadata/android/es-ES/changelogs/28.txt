@@ -1,0 +1,5 @@
+v2.1.0:
+• Enciende tu TV apagado (Wake-on-LAN): Despierta televisores compatibles desde iPhone y Android sin emisor IR.
+• Configuración manual de MAC: Guarda la dirección MAC y enciende tu TV con un toque desde el control, Ajustes o Búsqueda.
+• Detección automática de MAC en Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel y Android TV.
+• Respaldo automático de Wake-on-LAN en el botón de encendido para todos los controladores.

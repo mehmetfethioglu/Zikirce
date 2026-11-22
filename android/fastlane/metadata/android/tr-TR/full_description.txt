@@ -1,19 +1,23 @@
-CueDeck, evinizdeki tüm televizyonları tek bir akıcı kumandada ve akıllı izleme planlayıcısında birleştiren evrensel Smart TV kumandasıdır.
+CueDeck, evinizdeki tüm televizyonları tek bir akıcı kumandada, kapalı TV uyandırma (Wake-on-LAN) motorunda ve akıllı izleme planlayıcısında birleştiren evrensel Smart TV kumandasıdır.
+
+KAPALI TV UYANDIRMA (IR GEREKTİRMEZ)
+• Evrensel Wake-on-LAN (WoL): Kızılötesi vericisi olmayan telefonlardan bile uyumlu Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel ve Android/Google TV'leri ağ üzerinden açın.
+• Otomatik & Manuel MAC Kurulumu: Bağlı TV'lerin MAC adresini SSDP, mDNS, XML/JSON ve ADB üzerinden otomatik algılar veya kumanda/Ayarlar üzerinden manuel MAC girerek tek dokunuşla («⚡ TV Uyandır») uyandırmanızı sağlar.
 
 DESTEKLENEN TELEVİZYON PROTOKOLLERİ
-• Google TV ve Android TV (ADB Turbo Port 5555 + Standart 6466 PIN eşleştirme)
-• Samsung Tizen Smart TV (Kalıcı WebSocket 8002/8001, token kaydı, telefon klavyesi girişi ve Wake-on-LAN ile kapalı TV açma)
+• Google TV ve Android TV (ADB Turbo Port 5555 + Standart 6466 6 haneli PIN eşleştirme)
+• Samsung Tizen Smart TV (Kalıcı WebSocket 8002/8001, token kaydı, telefon klavyesi girişi ve Wake-on-LAN)
 • LG webOS Smart TV (Magic Remote imleç kontrolü, dokunmatik tekerlek, yön tuşları ve client-key kalıcılığı)
-• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP ve Arçelik / Grundig / Vestel / UPnP-DLNA televizyonlar
+• Philips JointSpace v6 (4 haneli PIN + HTTP Digest), Hisense/Toshiba VIDAA (MQTT TLS + PIN), Roku ECP, Sony Bravia IRCC-IP ve Arçelik / Grundig / Vestel / UPnP-DLNA televizyonlar
 • Kızılötesi (IR) Blaster Modu: IR vericili Android telefonlarda Wi-Fi olmadan 7 marka için doğrudan kontrol
 
 AYIRT EDİCİ ÖZELLİKLER
 • Paylaş → CueDeck (Share-to-TV): YouTube, Netflix, Prime Video, tabii veya tarayıcıdan paylaştığınız bağlantıyı evrensel YouTube DIAL v2 ile anında TV ekranında açın ya da akşam saatinize planlayın.
 • Dokunmatik Touchpad & Fiziksel Tekerlek: TV ekranında akıcı imleç hareketi, sol/sağ tıklama ve tek elle sayfa kaydırma.
-• Canlı Telefon Klavyesi: TV ekranındaki arama kutularına telefon klavyenizden anında harf harf yazın.
-• Kişisel İzleme Planlayıcısı & Bildirimler: YouTube oynatma listeleri ve dizileriniz için akşam saati alarmı, bölüm/dakika takibi ve Google Drive veya yerel JSON yedekleme.
-• Özelleştirilebilir 6 Kısayol Yuvası & Gerçek Siyah OLED / Klasik Beyaz Tema.
+• Canlı Telefon Klavyesi & Türkçe Sesli Komut: TV arama kutularına telefonunuzdan anında yazın veya konuşarak aratın.
+• Kişisel İzleme Planlayıcısı & Bildirimler: YouTube oynatma listeleri ve dizileriniz için akşam saati alarmı, bölüm/dakika takibi ve Google Drive / yerel JSON yedekleme.
+• Özelleştirilebilir 6 Kısayol Yuvası, Tek Dokunuş Alternatif Profil Seçici & Gerçek Siyah OLED / Klasik Beyaz Tema.
 
 ESNEK ERİŞİM SEÇENEKLERİ
 • Temel kumanda tuşlarında kesinti yok — yön tuşları, ses ve kanal kontrolü her zaman hızlıdır.
-• Ücretsiz sürümde günlük 3 Share-to-TV ışınlama ve 2 özel izleme planı dahildir; dilerseniz ödüllü video ile 24 Saat Pro Pass açabilir veya Yıllık (3 Gün Ücretsiz Deneme), Haftalık ya da Ömür Boyu Pro planına geçebilirsiniz.
+• Günlük 3 Share-to-TV ışınlama ve 2 özel izleme planı dahildir; dilerseniz ödüllü video ile 24 Saat Pro Pass açabilir veya Yıllık (3 Gün Deneme), Haftalık ya da Ömür Boyu Pro planına geçebilirsiniz.

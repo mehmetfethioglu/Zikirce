@@ -101,6 +101,7 @@ class AdbTvService {
 
   final Map<String, String> _ssdpLocationUrls = <String, String>{};
   final Map<String, String> _dialAppUrls = <String, String>{};
+  final Map<String, String> _discoveredMacByIp = <String, String>{};
   final Set<String> _pinPairedIps = <String>{};
   final Set<String> _ipsRequiringRsaAuth = <String>{};
 
@@ -186,11 +187,13 @@ class AdbTvService {
       );
 
   Future<bool> wakeUpTv(TvDevice device) {
-    final driver = _driverRegistry.driverFor(device.protocol);
-    if (driver != null) return driver.wakeOnLan(device);
+    if (device.isIrBlaster) {
+      return _driverRegistry.irBlasterDriver.wakeOnLan(device);
+    }
     return WakeOnLanService.sendMagicPacket(
       device.macAddress,
       targetIp: device.ip,
+      localSubnetIp: _detectedWifiIp,
     );
   }
 
@@ -1024,7 +1027,7 @@ class AdbTvService {
     String model = 'CueDeck',
     String vendor = 'Akarworks',
     String packageName = 'androidtvremote2',
-    String appVersion = '2.0.0',
+    String appVersion = '2.1.0',
   }) {
     final modelBytes = utf8.encode(model);
     final vendorBytes = utf8.encode(vendor);
@@ -1457,7 +1460,7 @@ class AdbTvService {
   }) async {
     final output = await _executeShellCommandWithOutput(
       device,
-      'getprop ro.product.brand; getprop ro.product.model; getprop ro.board.platform; getprop ro.build.version.release',
+      'getprop ro.product.brand; getprop ro.product.model; getprop ro.board.platform; getprop ro.build.version.release; echo "MAC=\$(cat /sys/class/net/wlan0/address 2>/dev/null || cat /sys/class/net/eth0/address 2>/dev/null)"',
       allowInteractivePairing: allowInteractivePairing,
     );
 
@@ -1475,10 +1478,15 @@ class AdbTvService {
       );
     }
 
+    final probedMac = TvDiscoveryHelpers.extractMacFromShellOutput(output);
+    if (probedMac.isNotEmpty) {
+      _discoveredMacByIp[device.ip.trim()] = probedMac;
+    }
+
     final lines = output
         .split(RegExp(r'\r?\n'))
         .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+        .where((e) => e.isNotEmpty && !e.toUpperCase().startsWith('MAC='))
         .toList();
 
     final rawBrand = lines.isNotEmpty ? lines[0] : '';
@@ -1508,6 +1516,7 @@ class AdbTvService {
 
     return device.copyWith(
       name: resolvedName,
+      macAddress: probedMac.isNotEmpty ? probedMac : device.macAddress,
       boardInfo: '$platformPart • $releasePart',
       isOnline: true,
     );
@@ -1518,6 +1527,14 @@ class AdbTvService {
     if (!isValidIp(cleanIp) ||
         Platform.environment.containsKey('FLUTTER_TEST')) {
       return const <String, String>{};
+    }
+
+    var foundMac = _discoveredMacByIp[cleanIp] ?? '';
+    void captureMac(String candidate) {
+      if (foundMac.isEmpty && candidate.isNotEmpty) {
+        foundMac = candidate;
+        _discoveredMacByIp[cleanIp] = candidate;
+      }
     }
 
     final client = HttpClient()
@@ -1541,6 +1558,7 @@ class AdbTvService {
                 .transform(utf8.decoder)
                 .join()
                 .timeout(const Duration(milliseconds: 480));
+            captureMac(TvDiscoveryHelpers.extractMacFromXmlMetadata(xml));
             final friendly = RegExp(
               r'<friendlyName>([^<]+)</friendlyName>',
               caseSensitive: false,
@@ -1582,6 +1600,7 @@ class AdbTvService {
                 'name': friendly,
                 'model': [manufacturer, model].where((s) => s.isNotEmpty).join(' '),
                 if (detectedSmartPort.isNotEmpty) 'smartPort': detectedSmartPort,
+                if (foundMac.isNotEmpty) 'mac': foundMac,
               };
             }
           }
@@ -1603,10 +1622,15 @@ class AdbTvService {
               .timeout(const Duration(milliseconds: 450));
           final decoded = jsonDecode(body);
           if (decoded is Map) {
+            captureMac(TvDiscoveryHelpers.extractMacFromJsonMetadata(decoded));
             final name = decoded['name']?.toString().trim() ?? '';
             final model = decoded['model_name']?.toString().trim() ?? '';
             if (name.isNotEmpty) {
-              return <String, String>{'name': name, 'model': model};
+              return <String, String>{
+                'name': name,
+                'model': model,
+                if (foundMac.isNotEmpty) 'mac': foundMac,
+              };
             }
           }
         }
@@ -1627,6 +1651,7 @@ class AdbTvService {
               .timeout(const Duration(milliseconds: 420));
           final decoded = jsonDecode(body);
           if (decoded is Map) {
+            captureMac(TvDiscoveryHelpers.extractMacFromJsonMetadata(decoded));
             final dev = decoded['device'];
             final name =
                 (dev is Map ? dev['name'] : decoded['name'])?.toString().trim() ??
@@ -1635,13 +1660,12 @@ class AdbTvService {
                     ?.toString()
                     .trim() ??
                 'Samsung Smart TV';
-            final mac = (dev is Map ? dev['wifiMac'] : '')?.toString().trim() ?? '';
             if (name.isNotEmpty) {
               return <String, String>{
                 'name': name,
                 'model': model,
                 'smartPort': '8001',
-                if (mac.isNotEmpty) 'mac': mac,
+                if (foundMac.isNotEmpty) 'mac': foundMac,
               };
             }
           }
@@ -1661,6 +1685,7 @@ class AdbTvService {
               .transform(utf8.decoder)
               .join()
               .timeout(const Duration(milliseconds: 420));
+          captureMac(TvDiscoveryHelpers.extractMacFromXmlMetadata(xml));
           final friendly = RegExp(
             r'<friendly-device-name>([^<]+)</friendly-device-name>',
             caseSensitive: false,
@@ -1674,6 +1699,7 @@ class AdbTvService {
               'name': friendly,
               'model': model.isNotEmpty ? model : 'Roku Smart TV',
               'smartPort': '8060',
+              if (foundMac.isNotEmpty) 'mac': foundMac,
             };
           }
         }
@@ -1683,7 +1709,9 @@ class AdbTvService {
     } finally {
       client.close(force: true);
     }
-    return const <String, String>{};
+    return foundMac.isNotEmpty
+        ? <String, String>{'mac': foundMac}
+        : const <String, String>{};
   }
 
   Future<Map<String, String>> _discoverViaSsdp() async {
@@ -1709,6 +1737,10 @@ class AdbTvService {
         if (lower.contains('internetgatewaydevice') ||
             lower.contains('wanipconnection')) {
           return;
+        }
+        final ssdpMac = TvDiscoveryHelpers.extractMacFromSsdpResponse(text);
+        if (ssdpMac.isNotEmpty) {
+          _discoveredMacByIp[senderIp] = ssdpMac;
         }
         final locMatch = RegExp(
           r'LOCATION:\s*(http[^\r\n]+)',
@@ -1786,6 +1818,10 @@ class AdbTvService {
         if (dg == null) return;
         final senderIp = dg.address.address.trim();
         if (!isValidIp(senderIp)) return;
+        final mdnsMac = TvDiscoveryHelpers.extractMacFromMdnsPacket(dg.data);
+        if (mdnsMac.isNotEmpty) {
+          _discoveredMacByIp.putIfAbsent(senderIp, () => mdnsMac);
+        }
         final hint = TvDiscoveryHelpers.extractReadableMdnsLabel(dg.data);
         discoveredByMdns[senderIp] =
             hint.isNotEmpty ? hint : 'Android TV ($senderIp)';
@@ -1796,6 +1832,8 @@ class AdbTvService {
         '_adb._tcp.local',
         '_googlecast._tcp.local',
         '_arceliktvremote._tcp.local',
+        '_webostv._tcp.local',
+        '_samsungmsf._tcp.local',
       ];
       for (final svc in services) {
         mdnsSocket.send(
@@ -1963,7 +2001,9 @@ class AdbTvService {
       final httpMeta = await _fetchTvHttpMetadata(ip);
       final metaName = httpMeta['name']?.trim() ?? '';
       final metaModel = httpMeta['model']?.trim() ?? '';
-      final metaMac = httpMeta['mac']?.trim() ?? '';
+      final metaMac = (httpMeta['mac']?.trim().isNotEmpty ?? false)
+          ? httpMeta['mac']!.trim()
+          : (_discoveredMacByIp[ip] ?? '');
       final metaSmartPort =
           int.tryParse(httpMeta['smartPort']?.trim() ?? '') ?? 0;
       var effectiveSmartPort = smartTvPort > 0 ? smartTvPort : metaSmartPort;
@@ -2405,6 +2445,13 @@ class AdbTvService {
       'protokol=${device.protocol.name} eşleşti=${device.isPaired}',
     );
 
+    if (!device.isIrBlaster && !isValidIp(ip)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeUpTv(device);
+      }
+      return false;
+    }
+
     if (device.protocol.isNonAndroidSmartTv) {
       final driver = _driverRegistry.driverFor(device.protocol);
       if (driver != null) {
@@ -2439,6 +2486,9 @@ class AdbTvService {
           if (adbOk) return true;
         }
       }
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeUpTv(device);
+      }
       return false;
     }
 
@@ -2456,7 +2506,12 @@ class AdbTvService {
       buildFastKeyShellCommand(command),
     );
     if (adbOk) return true;
-    return _sendRemote6466KeyFrame(device, code);
+    final remoteFallbackOk = await _sendRemote6466KeyFrame(device, code);
+    if (remoteFallbackOk) return true;
+    if (command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeUpTv(device);
+    }
+    return false;
   }
 
   Future<Map<String, dynamic>> startSmartTvPinPairing(

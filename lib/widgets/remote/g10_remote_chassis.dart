@@ -9,6 +9,7 @@ import '../cuetv_channel_studio_sheet.dart';
 import '../modals/share_to_tv_beam_sheet.dart';
 import '../modals/tv_discovery_pairing_sheets.dart';
 import '../modals/voice_and_keyboard_sheets.dart';
+import '../modals/wake_on_lan_setup_sheet.dart';
 import 'quick_launch_app_dock.dart';
 import 'tactile_dpad_touchpad.dart';
 
@@ -27,7 +28,10 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
       final selected = ref.read(cueDeckProvider).selectedDevice;
       if (selected.hasValidIp &&
           selected.protocol == TvConnectionProtocol.remotePort6466 &&
-          !selected.isPaired) {
+          !selected.isPaired &&
+          !(cmd == TvKeyCommand.power &&
+              !selected.isOnline &&
+              selected.hasValidMac)) {
         showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
@@ -250,14 +254,18 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                     showIrBlasterBrandPickerSheet(context);
                   },
                 ),
-                if (!selectedDevice.isOnline && selectedDevice.hasValidIp)
+                if (!selectedDevice.isOnline && !selectedDevice.isIrBlaster)
                   _RemoteUtilityChip(
                     key: const Key('remote_wake_tv_chip'),
                     label: '⚡ TV Uyandır',
                     isDarkMode: isDarkMode,
                     onTap: () {
                       HapticFeedback.mediumImpact();
-                      ref.read(cueDeckProvider.notifier).wakeUpSelectedTv();
+                      if (selectedDevice.hasValidMac) {
+                        ref.read(cueDeckProvider.notifier).wakeUpSelectedTv();
+                      } else {
+                        showWakeOnLanSetupSheet(context);
+                      }
                     },
                   ),
               ],

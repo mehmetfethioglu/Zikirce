@@ -1,13 +1,17 @@
-CueDeck combina un control remoto universal para Smart TV con envío directo de enlaces y un planificador personal de series y listas.
+CueDeck combina un control remoto universal para Smart TV, encendido Wake-on-LAN sin infrarrojo, envío directo de enlaces y un planificador personal de series y listas.
+
+ENCIENDE TU TV APAGADO SIN INFRARROJO (WoL)
+• Wake-on-LAN Universal: Enciende televisores apagados compatibles desde teléfonos sin emisor IR mediante paquetes Wake-on-LAN de subred y respaldo automático en el botón de encendido.
+• Detección y Registro Manual de MAC: Extrae la dirección MAC por SSDP, mDNS, XML/JSON y ADB o guárdala manualmente con un toque.
 
 TELEVISORES COMPATIBLES
 • Google TV y Android TV (ADB Turbo 5555 y emparejamiento por PIN 6466)
 • Samsung Tizen Smart TV (WebSocket persistente 8002/8001, guardado de token, teclado y Wake-on-LAN)
 • LG webOS Smart TV (Puntero Magic Remote, rueda de desplazamiento, teclas de dirección y client-key)
-• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel y UPnP/DLNA
+• Philips JointSpace v6 (PIN + Digest), Hisense VIDAA (MQTT TLS), Roku ECP, Sony Bravia IRCC-IP, Arçelik / Vestel y UPnP/DLNA
 • Modo Infrarrojo (IR): Control sin Wi-Fi para teléfonos Android con emisor IR integrado (7 perfiles)
 
-FUNCIONES PRINCIPALES
+FUNCIONES PRINCIPAIS / PRINCIPALES
 • Compartir → CueDeck: Abre al instante enlaces y listas de YouTube en tu televisor o prográmalos para verlos por la noche.
 • Touchpad de precisión y rueda táctil con clics derecho/izquierdo.
 • Teclado en vivo del teléfono para escribir rápido en los buscadores del TV.

@@ -40,11 +40,32 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '2.0.0+27';
-  static const String currentShortVersion = 'v2.0.0';
+  static const String currentVersion = '2.1.0+28';
+  static const String currentShortVersion = 'v2.1.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '2.1.0+28',
+      versionLabel: 'v2.1.0 (Build 28)',
+      releaseDate: '22 Kasım 2026',
+      headline:
+          'Kapalı TV Uyandırma (Evrensel Wake-on-LAN), Manuel MAC Kurulumu & Çoklu Marka Otomatik MAC Keşfi',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'KAPALI TV AÇMA (WoL)',
+          title: 'IR Vericisi Olmadan iPhone & Android ile Kapalı TV Açma',
+          description:
+              'Kumanda, Ayarlar ve ağ tarama ekranlarına tek dokunuşla manuel MAC girişi («⚡ TV Uyandır») eklendi. Tüm Smart TV ve Android/Google TV protokollerinde Güç tuşu kapalı cihazda otomatik Wake-on-LAN yedeklemesine geçer.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'OTOMATİK MAC KEŞFİ',
+          title: 'Çoklu Marka MAC Algılama & Tarama Sonrası Kalıcı Koruma',
+          description:
+              'Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel ve Android/Google TV\'lerde SSDP, mDNS, XML/JSON ve ADB üzerinden otomatik MAC algılama ve yeniden taramalarda kayıtlı MAC koruma eklendi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '2.0.0+27',
       versionLabel: 'v2.0.0 (Build 27)',

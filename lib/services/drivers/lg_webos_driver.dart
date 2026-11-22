@@ -461,6 +461,12 @@ class LgWebOsDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final cleanIp = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     final pointerButton = pointerButtonNameForKey(command);
     if (command == TvKeyCommand.channelUp ||
         command == TvKeyCommand.channelDown) {

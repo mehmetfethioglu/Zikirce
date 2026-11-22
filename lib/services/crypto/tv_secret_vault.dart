@@ -106,10 +106,11 @@ class WakeOnLanService {
 
   /// Builds a standard 102-byte Wake-on-LAN magic packet (`6x 0xFF` + `16x MAC`).
   static Uint8List buildMagicPacket(String macAddress) {
-    final cleanHex = macAddress.replaceAll(RegExp(r'[^0-9A-Fa-f]'), '');
-    if (cleanHex.length != 12) {
+    final cleanMac = TvNetworkValidators.normalizeMacAddress(macAddress);
+    if (cleanMac.isEmpty) {
       return Uint8List(0);
     }
+    final cleanHex = cleanMac.replaceAll(':', '');
     final macBytes = Uint8List(6);
     for (var i = 0; i < 6; i++) {
       macBytes[i] = int.parse(cleanHex.substring(i * 2, i * 2 + 2), radix: 16);
@@ -129,19 +130,56 @@ class WakeOnLanService {
   static Future<bool> sendMagicPacket(
     String macAddress, {
     String? targetIp,
+    String? localSubnetIp,
+    int burstCount = 2,
   }) async {
-    if (!TvNetworkValidators.isValidMacAddress(macAddress)) {
+    final cleanMac = TvNetworkValidators.normalizeMacAddress(macAddress);
+    if (cleanMac.isEmpty) {
       return false;
     }
-    final packet = buildMagicPacket(macAddress);
+    final packet = buildMagicPacket(cleanMac);
     if (packet.length != 102) return false;
 
     final targets = <String>{'255.255.255.255'};
-    final cleanIp = targetIp?.trim() ?? '';
-    if (TvNetworkValidators.isValidIp(cleanIp)) {
-      final parts = cleanIp.split('.');
+    var hasDirectedBroadcast = false;
+    void addDirectedSubnet(String? ip) {
+      final clean = ip?.trim() ?? '';
+      if (!TvNetworkValidators.isValidIp(clean)) return;
+      final parts = clean.split('.');
       if (parts.length == 4) {
         targets.add('${parts[0]}.${parts[1]}.${parts[2]}.255');
+        hasDirectedBroadcast = true;
+      }
+    }
+
+    addDirectedSubnet(targetIp);
+    addDirectedSubnet(localSubnetIp);
+
+    if (!hasDirectedBroadcast &&
+        !Platform.environment.containsKey('FLUTTER_TEST')) {
+      try {
+        final interfaces = await NetworkInterface.list(
+          type: InternetAddressType.IPv4,
+          includeLoopback: false,
+        );
+        for (final iface in interfaces) {
+          final lowerName = iface.name.toLowerCase();
+          final isCellularOrTunnel =
+              lowerName.startsWith('pdp') ||
+              lowerName.startsWith('utun') ||
+              lowerName.startsWith('awdl') ||
+              lowerName.contains('vethernet');
+          if (isCellularOrTunnel) continue;
+          for (final addr in iface.addresses) {
+            final ip = addr.address.trim();
+            if (TvNetworkValidators.isPrivateLanIp(ip) &&
+                !ip.startsWith('127.')) {
+              addDirectedSubnet(ip);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('WakeOnLanService interface discovery error: $e');
       }
     }
 
@@ -150,11 +188,14 @@ class WakeOnLanService {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       socket.broadcastEnabled = true;
       var sent = false;
-      for (final host in targets) {
-        final addr = InternetAddress(host);
-        for (final port in const <int>[9, 7]) {
-          final n = socket.send(packet, addr, port);
-          if (n > 0) sent = true;
+      final passes = burstCount.clamp(1, 3);
+      for (var pass = 0; pass < passes; pass++) {
+        for (final host in targets) {
+          final addr = InternetAddress(host);
+          for (final port in const <int>[9, 7]) {
+            final n = socket.send(packet, addr, port);
+            if (n > 0) sent = true;
+          }
         }
       }
       return sent;

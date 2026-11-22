@@ -1,10 +1,14 @@
-CueDeck ist Ihre universelle Smart-TV-Fernbedienung mit Direktübertragung von YouTube-Links, Präzisions-Touchpad und persönlichem Serien-Planer.
+CueDeck ist Ihre universelle Smart-TV-Fernbedienung mit Wake-on-LAN-Einschaltung ohne Infrarot, Direktübertragung von YouTube-Links, Präzisions-Touchpad und persönlichem Serien-Planer.
+
+TV OHNE INFRAROT EINSCHALTEN (WAKE-ON-LAN)
+• Universelles Wake-on-LAN (WoL): Wecken Sie kompatible ausgeschaltete Fernseher auch mit Smartphones ohne IR-Sender über gezielte Subnetz-Magic-Packets auf Knopfdruck.
+• Automatische & manuelle MAC-Einrichtung: Erkennt TV-MAC-Adressen automatisch über SSDP, mDNS, XML/JSON sowie ADB oder speichert Ihre MAC-Adresse direkt manuell.
 
 UNTERSTÜTZTE TV-SYSTEME
 • Google TV & Android TV (Port 5555 ADB Turbo & Port 6466 PIN-Kopplung)
 • Samsung Tizen Smart TV (Persistentes WebSocket 8002/8001, Token-Speicher, Tastatur-Eingabe & Wake-on-LAN)
 • LG webOS Smart TV (Magic-Remote-Mauszeiger, Scrollrad, D-Pad-Steuerung & client-key)
-• Roku ECP, Philips JointSpace, Hisense VIDAA, Sony Bravia IRCC-IP, Arçelik / Vestel & UPnP/DLNA
+• Philips JointSpace v6 (PIN + HTTP Digest), Hisense VIDAA (MQTT TLS), Roku ECP, Sony Bravia IRCC-IP, Arçelik / Vestel & UPnP/DLNA
 • Infrarot (IR) Modus: Steuerung ohne WLAN für unterstützte Android-Smartphones (7 Marken)
 
 BESONDERE FUNKTIONEN

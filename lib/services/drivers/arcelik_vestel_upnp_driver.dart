@@ -147,7 +147,13 @@ class UpnpDlnaDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
-    if (!TvNetworkValidators.isValidIp(ip)) return false;
+    if (!TvNetworkValidators.isValidIp(ip) ||
+        (command == TvKeyCommand.power && device.hasValidMac)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     await _ensureControlUrls(ip);
 
     final renderUrl = _renderingUrls[ip];
@@ -564,7 +570,12 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
-    if (!TvNetworkValidators.isValidIp(ip)) return false;
+    if (!TvNetworkValidators.isValidIp(ip)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
 
     final query = arcelikGrundigQueryForCommand(command);
     if (device.port > 0 && device.port != 8085 && device.port != 8080) {
@@ -667,6 +678,12 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
   @override
   Future<bool> sendKey(TvDevice device, TvKeyCommand command) async {
     final ip = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(ip)) {
+      if (command == TvKeyCommand.power && device.hasValidMac) {
+        return wakeOnLan(device);
+      }
+      return false;
+    }
     if (await _arcelikDelegate.sendVestelSmartCenterKey(
       ip,
       command,
@@ -675,11 +692,17 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
       return true;
     }
     final query = ArcelikGrundigDriver.arcelikGrundigQueryForCommand(command);
-    return _arcelikDelegate.sendRawHttpGetOverTcp(
+    if (await _arcelikDelegate.sendRawHttpGetOverTcp(
       ip,
       8085,
       '/sendrcpackage?$query',
-    );
+    )) {
+      return true;
+    }
+    if (command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeOnLan(device);
+    }
+    return false;
   }
 
   @override
