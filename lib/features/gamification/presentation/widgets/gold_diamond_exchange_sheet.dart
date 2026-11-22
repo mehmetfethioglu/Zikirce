@@ -12,8 +12,13 @@ class GoldDiamondExchangeSheet extends ConsumerStatefulWidget {
   const GoldDiamondExchangeSheet({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet(
-      context: context,
+    if (!context.mounted) return Future<void>.value();
+    final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
+    if (rootNavigator == null || !rootNavigator.mounted) {
+      return Future<void>.value();
+    }
+    return showModalBottomSheet<void>(
+      context: rootNavigator.context,
       isScrollControlled: true,
       useRootNavigator: true,
       useSafeArea: true,

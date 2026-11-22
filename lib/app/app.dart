@@ -14,6 +14,7 @@ import '../core/providers/tv_mode_provider.dart';
 import '../core/services/screen_awake_service.dart';
 import '../core/theme/theme_provider.dart';
 import '../features/settings/providers/settings_provider.dart';
+import '../features/tv/providers/tv_cast_provider.dart';
 import '../features/namaz_vakitleri/providers/prayer_providers.dart';
 import '../features/gamification/providers/gamification_providers.dart';
 import '../core/widgets/celebration/spiritual_celebration_overlay.dart';
@@ -112,6 +113,16 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    unawaited(
+      TvModeService.syncOrientationForCurrentDisplay(
+        isTvMode: ref.read(isTvModeProvider),
+      ),
+    );
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (!ref.read(isTvModeProvider)) {
@@ -137,6 +148,9 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
         ref.invalidate(todayPrayersProvider);
         ref.invalidate(dailyGoalsStatusProvider);
       }
+      if (!TvModeService.isHardwareTv && ref.read(tvCastProvider).isSupported) {
+        unawaited(ref.read(tvCastProvider.notifier).refreshStatus());
+      }
       // Trigger silent cloud check & reconciliation
       CloudSyncEngine.instance.syncOnAppResume(ref);
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
@@ -151,7 +165,7 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
     ref.listen<bool>(
       settingsProvider.select((s) => s.isKeepScreenAwakeEnabled),
       (prev, next) {
-        ScreenAwakeService.setKeepAwake(next);
+        ScreenAwakeService.setKeepAwake(next || ref.read(isTvModeProvider));
       },
     );
 

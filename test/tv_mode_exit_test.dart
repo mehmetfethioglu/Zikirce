@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +43,7 @@ void main() {
     recordedOrientations = <List<String>>[];
     TvModeService.setHardwareTvForTest(false);
     TvModeService.setTvModeActiveForTest(false);
+    TvModeService.resetOrientationCacheForTest();
     TvModeService.testIsIosOverride = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     db = AppDatabase(NativeDatabase.memory());
@@ -66,6 +68,7 @@ void main() {
   tearDown(() async {
     TvModeService.setHardwareTvForTest(false);
     TvModeService.setTvModeActiveForTest(false);
+    TvModeService.resetOrientationCacheForTest();
     TvModeService.testIsIosOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(batteryChannel, null);
@@ -116,7 +119,7 @@ void main() {
     });
 
     testWidgets(
-        'setTvMode(false) restores portrait orientation on Android and iOS phone viewports',
+        'setTvMode(false) enables foldable-safe multi-orientation on Android and iOS viewports',
         (tester) async {
       for (final viewport in <Size>[
         const Size(390, 844),
@@ -129,6 +132,7 @@ void main() {
 
         for (final isIos in <bool>[false, true]) {
           recordedOrientations.clear();
+          TvModeService.resetOrientationCacheForTest();
           TvModeService.testIsIosOverride = isIos;
 
           final container = ProviderContainer(
@@ -138,20 +142,13 @@ void main() {
           );
 
           await container.read(isTvModeProvider.notifier).setTvMode(true);
-          if (isIos) {
-            expect(
-              recordedOrientations.last,
-              equals(<String>['DeviceOrientation.portraitUp']),
-            );
-          } else {
-            expect(
-              recordedOrientations.last,
-              equals(<String>[
-                'DeviceOrientation.landscapeLeft',
-                'DeviceOrientation.landscapeRight',
-              ]),
-            );
-          }
+          expect(
+            recordedOrientations.last,
+            equals(<String>[
+              'DeviceOrientation.landscapeLeft',
+              'DeviceOrientation.landscapeRight',
+            ]),
+          );
 
           await container.read(isTvModeProvider.notifier).setTvMode(false);
           expect(
@@ -159,11 +156,48 @@ void main() {
             equals(<String>[
               'DeviceOrientation.portraitUp',
               'DeviceOrientation.portraitDown',
+              'DeviceOrientation.landscapeLeft',
+              'DeviceOrientation.landscapeRight',
             ]),
           );
           container.dispose();
         }
       }
+    });
+
+    testWidgets(
+        'hasFoldingDisplayFeature & isCurrentDisplayFoldableOrLarge detect fold/hinge on compact clamshells and sync avoids duplicate calls',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      expect(TvModeService.isCurrentDeviceTablet(), isFalse);
+      expect(TvModeService.hasFoldingDisplayFeature(), isFalse);
+      expect(TvModeService.isCurrentDisplayFoldableOrLarge(), isFalse);
+
+      tester.view.displayFeatures = const <ui.DisplayFeature>[
+        ui.DisplayFeature(
+          bounds: Rect.fromLTWH(0, 450, 412, 12),
+          type: ui.DisplayFeatureType.fold,
+          state: ui.DisplayFeatureState.postureHalfOpened,
+        ),
+      ];
+      addTearDown(tester.view.resetDisplayFeatures);
+
+      expect(TvModeService.isCurrentDeviceTablet(), isFalse);
+      expect(TvModeService.hasFoldingDisplayFeature(), isTrue);
+      expect(TvModeService.isCurrentDisplayFoldableOrLarge(), isTrue);
+
+      TvModeService.testIsIosOverride = false;
+      recordedOrientations.clear();
+      await TvModeService.syncOrientationForCurrentDisplay(isTvMode: false);
+      expect(recordedOrientations.length, 1);
+
+      // Calling again with unchanged policy must be an O(1) no-op
+      await TvModeService.syncOrientationForCurrentDisplay(isTvMode: false);
+      expect(recordedOrientations.length, 1);
     });
   });
 

@@ -167,6 +167,18 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
+      Zikirce v2.4.0 Yenilikleri:
+      • Profesyonel 3B Kıble Bulucu & İftitah Tekbiri Deneyimi: Eğim düzeltmeli pusula ve küresel WMM manyetik sapma hesabı ile gerçek Kâbe yönünü hassas biçimde bulun. Anıtsal Kâbe külliyesi, 3B seccade (Erkek Figür, Kadın Figür, Sadece Seccade seçenekleri), 3 adımlı rehber (Düz Tut → Kâbe'ye Dön → Tekbir), sıfır kayma hizalama kilidi, gündüz güneşle görsel teyit, manyetik parazit kalibrasyon uyarısı ve isteğe bağlı sesli İftitah Tekbiri eklendi.
+      • Geniş Ekran & Katlanabilir Cihaz (Çift Panel / Rahle) Desteği: iPad ve katlanabilir/geniş ekranlar için uyarlanabilir çift panel düzeni, yan gezinme rayı ve Rahle açık kitap (çift sayfa) Mushaf okuma deneyimi geliştirildi; Zikirmatik, Ana Sayfa Bento kartları, Namaz Vakitleri ve Ayarlar ekranları her pencere boyutuna taşmasız uyum sağlar.
+      • Zikirce TV AirPlay / HDMI Yansıtma & Mukabele Ses-Ok Senkronizasyonu: Zikirce TV modunda tek dokunuşla AirPlay / Apple TV / HDMI ekran yansıtma penceresi ve canlı bağlantı takibi eklendi. Kablosuz veya kablolu TV gecikmeleri için ayarlanabilir (-600 ms ile +300 ms) ses-işaretçi senkron ofseti sunuldu.
+      • Tilâvet Secdesi Hatırlatıcı, Kelime Takibi & Kararlılık İyileştirmeleri: Tilâvet Secdesi borcu ve yüzen hatırlatıcı şeritleri yenilendi; uzun âyetlerde kelime takipli otomatik kaydırma iyileştirildi; Günlük Hedefler sandığı, Altın-Elmas takası ve seri kurtarma pencerelerindeki kararlılık sorunları giderildi.
+
+      What's New in v2.4.0:
+      • Upgraded 3D Qibla Finder & Opening Takbir Experience: Find the exact direction of the Kaaba with a tilt-compensated compass and global WMM magnetic declination. Features a monumental 3D Kaaba sanctuary and prayer rug scene (Male, Female, or Rug-Only modes), 3-step visual guide (Hold Flat → Face Kaaba → Takbir), zero-drift alignment lock, daytime solar verification, magnetic interference calibration alerts, and optional spoken Takbir audio.
+      • Large-Screen & Foldable Adaptive Layouts (Two-Pane / Rahle): Added adaptive two-pane layouts, side NavigationRail, and Rahle open-book dual-page Mushaf spreads for iPad and large/foldable displays, with overflow-free scaling across the Dhikr counter, Minimal Bento Home, Prayer Times, and Settings.
+      • Zikirce TV AirPlay / HDMI Casting & Mukabele Audio-Pointer Sync: Added a one-tap native AirPlay / Apple TV / HDMI mirroring picker and live external display status in Zikirce TV mode, plus configurable (-600 ms to +300 ms) audio-to-pointer sync compensation for wireless and wired TV playback.
+      • Sajdah al-Tilawah Reminders, Word Tracking & Stability Fixes: Refined Sajdah al-Tilawah floating and debt reminder banners with larger touch targets, improved word-tracked auto-scrolling on long verses, and resolved dialog context stability issues in Daily Goals, Gold-Diamond Exchange, and Streak Recovery sheets.
+
       Zikirce v2.3.1 Yenilikleri:
       • TV Modundan Çıkış & Telefon Ekranı Düzeltmesi (iOS & Android): Telefonlarda Zikirce TV Modu açıldığında kapatılamaması hatası giderildi. TV ekranının üst çubuğuna tek dokunuşla çalışan «TV Modundan Çık» butonu, Android sistem geri tuşuyla çıkış desteği, telefon ekranlarına tam uyumlu taşmasız düzen ve çıkışta otomatik dikey ekran dönüşü eklendi.
       • Minimal Bento Ana Sayfa & Detaylı İstatistikler: Açılış ekranı sade Bento kartlarıyla (Günlük Zikir halkası, 7 günlük seri ritmi, tek dokunuşla 5 vakit namaz kapsülleri) yenilendi; grafikler, ısı haritası ve rozetler ayrı Detaylı İstatistikler sayfasına taşındı. Ayarlar > Ekran altına doğrudan Zikirmatik ile açılış tercihi eklendi.

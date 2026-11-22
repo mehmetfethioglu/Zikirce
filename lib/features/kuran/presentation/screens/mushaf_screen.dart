@@ -28,6 +28,7 @@ import '../../../../core/services/celebration_service.dart';
 import '../../../../core/utils/pref_utils.dart';
 import '../../data/tilavet_secdesi_data.dart';
 import '../../providers/tilavet_secdesi_provider.dart';
+import '../widgets/tilavet_secdesi_debt_reminder_banner.dart';
 import '../widgets/tilavet_secdesi_floating_banner.dart';
 import '../widgets/tilavet_secdesi_exit_dialog.dart';
 import '../widgets/tilavet_secdesi_guide_sheet.dart';
@@ -35,8 +36,12 @@ import '../../../gamification/services/custom_badge_service.dart';
 import '../widgets/add_custom_quran_badge_sheet.dart';
 import '../../data/islamic_bookshelf_models.dart';
 import '../../../dashboard/providers/share_reminder_provider.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
+import '../../../../core/layout/foldable_two_pane.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/widgets/tv_focusable.dart';
+import '../../../tv/presentation/widgets/tv_cast_action_button.dart';
 
 class MushafScreen extends ConsumerStatefulWidget {
   final int initialPage;
@@ -56,12 +61,26 @@ class MushafScreen extends ConsumerStatefulWidget {
     this.initialReadingMode,
   });
 
+  /// Toplam 605 sayfalık Mushaf'ı çift sayfalık (0..302) açılış indeksine eşler.
+  static int spreadIndexForPage(int page) => (page.clamp(1, 605) - 1) ~/ 2;
+
+  /// Verilen spread indeksindeki sağ (ilk okunan tek) sayfa numarasını döndürür.
+  static int rightPageForSpread(int spreadIndex) =>
+      spreadIndex.clamp(0, 302) * 2 + 1;
+
+  /// Verilen spread indeksindeki sol (ikinci çift) sayfa numarasını döndürür.
+  static int? leftPageForSpread(int spreadIndex) {
+    final left = rightPageForSpread(spreadIndex) + 1;
+    return left <= 605 ? left : null;
+  }
+
   @override
   ConsumerState<MushafScreen> createState() => _MushafScreenState();
 }
 
 class _MushafScreenState extends ConsumerState<MushafScreen> {
   late PageController _pageController;
+  late PageController _spreadPageController;
   late final FocusNode _focusNode;
   int _startPage = 1;
   bool _hasMarkedAsRead = false;
@@ -73,7 +92,11 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   bool _showDebtReminderBanner = false;
   bool _hideReadBanner = false;
   bool _hasCompletedActiveHatimInSession = false;
+  bool _preferTwoPageSpread = true;
+  bool _isCurrentlyTwoPageSpread = false;
+  bool _hasInitializedLayoutMode = false;
   Timer? _hideReadBannerTimer;
+  Timer? _debtReminderTimer;
 
   @override
   void initState() {
@@ -88,6 +111,9 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final targetPage = widget.initialPage > 0 ? widget.initialPage : startPage;
     _startPage = targetPage.clamp(1, 605);
     _pageController = PageController(initialPage: _startPage - 1);
+    _spreadPageController = PageController(
+      initialPage: MushafScreen.spreadIndexForPage(_startPage),
+    );
 
     if (TilavetSecdesiData.isSecdePage(_startPage)) {
       _encounteredSecdePages.add(_startPage);
@@ -110,7 +136,8 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
             _showDebtReminderBanner = true;
           });
         }
-        Future.delayed(const Duration(seconds: 6), () {
+        _debtReminderTimer?.cancel();
+        _debtReminderTimer = Timer(const Duration(seconds: 6), () {
           if (mounted && _showDebtReminderBanner) {
             setState(() {
               _showDebtReminderBanner = false;
@@ -124,8 +151,10 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
   @override
   void dispose() {
     _hideReadBannerTimer?.cancel();
+    _debtReminderTimer?.cancel();
     _focusNode.dispose();
     _pageController.dispose();
+    _spreadPageController.dispose();
     CloudSyncEngine.instance
         .triggerDebouncedSync(null, delay: const Duration(seconds: 1));
     try {
@@ -152,10 +181,31 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     if (_pageController.hasClients) {
       _pageController.jumpToPage(target - 1);
     }
+    if (_spreadPageController.hasClients) {
+      _spreadPageController.jumpToPage(MushafScreen.spreadIndexForPage(target));
+    }
   }
 
   void _goToNextPage() {
     final currentPage = ref.read(currentMushafPageProvider);
+    if (_isCurrentlyTwoPageSpread) {
+      final currentSpread = MushafScreen.spreadIndexForPage(currentPage);
+      if (currentSpread < 302) {
+        final nextSpread = currentSpread + 1;
+        final nextPage = MushafScreen.rightPageForSpread(nextSpread);
+        ref.read(currentMushafPageProvider.notifier).state = nextPage;
+        unawaited(_saveIndependentMushafPage(nextPage));
+        if (_spreadPageController.hasClients) {
+          _spreadPageController.animateToPage(
+            nextSpread,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+          );
+        }
+      }
+      return;
+    }
+
     if (currentPage < 605) {
       final next = (currentPage + 1).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = next;
@@ -172,6 +222,24 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
 
   void _goToPreviousPage() {
     final currentPage = ref.read(currentMushafPageProvider);
+    if (_isCurrentlyTwoPageSpread) {
+      final currentSpread = MushafScreen.spreadIndexForPage(currentPage);
+      if (currentSpread > 0) {
+        final prevSpread = currentSpread - 1;
+        final prevPage = MushafScreen.rightPageForSpread(prevSpread);
+        ref.read(currentMushafPageProvider.notifier).state = prevPage;
+        unawaited(_saveIndependentMushafPage(prevPage));
+        if (_spreadPageController.hasClients) {
+          _spreadPageController.animateToPage(
+            prevSpread,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+          );
+        }
+      }
+      return;
+    }
+
     if (currentPage > 1) {
       final prev = (currentPage - 1).clamp(1, 605);
       ref.read(currentMushafPageProvider.notifier).state = prev;
@@ -866,6 +934,46 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final currentPage = ref.watch(currentMushafPageProvider);
     final pageAsync = ref.watch(quranPageDataProvider(currentPage));
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final layout = FoldableLayoutInfo.of(context);
+    final isTvMode = ref.watch(isTvModeProvider);
+    final canUseTwoPageSpread = !isTvMode && layout.supportsTwoPageSpread;
+    final isTwoPageSpread = canUseTwoPageSpread && _preferTwoPageSpread;
+
+    if (!_hasInitializedLayoutMode) {
+      _hasInitializedLayoutMode = true;
+      _isCurrentlyTwoPageSpread = isTwoPageSpread;
+    } else if (_isCurrentlyTwoPageSpread != isTwoPageSpread) {
+      _isCurrentlyTwoPageSpread = isTwoPageSpread;
+      final pageNow = currentPage.clamp(1, 605);
+      if (isTwoPageSpread && !_spreadPageController.hasClients) {
+        _spreadPageController.dispose();
+        _spreadPageController = PageController(
+          initialPage: MushafScreen.spreadIndexForPage(pageNow),
+        );
+      } else if (!isTwoPageSpread && !_pageController.hasClients) {
+        _pageController.dispose();
+        _pageController = PageController(initialPage: pageNow - 1);
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final activePage = ref.read(currentMushafPageProvider).clamp(1, 605);
+          if (isTwoPageSpread && _spreadPageController.hasClients) {
+            _spreadPageController.jumpToPage(
+              MushafScreen.spreadIndexForPage(activePage),
+            );
+          } else if (!isTwoPageSpread && _pageController.hasClients) {
+            _pageController.jumpToPage(activePage - 1);
+          }
+        });
+      }
+    }
+
+    final activeSpreadIndex = MushafScreen.spreadIndexForPage(currentPage);
+    final spreadRightPage = MushafScreen.rightPageForSpread(activeSpreadIndex);
+    final spreadLeftPage = MushafScreen.leftPageForSpread(activeSpreadIndex);
+    final List<int> visiblePages = isTwoPageSpread
+        ? <int>[spreadRightPage, if (spreadLeftPage != null) spreadLeftPage]
+        : <int>[currentPage];
 
     final scaffoldBg =
         isDark ? const Color(0xFF101216) : const Color(0xFFFBF8F1);
@@ -878,42 +986,69 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
     final audioState = ref.watch(kuranAudioNotifierProvider);
     final isAudioActive = audioState.isBarVisible;
 
-    // Detect effective surah ending on this page
+    // Detect effective surah ending on any currently visible page
     SureItem? detectedSurah;
     if (widget.targetSurah != null) {
       detectedSurah = widget.targetSurah;
     } else {
-      pageAsync.whenData((data) {
-        for (final ayat in data.quranAyats) {
-          final s = SurahDataProvider.surahs
-              .where((item) => item.id == ayat.sureId)
-              .firstOrNull;
-          if (s != null && ayat.ayetId == s.ayetSayisi) {
-            detectedSurah = s;
-            break;
+      for (final p in visiblePages) {
+        final pAsync = p == currentPage
+            ? pageAsync
+            : ref.watch(quranPageDataProvider(p));
+        pAsync.whenData((data) {
+          if (detectedSurah != null) return;
+          for (final ayat in data.quranAyats) {
+            final s = SurahDataProvider.surahs
+                .where((item) => item.id == ayat.sureId)
+                .firstOrNull;
+            if (s != null && ayat.ayetId == s.ayetSayisi) {
+              detectedSurah = s;
+              break;
+            }
           }
-        }
-      });
+        });
+        if (detectedSurah != null) break;
+      }
     }
 
     final effectiveSurah = detectedSurah;
     final bool isSurahEnd = effectiveSurah != null &&
-        pageAsync.maybeWhen(
-          data: (data) =>
-              data.quranAyats.any((a) =>
-                  a.sureId == effectiveSurah.id &&
-                  a.ayetId == effectiveSurah.ayetSayisi) ||
-              currentPage >=
-                  SurahDataProvider.getSurahEndPage(effectiveSurah.id),
-          orElse: () =>
-              currentPage >=
-              SurahDataProvider.getSurahEndPage(effectiveSurah.id),
-        );
+        visiblePages.any((p) {
+          final pAsync = p == currentPage
+              ? pageAsync
+              : ref.watch(quranPageDataProvider(p));
+          return pAsync.maybeWhen(
+            data: (data) =>
+                data.quranAyats.any((a) =>
+                    a.sureId == effectiveSurah.id &&
+                    a.ayetId == effectiveSurah.ayetSayisi) ||
+                p >= SurahDataProvider.getSurahEndPage(effectiveSurah.id),
+            orElse: () =>
+                p >= SurahDataProvider.getSurahEndPage(effectiveSurah.id),
+          );
+        });
     final bool isMarkedAsRead = effectiveSurah != null &&
         (_completedSurahIdsInSession.contains(effectiveSurah.id) ||
             (widget.targetSurah != null &&
                 widget.targetSurah!.id == effectiveSurah.id &&
                 _hasMarkedAsRead));
+    final activeSecdeItem = visiblePages
+        .map(TilavetSecdesiData.getSecdeForPage)
+        .whereType<TilavetSecdeItem>()
+        .firstOrNull;
+    final tilavetDebt = ref.watch(tilavetSecdesiDebtProvider);
+    final showSecdePageBanner =
+        activeSecdeItem != null && !_dismissedBannerForCurrentPage;
+    final showDebtBanner = _showDebtReminderBanner &&
+        !isTvMode &&
+        activeSecdeItem == null &&
+        tilavetDebt > 0;
+    final topBannerHorizontalPadding =
+        layout.isNarrowCoverScreen ? 10.0 : 16.0;
+    final isAtMushafEnd = visiblePages.any((p) => p >= 604);
+    final pageSubtitle = isTwoPageSpread && spreadLeftPage != null
+        ? 'Sayfa $spreadRightPage – $spreadLeftPage / 605'
+        : 'Sayfa $currentPage / 605';
 
     return PopScope(
       canPop: false,
@@ -924,7 +1059,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
       child: Scaffold(
         backgroundColor: scaffoldBg,
         appBar: AppBar(
-          toolbarHeight: ref.watch(isTvModeProvider) ? 46 : kToolbarHeight,
+          toolbarHeight: isTvMode ? 46 : kToolbarHeight,
           backgroundColor: scaffoldBg,
           elevation: 0,
           scrolledUnderElevation: 0,
@@ -939,10 +1074,14 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               children: [
                 Text(
                   '${data.mealSureLabel} • Cüz ${data.cuzNo}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: AppTypography.headingSmall(color: titleColor),
                 ),
                 Text(
-                  'Sayfa ${data.pageNo} / 605',
+                  pageSubtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: subtitleColor, fontSize: 12),
                 ),
               ],
@@ -953,7 +1092,29 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 Text('Kur’ân-ı Kerîm', style: TextStyle(color: titleColor)),
           ),
           actions: [
-            if (ref.watch(isTvModeProvider))
+            if (canUseTwoPageSpread)
+              IconButton(
+                icon: Icon(
+                  _preferTwoPageSpread
+                      ? Icons.chrome_reader_mode_rounded
+                      : Icons.auto_stories_rounded,
+                  color: _preferTwoPageSpread ? goldColor : iconColor,
+                ),
+                tooltip: context.l10n.isTurkish
+                    ? (_preferTwoPageSpread
+                        ? 'Tek Sayfa Görünüme Geç'
+                        : 'Çift Sayfa Rahle Görünümü')
+                    : (_preferTwoPageSpread
+                        ? 'Switch to Single Page'
+                        : 'Two-Page Spread'),
+                onPressed: () {
+                  HapticService.selectionClick();
+                  setState(() {
+                    _preferTwoPageSpread = !_preferTwoPageSpread;
+                  });
+                },
+              ),
+            if (isTvMode)
               TextButton.icon(
                 onPressed: () {
                   HapticService.selectionClick();
@@ -989,7 +1150,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                   ),
                 ),
               ),
-            if (ref.watch(isTvModeProvider))
+            if (isTvMode)
               TextButton.icon(
                 onPressed: () => _showReadingSettingsSheet(context, isDark),
                 icon: Icon(
@@ -1012,7 +1173,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 tooltip: 'Yazı Boyutu & Meâl Ayarları',
                 onPressed: () => _showReadingSettingsSheet(context, isDark),
               ),
-            if (!ref.watch(isTvModeProvider))
+            if (!isTvMode)
               IconButton(
                 icon: Icon(Icons.search_rounded, color: iconColor),
                 tooltip: 'Âyet Ara',
@@ -1033,24 +1194,29 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 if (selectedPage != null &&
                     selectedPage >= 1 &&
                     selectedPage <= 605) {
-                  ref.read(currentMushafPageProvider.notifier).state =
-                      selectedPage;
-                  _pageController.jumpToPage(selectedPage - 1);
+                  _jumpToMushafPage(selectedPage);
                 }
               },
             ),
+            if (isTvMode && !TvModeService.isHardwareTv)
+              TvCastIconButton(iconColor: iconColor),
             IconButton(
               icon: Icon(Icons.skip_next_rounded, color: iconColor),
               tooltip: 'Sayfaya Git',
               onPressed: () => _showJumpToPageDialog(context, isDark),
             ),
           ],
-          bottom: ref.watch(isTvModeProvider)
+          bottom: isTvMode
               ? null
               : PreferredSize(
                   preferredSize: const Size.fromHeight(44),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    padding: EdgeInsets.fromLTRB(
+                      layout.isNarrowCoverScreen ? 10 : 16,
+                      0,
+                      layout.isNarrowCoverScreen ? 10 : 16,
+                      8,
+                    ),
                     child: Container(
                       height: 36,
                       padding: const EdgeInsets.all(3),
@@ -1162,156 +1328,167 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               }
               return KeyEventResult.ignored;
             },
-            child: Stack(
+            child: Column(
               children: [
-                // 605 PageView (RTL Swiping for Quran reading)
-                PageView.builder(
-                controller: _pageController,
-                reverse: true, // Right-to-Left standard for Arabic Mushaf
-                itemCount: 605,
-                onPageChanged: (pageIndex) {
-                  final newPage = pageIndex + 1;
-                  if (_hideReadBanner) {
-                    _hideReadBanner = false;
-                  }
-                  ref.read(currentMushafPageProvider.notifier).state = newPage;
-                  unawaited(_saveIndependentMushafPage(newPage));
-                  if (TilavetSecdesiData.isSecdePage(newPage)) {
-                    _encounteredSecdePages.add(newPage);
-                    if (_lastBannerPage != newPage) {
-                      setState(() {
-                        _lastBannerPage = newPage;
-                        _dismissedBannerForCurrentPage = false;
-                        _showDebtReminderBanner = false;
-                      });
-                    }
-                  }
-                },
-                itemBuilder: (context, index) {
-                  final pageNum = index + 1;
-                  final pageDataAsync =
-                      ref.watch(quranPageDataProvider(pageNum));
-
-                  return pageDataAsync.when(
-                    data: (data) => MushafPageWidget(
-                      pageData: data,
-                      isMealOnlyMode:
-                          _readingMode == MushafReadingMode.mealOnly,
-                      readingMode: _readingMode,
-                    ),
-                    loading: () => Center(
-                      child: CircularProgressIndicator(color: goldColor),
-                    ),
-                    error: (err, _) => Center(
-                      child: Text('Sayfa yüklenemedi: $err',
-                          style: const TextStyle(color: Colors.red)),
-                    ),
-                  );
-                },
-              ),
-
-              // Floating Tilâvet Secdesi Banner & Debt Reminder
-              if (TilavetSecdesiData.getSecdeForPage(currentPage) != null &&
-                  !_dismissedBannerForCurrentPage)
-                Positioned(
-                  top: 6,
-                  left: 0,
-                  right: 0,
-                  child: TilavetSecdesiFloatingBanner(
-                    secdeItem:
-                        TilavetSecdesiData.getSecdeForPage(currentPage)!,
-                    onDismiss: () {
-                      setState(() {
-                        _dismissedBannerForCurrentPage = true;
-                      });
-                    },
-                  ),
-                ),
-
-              if (_showDebtReminderBanner &&
-                  !ref.watch(isTvModeProvider) &&
-                  TilavetSecdesiData.getSecdeForPage(currentPage) == null &&
-                  ref.watch(tilavetSecdesiDebtProvider) > 0)
-                Positioned(
-                  top: 6,
-                  left: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: (isDark
-                              ? const Color(0xFF2C2216)
-                              : const Color(0xFFFFF8E7))
-                          .withValues(alpha: 0.96),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: const Color(0xFFD97706), width: 1.2),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          TilavetSecdesiGuideSheet.show(context);
-                        },
-                        child: Row(
-                          children: [
-                            const Text('📌 ',
-                                style: TextStyle(fontSize: 16)),
-                            Expanded(
-                              child: Text(
-                                '${ref.watch(tilavetSecdesiDebtProvider)} adet tilâvet secdesi borcunuz bulunuyor.',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark
-                                      ? const Color(0xFFFFD56B)
-                                      : const Color(0xFF8C5400),
-                                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: showSecdePageBanner
+                      ? TilavetSecdesiFloatingBanner(
+                          key: ValueKey(
+                            'mushaf_secde_banner_${activeSecdeItem.no}',
+                          ),
+                          secdeItem: activeSecdeItem,
+                          padding: EdgeInsets.fromLTRB(
+                            topBannerHorizontalPadding,
+                            0,
+                            topBannerHorizontalPadding,
+                            6,
+                          ),
+                          onDismiss: () {
+                            setState(() {
+                              _dismissedBannerForCurrentPage = true;
+                            });
+                          },
+                        )
+                      : (showDebtBanner
+                          ? TilavetSecdesiDebtReminderBanner(
+                              debtCount: tilavetDebt,
+                              padding: EdgeInsets.fromLTRB(
+                                topBannerHorizontalPadding,
+                                0,
+                                topBannerHorizontalPadding,
+                                6,
                               ),
-                            ),
-                            Text(
-                              'Rehber →',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF8C5400),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
+                              onOpenGuide: () {
+                                TilavetSecdesiGuideSheet.show(context);
+                              },
+                              onDismiss: () {
+                                _debtReminderTimer?.cancel();
                                 setState(() {
                                   _showDebtReminderBanner = false;
                                 });
                               },
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 18,
-                                color: isDark
-                                    ? Colors.white70
-                                    : Colors.black54,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                            )
+                          : const SizedBox.shrink()),
                 ),
+                Expanded(
+                  child: Stack(
+                    children: [
+                if (isTwoPageSpread)
+                  PageView.builder(
+                    key: const ValueKey('mushaf_spread_page_view'),
+                    controller: _spreadPageController,
+                    reverse: true,
+                    itemCount: 303,
+                    onPageChanged: (spreadIndex) {
+                      final newRightPage =
+                          MushafScreen.rightPageForSpread(spreadIndex);
+                      final newLeftPage =
+                          MushafScreen.leftPageForSpread(spreadIndex);
+                      if (_hideReadBanner) {
+                        _hideReadBanner = false;
+                      }
+                      ref.read(currentMushafPageProvider.notifier).state =
+                          newRightPage;
+                      unawaited(_saveIndependentMushafPage(newRightPage));
+                      final secdePage = TilavetSecdesiData.isSecdePage(
+                              newRightPage)
+                          ? newRightPage
+                          : (newLeftPage != null &&
+                                  TilavetSecdesiData.isSecdePage(newLeftPage)
+                              ? newLeftPage
+                              : null);
+                      if (secdePage != null) {
+                        _encounteredSecdePages.add(secdePage);
+                        if (_lastBannerPage != secdePage) {
+                          _debtReminderTimer?.cancel();
+                          setState(() {
+                            _lastBannerPage = secdePage;
+                            _dismissedBannerForCurrentPage = false;
+                            _showDebtReminderBanner = false;
+                          });
+                        }
+                      }
+                    },
+                    itemBuilder: (context, spreadIndex) {
+                      final rightPage =
+                          MushafScreen.rightPageForSpread(spreadIndex);
+                      final leftPage =
+                          MushafScreen.leftPageForSpread(spreadIndex);
+                      final isSpreadActive = rightPage == currentPage ||
+                          leftPage == currentPage;
+                      return FoldableTwoPane(
+                        reverseHorizontal: true,
+                        axis: FoldableSplitAxis.horizontal,
+                        paneSpacing: 14.0,
+                        hingeSeparator: _MushafBookSpineDivider(
+                          isDark: isDark,
+                          accentColor: goldColor,
+                        ),
+                        startPane: _buildMushafPageSlot(
+                          pageNum: rightPage,
+                          isActivePage: isSpreadActive,
+                          usePrimaryScrollController: true,
+                          goldColor: goldColor,
+                        ),
+                        endPane: leftPage != null
+                            ? _buildMushafPageSlot(
+                                pageNum: leftPage,
+                                isActivePage: isSpreadActive,
+                                usePrimaryScrollController: false,
+                                goldColor: goldColor,
+                              )
+                            : _MushafSpreadEndLeaf(
+                                isDark: isDark,
+                                goldColor: goldColor,
+                                onOpenHatimDua: _completeActiveHatimAndShowDua,
+                              ),
+                      );
+                    },
+                  )
+                else
+                  // 605 PageView (RTL Swiping for Quran reading)
+                  PageView.builder(
+                    key: const ValueKey('mushaf_single_page_view'),
+                    controller: _pageController,
+                    reverse: true, // Right-to-Left standard for Arabic Mushaf
+                    itemCount: 605,
+                    onPageChanged: (pageIndex) {
+                      final newPage = pageIndex + 1;
+                      if (_hideReadBanner) {
+                        _hideReadBanner = false;
+                      }
+                      ref.read(currentMushafPageProvider.notifier).state =
+                          newPage;
+                      unawaited(_saveIndependentMushafPage(newPage));
+                      if (TilavetSecdesiData.isSecdePage(newPage)) {
+                        _encounteredSecdePages.add(newPage);
+                        if (_lastBannerPage != newPage) {
+                          _debtReminderTimer?.cancel();
+                          setState(() {
+                            _lastBannerPage = newPage;
+                            _dismissedBannerForCurrentPage = false;
+                            _showDebtReminderBanner = false;
+                          });
+                        }
+                      }
+                    },
+                    itemBuilder: (context, index) {
+                      final pageNum = index + 1;
+                      return _buildMushafPageSlot(
+                        pageNum: pageNum,
+                        isActivePage: pageNum == currentPage,
+                        usePrimaryScrollController: pageNum == currentPage,
+                        goldColor: goldColor,
+                      );
+                    },
+                  ),
 
               // Floating "Sureyi Okudum" Action Button (at the end of the surah)
               // Hatim ve Mukabele modlarında genel hedef hatim tamamlamak olduğu için sûre okundu butonu gösterilmez
-              if (!ref.watch(isTvModeProvider) &&
+              if (!isTvMode &&
                   widget.activeHatim == null &&
                   effectiveSurah != null &&
                   isSurahEnd &&
@@ -1385,15 +1562,19 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                                         fontSize: 18, color: Colors.white),
                                   ),
                                   const SizedBox(width: 10),
-                                  Text(
-                                    isMarkedAsRead
-                                        ? '${effectiveSurah.name} Sûresi Okundu'
-                                        : '${effectiveSurah.name} Sûresini Okudum',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15.5,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.3,
+                                  Flexible(
+                                    child: Text(
+                                      isMarkedAsRead
+                                          ? '${effectiveSurah.name} Sûresi Okundu'
+                                          : '${effectiveSurah.name} Sûresini Okudum',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.3,
+                                      ),
                                     ),
                                   ),
                                   if (!isMarkedAsRead) ...[
@@ -1412,7 +1593,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 ),
 
               // Floating "Hatmi Tamamla ve Hatim Duası Oku" / "Matbû Hatim Duasını Oku" Button at Mushaf End (Page 604/605)
-              if (currentPage >= 604 &&
+              if (isAtMushafEnd &&
                   (widget.activeHatim != null || widget.targetSurah == null))
                 Positioned(
                   left: 20,
@@ -1498,7 +1679,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
               ),
 
               // Masaüstü & TV İleri / Geri Sayfa Butonları (Sol: Sonraki, Sağ: Önceki)
-              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && currentPage < 605)
+              if ((isDesktopMushafPlatform || isTvMode) && currentPage < 605)
                 Positioned(
                   left: 14,
                   top: 0,
@@ -1512,7 +1693,7 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     ),
                   ),
                 ),
-              if ((isDesktopMushafPlatform || ref.watch(isTvModeProvider)) && currentPage > 1)
+              if ((isDesktopMushafPlatform || isTvMode) && currentPage > 1)
                 Positioned(
                   right: 14,
                   top: 0,
@@ -1526,9 +1707,12 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                     ),
                   ),
                 ),
-            ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -1654,11 +1838,10 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                   isDark ? AppColors.gold500 : AppColors.emerald700,
               foregroundColor: isDark ? Colors.black : Colors.white,
             ),
-            onPressed: () {
+              onPressed: () {
               final p = int.tryParse(controller.text.trim());
               if (p != null && p >= 1 && p <= 605) {
-                ref.read(currentMushafPageProvider.notifier).state = p;
-                _pageController.jumpToPage(p - 1);
+                _jumpToMushafPage(p);
                 Navigator.of(ctx).pop();
               }
             },
@@ -1666,6 +1849,148 @@ class _MushafScreenState extends ConsumerState<MushafScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildMushafPageSlot({
+    required int pageNum,
+    required bool isActivePage,
+    required bool usePrimaryScrollController,
+    required Color goldColor,
+  }) {
+    final pageDataAsync = ref.watch(quranPageDataProvider(pageNum));
+    return pageDataAsync.when(
+      data: (data) => MushafPageWidget(
+        pageData: data,
+        isMealOnlyMode: _readingMode == MushafReadingMode.mealOnly,
+        readingMode: _readingMode,
+        isActivePage: isActivePage,
+        usePrimaryScrollController: usePrimaryScrollController,
+      ),
+      loading: () => Center(
+        child: CircularProgressIndicator(color: goldColor),
+      ),
+      error: (err, _) => Center(
+        child: Text(
+          'Sayfa yüklenemedi: $err',
+          style: const TextStyle(color: Colors.red),
+        ),
+      ),
+    );
+  }
+}
+
+class _MushafBookSpineDivider extends StatelessWidget {
+  final bool isDark;
+  final Color accentColor;
+
+  const _MushafBookSpineDivider({
+    required this.isDark,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.transparent,
+            accentColor.withValues(alpha: isDark ? 0.22 : 0.18),
+            Colors.transparent,
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+      ),
+      child: Center(
+        child: Container(
+          width: 1.5,
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: isDark ? 0.45 : 0.35),
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MushafSpreadEndLeaf extends StatelessWidget {
+  final bool isDark;
+  final Color goldColor;
+  final VoidCallback onOpenHatimDua;
+
+  const _MushafSpreadEndLeaf({
+    required this.isDark,
+    required this.goldColor,
+    required this.onOpenHatimDua,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? const Color(0xFF15191F) : const Color(0xFFFDFBF6);
+    final titleColor = isDark ? Colors.white : const Color(0xFF1E2B27);
+    final subColor = isDark ? Colors.white70 : const Color(0xFF506861);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: goldColor.withValues(alpha: 0.42),
+            width: 1.4,
+          ),
+        ),
+        padding: const EdgeInsets.all(28),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_stories_rounded, size: 48, color: goldColor),
+              const SizedBox(height: 14),
+              Text(
+                'Sadakallâhu’l-Azîm',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: titleColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Kur’ân-ı Kerîm’in son sayfasına ulaştınız.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13.5, color: subColor),
+              ),
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: onOpenHatimDua,
+                icon: Icon(Icons.auto_awesome_rounded, color: goldColor),
+                label: Text(
+                  'Hatim Duasını Aç',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: titleColor,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: goldColor.withValues(alpha: 0.65)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

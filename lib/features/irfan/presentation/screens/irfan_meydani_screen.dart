@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/asset_constants.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/haptic_service.dart';
 import '../../../../core/session/session_providers.dart';
@@ -204,6 +205,9 @@ class _IrfanMeydaniScreenState extends ConsumerState<IrfanMeydaniScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final layout = FoldableLayoutInfo.of(context);
+    final horizontalPad = layout.isNarrowCoverScreen ? 14.0 : 20.0;
+    final bottomPad = layout.useNavigationRail ? 28.0 : 112.0;
 
     return Scaffold(
       backgroundColor: colors.pageBackground,
@@ -212,7 +216,7 @@ class _IrfanMeydaniScreenState extends ConsumerState<IrfanMeydaniScreen> {
         child: ListView(
           controller: _scrollController,
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 14, 20, 112),
+          padding: EdgeInsets.fromLTRB(horizontalPad, 14, horizontalPad, bottomPad),
           children: [
             const _IrfanHeaderBar(),
             const SizedBox(height: 16),

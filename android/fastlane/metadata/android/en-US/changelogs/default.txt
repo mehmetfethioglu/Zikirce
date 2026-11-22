@@ -1,3 +1,4 @@
-• TV Mode Fix (iOS & Android): Fixed an issue where TV Mode could not be closed on phones; added a one-tap "Exit TV Mode" button in the top bar, responsive phone layout, and automatic portrait orientation restore.
-• Minimal Bento Home: Redesigned calm home cards, a dedicated Detailed Statistics screen, and an option to launch directly on the Dhikr counter.
-• Improved word-tracked Mushaf auto-scrolling and added new Catechism questions to Arena of Wisdom.
+• 3D Qibla Finder & Opening Takbir: Tilt-compensated compass, 3D Kaaba prayer rug scene, solar verification, and automatic Takbir/Qiyam alignment guide.
+• Foldable & Large-Screen Support: Hinge-aware two-pane layouts, adaptive NavigationRail, and Rahle dual-page Mushaf reading.
+• Zikirce TV Casting & Audio Sync: One-tap TV screen mirroring (Smart View, Miracast, Cast) and configurable Mukabele audio-pointer sync offset.
+• Refined Sajdah al-Tilawah banners and stability fixes.

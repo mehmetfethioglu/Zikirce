@@ -166,8 +166,15 @@ class TodayPrayersCard extends ConsumerWidget {
                 ),
               ),
               if (showCountdownHeader) ...[
-                const SizedBox(width: 12),
-                const _PrayerCountdownTickerText(),
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 108),
+                  child: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: _PrayerCountdownTickerText(),
+                  ),
+                ),
               ],
               const SizedBox(width: 6),
               InkWell(

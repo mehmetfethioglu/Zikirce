@@ -2,11 +2,17 @@ package com.akarworks.zikirce
 
 import android.content.ComponentName
 import android.content.Intent
+import android.hardware.display.DisplayManager
+import android.media.MediaRouter
 import android.net.Uri
 import android.os.Build
-import android.provider.Settings
-import android.view.WindowManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import android.util.Log
+import android.view.Display
+import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,6 +20,10 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.akarworks.zikirce/battery_optimization"
+    private val TV_CAST_CHANNEL = "com.akarworks.zikirce/tv_cast"
+    private var tvCastChannel: MethodChannel? = null
+    private var displayManager: DisplayManager? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -84,12 +94,193 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        val castChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, TV_CAST_CHANNEL)
+        tvCastChannel = castChannel
+        castChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getCastStatus" -> result.success(queryCastStatus())
+                "openCastPicker" -> {
+                    val opened = openAndroidCastPicker()
+                    result.success(
+                        mapOf(
+                            "opened" to opened,
+                            "mode" to if (opened) "system_cast_settings" else "unsupported"
+                        )
+                    )
+                }
+                else -> result.notImplemented()
+            }
+        }
+        registerCastDisplayListener()
     }
 
     override fun onResume() {
         super.onResume()
         com.akarworks.zikirce.widgets.WidgetTimeTickReceiver.updateAllWidgets(this)
         com.akarworks.zikirce.widgets.WidgetAlarmScheduler.scheduleNextPrayerAlarm(this)
+        pushCastStatusToFlutter()
+    }
+
+    override fun onDestroy() {
+        try {
+            displayListener?.let { listener ->
+                displayManager?.unregisterDisplayListener(listener)
+            }
+        } catch (e: Exception) {
+            Log.w("ZikirceCast", "DisplayListener unregister warning: ${e.message}")
+        }
+        displayListener = null
+        tvCastChannel = null
+        super.onDestroy()
+    }
+
+    private fun registerCastDisplayListener() {
+        try {
+            val manager = (getSystemService(DISPLAY_SERVICE) as? DisplayManager) ?: return
+            displayManager = manager
+            displayListener?.let { manager.unregisterDisplayListener(it) }
+            val listener = object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) {
+                    pushCastStatusToFlutter()
+                }
+
+                override fun onDisplayRemoved(displayId: Int) {
+                    pushCastStatusToFlutter()
+                }
+
+                override fun onDisplayChanged(displayId: Int) {
+                    pushCastStatusToFlutter()
+                }
+            }
+            displayListener = listener
+            manager.registerDisplayListener(listener, Handler(Looper.getMainLooper()))
+        } catch (e: Exception) {
+            Log.w("ZikirceCast", "DisplayListener register warning: ${e.message}")
+        }
+    }
+
+    private fun pushCastStatusToFlutter() {
+        val channel = tvCastChannel ?: return
+        runOnUiThread {
+            try {
+                channel.invokeMethod("onCastStateChanged", queryCastStatus())
+            } catch (e: Exception) {
+                Log.w("ZikirceCast", "pushCastStatusToFlutter warning: ${e.message}")
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun queryCastStatus(): Map<String, Any?> {
+        val isHardwareTv = isRunningOnTelevision()
+        return try {
+            val manager = displayManager ?: (getSystemService(DISPLAY_SERVICE) as? DisplayManager)
+            displayManager = manager
+
+            val presentationDisplay = manager
+                ?.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+                ?.firstOrNull { it.displayId != Display.DEFAULT_DISPLAY }
+
+            val mediaRouter = getSystemService(MEDIA_ROUTER_SERVICE) as? MediaRouter
+            val selectedVideoRoute = mediaRouter?.getSelectedRoute(MediaRouter.ROUTE_TYPE_LIVE_VIDEO)
+            val liveVideoRoute = if (
+                selectedVideoRoute != null &&
+                selectedVideoRoute != mediaRouter.defaultRoute &&
+                selectedVideoRoute.isEnabled
+            ) {
+                selectedVideoRoute
+            } else {
+                null
+            }
+
+            val fallbackDisplay = manager?.displays?.firstOrNull { display ->
+                display.displayId != Display.DEFAULT_DISPLAY &&
+                    (display.flags and Display.FLAG_PRIVATE) == 0 &&
+                    display.state != Display.STATE_OFF &&
+                    !display.name.equals("Built-in Screen", ignoreCase = true)
+            }
+
+            val activeDisplay = presentationDisplay ?: fallbackDisplay
+            val isConnected = activeDisplay != null || liveVideoRoute != null
+            val deviceName = liveVideoRoute?.name?.toString()?.takeIf { it.isNotBlank() }
+                ?: activeDisplay?.name?.takeIf { it.isNotBlank() }
+
+            val lowerName = deviceName?.lowercase() ?: ""
+            val connectionType = when {
+                !isConnected -> "none"
+                liveVideoRoute == null &&
+                    (lowerName.contains("hdmi") ||
+                        lowerName.contains("usb") ||
+                        lowerName.contains("wired")) -> "wired"
+                else -> "wireless"
+            }
+
+            mapOf(
+                "supported" to !isHardwareTv,
+                "isConnected" to isConnected,
+                "isVisualMirroring" to isConnected,
+                "deviceName" to deviceName,
+                "connectionType" to connectionType,
+                "platform" to "android"
+            )
+        } catch (e: Exception) {
+            Log.w("ZikirceCast", "queryCastStatus error: ${e.message}")
+            mapOf(
+                "supported" to !isHardwareTv,
+                "isConnected" to false,
+                "isVisualMirroring" to false,
+                "deviceName" to null,
+                "connectionType" to "none",
+                "platform" to "android"
+            )
+        }
+    }
+
+    private fun openAndroidCastPicker(): Boolean {
+        val manufacturer = (Build.MANUFACTURER ?: "").lowercase()
+        val candidateIntents = mutableListOf<Intent>()
+
+        if (manufacturer.contains("samsung")) {
+            candidateIntents.add(Intent("com.samsung.wfd.LAUNCH_WFD_PICKER_DLG"))
+            candidateIntents.add(
+                Intent().setComponent(
+                    ComponentName(
+                        "com.samsung.android.smartmirroring",
+                        "com.samsung.android.smartmirroring.CastingDialogActivity"
+                    )
+                )
+            )
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            candidateIntents.add(Intent(Settings.ACTION_CAST_SETTINGS))
+        }
+        candidateIntents.add(Intent("android.settings.WIFI_DISPLAY_SETTINGS"))
+
+        if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
+            candidateIntents.add(
+                Intent().setComponent(
+                    ComponentName(
+                        "com.android.settings",
+                        "com.android.settings.Settings\$WifiDisplaySettingsActivity"
+                    )
+                )
+            )
+        }
+
+        candidateIntents.add(Intent(Settings.ACTION_DISPLAY_SETTINGS))
+
+        for (intent in candidateIntents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                return true
+            } catch (e: Exception) {
+                Log.d("ZikirceCast", "Cast intent candidate skipped (${intent.action ?: intent.component}): ${e.message}")
+            }
+        }
+        return false
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {

@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -46,9 +45,6 @@ class _FavoriteZikirsCarouselCardState
     final colors = context.colors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final items = ref.watch(dashboardFavoriteZikirsProvider);
-    final isInfinite = ref.watch(
-      zikirQuickSettingsProvider.select((s) => s.isInfiniteMode),
-    );
     final arabicFontFamily = ref.watch(arabicFontFamilyProvider);
     final isBoldArabic = ref.watch(isBoldArabicProvider);
     final highlightDivine = ref.watch(highlightDivineWordsProvider);
@@ -76,7 +72,9 @@ class _FavoriteZikirsCarouselCardState
               child: IgnorePointer(
                 child: CustomPaint(
                   painter: _ZikirSlideOrnamentPainter(
-                    color: colors.accent.withValues(alpha: isDark ? 0.11 : 0.06),
+                    color: colors.accent.withValues(
+                      alpha: isDark ? 0.08 : 0.045,
+                    ),
                   ),
                 ),
               ),
@@ -93,6 +91,7 @@ class _FavoriteZikirsCarouselCardState
                         );
                 }
 
+                final activeItem = items[safePage];
                 final pageView = PageView.builder(
                   controller: _pageController,
                   physics: const BouncingScrollPhysics(),
@@ -103,8 +102,8 @@ class _FavoriteZikirsCarouselCardState
                   },
                   itemBuilder: (context, index) {
                     return _FavoriteZikirPageSlide(
+                      key: ValueKey('favorite_zikir_page_${items[index].id}'),
                       item: items[index],
-                      isInfiniteMode: isInfinite,
                       arabicFontFamily: arabicFontFamily,
                       isBoldArabic: isBoldArabic,
                       highlightDivine: highlightDivine,
@@ -119,11 +118,11 @@ class _FavoriteZikirsCarouselCardState
                     if (hasBoundedHeight)
                       Expanded(child: pageView)
                     else
-                      SizedBox(height: 172, child: pageView),
+                      SizedBox(height: 164, child: pageView),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8, top: 2),
-                      child: _ZikirSwipeDotsIndicator(
-                        key: const Key('favorite_zikir_dots_indicator'),
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      child: _FavoriteZikirBottomBar(
+                        item: activeItem,
                         count: items.length,
                         currentIndex: safePage,
                         onPrevious: safePage > 0
@@ -141,6 +140,147 @@ class _FavoriteZikirsCarouselCardState
               },
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FavoriteZikirBottomBar extends StatelessWidget {
+  final FavoriteZikirCardItem item;
+  final int count;
+  final int currentIndex;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+  final ValueChanged<int> onSelectIndex;
+
+  const _FavoriteZikirBottomBar({
+    required this.item,
+    required this.count,
+    required this.currentIndex,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onSelectIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _FavoriteZikirTotalBadge(item: item),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: _ZikirSwipeDotsIndicator(
+                  key: const Key('favorite_zikir_dots_indicator'),
+                  count: count,
+                  currentIndex: currentIndex,
+                  onPrevious: onPrevious,
+                  onNext: onNext,
+                  onSelectIndex: onSelectIndex,
+                ),
+              ),
+            ),
+          ),
+        ),
+        _FavoriteZikirStartButton(item: item),
+      ],
+    );
+  }
+}
+
+class _FavoriteZikirTotalBadge extends StatelessWidget {
+  final FavoriteZikirCardItem item;
+
+  const _FavoriteZikirTotalBadge({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final l10n = context.l10n;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final totalBadgeText = item.effectiveTotal > 0
+        ? '${formatCompactNumber(item.effectiveTotal)} ${l10n.isTurkish ? 'kez' : 'x'}'
+        : (l10n.isTurkish ? 'Yeni' : 'New');
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: Container(
+        key: Key('favorite_zikir_total_badge_${item.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: colors.accent.withValues(alpha: isDark ? 0.20 : 0.10),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Text(
+          totalBadgeText,
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: colors.accentText,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FavoriteZikirStartButton extends ConsumerWidget {
+  final FavoriteZikirCardItem item;
+
+  const _FavoriteZikirStartButton({required this.item});
+
+  Future<void> _continueZikir(BuildContext context, WidgetRef ref) async {
+    HapticService.selectionClick();
+    try {
+      await ref.read(selectedZikirIdProvider.notifier).select(item.id);
+    } catch (e) {
+      debugPrint('[FavoriteZikirsCarouselCard] Failed to select zikir: $e');
+    }
+    if (context.mounted) {
+      context.go('/zikir');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final l10n = context.l10n;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeFgColor = colors.activeNavIconColor == const Color(0xFF000000)
+        ? Colors.black
+        : Colors.white;
+
+    return TextButton.icon(
+      key: Key('favorite_zikir_continue_${item.id}'),
+      onPressed: () => _continueZikir(context, ref),
+      style: TextButton.styleFrom(
+        backgroundColor: item.isActive
+            ? colors.accent
+            : colors.accent.withValues(alpha: isDark ? 0.22 : 0.12),
+        foregroundColor: item.isActive ? activeFgColor : colors.accentText,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(11),
+        ),
+      ),
+      icon: const Icon(Icons.fingerprint_rounded, size: 14),
+      label: Text(
+        l10n.isTurkish ? 'Zikre Başla' : 'Start Dhikr',
+        maxLines: 1,
+        softWrap: false,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.1,
         ),
       ),
     );
@@ -175,17 +315,17 @@ class _ZikirSwipeDotsIndicator extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onPrevious,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
             child: Icon(
               Icons.chevron_left_rounded,
-              size: 14,
+              size: 13,
               color: onPrevious != null
                   ? colors.secondaryTextAlt
                   : colors.secondaryTextAlt.withValues(alpha: 0.28),
             ),
           ),
         ),
-        const SizedBox(width: 2),
+        const SizedBox(width: 1),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(count, (idx) {
@@ -194,12 +334,12 @@ class _ZikirSwipeDotsIndicator extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: () => onSelectIndex(idx),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  width: isSelected ? 14 : 5,
-                  height: 5,
+                  width: isSelected ? 12 : 4.5,
+                  height: 4.5,
                   decoration: BoxDecoration(
                     color: isSelected
                         ? colors.accent
@@ -211,15 +351,15 @@ class _ZikirSwipeDotsIndicator extends StatelessWidget {
             );
           }),
         ),
-        const SizedBox(width: 2),
+        const SizedBox(width: 1),
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onNext,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
             child: Icon(
               Icons.chevron_right_rounded,
-              size: 14,
+              size: 13,
               color: onNext != null
                   ? colors.secondaryTextAlt
                   : colors.secondaryTextAlt.withValues(alpha: 0.28),
@@ -282,312 +422,303 @@ class _EmptyZikirCarouselHint extends StatelessWidget {
   }
 }
 
-class _FavoriteZikirPageSlide extends ConsumerWidget {
+class _FavoriteZikirPageSlide extends StatefulWidget {
   final FavoriteZikirCardItem item;
-  final bool isInfiniteMode;
   final String arabicFontFamily;
   final bool isBoldArabic;
   final bool highlightDivine;
 
   const _FavoriteZikirPageSlide({
+    super.key,
     required this.item,
-    required this.isInfiniteMode,
     required this.arabicFontFamily,
     required this.isBoldArabic,
     required this.highlightDivine,
   });
 
-  Future<void> _continueZikir(BuildContext context, WidgetRef ref) async {
-    HapticService.selectionClick();
-    await ref.read(selectedZikirIdProvider.notifier).select(item.id);
-    if (context.mounted) {
-      context.go('/zikir');
+  @override
+  State<_FavoriteZikirPageSlide> createState() =>
+      _FavoriteZikirPageSlideState();
+}
+
+class _FavoriteZikirPageSlideState extends State<_FavoriteZikirPageSlide> {
+  bool _showDescription = false;
+
+  @override
+  void didUpdateWidget(covariant _FavoriteZikirPageSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id && _showDescription) {
+      _showDescription = false;
     }
   }
 
-  double _resolveArabicFontSize(String text, bool isCompact) {
-    final len = text.trim().length;
-    final double base;
-    if (len <= 24) {
-      base = 23.0;
-    } else if (len <= 55) {
-      base = 19.5;
-    } else {
-      base = 16.5;
-    }
-    return isCompact ? (base * 0.84).clamp(14.5, 19.0) : base;
+  void _toggleDescription() {
+    HapticService.selectionClick();
+    setState(() => _showDescription = !_showDescription);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final descriptionText =
+        l10n.isTurkish && widget.item.virtueSummary.trim().isNotEmpty
+            ? widget.item.virtueSummary.trim()
+            : '${widget.item.name} • ${widget.item.category}';
 
-    final safeTarget = max(1, item.target);
-    final progress = isInfiniteMode
-        ? 1.0
-        : (item.currentCount / safeTarget).clamp(0.0, 1.0);
-    final countLabel = isInfiniteMode
-        ? '${item.currentCount} ∞'
-        : '${item.currentCount} / $safeTarget';
-    final totalBadgeText = item.effectiveTotal > 0
-        ? '${formatCompactNumber(item.effectiveTotal)} ${l10n.isTurkish ? 'kez' : 'x'}'
-        : (l10n.isTurkish ? 'Yeni' : 'New');
-    final activeFgColor = colors.activeNavIconColor == const Color(0xFF000000)
-        ? Colors.black
-        : Colors.white;
-    final hasArabic = item.arabic.trim().isNotEmpty;
-    final infoLine = l10n.isTurkish && item.virtueSummary.isNotEmpty
-        ? item.virtueSummary
-        : '${item.category} • ${l10n.isTurkish ? 'Hedef' : 'Target'}: $safeTarget';
+    return Semantics(
+      button: true,
+      label: _showDescription
+          ? (l10n.isTurkish ? 'Zikrin Arapçasını göster' : 'Show Arabic text')
+          : (l10n.isTurkish
+              ? 'Zikir açıklamasını göster'
+              : 'Show dhikr description'),
+      child: GestureDetector(
+        key: Key('favorite_zikir_slide_${widget.item.id}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleDescription,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            final scale = Tween<double>(begin: 0.96, end: 1.0).animate(animation);
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(scale: scale, child: child),
+            );
+          },
+          child: _showDescription
+              ? _ZikirDescriptionView(
+                  key: ValueKey('favorite_zikir_description_${widget.item.id}'),
+                  description: descriptionText,
+                )
+              : _ArabicCalligraphyFitBox(
+                  key: ValueKey('favorite_zikir_arabic_${widget.item.id}'),
+                  arabicText: widget.item.arabic,
+                  fallbackName: widget.item.name,
+                  arabicFontFamily: widget.arabicFontFamily,
+                  isBoldArabic: widget.isBoldArabic,
+                  highlightDivine: widget.highlightDivine,
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArabicCalligraphyFitBox extends StatelessWidget {
+  final String arabicText;
+  final String fallbackName;
+  final String arabicFontFamily;
+  final bool isBoldArabic;
+  final bool highlightDivine;
+
+  const _ArabicCalligraphyFitBox({
+    super.key,
+    required this.arabicText,
+    required this.fallbackName,
+    required this.arabicFontFamily,
+    required this.isBoldArabic,
+    required this.highlightDivine,
+  });
+
+  double _resolveBestArabicFontSize({
+    required String text,
+    required double maxWidth,
+    required double maxHeight,
+    required int maxLines,
+    required double maxFontSize,
+    required TextScaler textScaler,
+  }) {
+    const double minFontSize = 14.0;
+    final upper = maxFontSize < minFontSize ? minFontSize : maxFontSize;
+    final formattedText =
+        QuranWordHighlighter.formatArabicTextForFont(text, arabicFontFamily);
+    final measureWidth = (maxWidth - 4).clamp(1.0, double.infinity);
+    final measureHeight = (maxHeight - 4).clamp(1.0, double.infinity);
+
+    double low = minFontSize;
+    double high = upper;
+    double best = minFontSize;
+
+    for (int i = 0; i < 8; i++) {
+      final mid = (low + high) * 0.5;
+      final tp = TextPainter(
+        text: TextSpan(
+          text: formattedText,
+          style: TextStyle(
+            fontFamily: arabicFontFamily,
+            fontSize: mid,
+            fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
+            height: 1.42,
+            letterSpacing: -0.1,
+          ),
+        ),
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.center,
+        maxLines: maxLines,
+        textScaler: textScaler,
+      );
+      bool fits = false;
+      try {
+        tp.layout(maxWidth: measureWidth);
+        fits = !tp.didExceedMaxLines &&
+            tp.height <= measureHeight &&
+            tp.width <= (maxWidth - 3.5);
+      } finally {
+        tp.dispose();
+      }
+      if (fits) {
+        best = mid;
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    return best;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final trimmedArabic = arabicText.trim();
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isCompact =
-            constraints.hasBoundedHeight && constraints.maxHeight < 155;
-        final arabicFontSize = _resolveArabicFontSize(item.arabic, isCompact);
-
+        final isCompact = constraints.maxHeight < 120;
         return Padding(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            isCompact ? 9 : 12,
-            16,
-            isCompact ? 2 : 4,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Üst satır: Zikir adı + kategori/aktif rozeti + toplam çekim
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  if (item.isActive) ...[
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: colors.accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: isCompact ? 14.5 : 15.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.primaryText,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                            ),
-                            if (item.isActive) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.accent.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(7),
-                                ),
-                                child: Text(
-                                  l10n.isTurkish ? 'Aktif' : 'Active',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: colors.accentText,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        if (!isCompact)
-                          Text(
-                            item.category,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w500,
-                              color: colors.secondaryTextAlt,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.accent.withValues(
-                        alpha: isDark ? 0.2 : 0.11,
-                      ),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text(
-                      totalBadgeText,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: colors.accentText,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          padding: EdgeInsets.fromLTRB(18, isCompact ? 8 : 12, 18, 4),
+          child: LayoutBuilder(
+            builder: (context, innerConstraints) {
+              final availW = innerConstraints.maxWidth;
+              final availH = innerConstraints.maxHeight;
+              if (availW <= 0 || availH <= 0) {
+                return const SizedBox.shrink();
+              }
 
-              // Orta alan: Zikir metni (Arapça hat) ve kısa açıklama
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (hasArabic)
-                          Text.rich(
-                            TextSpan(
-                              children: QuranWordHighlighter.buildHighlightedSpans(
-                                rawText: item.arabic,
-                                baseStyle: TextStyle(
-                                  fontFamily: arabicFontFamily,
-                                  fontSize: arabicFontSize,
-                                  fontWeight: isBoldArabic
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  height: 1.4,
-                                  color: colors.zikirArabicColor,
-                                ),
-                                isDark: isDark,
-                                enabled: highlightDivine,
-                                fontFamily: arabicFontFamily,
-                                isBold: isBoldArabic,
-                              ),
-                            ),
-                            textDirection: TextDirection.rtl,
-                            textAlign: TextAlign.center,
-                            maxLines: isCompact ? 1 : 2,
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        else
-                          Text(
-                            item.name,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: isCompact ? 16 : 18,
-                              fontWeight: FontWeight.w700,
-                              color: colors.zikirArabicColor,
-                            ),
-                          ),
-                        SizedBox(height: isCompact ? 2 : 4),
-                        Text(
-                          infoLine,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: colors.secondaryTextAlt,
-                          ),
-                        ),
-                      ],
+              if (trimmedArabic.isEmpty) {
+                return Center(
+                  child: Text(
+                    fallbackName,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: (availH * 0.22).clamp(18.0, 28.0),
+                      fontWeight: FontWeight.w700,
+                      color: colors.zikirArabicColor,
                     ),
+                  ),
+                );
+              }
+
+              final wordCount = trimmedArabic
+                  .split(RegExp(r'\s+'))
+                  .where((w) => w.isNotEmpty)
+                  .length;
+              final len = trimmedArabic.length;
+
+              final int maxLines;
+              final double maxFontSize;
+              if (len <= 28 && wordCount <= 3) {
+                maxLines = 1;
+                maxFontSize = (availH * 0.46).clamp(30.0, 56.0);
+              } else if (len <= 52) {
+                maxLines = 2;
+                maxFontSize = (availH * 0.34).clamp(26.0, 44.0);
+              } else if (len <= 105) {
+                maxLines = 3;
+                maxFontSize = (availH * 0.28).clamp(22.0, 36.0);
+              } else {
+                maxLines = 5;
+                maxFontSize = (availH * 0.24).clamp(18.0, 30.0);
+              }
+
+              final fontSize = _resolveBestArabicFontSize(
+                text: trimmedArabic,
+                maxWidth: availW,
+                maxHeight: availH,
+                maxLines: maxLines,
+                maxFontSize: maxFontSize,
+                textScaler: MediaQuery.textScalerOf(context),
+              );
+
+              final richText = Text.rich(
+                TextSpan(
+                  children: QuranWordHighlighter.buildHighlightedSpans(
+                    rawText: trimmedArabic,
+                    baseStyle: TextStyle(
+                      fontFamily: arabicFontFamily,
+                      fontSize: fontSize,
+                      fontWeight:
+                          isBoldArabic ? FontWeight.bold : FontWeight.normal,
+                      height: 1.42,
+                      letterSpacing: -0.1,
+                      color: colors.zikirArabicColor,
+                    ),
+                    isDark: isDark,
+                    enabled: highlightDivine,
+                    fontFamily: arabicFontFamily,
+                    isBold: isBoldArabic,
                   ),
                 ),
-              ),
+                textDirection: TextDirection.rtl,
+                textAlign: TextAlign.center,
+                maxLines: maxLines,
+                overflow: TextOverflow.ellipsis,
+              );
 
-              // Alt satır: Solda ilerleme sayacı/çizgisi, sağ altta Zikre Başla butonu
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          countLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: colors.secondaryText,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 3,
-                            backgroundColor:
-                                colors.primaryText.withValues(alpha: 0.08),
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(colors.accent),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      key: Key('favorite_zikir_continue_${item.id}'),
-                      onPressed: () => _continueZikir(context, ref),
-                      style: TextButton.styleFrom(
-                        backgroundColor: item.isActive
-                            ? colors.accent
-                            : colors.accent.withValues(alpha: 0.12),
-                        foregroundColor:
-                            item.isActive ? activeFgColor : colors.accent,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompact ? 12 : 15,
-                          vertical: isCompact ? 7 : 9,
-                        ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                      ),
-                      icon: const Icon(Icons.fingerprint_rounded, size: 16),
-                      label: Text(
-                        l10n.isTurkish ? 'Zikre Başla' : 'Start Dhikr',
-                        style: TextStyle(
-                          fontSize: isCompact ? 12 : 12.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              return Center(
+                child: maxLines == 1
+                    ? FittedBox(fit: BoxFit.scaleDown, child: richText)
+                    : richText,
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ZikirDescriptionView extends StatelessWidget {
+  final String description;
+
+  const _ZikirDescriptionView({
+    super.key,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxHeight < 120;
+        return SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(18, isCompact ? 8 : 12, 18, 6),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: (constraints.maxHeight - (isCompact ? 14 : 18))
+                  .clamp(0.0, double.infinity),
+            ),
+            child: Center(
+              child: Text(
+                description,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: isCompact ? 12.0 : 13.0,
+                  fontWeight: FontWeight.w500,
+                  height: 1.45,
+                  color: colors.primaryText.withValues(alpha: isDark ? 0.90 : 0.86),
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -607,9 +738,12 @@ class _ZikirSlideOrnamentPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.1;
 
-    final center = Offset(size.width - 14, 14);
-    canvas.drawCircle(center, 24, paint);
-    canvas.drawCircle(center, 38, paint);
+    final topRight = Offset(size.width - 14, 14);
+    canvas.drawCircle(topRight, 24, paint);
+    canvas.drawCircle(topRight, 38, paint);
+
+    const topLeft = Offset(14, 14);
+    canvas.drawCircle(topLeft, 28, paint);
   }
 
   @override

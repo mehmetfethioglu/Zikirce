@@ -1,0 +1,18 @@
+Zikirce is a calm, offline-first daily worship companion uniting a tactile tasbih dhikr counter, accurate five-daily prayer tracking, a 3D Qibla finder, word-by-word synchronized Holy Quran recitation, and a rich Islamic library without ads.
+
+• Smart Tasbih Counter & Litany Carousel
+Select Asma ul-Husna, Salawat, daily tasbihat, and custom dhikr routines in the Vakur card carousel. Customize targets, import counts from a physical finger counter, and practice comfortably with gentle haptics across OLED Night and Emerald themes.
+
+• 3D Qibla Finder & Opening Takbir Experience
+Find the exact direction of Makkah with tilt-compensated sensor fusion and regional magnetic declination correction. Hold your phone flat and turn toward the Kaaba to see the 3D sanctuary align, raise hands for Opening Takbir, and verify visually against real daytime solar azimuth.
+
+• Word-Tracked Holy Quran, Mukabele & Zikirce TV
+Follow smooth right-to-left Arabic word tracking synchronized across 6,236 verses, stay consistent with Mukabele Khatm portions and memorization drills, and cast cleanly in Zikirce TV mode with dedicated audio-sync offset tuning.
+
+• 40-Volume Islamic Library & Ottoman-Turkish Lexicon
+Explore a curated 40-volume collection with interactive 84,141-entry dictionary lookups inside the reading flow, alongside iOS Home and Lock Screen widgets.
+
+• 5 Daily Prayers, Qada Tracker & Arena of Wisdom
+Track daily prayer times and missed prayers, reinforce catechism and Seerah knowledge through 228+ spaced-repetition questions, and build consistency with Golden Day habit rings.
+
+Zikirce runs locally without ads and keeps all personal data private on your device.

@@ -1,14 +1,23 @@
 import Flutter
 import UIKit
 import AVFoundation
+import AVKit
 import MediaPlayer
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var audioChannel: FlutterMethodChannel?
+  private var tvCastChannel: FlutterMethodChannel?
+  private var deviceControlChannel: FlutterMethodChannel?
+  private var tvCastObserversRegistered = false
+  private var hiddenRoutePickerView: AVRoutePickerView?
   private var remoteCommandsConfigured = false
   private var bgTaskIdentifier: UIBackgroundTaskIdentifier = .invalid
   private var isAudioActive = false
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
 
   override func application(
     _ application: UIApplication,
@@ -26,9 +35,10 @@ import MediaPlayer
 
     let result = super.application(application, didFinishLaunchingWithOptions: launchOptions)
 
-    if audioChannel == nil,
-       let controller = window?.rootViewController as? FlutterViewController {
+    if let controller = window?.rootViewController as? FlutterViewController {
       setupAudioChannel(messenger: controller.binaryMessenger)
+      setupTvCastChannel(messenger: controller.binaryMessenger)
+      setupDeviceControlChannel(messenger: controller.binaryMessenger)
     }
 
     return result
@@ -37,7 +47,10 @@ import MediaPlayer
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ZikirceAudioBackgroundPlugin") {
-      setupAudioChannel(messenger: registrar.messenger())
+      let messenger = registrar.messenger()
+      setupAudioChannel(messenger: messenger)
+      setupTvCastChannel(messenger: messenger)
+      setupDeviceControlChannel(messenger: messenger)
     }
   }
 
@@ -192,6 +205,174 @@ import MediaPlayer
     if bgTaskIdentifier != .invalid {
       UIApplication.shared.endBackgroundTask(bgTaskIdentifier)
       bgTaskIdentifier = .invalid
+    }
+  }
+
+  private func setupDeviceControlChannel(messenger: FlutterBinaryMessenger) {
+    guard deviceControlChannel == nil else { return }
+    let channel = FlutterMethodChannel(
+      name: "com.akarworks.zikirce/battery_optimization",
+      binaryMessenger: messenger
+    )
+    deviceControlChannel = channel
+
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "setKeepScreenAwake":
+        let enabled = (call.arguments as? [String: Any])?["enabled"] as? Bool ?? false
+        DispatchQueue.main.async {
+          UIApplication.shared.isIdleTimerDisabled = enabled
+        }
+        result(true)
+      case "isTelevision":
+        result(false)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func setupTvCastChannel(messenger: FlutterBinaryMessenger) {
+    guard tvCastChannel == nil else { return }
+    let channel = FlutterMethodChannel(
+      name: "com.akarworks.zikirce/tv_cast",
+      binaryMessenger: messenger
+    )
+    tvCastChannel = channel
+
+    if !tvCastObserversRegistered {
+      tvCastObserversRegistered = true
+      let nc = NotificationCenter.default
+      nc.addObserver(
+        self,
+        selector: #selector(handleTvCastStateChanged),
+        name: UIScreen.didConnectNotification,
+        object: nil
+      )
+      nc.addObserver(
+        self,
+        selector: #selector(handleTvCastStateChanged),
+        name: UIScreen.didDisconnectNotification,
+        object: nil
+      )
+      nc.addObserver(
+        self,
+        selector: #selector(handleTvCastStateChanged),
+        name: UIScreen.capturedDidChangeNotification,
+        object: nil
+      )
+      nc.addObserver(
+        self,
+        selector: #selector(handleTvCastStateChanged),
+        name: AVAudioSession.routeChangeNotification,
+        object: nil
+      )
+    }
+
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else {
+        result(nil)
+        return
+      }
+      switch call.method {
+      case "getCastStatus":
+        result(self.currentTvCastStatus())
+      case "openCastPicker":
+        self.presentNativeAirPlayPicker { opened in
+          result([
+            "opened": opened,
+            "mode": "ios_airplay_picker",
+          ])
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  @objc private func handleTvCastStateChanged() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else { return }
+      self.tvCastChannel?.invokeMethod("onCastStateChanged", arguments: self.currentTvCastStatus())
+    }
+  }
+
+  private func currentTvCastStatus() -> [String: Any] {
+    let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let activeScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+    let mainScreen = activeScene?.screen ?? UIScreen.main
+    let hasExternalScreen = UIScreen.screens.count > 1
+    let isScreenCaptured = mainScreen.isCaptured
+
+    let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+    let airPlayOutput = outputs.first(where: { $0.portType == .airPlay })
+    let hdmiOutput = outputs.first(where: { $0.portType == .HDMI })
+
+    let isVisualMirroring = hasExternalScreen || isScreenCaptured
+    let isAirPlayAudio = airPlayOutput != nil
+    let isConnected = isVisualMirroring || isAirPlayAudio
+
+    let connectionType: String
+    if hasExternalScreen && hdmiOutput != nil {
+      connectionType = "wired"
+    } else if isVisualMirroring {
+      connectionType = "wireless"
+    } else if isAirPlayAudio {
+      connectionType = "airplay_audio"
+    } else {
+      connectionType = "none"
+    }
+
+    let deviceName: Any = airPlayOutput?.portName ?? hdmiOutput?.portName ?? NSNull()
+    return [
+      "supported": true,
+      "isConnected": isConnected,
+      "isVisualMirroring": isVisualMirroring,
+      "deviceName": deviceName,
+      "connectionType": connectionType,
+      "platform": "ios",
+    ]
+  }
+
+  private func presentNativeAirPlayPicker(completion: @escaping (Bool) -> Void) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self = self else {
+        completion(false)
+        return
+      }
+      let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+      let activeScene = windowScenes.first(where: { $0.activationState == .foregroundActive }) ?? windowScenes.first
+      let rootView = activeScene?.windows.first(where: { $0.isKeyWindow })?.rootViewController?.view
+        ?? activeScene?.windows.first?.rootViewController?.view
+        ?? self.window?.rootViewController?.view
+
+      guard let hostView = rootView else {
+        completion(false)
+        return
+      }
+
+      let picker: AVRoutePickerView
+      if let existing = self.hiddenRoutePickerView {
+        picker = existing
+      } else {
+        let created = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        created.isHidden = true
+        created.prioritizesVideoDevices = true
+        self.hiddenRoutePickerView = created
+        picker = created
+      }
+
+      if picker.superview !== hostView {
+        picker.removeFromSuperview()
+        hostView.addSubview(picker)
+      }
+
+      guard let button = picker.subviews.first(where: { $0 is UIButton }) as? UIButton else {
+        completion(false)
+        return
+      }
+      button.sendActions(for: .touchUpInside)
+      completion(true)
     }
   }
 }

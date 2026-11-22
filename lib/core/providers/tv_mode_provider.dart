@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/cloud_sync_engine.dart';
+import '../services/screen_awake_service.dart';
 
 /// Android TV / Google TV Donanım ve Mod Algılama Servisi
 class TvModeService {
@@ -18,6 +20,8 @@ class TvModeService {
   static bool _isTvModeActive = false;
   static bool get isTvModeActive => _isTvModeActive;
 
+  static String? _lastAppliedOrientationMode;
+
   @visibleForTesting
   static void setHardwareTvForTest(bool value) {
     _isHardwareTv = value;
@@ -26,6 +30,11 @@ class TvModeService {
   @visibleForTesting
   static void setTvModeActiveForTest(bool value) {
     _isTvModeActive = value;
+  }
+
+  @visibleForTesting
+  static void resetOrientationCacheForTest() {
+    _lastAppliedOrientationMode = null;
   }
 
   @visibleForTesting
@@ -44,6 +53,27 @@ class TvModeService {
       debugPrint('[TvModeService] isCurrentDeviceTablet error: $e');
       return false;
     }
+  }
+
+  /// Mevcut ekranda katlanabilir menteşe/kat (fold/hinge) özelliği olup olmadığını tespit eder
+  static bool hasFoldingDisplayFeature() {
+    try {
+      final view = WidgetsBinding.instance.platformDispatcher.views.firstOrNull;
+      if (view == null) return false;
+      return view.displayFeatures.any(
+        (feature) =>
+            feature.type == ui.DisplayFeatureType.fold ||
+            feature.type == ui.DisplayFeatureType.hinge,
+      );
+    } catch (e) {
+      debugPrint('[TvModeService] hasFoldingDisplayFeature error: $e');
+      return false;
+    }
+  }
+
+  /// Ekranın tablet, açılmış katlanabilir cihaz veya menteşeli cihaz olup olmadığını döndürür
+  static bool isCurrentDisplayFoldableOrLarge() {
+    return isCurrentDeviceTablet() || hasFoldingDisplayFeature();
   }
 
   /// Uygulama açılışında (main.dart) donanımsal TV olup olmadığını tespit eder
@@ -69,7 +99,10 @@ class TvModeService {
     }
   }
 
-  /// TV veya yatay geniş ekranlar için ekran yönelimini ayarlar
+  static String _orientationModeKey({required bool isTvMode}) =>
+      isTvMode ? 'tv_landscape' : 'adaptive_all';
+
+  /// TV, katlanabilir telefonlar (Android & iOS) ve tabletler için yönelim politikasını uygular
   static Future<void> applyOrientationForMode({
     required bool isTvMode,
     required bool isTablet,
@@ -79,31 +112,42 @@ class TvModeService {
         (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       return;
     }
-    final effectiveIsIos = testIsIosOverride ?? Platform.isIOS;
+    final modeKey = _orientationModeKey(isTvMode: isTvMode);
+    _lastAppliedOrientationMode = modeKey;
+
     if (isTvMode) {
-      if (effectiveIsIos && !isTablet) {
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-        ]);
-      } else {
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
-      }
-    } else if (isTablet) {
-      await SystemChrome.setPreferredOrientations([
+      await SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.immersiveSticky,
+      );
+    } else {
+      // Katlanabilir (Android/iOS), tablet ve telefon ekranlarında letterbox
+      // olmaması için tüm yönelimleri dinamik olarak serbest bırakır.
+      await SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
-    } else {
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+  }
+
+  /// Pencere boyutu veya katlanma durumu değiştiğinde yalnızca politika değiştiyse yönelimi günceller
+  static Future<void> syncOrientationForCurrentDisplay({
+    required bool isTvMode,
+  }) async {
+    final targetMode = _orientationModeKey(isTvMode: isTvMode);
+    if (_lastAppliedOrientationMode == targetMode) {
+      return;
+    }
+    await applyOrientationForMode(
+      isTvMode: isTvMode,
+      isTablet: isCurrentDisplayFoldableOrLarge(),
+    );
   }
 }
 
@@ -121,8 +165,11 @@ class TvModeNotifier extends StateNotifier<bool> {
       await prefs.setBool(TvModeService.prefsKey, enabled);
       await TvModeService.applyOrientationForMode(
         isTvMode: enabled,
-        isTablet: TvModeService.isCurrentDeviceTablet(),
+        isTablet: TvModeService.isCurrentDisplayFoldableOrLarge(),
       );
+      if (enabled) {
+        await ScreenAwakeService.setKeepAwake(true);
+      }
     } catch (e) {
       debugPrint('[TvModeNotifier] setTvMode($enabled) error: $e');
     }

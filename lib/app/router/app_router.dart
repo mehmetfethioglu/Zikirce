@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/layout/foldable_layout_info.dart';
+import '../../core/layout/foldable_two_pane.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/providers/tv_mode_provider.dart';
 import '../../core/theme/app_theme_colors.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +20,7 @@ import '../../features/irfan/presentation/screens/irfan_quiz_session_screen.dart
 import '../../features/kuran/presentation/screens/kuran_page_screen.dart';
 import '../../features/kuran/presentation/screens/mushaf_screen.dart';
 import '../../features/namaz_vakitleri/presentation/screens/prayer_times_screen.dart';
+import '../../features/namaz_vakitleri/presentation/screens/qibla_compass_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/privacy_policy_screen.dart';
 import '../../features/settings/presentation/screens/session_management_screen.dart';
@@ -180,6 +184,15 @@ final appRouter = GoRouter(
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const DetailedStatsScreen(),
     ),
+    GoRoute(
+      path: '/qibla',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) {
+        final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '');
+        final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '');
+        return QiblaCompassScreen(userLat: lat, userLng: lng);
+      },
+    ),
   ],
 );
 
@@ -245,13 +258,69 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
       );
     }
 
+    final layout = FoldableLayoutInfo.of(context);
+    final isTr = context.l10n.isTurkish;
+    final destinations = _buildNavDestinations(isTr);
+
+    if (layout.useNavigationRail && !hideNavBar) {
+      final mediaPadding = MediaQuery.paddingOf(context);
+      final railContentWidth = layout.useExtendedNavigationRail ? 184.0 : 76.0;
+      const railOuterHorizontalMargin = 16.0;
+      final railTotalWidth =
+          mediaPadding.left + railOuterHorizontalMargin + railContentWidth;
+
+      return Scaffold(
+        backgroundColor: colors.pageBackground,
+        body: Row(
+          textDirection: TextDirection.ltr,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _AdaptiveFoldableNavRail(
+              destinations: destinations,
+              selectedIndex: selectedIndex,
+              railWidth: railContentWidth,
+              isExtended: layout.useExtendedNavigationRail,
+              navBg: navBg,
+              borderStroke: colors.borderStroke,
+              activeColor: activeColor,
+              inactiveColor: inactiveColor,
+              primaryTextColor: colors.primaryText,
+              isDark: isDark,
+              onSelect: (index) => _onItemTapped(index, context),
+            ),
+            Expanded(
+              child: FoldableViewportScope(
+                windowOriginOffset: Offset(railTotalWidth, 0),
+                child: child,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (hideNavBar && layout.useNavigationRail) {
+      return Scaffold(
+        backgroundColor: colors.pageBackground,
+        body: FoldableViewportScope(
+          windowOriginOffset: Offset.zero,
+          child: child,
+        ),
+      );
+    }
+
+    final navHorizontalMargin = layout.isNarrowCoverScreen ? 8.0 : 14.0;
+
     return Scaffold(
       extendBody: true,
       backgroundColor: colors.pageBackground,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 900),
-          child: child,
+      body: FoldableViewportScope(
+        windowOriginOffset: Offset.zero,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: child,
+          ),
         ),
       ),
       bottomNavigationBar: hideNavBar
@@ -267,7 +336,11 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
                   child: Container(
-                    margin: const EdgeInsets.only(left: 14, right: 14, bottom: 14),
+                    margin: EdgeInsets.only(
+                      left: navHorizontalMargin,
+                      right: navHorizontalMargin,
+                      bottom: 14,
+                    ),
                     height: 68,
                     decoration: BoxDecoration(
                       color: navBg,
@@ -282,48 +355,19 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
                       ],
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _BottomNavBarItem(
-                          svgPath: 'assets/images/nav_panel.svg',
-                          fallbackIcon: Icons.home_rounded,
-                          isSelected: selectedIndex == 0,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          onTap: () => _onItemTapped(0, context),
-                        ),
-                        _BottomNavBarItem(
-                          svgPath: 'assets/images/nav_zikir.svg',
-                          fallbackIcon: Icons.fingerprint_rounded,
-                          isSelected: selectedIndex == 1,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          onTap: () => _onItemTapped(1, context),
-                        ),
-                        _BottomNavBarItem(
-                          svgPath: 'assets/images/nav_irfan.svg',
-                          fallbackIcon: Icons.auto_awesome_rounded,
-                          isSelected: selectedIndex == 2,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          onTap: () => _onItemTapped(2, context),
-                        ),
-                        _BottomNavBarItem(
-                          svgPath: 'assets/images/nav_vakit.svg',
-                          fallbackIcon: Icons.access_time_filled_rounded,
-                          isSelected: selectedIndex == 3,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          onTap: () => _onItemTapped(3, context),
-                        ),
-                        _BottomNavBarItem(
-                          svgPath: 'assets/images/nav_kuran.svg',
-                          fallbackIcon: Icons.menu_book_rounded,
-                          isSelected: selectedIndex == 4,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          onTap: () => _onItemTapped(4, context),
-                        ),
+                        for (int i = 0; i < destinations.length; i++)
+                          Expanded(
+                            child: _BottomNavBarItem(
+                              svgPath: destinations[i].svgPath,
+                              fallbackIcon: destinations[i].fallbackIcon,
+                              tooltip: destinations[i].label,
+                              isSelected: selectedIndex == i,
+                              activeColor: activeColor,
+                              inactiveColor: inactiveColor,
+                              onTap: () => _onItemTapped(i, context),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -334,9 +378,238 @@ class _MainScaffoldWithNavBar extends ConsumerWidget {
   }
 }
 
+class _NavDestinationData {
+  final String svgPath;
+  final IconData fallbackIcon;
+  final String label;
+
+  const _NavDestinationData({
+    required this.svgPath,
+    required this.fallbackIcon,
+    required this.label,
+  });
+}
+
+List<_NavDestinationData> _buildNavDestinations(bool isTr) {
+  return <_NavDestinationData>[
+    _NavDestinationData(
+      svgPath: 'assets/images/nav_panel.svg',
+      fallbackIcon: Icons.home_rounded,
+      label: isTr ? 'Ana Sayfa' : 'Home',
+    ),
+    _NavDestinationData(
+      svgPath: 'assets/images/nav_zikir.svg',
+      fallbackIcon: Icons.fingerprint_rounded,
+      label: isTr ? 'Zikir' : 'Dhikr',
+    ),
+    _NavDestinationData(
+      svgPath: 'assets/images/nav_irfan.svg',
+      fallbackIcon: Icons.auto_awesome_rounded,
+      label: isTr ? 'İrfan' : 'Irfan',
+    ),
+    _NavDestinationData(
+      svgPath: 'assets/images/nav_vakit.svg',
+      fallbackIcon: Icons.access_time_filled_rounded,
+      label: isTr ? 'Vakitler' : 'Prayers',
+    ),
+    _NavDestinationData(
+      svgPath: 'assets/images/nav_kuran.svg',
+      fallbackIcon: Icons.menu_book_rounded,
+      label: isTr ? 'Kur’ân' : 'Qur’an',
+    ),
+  ];
+}
+
+class _AdaptiveFoldableNavRail extends StatelessWidget {
+  final List<_NavDestinationData> destinations;
+  final int selectedIndex;
+  final double railWidth;
+  final bool isExtended;
+  final Color navBg;
+  final Color borderStroke;
+  final Color activeColor;
+  final Color inactiveColor;
+  final Color primaryTextColor;
+  final bool isDark;
+  final ValueChanged<int> onSelect;
+
+  const _AdaptiveFoldableNavRail({
+    required this.destinations,
+    required this.selectedIndex,
+    required this.railWidth,
+    required this.isExtended,
+    required this.navBg,
+    required this.borderStroke,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.primaryTextColor,
+    required this.isDark,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaPadding = MediaQuery.paddingOf(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        mediaPadding.left + 10,
+        mediaPadding.top + 12,
+        6,
+        mediaPadding.bottom + 12,
+      ),
+      child: SizedBox(
+        width: railWidth,
+        child: Container(
+          decoration: BoxDecoration(
+            color: navBg,
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: borderStroke, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.36 : 0.07),
+                blurRadius: 18,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: (constraints.maxHeight - 24).clamp(0.0, double.infinity),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (int i = 0; i < destinations.length; i++) ...[
+                        _RailNavBarItem(
+                          destination: destinations[i],
+                          isSelected: selectedIndex == i,
+                          isExtended: isExtended,
+                          activeColor: activeColor,
+                          inactiveColor: inactiveColor,
+                          primaryTextColor: primaryTextColor,
+                          onTap: () => onSelect(i),
+                        ),
+                        if (i < destinations.length - 1)
+                          const SizedBox(height: 8),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RailNavBarItem extends StatelessWidget {
+  final _NavDestinationData destination;
+  final bool isSelected;
+  final bool isExtended;
+  final Color activeColor;
+  final Color inactiveColor;
+  final Color primaryTextColor;
+  final VoidCallback onTap;
+
+  const _RailNavBarItem({
+    required this.destination,
+    required this.isSelected,
+    required this.isExtended,
+    required this.activeColor,
+    required this.inactiveColor,
+    required this.primaryTextColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = isSelected ? activeColor : inactiveColor;
+    final textColor = isSelected ? primaryTextColor : inactiveColor;
+
+    return Tooltip(
+      message: destination.label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            height: 52,
+            padding: EdgeInsets.symmetric(horizontal: isExtended ? 14 : 0),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? activeColor.withValues(alpha: 0.14)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: isExtended
+                ? Row(
+                    children: [
+                      SvgPicture.asset(
+                        destination.svgPath,
+                        width: 22,
+                        height: 22,
+                        colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                        errorBuilder: (_, __, ___) => Icon(
+                          destination.fallbackIcon,
+                          size: 22,
+                          color: iconColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          destination.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w600,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Center(
+                    child: AnimatedScale(
+                      scale: isSelected ? 1.12 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: SvgPicture.asset(
+                        destination.svgPath,
+                        width: 24,
+                        height: 24,
+                        colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
+                        errorBuilder: (_, __, ___) => Icon(
+                          destination.fallbackIcon,
+                          size: 24,
+                          color: iconColor,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BottomNavBarItem extends StatelessWidget {
   final String svgPath;
   final IconData fallbackIcon;
+  final String tooltip;
   final bool isSelected;
   final Color activeColor;
   final Color inactiveColor;
@@ -345,6 +618,7 @@ class _BottomNavBarItem extends StatelessWidget {
   const _BottomNavBarItem({
     required this.svgPath,
     required this.fallbackIcon,
+    required this.tooltip,
     required this.isSelected,
     required this.activeColor,
     required this.inactiveColor,
@@ -354,23 +628,25 @@ class _BottomNavBarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isSelected ? activeColor : inactiveColor;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        width: 52,
-        height: 52,
-        alignment: Alignment.center,
-        child: AnimatedScale(
-          scale: isSelected ? 1.15 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          child: SvgPicture.asset(
-            svgPath,
-            width: 24,
-            height: 24,
-            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-            errorBuilder: (_, __, ___) => Icon(fallbackIcon, size: 24, color: color),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          child: AnimatedScale(
+            scale: isSelected ? 1.15 : 1.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            child: SvgPicture.asset(
+              svgPath,
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+              errorBuilder: (_, __, ___) => Icon(fallbackIcon, size: 24, color: color),
+            ),
           ),
         ),
       ),

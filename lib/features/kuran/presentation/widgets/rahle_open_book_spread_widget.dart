@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
 import '../../../../core/widgets/tv_focusable.dart';
 
 /// Rahle üzerindeki tek bir yaprağın (Sol veya Sağ yaprak) veri modeli.
@@ -528,6 +529,7 @@ class RahleOpenBookSpreadWidget extends StatefulWidget {
   final VoidCallback? onOpenTableOfContents;
   final VoidCallback? onToggleBookmark;
   final VoidCallback? onOpenSettings;
+  final VoidCallback? onExitSpreadMode;
   final VoidCallback? onExit;
   final bool isBookmarked;
 
@@ -548,6 +550,7 @@ class RahleOpenBookSpreadWidget extends StatefulWidget {
     this.onOpenTableOfContents,
     this.onToggleBookmark,
     this.onOpenSettings,
+    this.onExitSpreadMode,
     this.onExit,
     this.isBookmarked = false,
   });
@@ -652,6 +655,16 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final layout = FoldableLayoutInfo.of(context);
+    final isCompactWide = layout.windowSize.width < 900.0;
+    final outerHorizontalPad = isCompactWide ? 12.0 : 24.0;
+    final innerHorizontalPad = isCompactWide ? 16.0 : 30.0;
+    final effectiveSpineGap = math.max(
+      28.0,
+      layout.verticalHingeWidth(fallback: 28.0) +
+          (layout.hingeBounds != null ? 10.0 : 0.0),
+    );
+
     return Focus(
       focusNode: _spreadFocusNode,
       autofocus: true,
@@ -684,9 +697,9 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                     duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOutCubic,
                     padding: EdgeInsets.fromLTRB(
-                      24,
+                      outerHorizontalPad,
                       _showHud ? 68 : 18,
-                      24,
+                      outerHorizontalPad,
                       _showHud ? 76 : 22,
                     ),
                     child: CustomPaint(
@@ -698,7 +711,12 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                         isBookmarked: widget.isBookmarked,
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(30, 20, 30, 26),
+                        padding: EdgeInsets.fromLTRB(
+                          innerHorizontalPad,
+                          20,
+                          innerHorizontalPad,
+                          26,
+                        ),
                         child: PhysicalBookSpreadTurnTransition(
                           spreadKey: widget.spreadSubtitle,
                           leftLeaf: widget.leftLeaf,
@@ -707,7 +725,7 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                           accentColor: widget.accentColor,
                           isRtl: widget.isRtl,
                           turnDirection: _turnDirection,
-                          spineGap: 28,
+                          spineGap: effectiveSpineGap,
                         ),
                       ),
                     ),
@@ -717,14 +735,14 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                 // Üst HUD Çubuğu (Kitap Adı, Sayfa/İlerleme ve Hızlı Aksiyonlar)
                 Positioned(
                   top: 8,
-                  left: 24,
-                  right: 24,
+                  left: outerHorizontalPad,
+                  right: outerHorizontalPad,
                   child: IgnorePointer(
                     ignoring: !_showHud,
                     child: AnimatedOpacity(
                       duration: const Duration(milliseconds: 200),
                       opacity: _showHud ? 1.0 : 0.0,
-                      child: _buildTopHudBar(),
+                      child: _buildTopHudBar(layout),
                     ),
                   ),
                 ),
@@ -732,14 +750,14 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                 // Alt HUD Çubuğu (Kumanda Tuş İpuçları ve Sayfa Çevirme Butonları)
                 Positioned(
                   bottom: 8,
-                  left: 24,
-                  right: 24,
+                  left: outerHorizontalPad,
+                  right: outerHorizontalPad,
                   child: IgnorePointer(
                     ignoring: !_showHud,
                     child: AnimatedOpacity(
                       duration: const Duration(milliseconds: 200),
                       opacity: _showHud ? 1.0 : 0.0,
-                      child: _buildBottomHudBar(),
+                      child: _buildBottomHudBar(layout),
                     ),
                   ),
                 ),
@@ -751,9 +769,13 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
     );
   }
 
-  Widget _buildTopHudBar() {
+  Widget _buildTopHudBar(FoldableLayoutInfo layout) {
+    final compactHud = layout.windowSize.width < 820.0;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compactHud ? 10 : 16,
+        vertical: 8,
+      ),
       decoration: BoxDecoration(
         color: const Color(0xFF140E0A).withValues(alpha: 0.90),
         borderRadius: BorderRadius.circular(16),
@@ -768,7 +790,10 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
             TvFocusable(
               onPressed: widget.onExit,
               borderRadius: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: compactHud ? 8 : 10,
+                vertical: 6,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -777,19 +802,21 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                     size: 18,
                     color: widget.accentColor,
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Kitaplığa Dön',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFFDF8EE),
+                  if (!compactHud) ...[
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Kitaplığa Dön',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFDF8EE),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: compactHud ? 6 : 12),
           ],
           Icon(
             Icons.menu_book_rounded,
@@ -825,11 +852,46 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
               ],
             ),
           ),
+          if (widget.onExitSpreadMode != null) ...[
+            TvFocusable(
+              onPressed: widget.onExitSpreadMode,
+              borderRadius: 12,
+              padding: EdgeInsets.symmetric(
+                horizontal: compactHud ? 8 : 10,
+                vertical: 6,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.chrome_reader_mode_rounded,
+                    size: 17,
+                    color: widget.accentColor,
+                  ),
+                  if (!compactHud) ...[
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Tek Sayfa',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFDF8EE),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           if (widget.onOpenTableOfContents != null) ...[
             TvFocusable(
               onPressed: widget.onOpenTableOfContents,
               borderRadius: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: compactHud ? 8 : 12,
+                vertical: 6,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -838,25 +900,30 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                     size: 17,
                     color: widget.accentColor,
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'İçindekiler (▲)',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFFDF8EE),
+                  if (!compactHud) ...[
+                    const SizedBox(width: 6),
+                    const Text(
+                      'İçindekiler (▲)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFDF8EE),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
           ],
           if (widget.onToggleBookmark != null) ...[
             TvFocusable(
               onPressed: widget.onToggleBookmark,
               borderRadius: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: compactHud ? 8 : 10,
+                vertical: 6,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -869,25 +936,30 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                         ? const Color(0xFFE53935)
                         : widget.accentColor,
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    widget.isBookmarked ? 'Ayraçlı' : 'Ayraç Ekle',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFFDF8EE),
+                  if (!compactHud) ...[
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.isBookmarked ? 'Ayraçlı' : 'Ayraç Ekle',
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFDF8EE),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
           ],
           if (widget.onOpenSettings != null)
             TvFocusable(
               onPressed: widget.onOpenSettings,
               borderRadius: 12,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: compactHud ? 8 : 12,
+                vertical: 6,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -896,15 +968,17 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
                     size: 17,
                     color: widget.accentColor,
                   ),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Görünüm (▼)',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFFDF8EE),
+                  if (!compactHud) ...[
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Görünüm (▼)',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFDF8EE),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -913,13 +987,14 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
     );
   }
 
-  Widget _buildBottomHudBar() {
+  Widget _buildBottomHudBar(FoldableLayoutInfo layout) {
     final leftLabel =
         widget.isRtl ? '▶ Sonraki Çift Sayfa' : '◀ Önceki Çift Sayfa';
     final rightLabel =
         widget.isRtl ? '◀ Önceki Çift Sayfa' : '▶ Sonraki Çift Sayfa';
     final leftAction = widget.isRtl ? _triggerNext : _triggerPrevious;
     final rightAction = widget.isRtl ? _triggerPrevious : _triggerNext;
+    final showKeyHints = layout.windowSize.width >= 760.0;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -934,42 +1009,51 @@ class _RahleOpenBookSpreadWidgetState extends State<RahleOpenBookSpreadWidget> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          TvFocusable(
-            onPressed: leftAction,
-            borderRadius: 12,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            child: Text(
-              '[$leftLabel]',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: widget.accentColor,
+          Flexible(
+            child: TvFocusable(
+              onPressed: leftAction,
+              borderRadius: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              child: Text(
+                '[$leftLabel]',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: widget.accentColor,
+                ),
               ),
             ),
           ),
-          const Flexible(
-            child: Wrap(
-              spacing: 10,
-              runSpacing: 4,
-              alignment: WrapAlignment.center,
-              children: [
-                _RemoteKeyHintBadge(label: '[OK Araç Çubuğu]'),
-                _RemoteKeyHintBadge(label: '[▲ İçindekiler]'),
-                _RemoteKeyHintBadge(label: '[▼ Yazı & Tema]'),
-                _RemoteKeyHintBadge(label: '[0-9 Sayfaya Atla]'),
-              ],
+          if (showKeyHints)
+            const Flexible(
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 4,
+                alignment: WrapAlignment.center,
+                children: [
+                  _RemoteKeyHintBadge(label: '[OK Araç Çubuğu]'),
+                  _RemoteKeyHintBadge(label: '[▲ İçindekiler]'),
+                  _RemoteKeyHintBadge(label: '[▼ Yazı & Tema]'),
+                  _RemoteKeyHintBadge(label: '[0-9 Sayfaya Atla]'),
+                ],
+              ),
             ),
-          ),
-          TvFocusable(
-            onPressed: rightAction,
-            borderRadius: 12,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            child: Text(
-              '[$rightLabel]',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-                color: widget.accentColor,
+          Flexible(
+            child: TvFocusable(
+              onPressed: rightAction,
+              borderRadius: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              child: Text(
+                '[$rightLabel]',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: widget.accentColor,
+                ),
               ),
             ),
           ),

@@ -401,6 +401,8 @@ Future<void> _openTimeExtensionSheet(BuildContext context, WidgetRef ref) async 
 }
 
 void _showInsufficientBalanceNotice(BuildContext context, bool isTr) {
+  if (!context.mounted) return;
+  final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
   HapticService.error();
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
@@ -411,7 +413,11 @@ void _showInsufficientBalanceNotice(BuildContext context, bool isTr) {
       ),
       action: SnackBarAction(
         label: isTr ? 'Dönüştür' : 'Convert',
-        onPressed: () => GoldDiamondExchangeSheet.show(context),
+        onPressed: () {
+          if (rootNavigator != null && rootNavigator.mounted) {
+            GoldDiamondExchangeSheet.show(rootNavigator.context);
+          }
+        },
       ),
       duration: const Duration(seconds: 3),
     ),

@@ -212,6 +212,36 @@ class AppLocalizations {
   String get namazManageMissed => translate('Namaz_ManageMissed');
   String get namazViewAllFiqh => translate('Namaz_ViewAllFiqh');
 
+  // 3B Kıble Bulucu / 3D Qibla Finder
+  String get qibla3DTitle => translate('Qibla_3DTitle');
+  String get qiblaCardSubtitle => translate('Qibla_CardSubtitle');
+  String get qiblaFindAction => translate('Qibla_FindAction');
+  String get qiblaTurnRight => translate('Qibla_TurnRight');
+  String get qiblaTurnLeft => translate('Qibla_TurnLeft');
+  String get qiblaApproaching => translate('Qibla_Approaching');
+  String get qiblaTakbirStatus => translate('Qibla_TakbirStatus');
+  String get qiblaAlignedStatus => translate('Qibla_AlignedStatus');
+  String get qiblaHoldFlatHint => translate('Qibla_HoldFlatHint');
+  String get qiblaInterferenceHint => translate('Qibla_InterferenceHint');
+  String get qiblaCalibrateTitle => translate('Qibla_CalibrateTitle');
+  String get qiblaCalibrateDesc => translate('Qibla_CalibrateDesc');
+  String get qiblaSunVerifyLabel => translate('Qibla_SunVerifyLabel');
+  String get qiblaSunNightLabel => translate('Qibla_SunNightLabel');
+  String get qiblaAngleLabel => translate('Qibla_AngleLabel');
+  String get qiblaDistanceLabel => translate('Qibla_DistanceLabel');
+  String get qiblaModeMale => translate('Qibla_ModeMale');
+  String get qiblaModeFemale => translate('Qibla_ModeFemale');
+  String get qiblaModeRugOnly => translate('Qibla_ModeRugOnly');
+  String get qiblaInteractiveHint => translate('Qibla_InteractiveHint');
+  String get qiblaPreviewToggle => translate('Qibla_PreviewToggle');
+  String get qiblaLiveCompassToggle => translate('Qibla_LiveCompassToggle');
+  String get qiblaSoundOn => translate('Qibla_SoundOn');
+  String get qiblaSoundOff => translate('Qibla_SoundOff');
+  String get qiblaStepFlat => translate('Qibla_StepFlat');
+  String get qiblaStepFace => translate('Qibla_StepFace');
+  String get qiblaStepTakbir => translate('Qibla_StepTakbir');
+  String get qiblaReplayTakbir => translate('Qibla_ReplayTakbir');
+
   // Zikir Page & List
   String get zikirPageCounter => translate('ZikirPage_Counter');
   String get zikirPageTarget => translate('ZikirPage_Target');

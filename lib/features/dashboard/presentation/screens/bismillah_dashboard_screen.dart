@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
+import '../../../../core/layout/foldable_two_pane.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/battery_optimization_service.dart';
@@ -359,13 +361,17 @@ class _BismillahDashboardScreenState
     final badgeSecondaryColor =
         isGoldGoalState ? const Color(0xFFD97706) : const Color(0xFF0D9488);
 
+    final layout = FoldableLayoutInfo.of(context);
     final rawBottomInset = MediaQuery.paddingOf(context).bottom;
-    final bottomClearance = rawBottomInset > 0 ? (rawBottomInset + 10.0) : 12.0;
+    final bottomClearance = layout.useNavigationRail
+        ? (rawBottomInset + 16.0)
+        : (rawBottomInset > 0 ? (rawBottomInset + 10.0) : 12.0);
     const topPad = 8.0;
     final hasPendingBanner = pendingPastResult?.hasRecent == true;
     final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.35);
     final minCanvasHeight = (hasPendingBanner ? 576.0 : 516.0) * textScale;
     final maxCanvasHeight = math.max(minCanvasHeight, 840.0);
+    final compactHorizontalPad = layout.isNarrowCoverScreen ? 12.0 : 16.0;
 
     return Scaffold(
       backgroundColor: colors.pageBackground,
@@ -375,6 +381,87 @@ class _BismillahDashboardScreenState
           builder: (context, constraints) {
             final availableHeight =
                 constraints.maxHeight - topPad - bottomClearance;
+
+            if (layout.supportsTwoPaneHorizontal) {
+              final minTwoPaneHeight =
+                  (hasPendingBanner ? 510.0 : 460.0) * textScale;
+              final maxTwoPaneHeight = math.max(minTwoPaneHeight, 900.0);
+              final fitsTwoPane = availableHeight >= minTwoPaneHeight;
+              final twoPaneCanvasHeight = fitsTwoPane
+                  ? availableHeight.clamp(minTwoPaneHeight, maxTwoPaneHeight)
+                  : minTwoPaneHeight;
+              final gap = (twoPaneCanvasHeight * 0.018).clamp(8.0, 14.0);
+
+              return SingleChildScrollView(
+                physics: fitsTwoPane
+                    ? const ClampingScrollPhysics()
+                    : const BouncingScrollPhysics(),
+                child: SizedBox(
+                  height: twoPaneCanvasHeight + topPad + bottomClearance,
+                  child: FoldableTwoPane(
+                    key: const Key('dashboard_two_pane'),
+                    axis: FoldableSplitAxis.horizontal,
+                    paneProportion: 0.48,
+                    paneSpacing: 16.0,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      topPad,
+                      16,
+                      bottomClearance,
+                    ),
+                    startPane: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (hasPendingBanner) ...[
+                          PendingPastPrayersBanner(
+                            count: pendingPastResult!.recentDays.length,
+                            onTap: _triggerPastDaysConfirmationFlow,
+                          ),
+                          SizedBox(height: gap),
+                        ],
+                        Expanded(
+                          flex: 52,
+                          child: MinimalHomeHeader(
+                            hasShareBadge: hasShareBadge,
+                            badgePrimaryColor: badgePrimaryColor,
+                            badgeSecondaryColor: badgeSecondaryColor,
+                            onOpenShareReminder: () =>
+                                _openShareReminder(context, shareReminder),
+                          ),
+                        ),
+                        SizedBox(height: gap),
+                        const Expanded(
+                          flex: 48,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: BentoDailyZikirCard()),
+                              SizedBox(width: 12),
+                              Expanded(child: BentoStreakRhythmCard()),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    endPane: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Expanded(
+                          flex: 54,
+                          child: FavoriteZikirsCarouselCard(),
+                        ),
+                        SizedBox(height: gap),
+                        const Expanded(
+                          flex: 46,
+                          child: Last7DaysActivityTrendCard(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             final fitsViewport = availableHeight >= minCanvasHeight;
             final canvasHeight = fitsViewport
                 ? availableHeight.clamp(minCanvasHeight, maxCanvasHeight)
@@ -385,7 +472,12 @@ class _BismillahDashboardScreenState
               physics: fitsViewport
                   ? const ClampingScrollPhysics()
                   : const BouncingScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(16, topPad, 16, bottomClearance),
+              padding: EdgeInsets.fromLTRB(
+                compactHorizontalPad,
+                topPad,
+                compactHorizontalPad,
+                bottomClearance,
+              ),
               child: SizedBox(
                 height: canvasHeight,
                 child: Column(

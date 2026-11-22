@@ -355,8 +355,11 @@ class _StreakRecoveryDialogState extends ConsumerState<StreakRecoveryDialog> {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
+                          final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
                           Navigator.of(context).pop(false);
-                          GoldDiamondExchangeSheet.show(context);
+                          if (rootNavigator != null && rootNavigator.mounted) {
+                            GoldDiamondExchangeSheet.show(rootNavigator.context);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),

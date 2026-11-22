@@ -28,6 +28,12 @@ BASE_URL = f"https://androidpublisher.googleapis.com/androidpublisher/v3/applica
 UPLOAD_URL = f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/{PACKAGE_NAME}"
 
 
+MAX_PLAY_TITLE_CHARS = 30
+MAX_PLAY_SHORT_DESC_CHARS = 80
+MAX_PLAY_FULL_DESC_CHARS = 4000
+STORE_LOCALES = ("tr-TR", "en-US")
+
+
 def parse_pubspec_version(repo_root: Path) -> tuple[str, int]:
     pubspec = (repo_root / "pubspec.yaml").read_text(encoding="utf-8")
     m = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)", pubspec, re.MULTILINE)
@@ -69,6 +75,74 @@ def load_release_notes(repo_root: Path, version_name: str, version_code: int) ->
 
     # Google Play Console 500 karakter sınırını garanti altına al
     return tr_text[:495], en_text[:495]
+
+
+def load_store_listings(repo_root: Path) -> dict[str, dict[str, str]]:
+    """android/fastlane/metadata/android/{tr-TR,en-US} ASO metinlerini yükler ve sınırları doğrular."""
+    base_dir = repo_root / "android" / "fastlane" / "metadata" / "android"
+    listings: dict[str, dict[str, str]] = {}
+
+    for lang in STORE_LOCALES:
+        lang_dir = base_dir / lang
+        if not lang_dir.is_dir():
+            continue
+
+        title_file = lang_dir / "title.txt"
+        short_file = lang_dir / "short_description.txt"
+        full_file = lang_dir / "full_description.txt"
+        if not (title_file.exists() and short_file.exists() and full_file.exists()):
+            continue
+
+        title = title_file.read_text(encoding="utf-8").strip()
+        short_desc = short_file.read_text(encoding="utf-8").strip()
+        full_desc = full_file.read_text(encoding="utf-8").strip()
+
+        if len(title) > MAX_PLAY_TITLE_CHARS:
+            raise ValueError(
+                f"Play Store title ({lang}) {MAX_PLAY_TITLE_CHARS} karakter sınırını aşıyor: {len(title)}"
+            )
+        if len(short_desc) > MAX_PLAY_SHORT_DESC_CHARS:
+            raise ValueError(
+                f"Play Store short_description ({lang}) {MAX_PLAY_SHORT_DESC_CHARS} karakter sınırını aşıyor: {len(short_desc)}"
+            )
+        if len(full_desc) > MAX_PLAY_FULL_DESC_CHARS:
+            raise ValueError(
+                f"Play Store full_description ({lang}) {MAX_PLAY_FULL_DESC_CHARS} karakter sınırını aşıyor: {len(full_desc)}"
+            )
+
+        listings[lang] = {
+            "title": title,
+            "shortDescription": short_desc,
+            "fullDescription": full_desc,
+        }
+
+    return listings
+
+
+def sync_store_listings(
+    edit_id: str,
+    headers: dict[str, str],
+    listings: dict[str, dict[str, str]],
+) -> None:
+    """Açık Play Console Edit oturumu içinde TR/EN mağaza vitrin metinlerini günceller."""
+    for lang, fields in listings.items():
+        payload = {"language": lang, **fields}
+        res = requests.put(
+            f"{BASE_URL}/edits/{edit_id}/listings/{lang}",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        if res.status_code not in (200, 201):
+            raise RuntimeError(
+                f"Play Store listing ({lang}) güncelleme hatası ({res.status_code}): {res.text}"
+            )
+        print(
+            f"   📝 Play Store vitrin ({lang}) güncellendi: "
+            f"title={len(fields['title'])}/{MAX_PLAY_TITLE_CHARS}, "
+            f"short={len(fields['shortDescription'])}/{MAX_PLAY_SHORT_DESC_CHARS}, "
+            f"full={len(fields['fullDescription'])}/{MAX_PLAY_FULL_DESC_CHARS}"
+        )
 
 
 def load_service_account_info(key_file: str | None) -> dict:
@@ -123,25 +197,47 @@ def get_access_token(sa_info: dict) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Publish Zikirce AAB to Google Play Console")
+    parser = argparse.ArgumentParser(description="Publish Zikirce AAB & ASO Listings to Google Play Console")
     parser.add_argument("--track", default=os.environ.get("PLAY_TRACK", "production"), choices=["internal", "alpha", "beta", "production"])
     parser.add_argument("--status", default=os.environ.get("PLAY_RELEASE_STATUS", "completed"), choices=["completed", "draft", "halted", "inProgress"])
     parser.add_argument("--aab", default=None, help="Path to app-release.aab")
     parser.add_argument("--key-file", default=None, help="Path to service account JSON file")
+    parser.add_argument("--skip-listings", action="store_true", help="Skip syncing store title/descriptions")
+    parser.add_argument("--listings-only", action="store_true", help="Sync store listings only without AAB upload")
+    parser.add_argument("--dry-run-metadata", action="store_true", help="Validate Android metadata locally without API calls")
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
     version_name, version_code = parse_pubspec_version(repo_root)
+    tr_notes, en_notes = load_release_notes(repo_root, version_name, version_code)
+    listings = load_store_listings(repo_root)
+
+    if args.dry_run_metadata:
+        print(f"🔎 Zikirce v{version_name} (Build {version_code}) Android ASO & Release Notes Doğrulaması:")
+        print(f"   TR Sürüm Notu: {len(tr_notes)}/500 krk | EN Sürüm Notu: {len(en_notes)}/500 krk")
+        if not listings:
+            print("❌ android/fastlane/metadata/android/{tr-TR,en-US} altında ASO dosyası bulunamadı!")
+            return 1
+        for lang, fields in listings.items():
+            print(
+                f"   ✅ {lang}: title='{fields['title']}' ({len(fields['title'])}/{MAX_PLAY_TITLE_CHARS}), "
+                f"short={len(fields['shortDescription'])}/{MAX_PLAY_SHORT_DESC_CHARS}, "
+                f"full={len(fields['fullDescription'])}/{MAX_PLAY_FULL_DESC_CHARS}"
+            )
+        return 0
+
     aab_path = Path(args.aab) if args.aab else (repo_root / "build" / "app" / "outputs" / "bundle" / "release" / "app-release.aab")
 
-    if not aab_path.exists():
+    if not args.listings_only and not aab_path.exists():
         print(f"❌ AAB dosyası bulunamadı: {aab_path}")
         return 1
 
-    tr_notes, en_notes = load_release_notes(repo_root, version_name, version_code)
-    print(f"📦 Zikirce v{version_name} (Build {version_code}) -> Google Play '{args.track}' kanalına hazırlanıyor...")
-    print(f"   AAB Boyutu: {aab_path.stat().st_size / (1024 * 1024):.2f} MB")
-    print(f"   TR Sürüm Notu ({len(tr_notes)} krk) / EN Sürüm Notu ({len(en_notes)} krk)")
+    if args.listings_only:
+        print(f"📝 Zikirce v{version_name} (Build {version_code}) -> Yalnızca Play Store ASO vitrin metinleri güncelleniyor...")
+    else:
+        print(f"📦 Zikirce v{version_name} (Build {version_code}) -> Google Play '{args.track}' kanalına hazırlanıyor...")
+        print(f"   AAB Boyutu: {aab_path.stat().st_size / (1024 * 1024):.2f} MB")
+        print(f"   TR Sürüm Notu ({len(tr_notes)} krk) / EN Sürüm Notu ({len(en_notes)} krk)")
 
     sa_info = load_service_account_info(args.key_file)
     client_email = sa_info.get("client_email", "bilinmiyor")
@@ -170,65 +266,77 @@ def main() -> int:
     edit_id = edit_res.json()["id"]
     print(f"✅ Play Console Edit oturumu açıldı: {edit_id}")
 
-    # 2. AAB dosyasını yükle
-    print("⬆️ app-release.aab Google Play sunucularına yükleniyor...")
-    upload_headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/octet-stream",
-    }
-    with aab_path.open("rb") as f:
-        bundle_res = requests.post(
-            f"{UPLOAD_URL}/edits/{edit_id}/bundles?uploadType=media",
-            headers=upload_headers,
-            data=f,
-            timeout=600,
-        )
-    if bundle_res.status_code not in (200, 201):
-        err_lower = bundle_res.text.lower()
-        if "already been used" in err_lower or ("version code" in err_lower and "already" in err_lower):
-            print(f"ℹ️ Build {version_code} zaten Google Play Console'a yüklenmiş ve yayınlanmış; işlem tamamlandı kabul ediliyor.")
-            return 0
-        print(f"❌ AAB yükleme hatası ({bundle_res.status_code}): {bundle_res.text}")
-        return 1
-
-    uploaded_version_code = bundle_res.json().get("versionCode", version_code)
-    print(f"✅ AAB yüklendi! versionCode: {uploaded_version_code}")
-
-    # 3. İlgili Track'e (production/beta/internal) sürüm notlarıyla bağla
-    release_notes_payload = []
-    if tr_notes:
-        release_notes_payload.append({"language": "tr-TR", "text": tr_notes})
-    if en_notes:
-        release_notes_payload.append({"language": "en-US", "text": en_notes})
-
-    def update_track(release_status: str) -> requests.Response:
-        track_body = {
-            "track": args.track,
-            "releases": [
-                {
-                    "name": f"{version_name} ({uploaded_version_code})",
-                    "versionCodes": [str(uploaded_version_code)],
-                    "status": release_status,
-                    "releaseNotes": release_notes_payload,
-                }
-            ],
+    # 2. AAB dosyasını yükle ve Track'e bağla (--listings-only değilse)
+    uploaded_version_code = version_code
+    if not args.listings_only:
+        print("⬆️ app-release.aab Google Play sunucularına yükleniyor...")
+        upload_headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
         }
-        return requests.put(
-            f"{BASE_URL}/edits/{edit_id}/tracks/{args.track}",
-            headers=headers,
-            json=track_body,
-            timeout=30,
-        )
+        with aab_path.open("rb") as f:
+            bundle_res = requests.post(
+                f"{UPLOAD_URL}/edits/{edit_id}/bundles?uploadType=media",
+                headers=upload_headers,
+                data=f,
+                timeout=600,
+            )
+        if bundle_res.status_code not in (200, 201):
+            err_lower = bundle_res.text.lower()
+            if "already been used" in err_lower or ("version code" in err_lower and "already" in err_lower):
+                print(f"ℹ️ Build {version_code} zaten Google Play Console'a yüklenmiş ve yayınlanmış; yalnızca ASO vitrini varsa güncelleniyor.")
+                if not args.skip_listings and listings:
+                    sync_store_listings(edit_id, headers, listings)
+                    commit_only = requests.post(f"{BASE_URL}/edits/{edit_id}:commit", headers=headers, timeout=60)
+                    if commit_only.status_code not in (200, 201):
+                        print(f"❌ ASO Edit commit hatası ({commit_only.status_code}): {commit_only.text}")
+                        return 1
+                return 0
+            print(f"❌ AAB yükleme hatası ({bundle_res.status_code}): {bundle_res.text}")
+            return 1
 
-    track_res = update_track(args.status)
-    if track_res.status_code not in (200, 201) and args.status == "completed":
-        print(f"⚠️ 'completed' statüsü kabul edilmedi ({track_res.status_code}), 'draft' olarak deneniyor...")
-        track_res = update_track("draft")
+        uploaded_version_code = bundle_res.json().get("versionCode", version_code)
+        print(f"✅ AAB yüklendi! versionCode: {uploaded_version_code}")
 
-    if track_res.status_code not in (200, 201):
-        print(f"❌ Track güncelleme hatası ({track_res.status_code}): {track_res.text}")
-        return 1
-    print(f"✅ '{args.track}' kanalı sürüm notlarıyla güncellendi.")
+        # 3. İlgili Track'e (production/beta/internal) sürüm notlarıyla bağla
+        release_notes_payload = []
+        if tr_notes:
+            release_notes_payload.append({"language": "tr-TR", "text": tr_notes})
+        if en_notes:
+            release_notes_payload.append({"language": "en-US", "text": en_notes})
+
+        def update_track(release_status: str) -> requests.Response:
+            track_body = {
+                "track": args.track,
+                "releases": [
+                    {
+                        "name": f"{version_name} ({uploaded_version_code})",
+                        "versionCodes": [str(uploaded_version_code)],
+                        "status": release_status,
+                        "releaseNotes": release_notes_payload,
+                    }
+                ],
+            }
+            return requests.put(
+                f"{BASE_URL}/edits/{edit_id}/tracks/{args.track}",
+                headers=headers,
+                json=track_body,
+                timeout=30,
+            )
+
+        track_res = update_track(args.status)
+        if track_res.status_code not in (200, 201) and args.status == "completed":
+            print(f"⚠️ 'completed' statüsü kabul edilmedi ({track_res.status_code}), 'draft' olarak deneniyor...")
+            track_res = update_track("draft")
+
+        if track_res.status_code not in (200, 201):
+            print(f"❌ Track güncelleme hatası ({track_res.status_code}): {track_res.text}")
+            return 1
+        print(f"✅ '{args.track}' kanalı sürüm notlarıyla güncellendi.")
+
+    # 3B. Mağaza vitrini (Title, Short, Full Description) senkronizasyonu
+    if not args.skip_listings and listings:
+        sync_store_listings(edit_id, headers, listings)
 
     # 4. Edit oturumunu onayla ve yayına (incelemeye) gönder
     commit_res = requests.post(f"{BASE_URL}/edits/{edit_id}:commit", headers=headers, timeout=60)
@@ -236,7 +344,10 @@ def main() -> int:
         print(f"❌ Edit commit hatası ({commit_res.status_code}): {commit_res.text}")
         return 1
 
-    print(f"🚀 Zikirce v{version_name} (Build {uploaded_version_code}) Google Play Console '{args.track}' kanalına başarıyla gönderildi!")
+    if args.listings_only:
+        print(f"🚀 Zikirce TR/EN Google Play vitrin metinleri başarıyla güncellendi!")
+    else:
+        print(f"🚀 Zikirce v{version_name} (Build {uploaded_version_code}) Google Play Console '{args.track}' kanalına başarıyla gönderildi!")
     return 0
 
 

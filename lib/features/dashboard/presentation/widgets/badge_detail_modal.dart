@@ -277,24 +277,29 @@ class BadgeDetailModal extends ConsumerWidget {
                 label: Text(l10n.isTurkish ? '${badge.unlockCost} Elmas ile Kilidi Aç' : 'Unlock with ${badge.unlockCost} Diamonds', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
                 onPressed: () async {
                   final success = await ref.read(gamificationNotifierProvider).unlockBadgeWithDiamonds(badge);
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(l10n.isTurkish ? '🎉 Tebrikler! "${badge.name}" rozetinin kilidi açıldı ve kuşu yüklendi!' : '🎉 Congratulations! "${badge.name}" badge unlocked!')),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(l10n.isTurkish ? 'Yetersiz Elmas! Gerekli: ${badge.unlockCost} 💎' : 'Not enough diamonds! Required: ${badge.unlockCost} 💎'),
-                          action: SnackBarAction(
-                            label: l10n.translate('Exchange_ConvertBtn'),
-                            textColor: const Color(0xFF38BDF8),
-                            onPressed: () => GoldDiamondExchangeSheet.show(context),
-                          ),
+                  if (!context.mounted) return;
+                  final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
+                  final messenger = ScaffoldMessenger.of(context);
+                  Navigator.of(context).pop();
+                  if (success) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(l10n.isTurkish ? '🎉 Tebrikler! "${badge.name}" rozetinin kilidi açıldı ve kuşu yüklendi!' : '🎉 Congratulations! "${badge.name}" badge unlocked!')),
+                    );
+                  } else {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(l10n.isTurkish ? 'Yetersiz Elmas! Gerekli: ${badge.unlockCost} 💎' : 'Not enough diamonds! Required: ${badge.unlockCost} 💎'),
+                        action: SnackBarAction(
+                          label: l10n.translate('Exchange_ConvertBtn'),
+                          textColor: const Color(0xFF38BDF8),
+                          onPressed: () {
+                            if (rootNavigator != null && rootNavigator.mounted) {
+                              GoldDiamondExchangeSheet.show(rootNavigator.context);
+                            }
+                          },
                         ),
-                      );
-                    }
+                      ),
+                    );
                   }
                 },
               ),
@@ -316,8 +321,11 @@ class BadgeDetailModal extends ConsumerWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                   onPressed: () {
+                    final rootNavigator = Navigator.maybeOf(context, rootNavigator: true);
                     Navigator.of(context).pop();
-                    GoldDiamondExchangeSheet.show(context);
+                    if (rootNavigator != null && rootNavigator.mounted) {
+                      GoldDiamondExchangeSheet.show(rootNavigator.context);
+                    }
                   },
                 ),
               ),

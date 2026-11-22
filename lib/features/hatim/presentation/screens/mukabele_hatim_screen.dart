@@ -5,8 +5,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
+import '../../../../core/layout/foldable_two_pane.dart';
 import '../../../../core/services/audio_download_service.dart';
 import '../../../../core/services/audio_sync_service.dart';
 import '../../../../core/services/haptic_service.dart';
@@ -32,11 +35,14 @@ import '../../../kuran/presentation/widgets/tilavet_secdesi_guide_sheet.dart';
 import '../../../settings/providers/settings_provider.dart';
 import '../../../zikir/presentation/widgets/zikir_share_card_widget.dart';
 import '../../../zikir/presentation/widgets/zikir_share_preview_modal.dart';
+import '../../domain/mukabele_tv_sync_helper.dart';
 import '../../providers/hatim_providers.dart';
 import '../widgets/hatim_duasi_modal.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/widgets/tv_focusable.dart';
+import '../../../tv/presentation/widgets/tv_cast_action_button.dart';
+import '../../../tv/providers/tv_cast_provider.dart';
 
 class _MukabeleQueueItemMeta {
   final int verseIndex;
@@ -99,6 +105,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
   int _lastHandledQueueIndex = -1;
   int _queueGeneration = 0;
   bool _isAdvancingWindowsItem = false;
+  bool _hasAudioClockStartedForVerse = false;
+  int? _savedTvSyncOffsetMs;
   final Stopwatch _verseStopwatch = Stopwatch();
   final Stopwatch _microInterpStopwatch = Stopwatch();
   double _verseSeekAnchorMs = 0.0;
@@ -180,6 +188,20 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
 
   Future<void> _initScreenAndAudio() async {
     await AudioSyncService.initialize();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedOffset = prefs.getInt(MukabeleTvSyncHelper.prefKey);
+      if (savedOffset != null && mounted) {
+        setState(() {
+          _savedTvSyncOffsetMs = savedOffset.clamp(
+            MukabeleTvSyncHelper.minOffsetMs,
+            MukabeleTvSyncHelper.maxOffsetMs,
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('[MukabeleHatimScreen] TV sync pref load warning: $e');
+    }
     if (ref.read(settingsProvider).isKeepScreenAwakeEnabled ||
         ref.read(isTvModeProvider)) {
       ScreenAwakeService.setKeepAwake(true);
@@ -238,6 +260,37 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     );
   }
 
+  int _effectiveTvSyncOffsetMs() {
+    return MukabeleTvSyncHelper.resolveEffectiveOffsetMs(
+      isTvMode: ref.read(isTvModeProvider),
+      isHardwareTv: TvModeService.isHardwareTv,
+      castState: ref.read(tvCastProvider),
+      savedTvOffsetMs: _savedTvSyncOffsetMs,
+    );
+  }
+
+  Future<void> _saveTvSyncOffsetMs(int? value) async {
+    final clamped = value?.clamp(
+      MukabeleTvSyncHelper.minOffsetMs,
+      MukabeleTvSyncHelper.maxOffsetMs,
+    );
+    if (mounted) {
+      setState(() {
+        _savedTvSyncOffsetMs = clamped;
+      });
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (clamped == null) {
+        await prefs.remove(MukabeleTvSyncHelper.prefKey);
+      } else {
+        await prefs.setInt(MukabeleTvSyncHelper.prefKey, clamped);
+      }
+    } catch (e) {
+      debugPrint('[MukabeleHatimScreen] TV sync pref save warning: $e');
+    }
+  }
+
   void _resetVerseClock({int seekMs = 0, bool isPlaying = true}) {
     _verseSeekAnchorMs = seekMs.toDouble();
     _lastSampledPlayerMs = -1.0;
@@ -245,6 +298,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     _verseStopwatch.reset();
     _microInterpStopwatch.reset();
     final isReady = _player.processingState == ProcessingState.ready;
+    _hasAudioClockStartedForVerse =
+        seekMs > 0 && isPlaying && !_isBuffering && isReady;
     if (isPlaying && !_isBuffering && isReady) {
       _verseStopwatch.start();
     }
@@ -265,20 +320,24 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         ..start();
     }
 
-    double effectiveMs = playerMs;
-    if (_player.playing &&
-        _player.processingState == ProcessingState.ready &&
-        playerMs > 0) {
-      final interpDelta =
-          (_microInterpStopwatch.elapsedMilliseconds * _playbackSpeed)
-              .clamp(0.0, 45.0);
-      effectiveMs = playerMs + interpDelta;
-    }
+    final isTvMode = ref.read(isTvModeProvider);
+    final offsetMs = _effectiveTvSyncOffsetMs();
+    final isReadyPlaying =
+        _player.playing && _player.processingState == ProcessingState.ready;
+
+    final effectiveMs = MukabeleTvSyncHelper.computeSyncedPositionMs(
+      playerMs: playerMs,
+      microInterpMs: _microInterpStopwatch.elapsedMilliseconds.toDouble(),
+      playbackSpeed: _playbackSpeed,
+      isPlayingReady: isReadyPlaying,
+      isTvMode: isTvMode,
+      offsetMs: offsetMs,
+    );
 
     if (effectiveMs > _maxObservedVerseMs) {
       _maxObservedVerseMs = effectiveMs;
     }
-    return effectiveMs.clamp(0.0, 600000.0);
+    return effectiveMs;
   }
 
   void _tickWordSync() {
@@ -289,6 +348,28 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     if (!_isPlaying && !_player.playing) return;
     if (_pageVerses.isEmpty || _currentVerseIndex >= _pageVerses.length) {
       return;
+    }
+
+    final rawPlayerMs = _player.position.inMilliseconds.toDouble();
+    final offsetMs = _effectiveTvSyncOffsetMs();
+    final trackDurMs = _player.duration?.inMilliseconds;
+    final startGateMs = offsetMs < 0 ? (-offsetMs * 0.75) : 0.0;
+    final trackQuarterMs =
+        (trackDurMs != null && trackDurMs > 0) ? trackDurMs * 0.25 : 260.0;
+
+    final audioClockActuallyRunning = _player.playing &&
+        _player.processingState == ProcessingState.ready &&
+        rawPlayerMs > 0 &&
+        (rawPlayerMs >= startGateMs || rawPlayerMs >= trackQuarterMs);
+
+    if (!audioClockActuallyRunning && !_hasAudioClockStartedForVerse) {
+      return;
+    }
+
+    final becameClockReady =
+        !_hasAudioClockStartedForVerse && audioClockActuallyRunning;
+    if (becameClockReady) {
+      _hasAudioClockStartedForVerse = true;
     }
 
     final verse = _pageVerses[_currentVerseIndex];
@@ -303,13 +384,13 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       ayahWords: pureWords,
     );
 
-    if (activeWord != _activeWordOrder && mounted) {
+    if ((activeWord != _activeWordOrder || becameClockReady) && mounted) {
       final wordDur = AudioSyncService.getWordDurationMs(
         verse.sureId,
         verse.ayetId,
         activeWord,
         ayahWords: pureWords,
-        trackDurationMs: _player.duration?.inMilliseconds,
+        trackDurationMs: trackDurMs,
       );
       setState(() {
         _activeWordOrder = activeWord;
@@ -323,15 +404,16 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       ref
           .read(kuranAudioNotifierProvider.notifier)
           .syncExternalState(KuranAudioState(
-            isPlaying: _isPlaying || _player.playing,
+            isPlaying: (_isPlaying || _player.playing) &&
+                _hasAudioClockStartedForVerse,
             isLoading: _isBuffering,
             currentSurahId: verse.sureId,
             currentAyahId: verse.ayetId,
             currentWordOrder: activeWord,
             activeWordDurationMs: wordDur,
             playbackSpeed: _playbackSpeed,
-            playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
-                ? (ms / (_player.duration?.inMilliseconds ?? 1)).clamp(0.0, 1.0)
+            playbackProgress: (trackDurMs ?? 1) > 0
+                ? (ms / (trackDurMs ?? 1)).clamp(0.0, 1.0)
                 : 0.0,
           ));
     }
@@ -381,11 +463,12 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           ref
               .read(kuranAudioNotifierProvider.notifier)
               .syncExternalState(KuranAudioState(
-                isPlaying: isPlaying,
+                isPlaying: isPlaying && !isBuffering,
                 isLoading: isBuffering,
                 currentSurahId: 1,
                 currentAyahId: 1,
                 currentWordOrder: 0,
+                playbackSpeed: _playbackSpeed,
                 playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
                     ? ((_player.position.inMilliseconds) /
                             (_player.duration?.inMilliseconds ?? 1))
@@ -400,7 +483,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             ref
                 .read(kuranAudioNotifierProvider.notifier)
                 .syncExternalState(KuranAudioState(
-                  isPlaying: isPlaying,
+                  isPlaying: isPlaying &&
+                      !isBuffering &&
+                      _hasAudioClockStartedForVerse,
                   isLoading: isBuffering,
                   currentSurahId: verse.sureId,
                   currentAyahId: verse.ayetId,
@@ -573,7 +658,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
     ref
         .read(kuranAudioNotifierProvider.notifier)
         .syncExternalState(KuranAudioState(
-          isPlaying: true,
+          isPlaying: false,
           isLoading: true,
           currentSurahId: activeVerseForSync.sureId,
           currentAyahId: activeVerseForSync.ayetId,
@@ -620,7 +705,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       if (!mounted || myGen != _queueGeneration) return;
 
       await _player.setSpeed(_playbackSpeed);
-      _resetVerseClock(seekMs: seekMs, isPlaying: true);
+      _resetVerseClock(seekMs: seekMs, isPlaying: false);
       _isAdvancingWindowsItem = false;
       unawaited(_player.play());
 
@@ -628,7 +713,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
         ref
             .read(kuranAudioNotifierProvider.notifier)
             .syncExternalState(KuranAudioState(
-              isPlaying: true,
+              isPlaying: false,
               isLoading: false,
               currentSurahId: verse.sureId,
               currentAyahId: verse.ayetId,
@@ -662,10 +747,11 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
             _activeWordDurationMs = firstWordDur;
           });
         }
+        // Gerçek ses saati 0ms üzerine çıkıp gecikme kapısını geçene kadar ok 1. kelimede bekler.
         ref
             .read(kuranAudioNotifierProvider.notifier)
             .syncExternalState(KuranAudioState(
-              isPlaying: true,
+              isPlaying: false,
               isLoading: false,
               currentSurahId: verse.sureId,
               currentAyahId: verse.ayetId,
@@ -1031,6 +1117,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               currentSurahId: verse.sureId,
               currentAyahId: verse.ayetId,
               currentWordOrder: _activeWordOrder,
+              activeWordDurationMs: _activeWordDurationMs,
+              playbackSpeed: _playbackSpeed,
               playbackProgress: 0.0,
             ));
       }
@@ -1049,11 +1137,13 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           ref
               .read(kuranAudioNotifierProvider.notifier)
               .syncExternalState(KuranAudioState(
-                isPlaying: true,
+                isPlaying: _hasAudioClockStartedForVerse,
                 isLoading: false,
                 currentSurahId: verse.sureId,
                 currentAyahId: verse.ayetId,
                 currentWordOrder: _activeWordOrder,
+                activeWordDurationMs: _activeWordDurationMs,
+                playbackSpeed: _playbackSpeed,
                 playbackProgress: 0.0,
               ));
         }
@@ -1074,6 +1164,28 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
       _playbackSpeed = newSpeed;
     });
     _player.setSpeed(newSpeed);
+    final verse = _currentVerseIndex < _pageVerses.length
+        ? _pageVerses[_currentVerseIndex]
+        : null;
+    if (verse != null) {
+      ref
+          .read(kuranAudioNotifierProvider.notifier)
+          .syncExternalState(KuranAudioState(
+            isPlaying: (_isPlaying || _player.playing) &&
+                _hasAudioClockStartedForVerse,
+            isLoading: _isBuffering,
+            currentSurahId: verse.sureId,
+            currentAyahId: verse.ayetId,
+            currentWordOrder: _activeWordOrder,
+            activeWordDurationMs: _activeWordDurationMs,
+            playbackSpeed: newSpeed,
+            playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
+                ? (_verseSeekAnchorMs /
+                        (_player.duration?.inMilliseconds ?? 1))
+                    .clamp(0.0, 1.0)
+                : 0.0,
+          ));
+    }
     _syncNowPlaying();
   }
 
@@ -1102,12 +1214,28 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           trackDurationMs: _player.duration?.inMilliseconds,
         );
         _resetVerseClock(seekMs: seekTarget, isPlaying: true);
+        _hasAudioClockStartedForVerse = true;
         setState(() {
           _activeWordOrder = wordOrder;
           _activeWordDurationMs = wordDur;
         });
         _player.seek(Duration(milliseconds: seekTarget));
         if (!_isPlaying) _player.play();
+        ref
+            .read(kuranAudioNotifierProvider.notifier)
+            .syncExternalState(KuranAudioState(
+              isPlaying: true,
+              isLoading: false,
+              currentSurahId: verse.sureId,
+              currentAyahId: verse.ayetId,
+              currentWordOrder: wordOrder,
+              activeWordDurationMs: wordDur,
+              playbackSpeed: _playbackSpeed,
+              playbackProgress: (_player.duration?.inMilliseconds ?? 1) > 0
+                  ? (seekTarget / (_player.duration?.inMilliseconds ?? 1))
+                      .clamp(0.0, 1.0)
+                  : 0.0,
+            ));
         _scrollToActiveWord();
       }
     } else {
@@ -1323,6 +1451,173 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _showTvAudioSyncSheet() {
+    HapticService.selectionClick();
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final bg = isDark ? const Color(0xFF1B1E24) : Colors.white;
+        final textColor = isDark ? Colors.white : const Color(0xFF1E2B27);
+        final subColor = isDark ? Colors.white60 : Colors.black54;
+        final gold = isDark ? AppColors.gold400 : const Color(0xFFB57D15);
+
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            final currentMs = _effectiveTvSyncOffsetMs();
+            final isAuto = _savedTvSyncOffsetMs == null;
+
+            Future<void> applyOffset(int? next) async {
+              HapticService.selectionClick();
+              await _saveTvSyncOffsetMs(next);
+              setSheetState(() {});
+            }
+
+            Widget presetChip(String label, int? value, bool selected) {
+              return ChoiceChip(
+                label: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.black : textColor,
+                  ),
+                ),
+                selected: selected,
+                selectedColor: gold,
+                backgroundColor: isDark
+                    ? const Color(0xFF262A34)
+                    : const Color(0xFFF3EFE6),
+                onSelected: (_) => applyOffset(value),
+              );
+            }
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(26)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Icon(Icons.av_timer_rounded, color: gold, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'TV Ok–Ses Senkron Ayarı',
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: gold.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${currentMs > 0 ? '+' : ''}$currentMs ms${isAuto ? ' (Oto)' : ''}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: gold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Ok önden gidiyorsa sola (-), ses önden gidiyorsa sağa (+) kaydırın.',
+                      style: TextStyle(fontSize: 12, color: subColor),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () => applyOffset(
+                          currentMs - MukabeleTvSyncHelper.stepMs,
+                        ),
+                        icon: Icon(Icons.remove_circle_outline, color: gold),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: currentMs.toDouble(),
+                          min: MukabeleTvSyncHelper.minOffsetMs.toDouble(),
+                          max: MukabeleTvSyncHelper.maxOffsetMs.toDouble(),
+                          divisions: (MukabeleTvSyncHelper.maxOffsetMs -
+                                  MukabeleTvSyncHelper.minOffsetMs) ~/
+                              MukabeleTvSyncHelper.stepMs,
+                          activeColor: gold,
+                          onChanged: (val) => applyOffset(val.round()),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => applyOffset(
+                          currentMs + MukabeleTvSyncHelper.stepMs,
+                        ),
+                        icon: Icon(Icons.add_circle_outline, color: gold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      presetChip('Otomatik', null, isAuto),
+                      presetChip('Telefon (0ms)', 0, !isAuto && currentMs == 0),
+                      presetChip(
+                        'TV / HDMI (-180ms)',
+                        MukabeleTvSyncHelper.defaultTvOrWiredOffsetMs,
+                        !isAuto &&
+                            currentMs ==
+                                MukabeleTvSyncHelper.defaultTvOrWiredOffsetMs,
+                      ),
+                      presetChip(
+                        'Kablosuz (-280ms)',
+                        MukabeleTvSyncHelper.defaultWirelessCastOffsetMs,
+                        !isAuto &&
+                            currentMs ==
+                                MukabeleTvSyncHelper.defaultWirelessCastOffsetMs,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -1551,6 +1846,23 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                 ),
               ),
               TextButton.icon(
+                key: const Key('tv_mukabele_sync_btn'),
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(64, 34),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                onPressed: _showTvAudioSyncSheet,
+                icon: Icon(Icons.av_timer_rounded, color: goldAccent, size: 17),
+                label: Text(
+                  '${_effectiveTvSyncOffsetMs()}ms',
+                  style: TextStyle(
+                    color: titleColor,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              TextButton.icon(
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                 ),
@@ -1606,6 +1918,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   ),
                 ),
               ),
+              if (!TvModeService.isHardwareTv)
+                TvCastIconButton(iconColor: titleColor),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 icon: Icon(Icons.grid_view_rounded, color: titleColor, size: 20),
@@ -1710,28 +2024,104 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
               }
               return KeyEventResult.ignored;
             },
-            child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // MAIN CONTENT: Besmele Bar (üstte, ayetlerin üstünü kapatmaz) + Mushaf / Ayah List View
-              Positioned.fill(
-                bottom: isTvMode
-                    ? 0
-                    : (110 + MediaQuery.of(context).padding.bottom),
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : Column(
-                        children: [
-                          if (_isPlayingBesmele && !isTvMode)
-                            const BesmelePlaybackBanner(),
-                          Expanded(
-                            child: _isMushafView
-                                ? _buildMushafPageView()
-                                : _buildAyahListView(),
+            child: Builder(
+              builder: (context) {
+                final layout = FoldableLayoutInfo.of(context);
+                final isTabletop = !isTvMode && layout.isTabletopPosture;
+                final activeSecdeItem =
+                    TilavetSecdesiData.getSecdeForPage(_currentPage);
+                final showSecdeBanner =
+                    activeSecdeItem != null && !_dismissedBannerForCurrentPage;
+                final topBannerHorizontalPadding =
+                    layout.isNarrowCoverScreen ? 10.0 : 16.0;
+                final topSecdeBanner = AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: showSecdeBanner
+                      ? TilavetSecdesiFloatingBanner(
+                          key: ValueKey(
+                            'mukabele_secde_banner_${activeSecdeItem.no}',
                           ),
-                        ],
+                          secdeItem: activeSecdeItem,
+                          padding: EdgeInsets.fromLTRB(
+                            topBannerHorizontalPadding,
+                            4,
+                            topBannerHorizontalPadding,
+                            4,
+                          ),
+                          onDismiss: () {
+                            setState(() {
+                              _dismissedBannerForCurrentPage = true;
+                            });
+                          },
+                        )
+                      : const SizedBox.shrink(),
+                );
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // MAIN CONTENT: Besmele Bar (üstte, ayetlerin üstünü kapatmaz) + Mushaf / Ayah List View
+                    if (isTabletop)
+                      Positioned.fill(
+                        child: FoldableTwoPane(
+                          key: const Key('mukabele_tabletop_two_pane'),
+                          axis: FoldableSplitAxis.vertical,
+                          paneSpacing: 10.0,
+                          minVerticalPaneHeight: 130.0,
+                          startPane: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : Column(
+                                  children: [
+                                    topSecdeBanner,
+                                    Expanded(
+                                      child: _isMushafView
+                                          ? _buildMushafPageView()
+                                          : _buildAyahListView(),
+                                    ),
+                                  ],
+                                ),
+                          endPane: SafeArea(
+                            top: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_isPlayingBesmele)
+                                    const BesmelePlaybackBanner(),
+                                  _buildMukabeleBottomBar(
+                                    bottomBarBg,
+                                    titleColor,
+                                    goldAccent,
+                                    isDark,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Positioned.fill(
+                        bottom: isTvMode
+                            ? 0
+                            : (110 + MediaQuery.of(context).padding.bottom),
+                        child: _isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : Column(
+                                children: [
+                                  if (_isPlayingBesmele && !isTvMode)
+                                    const BesmelePlaybackBanner(),
+                                  topSecdeBanner,
+                                  Expanded(
+                                    child: _isMushafView
+                                        ? _buildMushafPageView()
+                                        : _buildAyahListView(),
+                                  ),
+                                ],
+                              ),
                       ),
-              ),
 
               // 2-SECOND PAGE COMPLETION NOTIFICATION BANNER
               if (_isPageTransitioning && _transitionBannerText != null)
@@ -1810,8 +2200,8 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   ),
                 ),
 
-              // FLOATING MUKABELE CONTROL BAR (Sadece Mobil / Tablet için; TV'de üst başlıkta yer alır)
-              if (!isTvMode)
+              // FLOATING MUKABELE CONTROL BAR (Sadece Mobil / Tablet için; TV'de ve Tabletop'ta özel yerleşir)
+              if (!isTvMode && !isTabletop)
                 Positioned(
                   left: 16,
                   right: 16,
@@ -1819,26 +2209,10 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   child: _buildMukabeleBottomBar(
                       bottomBarBg, titleColor, goldAccent, isDark),
                 ),
-
-              // TILAVET SECDESI FLOATING BANNER
-              if (TilavetSecdesiData.getSecdeForPage(_currentPage) != null &&
-                  !_dismissedBannerForCurrentPage)
-                Positioned(
-                  top: 8,
-                  left: 0,
-                  right: 0,
-                  child: TilavetSecdesiFloatingBanner(
-                    secdeItem:
-                        TilavetSecdesiData.getSecdeForPage(_currentPage)!,
-                    onDismiss: () {
-                      setState(() {
-                        _dismissedBannerForCurrentPage = true;
-                      });
-                    },
-                  ),
-                ),
-            ],
-          ),
+                  ],
+                );
+              },
+            ),
         ),
         ),
       ),
@@ -1863,11 +2237,7 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
           data: (data) => MushafPageWidget(
             pageData: data,
             isActivePage: pageNum == _currentPage,
-            viewportTopOverlayInset:
-                (TilavetSecdesiData.getSecdeForPage(pageNum) != null &&
-                        !_dismissedBannerForCurrentPage)
-                    ? 62.0
-                    : 0.0,
+            viewportTopOverlayInset: 0.0,
             viewportBottomOverlayInset: 0.0,
             onWordTap: (surahId, ayahId, wordOrder) {
               final vIdx = _pageVerses.indexWhere(
@@ -2091,7 +2461,9 @@ class _MukabeleHatimScreenState extends ConsumerState<MukabeleHatimScreen> {
                   activeWordOrder: isActive ? _activeWordOrder : 0,
                   activeWordDurationMs: _activeWordDurationMs,
                   playbackSpeed: _playbackSpeed,
-                  isPlaying: _isPlaying,
+                  isPlaying: _isPlaying &&
+                      !_isBuffering &&
+                      _hasAudioClockStartedForVerse,
                   isDark: isDark,
                   fontFamily: fontFamily,
                   fontSize: fontSize,

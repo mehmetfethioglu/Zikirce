@@ -1,3 +1,4 @@
-• TV Modu Düzeltmesi (iOS & Android): Telefonlarda TV Modu kapatılamaması sorunu giderildi; üst çubuğa «TV Modundan Çık» butonu, telefona uyumlu düzen ve otomatik dikey ekran dönüşü eklendi.
-• Minimal Bento Ana Sayfa: Yeni sade açılış kartları, ayrı Detaylı İstatistikler ekranı ve doğrudan Zikirmatik ile açılış ayarı.
-• Kelime takipli Mushaf kaydırması iyileştirildi; İrfan Meydanı’na yeni Diyanet İlmihali soruları eklendi.
+• 3B Kıble Bulucu & İftitah Tekbiri: Eğim düzeltmeli pusula, 3B Kâbe seccade sahnesi, güneşle doğrulama ve hizalanınca otomatik tekbir/kıyam rehberi.
+• Katlanabilir & Geniş Ekran Desteği: Menteşe/çift panel düzeni, gezinme rayı ve Rahle çift sayfa Mushaf görünümü.
+• Zikirce TV Yansıtma & Ses Senkronu: Tek dokunuşla TV ekran yansıtma (Smart View, Miracast, Cast) ve Mukabele ses-ok gecikme ayarı.
+• Tilâvet Secdesi hatırlatıcısı ve kararlılık iyileştirmeleri.

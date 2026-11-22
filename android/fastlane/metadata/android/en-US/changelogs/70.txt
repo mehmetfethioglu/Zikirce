@@ -1,0 +1,4 @@
+• 3D Qibla Finder & Opening Takbir: Tilt-compensated compass, 3D Kaaba prayer rug scene, solar verification, and automatic Takbir/Qiyam alignment guide.
+• Foldable & Large-Screen Support: Hinge-aware two-pane layouts, adaptive NavigationRail, and Rahle dual-page Mushaf reading.
+• Zikirce TV Casting & Audio Sync: One-tap TV screen mirroring (Smart View, Miracast, Cast) and configurable Mukabele audio-pointer sync offset.
+• Refined Sajdah al-Tilawah banners and stability fixes.

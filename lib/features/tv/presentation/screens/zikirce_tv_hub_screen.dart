@@ -20,6 +20,9 @@ import '../../../../core/utils/hijri_calendar.dart';
 import '../../../../core/widgets/tv_focusable.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
+import '../../providers/tv_cast_provider.dart';
+import '../widgets/tv_cast_action_button.dart';
+import '../widgets/tv_cast_sheet.dart';
 
 /// Android TV / Google TV Yalın 10-Foot UI Ana Ekranı.
 /// Yalnızca Sesli & Kelime Takipli Mukabele ve Kur'ân-ı Kerîm (Rahle & Mushaf)
@@ -42,6 +45,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
   final FocusNode _mushafHeroFocusNode = FocusNode(debugLabel: 'MushafHero');
   bool _isGoogleSignedIn = false;
   String _googleUserEmail = '';
+  Timer? _autoCastPromptTimer;
 
   static const List<int> _juzStartPages = <int>[
     1, 22, 42, 62, 82, 102, 122, 142, 162, 182,
@@ -54,6 +58,33 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
     super.initState();
     _refreshGoogleAuthState();
     _loadIndependentMushafProgress();
+    unawaited(ScreenAwakeService.setKeepAwake(true));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final castNotifier = ref.read(tvCastProvider.notifier);
+      final castState = ref.read(tvCastProvider);
+      if (castState.pendingAutoPrompt &&
+          !TvModeService.isHardwareTv &&
+          castState.isSupported) {
+        castNotifier.consumeAutoPrompt();
+        _autoCastPromptTimer?.cancel();
+        _autoCastPromptTimer = Timer(
+          const Duration(milliseconds: 350),
+          () async {
+            if (!mounted) return;
+            await castNotifier.refreshStatus();
+            if (!mounted) return;
+            final latest = ref.read(tvCastProvider);
+            if (!TvModeService.isHardwareTv &&
+                latest.isSupported &&
+                !latest.isVisualMirroring) {
+              unawaited(TvCastSheet.show(context));
+            }
+          },
+        );
+      }
+    });
   }
 
   Future<void> _loadIndependentMushafProgress() async {
@@ -70,6 +101,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
 
   @override
   void dispose() {
+    _autoCastPromptTimer?.cancel();
     _mukabeleHeroFocusNode.dispose();
     _mushafHeroFocusNode.dispose();
     super.dispose();
@@ -536,7 +568,10 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                   final maxW = constraints.maxWidth;
                   final maxH = constraints.maxHeight;
                   final isCompactWidth = maxW < 900;
-                  final useTwoRowTopBar = maxW < 1040;
+                  final isCastButtonVisible = !TvModeService.isHardwareTv &&
+                      ref.watch(tvCastProvider.select((s) => s.isSupported));
+                  final useTwoRowTopBar =
+                      maxW < (isCastButtonVisible ? 1180 : 1040);
                   final isPortraitCompact = maxW < 640;
                   final isCompactHeight = maxH < 520;
                   final useScrollableBody =
@@ -813,6 +848,12 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
       themeKey: themeKey,
       isCompact: isCompactWidth,
     );
+    final isCastVisible = !TvModeService.isHardwareTv &&
+        ref.watch(tvCastProvider.select((s) => s.isSupported));
+    final castButton = TvCastPillButton(
+      isCompact: isCompactWidth,
+      maxWidth: maxWidth,
+    );
 
     return Container(
       padding: isCompactWidth
@@ -896,6 +937,7 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    if (isCastVisible) castButton,
                     surahButton,
                     cloudButton,
                     themeButton,
@@ -970,6 +1012,10 @@ class _ZikirceTvHubScreenState extends ConsumerState<ZikirceTvHubScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
+                if (isCastVisible) ...[
+                  castButton,
+                  const SizedBox(width: 8),
+                ],
                 surahButton,
                 const SizedBox(width: 8),
                 cloudButton,

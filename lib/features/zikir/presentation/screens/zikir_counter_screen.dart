@@ -1,17 +1,22 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
+import '../../../../core/database/app_database.dart';
 import '../../../../core/database/zikir_seed_data.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
+import '../../../../core/layout/foldable_two_pane.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/sound_pool_service.dart';
 import '../../../../core/services/screen_awake_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../../core/utils/quran_word_highlighter.dart';
+import '../../../gamification/models/user_rank.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../kuran/providers/kuran_providers.dart';
 import '../../../settings/providers/settings_provider.dart';
@@ -409,89 +414,20 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     final settings = ref.watch(userSettingsProvider);
     final colors = context.colors;
     final l10n = context.l10n;
+    final layout = FoldableLayoutInfo.of(context);
 
     // =========================================================================
     // HILAL / OLED / FOCUS MODE (Pure AMOLED Black, Full-Screen Tap Target)
     // =========================================================================
     final Widget counterContent;
     if (isFocusMode) {
-      counterContent = PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) {
-            ref.read(isZikirFocusModeProvider.notifier).state = false;
-          }
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings),
-              child: Stack(
-                children: [
-                  // Top "Dünyaya Dön" Pill Button
-                  Positioned(
-                    top: 14,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            ref.read(isZikirFocusModeProvider.notifier).state = false;
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F1F),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white24, width: 1),
-                            ),
-                            child: Text(
-                              l10n.translate('Zikir_ReturnToWorld'),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Giant Counter Number in the Center of Screen
-                  Center(
-                    child: AnimatedBuilder(
-                      animation: _scaleAnimation,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scale: _scaleAnimation.value,
-                          child: Text(
-                            '${counterState.currentCount}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: _getFocusCounterFontSize(counterState.currentCount),
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: -1.0,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      counterContent = _buildFocusModeScaffold(
+        layout: layout,
+        counterState: counterState,
+        counterNotifier: counterNotifier,
+        currentZikir: currentZikir,
+        quickSettings: quickSettings,
+        l10n: l10n,
       );
     } else {
       final pageBg = colors.pageBackground;
@@ -500,394 +436,98 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
       final arabicColor = colors.zikirArabicColor;
       final progressValue = quickSettings.isInfiniteMode ? 1.0 : counterState.progress;
 
+      final arabicPromptArea = _buildArabicPromptArea(
+        currentZikir: currentZikir,
+        counterState: counterState,
+        arabicFont: arabicFont,
+        isBoldArabic: isBoldArabic,
+        arabicColor: arabicColor,
+        colors: colors,
+        l10n: l10n,
+        layout: layout,
+        showTargetChip: layout.isTabletopPosture,
+      );
+
+      final circularCounter = _buildResponsiveCircularCounter(
+        layout: layout,
+        counterState: counterState,
+        counterNotifier: counterNotifier,
+        currentZikir: currentZikir,
+        quickSettings: quickSettings,
+        selectedBird: selectedBird,
+        progressValue: progressValue,
+        buttonInnerBg: buttonInnerBg,
+        colors: colors,
+        l10n: l10n,
+      );
+
+      final toolbarArea = _buildToolbarArea(
+        layout: layout,
+        currentZikir: currentZikir,
+        counterState: counterState,
+        counterNotifier: counterNotifier,
+        quickSettings: quickSettings,
+        quickSettingsNotifier: quickSettingsNotifier,
+        isFocusMode: isFocusMode,
+        arabicFont: arabicFont,
+        headerPillBg: headerPillBg,
+        colors: colors,
+      );
+
+      final Widget mainBody;
+      if (layout.isTabletopPosture) {
+        mainBody = FoldableTwoPane(
+          key: const Key('zikir_tabletop_two_pane'),
+          axis: FoldableSplitAxis.vertical,
+          paneSpacing: 12.0,
+          minVerticalPaneHeight: 120.0,
+          startPane: arabicPromptArea,
+          endPane: Column(
+            children: [
+              Expanded(child: circularCounter),
+              toolbarArea,
+            ],
+          ),
+        );
+      } else if (layout.supportsTwoPaneHorizontal) {
+        mainBody = FoldableTwoPane(
+          key: const Key('zikir_horizontal_two_pane'),
+          axis: FoldableSplitAxis.horizontal,
+          paneProportion: 0.46,
+          paneSpacing: 16.0,
+          startPane: Column(
+            children: [
+              Expanded(child: arabicPromptArea),
+              toolbarArea,
+            ],
+          ),
+          endPane: circularCounter,
+        );
+      } else {
+        mainBody = Column(
+          children: [
+            Expanded(flex: 4, child: arabicPromptArea),
+            Expanded(flex: 6, child: circularCounter),
+            toolbarArea,
+          ],
+        );
+      }
+
       counterContent = Scaffold(
         backgroundColor: pageBg,
-          body: SafeArea(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: () {
-                if (settings.desktopFullScreenClickEnabled &&
-                    (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
-                  _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
-                }
-              },
-              child: Column(
-                children: [
-            // ==========================================
-            // 1. TOP ARABIC TEXT & HINT AREA
-            // ==========================================
-            Expanded(
-              flex: 4,
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (currentZikir.arabic != null && currentZikir.arabic!.isNotEmpty)
-                        GestureDetector(
-                          onTap: () => _showZikirDetails(
-                            currentZikir.name,
-                            currentZikir.arabic,
-                            currentZikir.category,
-                          ),
-                          child: Text(
-                            QuranWordHighlighter.formatArabicTextForFont(currentZikir.arabic!, arabicFont),
-                            textDirection: TextDirection.rtl,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontFamily: arabicFont,
-                              fontSize: 38,
-                              fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
-                              color: arabicColor,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 10),
-                      GestureDetector(
-                        onTap: () => _showZikirDetails(
-                          currentZikir.name,
-                          currentZikir.arabic,
-                          currentZikir.category,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('💡', style: TextStyle(fontSize: 13)),
-                            const SizedBox(width: 5),
-                            Text(
-                              l10n.isTurkish ? 'Açıklama için metne dokunun' : 'Tap text for details',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: colors.secondaryTextAlt,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ==========================================
-            // 2. CIRCULAR COUNTER & TAP AREA
-            // ==========================================
-            Expanded(
-              flex: 6,
-              child: Center(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings),
-                  child: AnimatedBuilder(
-                    animation: _scaleAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: _scaleAnimation.value,
-                        child: SizedBox(
-                          width: 290,
-                          height: 290,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Circular Progress Ring starting from bottom (6 o'clock)
-                              CustomPaint(
-                                size: const Size(290, 290),
-                                painter: CircularCounterPainter(
-                                  progress: progressValue,
-                                  progressColor: colors.counterProgressColor,
-                                  trackColor: Colors.transparent,
-                                  strokeWidth: 9.0,
-                                ),
-                              ),
-
-                              // Main Counter Clickable Circle
-                              Container(
-                                width: 256,
-                                height: 256,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: buttonInnerBg,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Stack(
-                                  alignment: Alignment.center,
-                                  children: [
-                                    // Bird Lottie right above centered number (Enlarged +35%: 74 -> 100)
-                                    Positioned(
-                                      top: 14,
-                                      child: SizedBox(
-                                        width: 100,
-                                        height: 100,
-                                        child: Lottie.asset(
-                                          selectedBird.fileName,
-                                          controller: _birdLottieController,
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Center(
-                                              child: Text(
-                                                selectedBird.badge,
-                                                style: const TextStyle(fontSize: 48),
-                                              ),
-                                            );
-                                          },
-                                          onLoaded: (comp) {
-                                            if (mounted) {
-                                              _birdLottieController.duration = comp.duration;
-                                              _birdLottieController.value = 0.5;
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    ),
-
-                                    // Counter text in the EXACT center of the circle button
-                                    Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 18),
-                                        child: Text(
-                                          '${counterState.currentCount}',
-                                          style: TextStyle(
-                                            fontSize: _getMainCounterFontSize(counterState.currentCount),
-                                            fontWeight: FontWeight.bold,
-                                            color: colors.counterValueColor,
-                                            height: 1.0,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-
-                                    // DOKUN label at the very bottom
-                                    Positioned(
-                                      bottom: 20,
-                                      child: Text(
-                                        l10n.isTurkish ? 'DOKUN' : 'TAP',
-                                        style: const TextStyle(
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 3.0,
-                                          color: Color(0xFFD1495B),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-
-            // ==========================================
-            // 3. TOOLBAR & QUICK SETTINGS AREA
-            // ==========================================
-            Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              margin: const EdgeInsets.only(bottom: 12),
-              child: _isQuickSettingsOpen
-                  ? // Quick Settings Mode (Auto-closing 7-button bar)
-                  Container(
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: headerPillBg,
-                        borderRadius: BorderRadius.circular(23),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          // 1. Sound Toggle
-                          _buildSettingToggle(
-                            icon: quickSettings.isSoundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                            isActive: quickSettings.isSoundEnabled,
-                            onTap: () {
-                              _resetQuickSettingsTimer();
-                              quickSettingsNotifier.toggleSound();
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 2. Vibration Toggle
-                          _buildSettingToggle(
-                            icon: quickSettings.isVibrationEnabled ? Icons.vibration_rounded : Icons.smartphone_rounded,
-                            isActive: quickSettings.isVibrationEnabled,
-                            onTap: () {
-                              _resetQuickSettingsTimer();
-                              quickSettingsNotifier.toggleVibration();
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 3. Infinite Mode Toggle
-                          _buildSettingToggle(
-                            icon: Icons.all_inclusive_rounded,
-                            isActive: quickSettings.isInfiniteMode,
-                            onTap: () async {
-                              _resetQuickSettingsTimer();
-                              final wasInfinite = quickSettings.isInfiniteMode;
-                              await quickSettingsNotifier.toggleInfiniteMode();
-                              if (wasInfinite) {
-                                // Sonsuz moddan çıkarken çekilen zikir diske kaydedilsin ve sayaç sıfırlansın
-                                await counterNotifier.onExitInfiniteMode();
-                              }
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 4. Hilal / OLED / Focus Mode
-                          _buildSettingToggle(
-                            icon: Icons.nightlight_round,
-                            isActive: isFocusMode,
-                            onTap: () {
-                              _closeQuickSettings();
-                              ref.read(isZikirFocusModeProvider.notifier).state = true;
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 5. Share Selected Dhikr (Visual Card & Text)
-                          _buildSettingToggle(
-                            icon: Icons.share_rounded,
-                            isActive: false,
-                            onTap: () {
-                              _resetQuickSettingsTimer();
-                              final virtue = _getZikirVirtue(currentZikir.name, currentZikir.arabic);
-                              ZikirSharePreviewModal.show(
-                                context: context,
-                                zikirName: currentZikir.name,
-                                arabicText: currentZikir.arabic,
-                                virtue: virtue,
-                                category: currentZikir.category,
-                                currentCount: counterState.currentCount,
-                                targetCount: currentZikir.target,
-                                totalCount: counterState.totalCount,
-                                arabicFontFamily: arabicFont,
-                                initialTheme: ZikirShareThemeData.themeForGoalOrTask(
-                                  category: currentZikir.category,
-                                  goalType: 'zikir',
-                                ),
-                              );
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 6. Reset Counter
-                          _buildSettingToggle(
-                            icon: Icons.refresh_rounded,
-                            isActive: false,
-                            onTap: () {
-                              _resetQuickSettingsTimer();
-                              counterNotifier.reset();
-                            },
-                            activeBg: colors.accent,
-                          ),
-                          // 7. Close Quick Settings
-                          _buildSettingToggle(
-                            icon: Icons.close_rounded,
-                            isActive: false,
-                            onTap: _closeQuickSettings,
-                            activeBg: colors.accent,
-                          ),
-                        ],
-                      ),
-                    )
-                  : // Standard Toolbar Mode
-                  Row(
-                      children: [
-                        // Left Settings Toggle (42x42 round button)
-                        InkWell(
-                          onTap: _openQuickSettings,
-                          borderRadius: BorderRadius.circular(21),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: headerPillBg,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.tune_rounded, size: 20, color: colors.secondaryText),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Middle Zikir Selector Badge (Flexible to prevent right overflow on long zikir names)
-                        Expanded(
-                          child: Center(
-                            child: InkWell(
-                              onTap: _showSwitchZikirSheet,
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                height: 40,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
-                                decoration: BoxDecoration(
-                                  color: headerPillBg,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        currentZikir.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 15.0,
-                                          fontWeight: FontWeight.bold,
-                                          color: colors.secondaryText,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    Icon(Icons.arrow_drop_down_rounded, size: 22, color: colors.secondaryText),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Right Edit Pencil Button (42x42 round button)
-                        InkWell(
-                          onTap: () async {
-                            await _flushCurrentZikirAsync();
-                            if (!context.mounted) return;
-                            await AddEditZikirSheet.show(
-                              context,
-                              zikir: currentZikir,
-                              onSave: (comp) => ref
-                                  .read(zikirCrudProvider)
-                                  .updateZikir(currentZikir.id, comp),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(21),
-                          child: Container(
-                            width: 42,
-                            height: 42,
-                            decoration: BoxDecoration(
-                              color: headerPillBg,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.edit_rounded, size: 18, color: colors.secondaryText),
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
+        body: SafeArea(
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              if (settings.desktopFullScreenClickEnabled &&
+                  (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+                _onTapCounter(counterNotifier, currentZikir.soundEffect, quickSettings);
+              }
+            },
+            child: mainBody,
+          ),
         ),
-      ),
-    ),
-    );
+      );
     }
 
       return KeyboardListener(
@@ -978,25 +618,635 @@ class _ZikirCounterScreenState extends ConsumerState<ZikirCounterScreen>
     }
   }
 
+  Widget _buildFocusModeScaffold({
+    required FoldableLayoutInfo layout,
+    required ZikirCounterState counterState,
+    required ZikirCounterNotifier counterNotifier,
+    required Zikir currentZikir,
+    required ZikirQuickSettingsState quickSettings,
+    required AppLocalizations l10n,
+  }) {
+    final returnToWorldPill = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          ref.read(isZikirFocusModeProvider.notifier).state = false;
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F1F1F),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white24, width: 1),
+          ),
+          child: Text(
+            l10n.translate('Zikir_ReturnToWorld'),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final countDisplay = AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Text(
+            '${counterState.currentCount}',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: _getFocusCounterFontSize(counterState.currentCount),
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: -1.0,
+            ),
+          ),
+        );
+      },
+    );
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          ref.read(isZikirFocusModeProvider.notifier).state = false;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: layout.isTabletopPosture
+              ? FoldableTwoPane(
+                  axis: FoldableSplitAxis.vertical,
+                  paneSpacing: 8,
+                  minVerticalPaneHeight: 110,
+                  startPane: Center(child: countDisplay),
+                  endPane: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _onTapCounter(
+                      counterNotifier,
+                      currentZikir.soundEffect,
+                      quickSettings,
+                    ),
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: Text(
+                            l10n.isTurkish ? 'DOKUN' : 'TAP',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 4.0,
+                              color: Colors.white.withValues(alpha: 0.35),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 16,
+                          left: 0,
+                          right: 0,
+                          child: Center(child: returnToWorldPill),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onTapCounter(
+                    counterNotifier,
+                    currentZikir.soundEffect,
+                    quickSettings,
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: 14,
+                        left: 0,
+                        right: 0,
+                        child: Center(child: returnToWorldPill),
+                      ),
+                      Center(child: countDisplay),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArabicPromptArea({
+    required Zikir currentZikir,
+    required ZikirCounterState counterState,
+    required String arabicFont,
+    required bool isBoldArabic,
+    required Color arabicColor,
+    required AppThemeColors colors,
+    required AppLocalizations l10n,
+    required FoldableLayoutInfo layout,
+    required bool showTargetChip,
+  }) {
+    final hasArabic =
+        currentZikir.arabic != null && currentZikir.arabic!.isNotEmpty;
+    final arabicSize = layout.isNarrowCoverScreen ? 32.0 : 38.0;
+
+    return Center(
+      key: const Key('zikir_arabic_prompt_area'),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(
+          horizontal: layout.isNarrowCoverScreen ? 16 : 24,
+          vertical: 12,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (hasArabic)
+              GestureDetector(
+                onTap: () => _showZikirDetails(
+                  currentZikir.name,
+                  currentZikir.arabic,
+                  currentZikir.category,
+                ),
+                child: Text(
+                  QuranWordHighlighter.formatArabicTextForFont(
+                    currentZikir.arabic!,
+                    arabicFont,
+                  ),
+                  textDirection: TextDirection.rtl,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: arabicFont,
+                    fontSize: arabicSize,
+                    fontWeight: isBoldArabic ? FontWeight.bold : FontWeight.normal,
+                    color: arabicColor,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => _showZikirDetails(
+                currentZikir.name,
+                currentZikir.arabic,
+                currentZikir.category,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('💡', style: TextStyle(fontSize: 13)),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      l10n.isTurkish
+                          ? 'Açıklama için metne dokunun'
+                          : 'Tap text for details',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.secondaryTextAlt,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (showTargetChip) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: colors.headerBackground,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  '${currentZikir.name} • ${counterState.currentCount} / ${currentZikir.target}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: colors.secondaryText,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResponsiveCircularCounter({
+    required FoldableLayoutInfo layout,
+    required ZikirCounterState counterState,
+    required ZikirCounterNotifier counterNotifier,
+    required Zikir currentZikir,
+    required ZikirQuickSettingsState quickSettings,
+    required BirdSelectionItem selectedBird,
+    required double progressValue,
+    required Color buttonInnerBg,
+    required AppThemeColors colors,
+    required AppLocalizations l10n,
+  }) {
+    final maxSide = layout.isMediumOrLarger ? 310.0 : 290.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final rawMax = math.min(
+          constraints.maxWidth.isFinite ? constraints.maxWidth : 290.0,
+          constraints.maxHeight.isFinite ? constraints.maxHeight : 290.0,
+        );
+        final targetBox = rawMax.clamp(120.0, maxSide);
+
+        return Center(
+          child: GestureDetector(
+            key: const Key('zikir_counter_circle'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _onTapCounter(
+              counterNotifier,
+              currentZikir.soundEffect,
+              quickSettings,
+            ),
+            child: AnimatedBuilder(
+              animation: _scaleAnimation,
+              builder: (context, child) {
+                return Transform.scale(
+                  scale: _scaleAnimation.value,
+                  child: SizedBox(
+                    width: targetBox,
+                    height: targetBox,
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: 290,
+                        height: 290,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CustomPaint(
+                              size: const Size(290, 290),
+                              painter: CircularCounterPainter(
+                                progress: progressValue,
+                                progressColor: colors.counterProgressColor,
+                                trackColor: Colors.transparent,
+                                strokeWidth: 9.0,
+                              ),
+                            ),
+                            Container(
+                              width: 256,
+                              height: 256,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: buttonInnerBg,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.06),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Positioned(
+                                    top: 14,
+                                    child: SizedBox(
+                                      width: 100,
+                                      height: 100,
+                                      child: Lottie.asset(
+                                        selectedBird.fileName,
+                                        controller: _birdLottieController,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          return Center(
+                                            child: Text(
+                                              selectedBird.badge,
+                                              style: const TextStyle(
+                                                fontSize: 48,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        onLoaded: (comp) {
+                                          if (mounted) {
+                                            _birdLottieController.duration =
+                                                comp.duration;
+                                            _birdLottieController.value = 0.5;
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 18),
+                                      child: Text(
+                                        '${counterState.currentCount}',
+                                        style: TextStyle(
+                                          fontSize: _getMainCounterFontSize(
+                                            counterState.currentCount,
+                                          ),
+                                          fontWeight: FontWeight.bold,
+                                          color: colors.counterValueColor,
+                                          height: 1.0,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    bottom: 20,
+                                    child: Text(
+                                      l10n.isTurkish ? 'DOKUN' : 'TAP',
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 3.0,
+                                        color: Color(0xFFD1495B),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildToolbarArea({
+    required FoldableLayoutInfo layout,
+    required Zikir currentZikir,
+    required ZikirCounterState counterState,
+    required ZikirCounterNotifier counterNotifier,
+    required ZikirQuickSettingsState quickSettings,
+    required ZikirQuickSettingsNotifier quickSettingsNotifier,
+    required bool isFocusMode,
+    required String arabicFont,
+    required Color headerPillBg,
+    required AppThemeColors colors,
+  }) {
+    final horizontalPad = layout.isNarrowCoverScreen ? 12.0 : 20.0;
+    final bottomMargin = layout.useNavigationRail ? 8.0 : 12.0;
+
+    return Container(
+      height: 52,
+      padding: EdgeInsets.symmetric(horizontal: horizontalPad),
+      margin: EdgeInsets.only(bottom: bottomMargin),
+      child: _isQuickSettingsOpen
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                final toggleSize = constraints.maxWidth < 310 ? 30.0 : 36.0;
+                final iconSize = constraints.maxWidth < 310 ? 15.5 : 18.0;
+                return Container(
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: headerPillBg,
+                    borderRadius: BorderRadius.circular(23),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildSettingToggle(
+                        icon: quickSettings.isSoundEnabled
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_off_rounded,
+                        isActive: quickSettings.isSoundEnabled,
+                        onTap: () {
+                          _resetQuickSettingsTimer();
+                          quickSettingsNotifier.toggleSound();
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: quickSettings.isVibrationEnabled
+                            ? Icons.vibration_rounded
+                            : Icons.smartphone_rounded,
+                        isActive: quickSettings.isVibrationEnabled,
+                        onTap: () {
+                          _resetQuickSettingsTimer();
+                          quickSettingsNotifier.toggleVibration();
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: Icons.all_inclusive_rounded,
+                        isActive: quickSettings.isInfiniteMode,
+                        onTap: () async {
+                          _resetQuickSettingsTimer();
+                          final wasInfinite = quickSettings.isInfiniteMode;
+                          await quickSettingsNotifier.toggleInfiniteMode();
+                          if (wasInfinite) {
+                            await counterNotifier.onExitInfiniteMode();
+                          }
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: Icons.nightlight_round,
+                        isActive: isFocusMode,
+                        onTap: () {
+                          _closeQuickSettings();
+                          ref.read(isZikirFocusModeProvider.notifier).state =
+                              true;
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: Icons.share_rounded,
+                        isActive: false,
+                        onTap: () {
+                          _resetQuickSettingsTimer();
+                          final virtue = _getZikirVirtue(
+                            currentZikir.name,
+                            currentZikir.arabic,
+                          );
+                          ZikirSharePreviewModal.show(
+                            context: context,
+                            zikirName: currentZikir.name,
+                            arabicText: currentZikir.arabic,
+                            virtue: virtue,
+                            category: currentZikir.category,
+                            currentCount: counterState.currentCount,
+                            targetCount: currentZikir.target,
+                            totalCount: counterState.totalCount,
+                            arabicFontFamily: arabicFont,
+                            initialTheme:
+                                ZikirShareThemeData.themeForGoalOrTask(
+                              category: currentZikir.category,
+                              goalType: 'zikir',
+                            ),
+                          );
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: Icons.refresh_rounded,
+                        isActive: false,
+                        onTap: () {
+                          _resetQuickSettingsTimer();
+                          counterNotifier.reset();
+                        },
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                      _buildSettingToggle(
+                        icon: Icons.close_rounded,
+                        isActive: false,
+                        onTap: _closeQuickSettings,
+                        activeBg: colors.accent,
+                        size: toggleSize,
+                        iconSize: iconSize,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            )
+          : Row(
+              children: [
+                InkWell(
+                  onTap: _openQuickSettings,
+                  borderRadius: BorderRadius.circular(21),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: headerPillBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.tune_rounded,
+                      size: 20,
+                      color: colors.secondaryText,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Center(
+                    child: InkWell(
+                      onTap: _showSwitchZikirSheet,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: headerPillBg,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                currentZikir.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15.0,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.secondaryText,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 22,
+                              color: colors.secondaryText,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    await _flushCurrentZikirAsync();
+                    if (!mounted) return;
+                    await AddEditZikirSheet.show(
+                      context,
+                      zikir: currentZikir,
+                      onSave: (comp) => ref
+                          .read(zikirCrudProvider)
+                          .updateZikir(currentZikir.id, comp),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(21),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: headerPillBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.edit_rounded,
+                      size: 18,
+                      color: colors.secondaryText,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
   Widget _buildSettingToggle({
     required IconData icon,
     required bool isActive,
     required VoidCallback onTap,
     required Color activeBg,
+    double size = 36,
+    double iconSize = 18,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(size * 0.5),
       child: Container(
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         decoration: BoxDecoration(
           color: isActive ? activeBg : Colors.transparent,
           shape: BoxShape.circle,
         ),
         child: Icon(
           icon,
-          size: 18,
+          size: iconSize,
           color: isActive ? Colors.white : context.colors.secondaryTextAlt,
         ),
       ),

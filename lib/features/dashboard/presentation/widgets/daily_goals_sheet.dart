@@ -11,6 +11,14 @@ import 'surprise_chest_dialog.dart';
 class DailyGoalsSheet extends ConsumerWidget {
   const DailyGoalsSheet({super.key});
 
+  static void invalidateChestProviders(ProviderContainer container) {
+    container.invalidate(dailyGoalsStatusProvider);
+    container.invalidate(userProfileStreamProvider);
+    container.invalidate(diamondCountProvider);
+    container.invalidate(goldCountProvider);
+    container.invalidate(userStreakStreamProvider);
+  }
+
   static void show(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -287,22 +295,46 @@ class DailyGoalsSheet extends ConsumerWidget {
                                   ? null
                                   : () async {
                                       HapticService.selectionClick();
+                                      final rootNavigator = Navigator.of(
+                                        context,
+                                        rootNavigator: true,
+                                      );
+                                      final container =
+                                          ProviderScope.containerOf(
+                                        context,
+                                        listen: false,
+                                      );
+                                      final gamification = ref.read(
+                                        gamificationNotifierProvider,
+                                      );
+                                      final isTurkish = l10n.isTurkish;
                                       Navigator.of(context).pop();
-                                      final reward = await ref
-                                          .read(gamificationNotifierProvider)
-                                          .openSurpriseChest(isTurkish: l10n.isTurkish);
-                                      ref.invalidate(dailyGoalsStatusProvider);
-                                      ref.invalidate(userProfileStreamProvider);
-                                      ref.invalidate(diamondCountProvider);
-                                      ref.invalidate(goldCountProvider);
-                                      ref.invalidate(userStreakStreamProvider);
-                                      if (reward != null && context.mounted) {
-                                        await SurpriseChestDialog.show(context, reward: reward);
-                                        ref.invalidate(dailyGoalsStatusProvider);
-                                        ref.invalidate(userProfileStreamProvider);
-                                        ref.invalidate(diamondCountProvider);
-                                        ref.invalidate(goldCountProvider);
-                                        ref.invalidate(userStreakStreamProvider);
+                                      try {
+                                        final reward = await gamification
+                                            .openSurpriseChest(
+                                          isTurkish: isTurkish,
+                                        );
+                                        if (!rootNavigator.mounted) return;
+                                        DailyGoalsSheet
+                                            .invalidateChestProviders(
+                                          container,
+                                        );
+                                        if (reward != null &&
+                                            rootNavigator.mounted) {
+                                          await SurpriseChestDialog.show(
+                                            rootNavigator.context,
+                                            reward: reward,
+                                          );
+                                          if (!rootNavigator.mounted) return;
+                                          DailyGoalsSheet
+                                              .invalidateChestProviders(
+                                            container,
+                                          );
+                                        }
+                                      } catch (e, st) {
+                                        debugPrint(
+                                          '[DailyGoalsSheet] openSurpriseChest error: $e\n$st',
+                                        );
                                       }
                                     },
                               style: ElevatedButton.styleFrom(

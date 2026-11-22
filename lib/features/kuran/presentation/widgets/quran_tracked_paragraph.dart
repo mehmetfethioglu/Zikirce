@@ -90,6 +90,18 @@ class QuranTrackedParagraphState extends State<QuranTrackedParagraph> {
     return null;
   }
 
+  /// Returns the bounding rects of the active word highlight pills in local
+  /// paragraph coordinates.
+  @visibleForTesting
+  List<Rect> get activeWordPillRects {
+    if (!mounted) return const <Rect>[];
+    final ro = context.findRenderObject();
+    if (ro is _RenderTrackedParagraph) {
+      return ro.activeWordPillRects;
+    }
+    return const <Rect>[];
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool showArrow =
@@ -211,8 +223,119 @@ class _RenderTrackedParagraph extends RenderBox
   }
 
   List<Rect> _activeWordBoxes = const <Rect>[];
+  List<Rect> _activeWordPillRects = const <Rect>[];
+  @visibleForTesting
+  List<Rect> get activeWordPillRects =>
+      List<Rect>.unmodifiable(_activeWordPillRects);
   Rect? _activeWordRect;
   Rect? get activeWordRect => _activeWordRect;
+
+  static List<Rect> _mergeBoxesByLine(List<ui.TextBox> boxes) {
+    final List<Rect> merged = <Rect>[];
+    for (final ui.TextBox box in boxes) {
+      final Rect r = box.toRect();
+      if (r.width <= 0.01 || r.height <= 0.01) continue;
+      int? matchIndex;
+      for (int i = 0; i < merged.length; i++) {
+        final Rect existing = merged[i];
+        final double threshold = math.min(existing.height, r.height) * 0.5;
+        if ((existing.center.dy - r.center.dy).abs() <= threshold) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex != null) {
+        merged[matchIndex] = merged[matchIndex].expandToInclude(r);
+      } else {
+        merged.add(r);
+      }
+    }
+    return merged;
+  }
+
+  static ({double? fontSize, double? lineHeight}) _resolveActiveTypography(
+    RenderParagraph paragraph,
+    int offset,
+  ) {
+    final InlineSpan? span =
+        paragraph.text.getSpanForPosition(TextPosition(offset: offset));
+    final double? rawSize =
+        span?.style?.fontSize ?? paragraph.text.style?.fontSize;
+    if (rawSize == null || rawSize <= 0) {
+      return (fontSize: null, lineHeight: null);
+    }
+    final double scaledFontSize = paragraph.textScaler.scale(rawSize);
+    final double? styleHeight =
+        span?.style?.height ?? paragraph.text.style?.height;
+    final double? scaledLineHeight =
+        (styleHeight != null && styleHeight > 0)
+            ? scaledFontSize * styleHeight
+            : null;
+    return (fontSize: scaledFontSize, lineHeight: scaledLineHeight);
+  }
+
+  static List<Rect> _computePillRects({
+    required List<Rect> tightRects,
+    required List<Rect> lineRects,
+    required double? scaledFontSize,
+    required double? scaledLineHeight,
+    required bool isTvMode,
+  }) {
+    final List<Rect> pills = <Rect>[];
+    final double hPad = isTvMode ? 7.5 : 6.0;
+
+    for (final Rect tb in tightRects) {
+      Rect lb = tb;
+      if (lineRects.isNotEmpty) {
+        double bestDist = double.infinity;
+        for (final Rect candidate in lineRects) {
+          final double dist = (candidate.center.dy - tb.center.dy).abs();
+          if (dist < bestDist) {
+            bestDist = dist;
+            lb = candidate;
+          }
+        }
+      }
+
+      final double f = scaledFontSize ?? (tb.height * 0.65);
+      final double effectiveLineHeight = scaledLineHeight != null
+          ? math.min(lb.height, scaledLineHeight)
+          : lb.height;
+      final double idealHeight = math.min(tb.height + 6.0, f * 1.56 + 4.0);
+      final double maxLineHeight =
+          math.max(f * 1.15, effectiveLineHeight - 4.0);
+      final double pillHeight = math.min(idealHeight, maxLineHeight);
+
+      double pillTop = tb.center.dy - (pillHeight / 2.0);
+      double pillBottom = pillTop + pillHeight;
+
+      // Only clamp to lb when SkParagraph's lb reflects actual line bounds
+      // (not inflated above scaledLineHeight by tall hhea metrics).
+      if (lb.height >= pillHeight + 4.0 &&
+          (scaledLineHeight == null || scaledLineHeight >= lb.height - 0.5)) {
+        final double minTop = lb.top + 2.0;
+        final double maxBottom = lb.bottom - 2.0;
+        if (pillTop < minTop) {
+          pillTop = minTop;
+          pillBottom = pillTop + pillHeight;
+        } else if (pillBottom > maxBottom) {
+          pillBottom = maxBottom;
+          pillTop = pillBottom - pillHeight;
+        }
+      }
+
+      pills.add(
+        Rect.fromLTRB(
+          tb.left - hPad,
+          pillTop,
+          tb.right + hPad,
+          pillBottom,
+        ),
+      );
+    }
+
+    return pills;
+  }
 
   @override
   void setupParentData(RenderBox child) {
@@ -263,6 +386,7 @@ class _RenderTrackedParagraph extends RenderBox
     if (paragraph == null) {
       size = constraints.smallest;
       _activeWordBoxes = const <Rect>[];
+      _activeWordPillRects = const <Rect>[];
       _activeWordRect = null;
       return;
     }
@@ -276,33 +400,57 @@ class _RenderTrackedParagraph extends RenderBox
         range != null &&
         range.start >= 0 &&
         range.end > range.start) {
-      final boxes = paragraph.getBoxesForSelection(
+      final List<ui.TextBox> tightBoxes = paragraph.getBoxesForSelection(
         TextSelection(baseOffset: range.start, extentOffset: range.end),
         boxHeightStyle: ui.BoxHeightStyle.tight,
         boxWidthStyle: ui.BoxWidthStyle.tight,
       );
-      if (boxes.isNotEmpty) {
-        final rects = <Rect>[];
-        Rect unionRect = boxes.first.toRect();
-        rects.add(unionRect);
-        for (int i = 1; i < boxes.length; i++) {
-          final r = boxes[i].toRect();
-          rects.add(r);
-          unionRect = unionRect.expandToInclude(r);
-        }
-        _activeWordBoxes = rects;
-        _activeWordRect = Rect.fromLTRB(
-          unionRect.left - 4.0,
-          unionRect.top - 6.0,
-          unionRect.right + 4.0,
-          unionRect.bottom + (_isTvMode ? 16.0 : 12.0),
+      final List<Rect> mergedTight = _mergeBoxesByLine(tightBoxes);
+      if (mergedTight.isNotEmpty) {
+        final List<ui.TextBox> lineBoxes = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: range.start, extentOffset: range.end),
+          boxHeightStyle: ui.BoxHeightStyle.includeLineSpacingMiddle,
+          boxWidthStyle: ui.BoxWidthStyle.tight,
         );
+        final List<Rect> mergedLine = _mergeBoxesByLine(lineBoxes);
+        final typography = _resolveActiveTypography(paragraph, range.start);
+        _activeWordBoxes = mergedTight;
+        _activeWordPillRects = _computePillRects(
+          tightRects: mergedTight,
+          lineRects: mergedLine,
+          scaledFontSize: typography.fontSize,
+          scaledLineHeight: typography.lineHeight,
+          isTvMode: _isTvMode,
+        );
+        if (!_isArrowMode && _activeWordPillRects.isNotEmpty) {
+          final Rect unionPill = _activeWordPillRects.length == 1
+              ? _activeWordPillRects.first
+              : _activeWordPillRects.reduce((a, c) => a.expandToInclude(c));
+          _activeWordRect = Rect.fromLTRB(
+            unionPill.left - 2.0,
+            unionPill.top - 4.0,
+            unionPill.right + 2.0,
+            unionPill.bottom + 6.0,
+          );
+        } else {
+          final Rect unionTight = mergedTight.length == 1
+              ? mergedTight.first
+              : mergedTight.reduce((a, c) => a.expandToInclude(c));
+          _activeWordRect = Rect.fromLTRB(
+            unionTight.left - 4.0,
+            unionTight.top - 6.0,
+            unionTight.right + 4.0,
+            unionTight.bottom + (_isTvMode ? 16.0 : 12.0),
+          );
+        }
       } else {
         _activeWordBoxes = const <Rect>[];
+        _activeWordPillRects = const <Rect>[];
         _activeWordRect = null;
       }
     } else {
       _activeWordBoxes = const <Rect>[];
+      _activeWordPillRects = const <Rect>[];
       _activeWordRect = null;
     }
 
@@ -311,9 +459,7 @@ class _RenderTrackedParagraph extends RenderBox
       final pointerData =
           pointerChild.parentData as _TrackedParagraphParentData;
       if (_isArrowMode && _activeWordBoxes.isNotEmpty) {
-        final Rect b = _activeWordBoxes.length == 1
-            ? _activeWordBoxes.first
-            : _activeWordBoxes.reduce((a, c) => a.expandToInclude(c));
+        final Rect b = _activeWordBoxes.last;
         final double pointerWidth = math.max(12.0, b.width);
         final double pointerHeight = _isTvMode ? 12.5 : 8.0;
         pointerChild.layout(
@@ -340,27 +486,38 @@ class _RenderTrackedParagraph extends RenderBox
     final RenderBox? paragraph = firstChild;
     if (paragraph == null) return;
 
-    if (!_isArrowMode && _activeWordBoxes.isNotEmpty) {
+    if (!_isArrowMode && _activeWordPillRects.isNotEmpty) {
       final Color emeraldBg =
           _isDark ? const Color(0xFF059669) : const Color(0xFF10B981);
-      final Rect b = _activeWordBoxes.length == 1
-          ? _activeWordBoxes.first
-          : _activeWordBoxes.reduce((a, c) => a.expandToInclude(c));
-      final RRect pillRRect = RRect.fromRectAndRadius(
-        Rect.fromLTRB(
-          b.left - 4.5,
-          b.top - 2.0,
-          b.right + 4.5,
-          b.bottom + 2.0,
-        ).shift(offset),
-        const Radius.circular(8.0),
+      final BoxShadow pillShadow = BoxShadow(
+        color: const Color(0xFF10B981).withValues(alpha: _isDark ? 0.50 : 0.60),
+        blurRadius: 12.0,
+        spreadRadius: 1.0,
+        offset: const Offset(0, 2),
       );
-      final Paint glowPaint = Paint()
-        ..color = emeraldBg.withValues(alpha: 0.45)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0);
-      context.canvas.drawRRect(pillRRect, glowPaint);
-      final Paint bgPaint = Paint()..color = emeraldBg;
-      context.canvas.drawRRect(pillRRect, bgPaint);
+      final Paint shadowPaint = pillShadow.toPaint();
+      final Paint bgPaint = Paint()
+        ..color = emeraldBg
+        ..isAntiAlias = true;
+      final double targetRadius = _isTvMode ? 12.0 : 10.0;
+
+      for (final Rect localPill in _activeWordPillRects) {
+        final Rect pillRect = localPill.shift(offset);
+        final double radius = math.min(
+          targetRadius,
+          math.min(pillRect.width, pillRect.height) / 2.0,
+        );
+        final RRect pillRRect = RRect.fromRectAndRadius(
+          pillRect,
+          Radius.circular(radius),
+        );
+        final RRect shadowRRect = RRect.fromRectAndRadius(
+          pillRect.inflate(pillShadow.spreadRadius).shift(pillShadow.offset),
+          Radius.circular(radius + pillShadow.spreadRadius),
+        );
+        context.canvas.drawRRect(shadowRRect, shadowPaint);
+        context.canvas.drawRRect(pillRRect, bgPaint);
+      }
     }
 
     context.paintChild(paragraph, offset);

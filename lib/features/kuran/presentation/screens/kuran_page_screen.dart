@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/surah_data_provider.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/haptic_service.dart';
@@ -276,6 +277,9 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
     final streaksAsync = ref.watch(surahStreaksProvider);
     final streaks = streaksAsync.valueOrNull ?? const SurahStreaksData();
     final todayHafizLog = ref.watch(todayHafizlikLogProvider).valueOrNull;
+    final layout = FoldableLayoutInfo.of(context);
+    final horizontalPad = layout.isNarrowCoverScreen ? 14.0 : 20.0;
+    final bottomPad = layout.useNavigationRail ? 28.0 : 100.0;
 
     return Scaffold(
       backgroundColor: pageBg,
@@ -285,7 +289,12 @@ class _KuranPageScreenState extends ConsumerState<KuranPageScreen> {
           physics: const BouncingScrollPhysics(),
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+              padding: EdgeInsets.fromLTRB(
+                horizontalPad,
+                12,
+                horizontalPad,
+                bottomPad,
+              ),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   // ==========================================

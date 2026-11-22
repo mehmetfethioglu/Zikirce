@@ -163,36 +163,40 @@ class BentoDailyZikirCard extends ConsumerWidget {
                               ),
                             ),
                             SizedBox(height: isCompact ? 4 : 6),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: (goalsStatus?.orderedGoals ??
-                                      const <DailyGoalItemState?>[
-                                        null,
-                                        null,
-                                        null,
-                                        null,
-                                        null,
-                                      ])
-                                  .map((goal) {
-                                final Color heartColor;
-                                if (goal == null || !goal.isEnabled) {
-                                  heartColor =
-                                      colors.accent.withValues(alpha: 0.16);
-                                } else if (goal.isCompleted) {
-                                  heartColor = colors.accent;
-                                } else {
-                                  heartColor =
-                                      colors.accent.withValues(alpha: 0.42);
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 2.5),
-                                  child: Icon(
-                                    Icons.favorite_rounded,
-                                    size: isCompact ? 10.5 : 11.5,
-                                    color: heartColor,
-                                  ),
-                                );
-                              }).toList(),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: (goalsStatus?.orderedGoals ??
+                                        const <DailyGoalItemState?>[
+                                          null,
+                                          null,
+                                          null,
+                                          null,
+                                          null,
+                                        ])
+                                    .map((goal) {
+                                  final Color heartColor;
+                                  if (goal == null || !goal.isEnabled) {
+                                    heartColor =
+                                        colors.accent.withValues(alpha: 0.16);
+                                  } else if (goal.isCompleted) {
+                                    heartColor = colors.accent;
+                                  } else {
+                                    heartColor =
+                                        colors.accent.withValues(alpha: 0.42);
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 2.5),
+                                    child: Icon(
+                                      Icons.favorite_rounded,
+                                      size: isCompact ? 10.5 : 11.5,
+                                      color: heartColor,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                             ),
                           ],
                         ),
@@ -250,25 +254,25 @@ class _SurpriseChestMiniChip extends ConsumerWidget {
     return GestureDetector(
       onTap: () async {
         HapticService.selectionClick();
+        final rootNavigator = Navigator.of(context, rootNavigator: true);
+        final container = ProviderScope.containerOf(context, listen: false);
+        final gamification = ref.read(gamificationNotifierProvider);
         try {
-          final reward = await ref
-              .read(gamificationNotifierProvider)
-              .openSurpriseChest(isTurkish: isTurkish);
-          ref.invalidate(dailyGoalsStatusProvider);
-          ref.invalidate(userProfileStreamProvider);
-          ref.invalidate(diamondCountProvider);
-          ref.invalidate(goldCountProvider);
-          ref.invalidate(userStreakStreamProvider);
-          if (reward != null && context.mounted) {
-            await SurpriseChestDialog.show(context, reward: reward);
-            ref.invalidate(dailyGoalsStatusProvider);
-            ref.invalidate(userProfileStreamProvider);
-            ref.invalidate(diamondCountProvider);
-            ref.invalidate(goldCountProvider);
-            ref.invalidate(userStreakStreamProvider);
+          final reward = await gamification.openSurpriseChest(
+            isTurkish: isTurkish,
+          );
+          if (!rootNavigator.mounted) return;
+          DailyGoalsSheet.invalidateChestProviders(container);
+          if (reward != null && rootNavigator.mounted) {
+            await SurpriseChestDialog.show(
+              rootNavigator.context,
+              reward: reward,
+            );
+            if (!rootNavigator.mounted) return;
+            DailyGoalsSheet.invalidateChestProviders(container);
           }
-        } catch (e) {
-          debugPrint('[BentoDailyZikirCard] openSurpriseChest error: $e');
+        } catch (e, st) {
+          debugPrint('[BentoDailyZikirCard] openSurpriseChest error: $e\n$st');
         }
       },
       child: Container(

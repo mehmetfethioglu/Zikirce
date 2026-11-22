@@ -49,16 +49,18 @@ void main(List<String> args) async {
     }
   }
 
-  // Set preferred orientations & system overlay on mobile / Android TV
+  // Set preferred orientations & system overlay on mobile / Android TV / Foldables
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
-    final isTablet = TvModeService.isCurrentDeviceTablet();
+    final isTablet = TvModeService.isCurrentDisplayFoldableOrLarge();
 
     await TvModeService.applyOrientationForMode(
       isTvMode: isTvMode,
       isTablet: isTablet,
     );
 
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    await SystemChrome.setEnabledSystemUIMode(
+      isTvMode ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,

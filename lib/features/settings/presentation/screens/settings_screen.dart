@@ -34,6 +34,8 @@ import '../../../../core/services/changelog_service.dart';
 import '../../../dashboard/presentation/widgets/whats_new_bottom_sheet.dart';
 import '../../../namaz_vakitleri/presentation/widgets/prayer_notification_settings_sheet.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
+import '../../../tv/providers/tv_cast_provider.dart';
+import '../../../tv/presentation/widgets/tv_cast_sheet.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -1706,58 +1708,190 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 14),
 
           // ==========================================
-          // 4.2 ZİKİRCE TV MODU (ANDROID TV, KUMANDA & RAHLE GÖRÜNÜMÜ)
+          // 4.2 ZİKİRCE TV MODU (ANDROID TV, KUMANDA, YANSITMA & RAHLE GÖRÜNÜMÜ)
           // ==========================================
           _buildCategoryHeader(
             l10n.isTurkish ? 'Zikirce TV & Rahle Modu' : 'Zikirce TV & Lectern Mode',
             colors.primaryText,
           ),
-          _buildContainerCard(
-            colors: colors,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        l10n.isTurkish
-                            ? '📺 Zikirce TV Modu (Kumanda & Rahlede Açık Kitap)'
-                            : '📺 Zikirce TV Mode (Remote & Two-Page Lectern)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: colors.primaryText,
+          Builder(
+            builder: (context) {
+              final isTvEnabled = ref.watch(isTvModeProvider);
+              final castSlice = ref.watch(
+                tvCastProvider.select(
+                  (s) => (s.isSupported, s.isVisualMirroring, s.deviceName),
+                ),
+              );
+              final isCastSupported =
+                  !TvModeService.isHardwareTv && castSlice.$1;
+              final isCastConnected = castSlice.$2;
+              final castDeviceName = castSlice.$3;
+
+              return _buildContainerCard(
+                colors: colors,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.isTurkish
+                                    ? '📺 Zikirce TV Modu (Kumanda, Yansıtma & Rahle)'
+                                    : '📺 Zikirce TV Mode (Remote, Cast & Lectern)',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: colors.primaryText,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                l10n.isTurkish
+                                    ? 'Android TV cihazlarda otomatik açılır. Telefon/tabletten açtığınızda Android olmayan akıllı TV’lere (Samsung, LG, Apple TV, Miracast, AirPlay 2, HDMI) tek dokunuşla yansıtıp büyük ekranda Rahle & Mukabele görünümünü kullanabilirsiniz.'
+                                    : 'Auto-enabled on Android TV. When turned on from phone or tablet, cast Zikirce TV to non-Android smart TVs (Samsung, LG, Apple TV, Miracast, AirPlay 2, HDMI) for full-screen lectern and recitation mode.',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: colors.secondaryTextAlt,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Switch(
+                          value: isTvEnabled,
+                          activeTrackColor: colors.accent,
+                          onChanged: (val) async {
+                            if (val && !TvModeService.isHardwareTv) {
+                              ref
+                                  .read(tvCastProvider.notifier)
+                                  .requestAutoPromptOnTvEntry();
+                            }
+                            await ref
+                                .read(isTvModeProvider.notifier)
+                                .setTvMode(val);
+                            if (val && context.mounted) {
+                              context.go('/');
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    if (isCastSupported) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Divider(
+                          height: 1,
+                          color: colors.borderStroke,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        l10n.isTurkish
-                            ? 'Android TV cihazlarda otomatik açılır. Büyük ekran kumanda odağı (D-Pad), Ev Mescidi Vakit Panosu ve Külliyat kitaplarını rahlede açık çift sayfa (kaydırmasız) görünümüyle sunar. İstediğiniz zaman TV ekranının üst çubuğundaki «TV Modundan Çık» butonuyla normal görünüme dönebilirsiniz.'
-                            : 'Auto-enabled on Android TV. Enables 10-foot remote D-Pad navigation, Ambient Prayer Dashboard, and full-screen two-page lectern book spreads. You can return to mobile mode anytime from the «Exit TV Mode» button in the top bar.',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: colors.secondaryTextAlt,
-                          height: 1.25,
+                      InkWell(
+                        key: const Key('settings_tv_cast_action'),
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () async {
+                          HapticService.tapClick();
+                          if (!isTvEnabled) {
+                            ref
+                                .read(tvCastProvider.notifier)
+                                .requestAutoPromptOnTvEntry();
+                            await ref
+                                .read(isTvModeProvider.notifier)
+                                .setTvMode(true);
+                            if (context.mounted) {
+                              context.go('/');
+                            }
+                          } else {
+                            await TvCastSheet.show(context);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: colors.accent.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  isCastConnected
+                                      ? Icons.cast_connected_rounded
+                                      : Icons.cast_rounded,
+                                  size: 18,
+                                  color: colors.accent,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isCastConnected
+                                          ? (l10n.isTurkish
+                                              ? "TV'ye Bağlı • ${castDeviceName ?? 'Harici Ekran'}"
+                                              : 'Connected to TV • ${castDeviceName ?? 'External Display'}')
+                                          : (l10n.isTurkish
+                                              ? "TV'ye Yansıt (Büyük Ekran)"
+                                              : 'Cast to TV (Big Screen)'),
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: colors.primaryText,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      l10n.isTurkish
+                                          ? 'Samsung, LG, Apple TV, Miracast & AirPlay ile büyük ekrana yansıt'
+                                          : 'Mirror to big screen with Samsung, LG, Apple TV, Miracast & AirPlay',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: colors.secondaryTextAlt,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colors.accent.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  l10n.isTurkish ? 'Yansıt →' : 'Cast →',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.accentText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: ref.watch(isTvModeProvider),
-                  activeTrackColor: colors.accent,
-                  onChanged: (val) async {
-                    await ref.read(isTvModeProvider.notifier).setTvMode(val);
-                    if (val && context.mounted) {
-                      context.go('/');
-                    }
-                  },
-                ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(height: 18),
 

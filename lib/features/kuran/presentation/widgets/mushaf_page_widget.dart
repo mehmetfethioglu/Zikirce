@@ -32,6 +32,7 @@ class MushafPageWidget extends ConsumerStatefulWidget {
   final bool isMealOnlyMode;
   final MushafReadingMode? readingMode;
   final bool? isActivePage;
+  final bool? usePrimaryScrollController;
   final double viewportTopOverlayInset;
   final double? viewportBottomOverlayInset;
   final void Function(int surahId, int ayahId, int wordOrder)? onWordTap;
@@ -43,6 +44,7 @@ class MushafPageWidget extends ConsumerStatefulWidget {
     this.isMealOnlyMode = false,
     this.readingMode,
     this.isActivePage,
+    this.usePrimaryScrollController,
     this.viewportTopOverlayInset = 0.0,
     this.viewportBottomOverlayInset,
     this.onWordTap,
@@ -52,6 +54,19 @@ class MushafPageWidget extends ConsumerStatefulWidget {
   MushafReadingMode get effectiveMode =>
       readingMode ??
       (isMealOnlyMode ? MushafReadingMode.mealOnly : MushafReadingMode.mushaf);
+
+  /// Klasik Mushaf sayfasında okunan âyetin arkaplanını renklendirmez;
+  /// yalnızca Secde âyetleri için kehribar vurgu rengini döndürür.
+  @visibleForTesting
+  static Color resolveClassicMushafAyahBackgroundColor({
+    required bool isSecdeAyah,
+    required bool isDark,
+  }) {
+    if (!isSecdeAyah) return Colors.transparent;
+    return isDark
+        ? const Color(0xFFB45309).withValues(alpha: 0.16)
+        : const Color(0xFFF59E0B).withValues(alpha: 0.12);
+  }
 
   @override
   ConsumerState<MushafPageWidget> createState() => _MushafPageWidgetState();
@@ -652,30 +667,12 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                               fontWeight: isBoldArabic
                                   ? FontWeight.bold
                                   : FontWeight.normal,
-                              color: isCurrentAyahPlaying
-                                  ? (isDark
-                                      ? const Color(0xFFF6F2EA)
-                                      : const Color(0xFF1E1A16))
-                                  : primaryTextColor,
-                              backgroundColor: isCurrentAyahPlaying
-                                  ? (isArrowTrackingMode
-                                      ? (isDark
-                                          ? const Color(0xFF059669)
-                                              .withValues(alpha: 0.10)
-                                          : const Color(0xFF10B981)
-                                              .withValues(alpha: 0.08))
-                                      : (isDark
-                                          ? const Color(0xFF059669)
-                                              .withValues(alpha: 0.14)
-                                          : const Color(0xFF10B981)
-                                              .withValues(alpha: 0.12)))
-                                  : (isSecdeAyah
-                                      ? (isDark
-                                          ? const Color(0xFFB45309)
-                                              .withValues(alpha: 0.16)
-                                          : const Color(0xFFF59E0B)
-                                              .withValues(alpha: 0.12))
-                                      : Colors.transparent),
+                              color: primaryTextColor,
+                              backgroundColor: MushafPageWidget
+                                  .resolveClassicMushafAyahBackgroundColor(
+                                isSecdeAyah: isSecdeAyah,
+                                isDark: isDark,
+                              ),
                               height: lineHeight,
                               letterSpacing: -0.1,
                             );
@@ -684,9 +681,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                               accumulator: accumulator,
                               rawText: ayat.ayetText,
                               baseStyle: baseAyatStyle,
-                              waqfColor: isCurrentAyahPlaying
-                                  ? AppColors.gold400
-                                  : waqfColor,
+                              waqfColor: waqfColor,
                               fontFamily: fontFamily,
                               recognizer: recognizer,
                               onWordTap: widget.onWordTap != null
@@ -709,7 +704,8 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                                 audioState.currentWordOrder > 0) {
                               groupActiveWordIdentity =
                                   '${ayat.sureId}_${ayat.ayetId}_${audioState.currentWordOrder}';
-                              groupIsAyahPlaying = audioState.isPlaying;
+                              groupIsAyahPlaying =
+                                  audioState.isPlaying && !audioState.isLoading;
                             }
 
                             accumulator.addText(
@@ -973,7 +969,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
                               .clamp(120.0, double.infinity);
 
                       return SingleChildScrollView(
-                        primary: isActivePage,
+                        primary: widget.usePrimaryScrollController ?? isActivePage,
                         physics: const BouncingScrollPhysics(),
                         padding: isTvMushafFullFit
                             ? const EdgeInsets.fromLTRB(12, 4, 12, 6)
@@ -2007,7 +2003,7 @@ class _MushafPageWidgetState extends ConsumerState<MushafPageWidget> {
       isTvMode: isTvMode,
       activeWordDurationMs: audioState.activeWordDurationMs,
       playbackSpeed: audioState.playbackSpeed,
-      isPlaying: audioState.isPlaying,
+      isPlaying: audioState.isPlaying && !audioState.isLoading,
       activeWordIdentity: (isCurrentAyahPlaying && audioState.currentWordOrder > 0)
           ? '${ayat.sureId}_${ayat.ayetId}_${audioState.currentWordOrder}'
           : null,

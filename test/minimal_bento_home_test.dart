@@ -357,7 +357,7 @@ void main() {
     });
 
     testWidgets(
-      'FavoriteZikirsCarouselCard shows 1 zikir at a time with Arabic text, dots indicator and Zikre Başla button',
+      'FavoriteZikirsCarouselCard shows large Arabic text, bottom bar [total | dots | Zikre Başla], and toggles description on tap',
       (tester) async {
         final firstId = await db.into(db.zikirs).insert(
               ZikirsCompanion.insert(
@@ -435,22 +435,64 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        // Removed header, category & progress bar elements must not be visible
         expect(find.text('Favori Zikirler'), findsNothing);
         expect(find.text('Tümünü Gör'), findsNothing);
-        expect(find.text('Birinci Zikir'), findsOneWidget);
+        expect(find.text('Birinci Zikir'), findsNothing);
         expect(find.text('İkinci Zikir'), findsNothing);
+        expect(find.text('Tesbihat'), findsNothing);
+        expect(find.text('12 / 33'), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+
+        // Front card displays large Arabic text and hides description by default
         expect(find.textContaining('سُبْحَانَ', findRichText: true), findsOneWidget);
-        expect(find.byKey(const Key('favorite_zikir_dots_indicator')), findsOneWidget);
+        expect(find.byKey(Key('favorite_zikir_description_$firstId')), findsNothing);
+
+        // Bottom row: [total badge]   [dots indicator]   [Zikre Başla]
+        final totalBadgeFinder = find.byKey(Key('favorite_zikir_total_badge_$firstId'));
+        final dotsFinder = find.byKey(const Key('favorite_zikir_dots_indicator'));
+        final startBtnFirstFinder = find.byKey(Key('favorite_zikir_continue_$firstId'));
+
+        expect(totalBadgeFinder, findsOneWidget);
+        expect(find.text('500 kez'), findsOneWidget);
+        expect(dotsFinder, findsOneWidget);
+        expect(startBtnFirstFinder, findsOneWidget);
         expect(find.text('Zikre Başla'), findsOneWidget);
-        expect(find.byKey(Key('favorite_zikir_continue_$firstId')), findsOneWidget);
+
+        final badgeCenter = tester.getCenter(totalBadgeFinder);
+        final dotsCenter = tester.getCenter(dotsFinder);
+        final startCenter = tester.getCenter(startBtnFirstFinder);
+        expect((badgeCenter.dy - dotsCenter.dy).abs(), lessThan(10));
+        expect((startCenter.dy - dotsCenter.dy).abs(), lessThan(10));
+        expect(badgeCenter.dx, lessThan(dotsCenter.dx));
+        expect(dotsCenter.dx, lessThan(startCenter.dx));
+
+        // Tap card body -> hides Arabic and shows ONLY description
+        await tester.tap(find.byKey(Key('favorite_zikir_slide_$firstId')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('سُبْحَانَ', findRichText: true), findsNothing);
+        expect(find.byKey(Key('favorite_zikir_description_$firstId')), findsOneWidget);
+        expect(find.textContaining('Sizden önde gidenlere'), findsOneWidget);
+        expect(find.text('Birinci Zikir'), findsNothing);
+        expect(find.text('Tesbihat'), findsNothing);
+        expect(find.byType(LinearProgressIndicator), findsNothing);
+
+        // Tap again -> restores Arabic calligraphy view
+        await tester.tap(find.byKey(Key('favorite_zikir_slide_$firstId')));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('سُبْحَانَ', findRichText: true), findsOneWidget);
+        expect(find.byKey(Key('favorite_zikir_description_$firstId')), findsNothing);
 
         // Swipe horizontally to reveal the second zikir card
         await tester.fling(find.byType(PageView), const Offset(-500, 0), 1000);
         await tester.pumpAndSettle();
 
-        expect(find.text('İkinci Zikir'), findsOneWidget);
-        expect(find.text('Birinci Zikir'), findsNothing);
         expect(find.textContaining('الْحَمْدُ', findRichText: true), findsOneWidget);
+        expect(find.textContaining('سُبْحَانَ', findRichText: true), findsNothing);
+        expect(find.byKey(Key('favorite_zikir_total_badge_$secondId')), findsOneWidget);
+        expect(find.text('120 kez'), findsOneWidget);
 
         final startBtn = find.byKey(Key('favorite_zikir_continue_$secondId'));
         expect(startBtn, findsOneWidget);
@@ -459,6 +501,124 @@ void main() {
 
         expect(container.read(selectedZikirIdProvider), secondId);
         expect(find.text('Zikir Route'), findsOneWidget);
+
+        await disposeWidgetTree(tester);
+      },
+    );
+
+    testWidgets(
+      'FavoriteZikirsCarouselCard handles 7 zikirs, long Arabic dua & 355,2K badge without overflow at 360x740',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 740);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'İstiğfar',
+                arabic: const drift.Value('أَسْتَغْفِرُ اللهَ'),
+                category: const drift.Value('Hadislerden Zikirler'),
+                totalCount: const drift.Value(355200),
+                target: const drift.Value(1000),
+              ),
+            );
+        final longDuaId = await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Âdem (a.s.) Duası',
+                arabic: const drift.Value(
+                  'رَبَّـنَا ظَلَمْنَٓا اَنْفُسَنَا وَاِنْ لَمْ تَغْفِرْ لَنَا وَتَرْحَمْنَا لَنَكُونَنَّ مِنَ الْخَاسِر۪ينَ',
+                ),
+                category: const drift.Value('Dualar'),
+                totalCount: const drift.Value(250000),
+                target: const drift.Value(25),
+              ),
+            );
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Mûsâ (a.s.) Duası 5',
+                arabic: const drift.Value(
+                  'رَبِّ اشْرَحْ ل۪ي صَدْر۪ي وَيَسِّرْ ل۪ٓي اَمْر۪ي وَاحْلُلْ عُقْدَةً مِنْ لِسَان۪ي',
+                ),
+                category: const drift.Value('Dualar'),
+                totalCount: const drift.Value(180000),
+                target: const drift.Value(25),
+              ),
+            );
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Besmele',
+                arabic: const drift.Value('بِسْمِ اللهِ الرَّحْمَنِ الرَّحِيمِ'),
+                category: const drift.Value('Hadislerden Zikirler'),
+                totalCount: const drift.Value(100000),
+                target: const drift.Value(1000),
+              ),
+            );
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Subhanallah',
+                arabic: const drift.Value('سُبْحَانَ اللهِ'),
+                category: const drift.Value('Tesbihat'),
+                totalCount: const drift.Value(50000),
+                target: const drift.Value(33),
+              ),
+            );
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Elhamdülillah',
+                arabic: const drift.Value('الْحَمْدُ لِلَّهِ'),
+                category: const drift.Value('Tesbihat'),
+                totalCount: const drift.Value(25000),
+                target: const drift.Value(33),
+              ),
+            );
+        await db.into(db.zikirs).insert(
+              ZikirsCompanion.insert(
+                name: 'Allahuekber',
+                arabic: const drift.Value('اللهُ أَكْبَرُ'),
+                category: const drift.Value('Tesbihat'),
+                totalCount: const drift.Value(10000),
+                target: const drift.Value(33),
+              ),
+            );
+
+        await tester.pumpWidget(
+          buildHarness(
+            child: const Scaffold(
+              extendBody: true,
+              body: BismillahDashboardScreen(),
+              bottomNavigationBar: SizedBox(
+                key: Key('mock_bottom_nav'),
+                height: 82,
+              ),
+            ),
+            themeColors: AppThemeColors.greenLight,
+            brightness: Brightness.light,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('355,2K kez'), findsOneWidget);
+        expect(find.byKey(const Key('favorite_zikir_dots_indicator')), findsOneWidget);
+        expect(find.text('Zikre Başla'), findsOneWidget);
+
+        // Swipe to the long Arabic dua slide (2nd item) and toggle its description
+        await tester.fling(find.byType(PageView), const Offset(-320, 0), 1000);
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('250,0K kez'), findsOneWidget);
+        expect(find.textContaining('رَبَّـنَا', findRichText: true), findsOneWidget);
+
+        await tester.tap(find.byKey(Key('favorite_zikir_slide_$longDuaId')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(Key('favorite_zikir_description_$longDuaId')), findsOneWidget);
+        expect(find.textContaining('Ey Rabbimiz!'), findsOneWidget);
 
         await disposeWidgetTree(tester);
       },

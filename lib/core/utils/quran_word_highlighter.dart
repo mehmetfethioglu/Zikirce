@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../../features/kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
@@ -533,7 +534,10 @@ class QuranTrackingArrowPainter extends CustomPainter {
     final t = progress.clamp(0.0, 1.0);
     final startCenterX =
         size.width > halfBase ? (size.width - halfBase) : (size.width / 2.0);
-    const endCenterX = 0.0;
+    final endCenterX = math.min(
+      startCenterX,
+      math.min(halfBase * 0.55, size.width * 0.3),
+    );
     final centerX = startCenterX - ((startCenterX - endCenterX) * t);
 
     final arrowPath = Path()

@@ -1,9 +1,14 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zikirce/core/services/quran_page_repository.dart';
 import 'package:zikirce/core/utils/quran_tracking_scroll_helper.dart';
 import 'package:zikirce/core/utils/quran_word_highlighter.dart';
+import 'package:zikirce/features/kuran/presentation/widgets/mushaf_page_widget.dart';
 import 'package:zikirce/features/kuran/presentation/widgets/quran_tracked_paragraph.dart';
 import 'package:zikirce/features/kuran/presentation/widgets/synchronized_arabic_ayah_wrap.dart';
 import 'package:zikirce/features/kuran/presentation/widgets/zikirce_ayah_stop_marker.dart';
@@ -600,6 +605,221 @@ void main() {
         expect(nextVerseWordRect.top, greaterThanOrEqualTo(14.0 - 1.0));
         expect(nextVerseWordRect.bottom, lessThanOrEqualTo(420.0 - 18.0 + 1.0));
         expect(listInteractionCount, 0);
+      },
+    );
+
+    test(
+      'MushafPageWidget keeps active ayah background transparent and preserves Secde tint',
+      () {
+        expect(
+          MushafPageWidget.resolveClassicMushafAyahBackgroundColor(
+            isSecdeAyah: false,
+            isDark: false,
+          ),
+          Colors.transparent,
+        );
+        expect(
+          MushafPageWidget.resolveClassicMushafAyahBackgroundColor(
+            isSecdeAyah: false,
+            isDark: true,
+          ),
+          Colors.transparent,
+        );
+
+        final lightSecdeBg =
+            MushafPageWidget.resolveClassicMushafAyahBackgroundColor(
+          isSecdeAyah: true,
+          isDark: false,
+        );
+        final darkSecdeBg =
+            MushafPageWidget.resolveClassicMushafAyahBackgroundColor(
+          isSecdeAyah: true,
+          isDark: true,
+        );
+        expect(lightSecdeBg, const Color(0xFFF59E0B).withValues(alpha: 0.12));
+        expect(darkSecdeBg, const Color(0xFFB45309).withValues(alpha: 0.16));
+      },
+    );
+
+    testWidgets(
+      'QuranTrackedParagraph fits bundled Arabic fonts inside line bounds with rounded List-style pill',
+      (WidgetTester tester) async {
+        final amasyaBytes =
+            File('assets/fonts/AmasyaAbay-Regular.ttf').readAsBytesSync();
+        final mushafBytes = File('assets/fonts/mushaf.ttf').readAsBytesSync();
+        final amasyaLoader = FontLoader('AmasyaAbay')
+          ..addFont(Future<ByteData>.value(ByteData.sublistView(amasyaBytes)));
+        final mushafLoader = FontLoader('mushaf')
+          ..addFont(Future<ByteData>.value(ByteData.sublistView(mushafBytes)));
+        await amasyaLoader.load();
+        await mushafLoader.load();
+
+        for (final fontFamily in ['AmasyaAbay', 'mushaf']) {
+          for (final config in [
+            (lineHeight: 2.0, isTvMode: false, expectedHPad: 6.0),
+            (lineHeight: 1.66, isTvMode: true, expectedHPad: 7.5),
+          ]) {
+            final paragraphKey = GlobalKey<QuranTrackedParagraphState>();
+            final markerKey = GlobalKey();
+            const double fontSize = 34.0;
+            final style = TextStyle(
+              fontFamily: fontFamily,
+              fontSize: fontSize,
+              height: config.lineHeight,
+              color: Colors.black,
+            );
+
+            final accum = QuranSpanAccumulator();
+            final wordRanges = <TextRange>[];
+            final tokens = QuranAyahWordParser.parse(
+              'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحٖيمِ الْحَمْدُ لِلّٰهِ رَبِّ الْعَالَمٖينَ مَالِكِ يَوْمِ الدّٖينِ',
+            );
+            for (int i = 0; i < tokens.length; i++) {
+              final token = tokens[i];
+              if (token.pureWord.isNotEmpty) {
+                final start = _currentSpanTextLength(accum.spans);
+                accum.addText(token.pureWord, style: style);
+                final end = _currentSpanTextLength(accum.spans);
+                wordRanges.add(TextRange(start: start, end: end));
+              }
+              if (i < tokens.length - 1) {
+                accum.addText(' ', style: style);
+              }
+            }
+            accum.addText('\u2060\u00A0\u2060', style: style);
+            accum.addWidget(
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: ZikirceAyahStopMarker(
+                  key: markerKey,
+                  number: '١',
+                  isDark: false,
+                  isHighlight: true,
+                  fontFamily: fontFamily,
+                  size: 38,
+                ),
+              ),
+            );
+            accum.addText('\u2060\u200F ', style: style);
+
+            final span = TextSpan(style: style, children: accum.spans);
+            TextRange? activeRange;
+            late StateSetter setHostState;
+
+            await tester.pumpWidget(
+              MaterialApp(
+                home: Scaffold(
+                  body: Center(
+                    child: SizedBox(
+                      width: 340,
+                      child: StatefulBuilder(
+                        builder: (context, setState) {
+                          setHostState = setState;
+                          return Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: QuranTrackedParagraph(
+                              key: paragraphKey,
+                              textSpan: span,
+                              textAlign: TextAlign.justify,
+                              textDirection: TextDirection.rtl,
+                              activeWordRange: activeRange,
+                              isArrowMode: false,
+                              isDark: false,
+                              isTvMode: config.isTvMode,
+                              isPlaying: true,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+            await tester.pump();
+            final markerBaseline = tester.getTopLeft(find.byKey(markerKey));
+
+            final targetRange = wordRanges[3];
+            setHostState(() {
+              activeRange = targetRange;
+            });
+            await tester.pump();
+
+            final pillRects = paragraphKey.currentState!.activeWordPillRects;
+            expect(
+              pillRects,
+              hasLength(1),
+              reason:
+                  'Expected single pill rect for $fontFamily (lineHeight=${config.lineHeight})',
+            );
+
+            final pillRect = pillRects.first;
+            final double maxAllowedHeight =
+                (fontSize * config.lineHeight) - 3.5;
+            expect(
+              pillRect.height,
+              lessThanOrEqualTo(maxAllowedHeight),
+              reason:
+                  'Pill overflowed line height for $fontFamily (lineHeight=${config.lineHeight})',
+            );
+            expect(
+              pillRect.height,
+              greaterThanOrEqualTo(fontSize * 1.15),
+            );
+
+            final renderParagraph = tester.renderObject<RenderParagraph>(
+              find
+                  .descendant(
+                    of: find.byKey(paragraphKey),
+                    matching: find.byType(RichText),
+                  )
+                  .first,
+            );
+            final rawTight = renderParagraph
+                .getBoxesForSelection(
+                  TextSelection(
+                    baseOffset: targetRange.start,
+                    extentOffset: targetRange.end,
+                  ),
+                  boxHeightStyle: ui.BoxHeightStyle.tight,
+                  boxWidthStyle: ui.BoxWidthStyle.tight,
+                )
+                .map((b) => b.toRect())
+                .where((r) => r.width > 0.01 && r.height > 0.01)
+                .reduce((a, b) => a.expandToInclude(b));
+
+            expect(
+              pillRect.width - rawTight.width,
+              closeTo(config.expectedHPad * 2.0, 0.05),
+              reason:
+                  'Expected symmetric ${config.expectedHPad}px horizontal padding for $fontFamily',
+            );
+            expect(tester.getTopLeft(find.byKey(markerKey)), markerBaseline);
+
+            // Verify consecutive lines do not overlap vertically.
+            setHostState(() {
+              activeRange = wordRanges.first;
+            });
+            await tester.pump();
+            final firstLinePill =
+                paragraphKey.currentState!.activeWordPillRects.single;
+
+            setHostState(() {
+              activeRange = wordRanges.last;
+            });
+            await tester.pump();
+            final lowerLinePill =
+                paragraphKey.currentState!.activeWordPillRects.single;
+
+            expect(
+              firstLinePill.bottom,
+              lessThan(lowerLinePill.top),
+              reason:
+                  'Consecutive Mushaf pills overlapped vertically for $fontFamily (lineHeight=${config.lineHeight})',
+            );
+            expect(tester.getTopLeft(find.byKey(markerKey)), markerBaseline);
+          }
+        }
       },
     );
   });

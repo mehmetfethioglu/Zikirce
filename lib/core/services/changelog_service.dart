@@ -51,11 +51,51 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 69;
-  static const String currentVersionName = '2.3.1';
+  static const int currentVersionCode = 70;
+  static const String currentVersionName = '2.4.0';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 70,
+      versionName: '2.4.0',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '3B Kıble Bulucu & İftitah Tekbiri Deneyimi',
+          titleEn: '3D Qibla Finder & Opening Takbir Experience',
+          descTr: 'Eğim düzeltmeli pusula ve küresel WMM manyetik sapma düzeltmesiyle gerçek Kâbe yönünü hassas biçimde bulun. Anıtsal 3B Kâbe külliyesi, seccade sahnesi (Erkek Figür, Kadın Figür, Sadece Seccade modları), 3 adımlı görsel rehber, sıfır kayma hizalama kilidi, gündüz güneşle doğrulama, manyetik parazit kalibrasyon uyarısı ve isteğe bağlı sesli İftitah Tekbiri eklendi.',
+          descEn: 'Find the true direction of the Kaaba with a tilt-compensated compass and global WMM magnetic declination. Features a monumental 3D Kaaba sanctuary and prayer rug scene (Male, Female, or Rug-Only modes), a 3-step visual guide, zero-drift alignment lock, daytime solar verification, magnetic interference calibration alerts, and optional spoken Opening Takbir.',
+          icon: Icons.explore_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Katlanabilir Telefon & Geniş Ekran (Çift Panel / Rahle) Desteği',
+          titleEn: 'Foldable & Large-Screen Adaptive Support (Two-Pane / Rahle)',
+          descTr: 'Android katlanabilir cihazlarda menteşe algılamalı Kitap ve Masaüstü düzenleri, iPad ve geniş ekranlarda uyarlanabilir çift panel ve yan gezinme rayı ile Rahle çift sayfa Mushaf okuma deneyimi sunuldu; ana ekranlar her pencere boyutuna taşmasız uyum sağlar.',
+          descEn: 'Added hinge-aware Book and Tabletop layouts for Android foldables, adaptive two-pane layouts and side NavigationRail on iPad and large screens, plus Rahle dual-page open-book Mushaf reading across core screens.',
+          icon: Icons.devices_fold_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Zikirce TV Ekran Yansıtma & Mukabele Ses-Ok Senkronizasyonu',
+          titleEn: 'Zikirce TV Casting & Mukabele Audio-Pointer Sync',
+          descTr: 'Zikirce TV modunda tek dokunuşla AirPlay/HDMI (iOS) ve Smart View/Miracast/Cast (Android) ekran yansıtma ve canlı bağlantı durumu eklendi; kablosuz veya kablolu TV gecikmeleri için ayarlanabilir (-600 ms ile +300 ms) ses-işaretçi senkron ofseti sunuldu.',
+          descEn: 'Added one-tap AirPlay/HDMI (iOS) and Smart View/Miracast/Cast (Android) screen mirroring with live status in Zikirce TV mode, plus configurable (-600 ms to +300 ms) audio-to-pointer sync compensation.',
+          icon: Icons.cast_connected_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Tilâvet Secdesi Hatırlatıcısı, Kelime Takibi & Kararlılık Düzeltmeleri',
+          titleEn: 'Sajdah al-Tilawah Reminders, Word Tracking & Stability Fixes',
+          descTr: 'Tilâvet Secdesi borcu ve yüzen hatırlatıcı şeritleri daha geniş dokunma alanıyla (44×44) yenilendi; uzun âyetlerde kelime takipli otomatik kaydırma iyileştirildi; Günlük Hedefler sandığı, Altın-Elmas takası ve seri kurtarma pencerelerindeki kararlılık sorunları giderildi.',
+          descEn: 'Redesigned Sajdah al-Tilawah debt and floating reminder banners with 44x44 touch targets, improved word-tracked auto-scrolling on long verses, and fixed dialog context stability in Daily Goals, Gold-Diamond Exchange, and Streak Recovery sheets.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 69,
       versionName: '2.3.1',

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/surah_data_provider.dart';
+import '../../../../core/layout/foldable_layout_info.dart';
 import '../../../../core/providers/tv_mode_provider.dart';
 import '../../../../core/services/cloud_sync_engine.dart';
 import '../../../../core/services/meal_service.dart';
@@ -50,6 +51,7 @@ class _IslamicBookReaderScreenState
   double _downloadProgress = 0.0;
   String? _downloadError;
   String _selectedText = '';
+  bool _userDismissedAutoBookSpread = false;
 
   final Map<int, QuranPageData> _quranPagesCache = {};
   final Map<int, IslamicBookPageData> _corpusPagesCache = {};
@@ -491,8 +493,24 @@ class _IslamicBookReaderScreenState
           'Sayfa $_currentPage / ${book.totalPages} • %$progressPct Okundu';
     }
 
+    ref.listen<bool>(
+      islamicBookReaderSettingsProvider.select((s) => s.isRahleSpreadMode),
+      (prev, next) {
+        if (prev == true && next == false && mounted) {
+          setState(() => _userDismissedAutoBookSpread = true);
+        } else if (prev == false && next == true && mounted) {
+          setState(() => _userDismissedAutoBookSpread = false);
+        }
+      },
+    );
+
     final isTvMode = ref.watch(isTvModeProvider);
-    final isRahleActive = isTvMode || settings.isRahleSpreadMode;
+    final layout = FoldableLayoutInfo.of(context);
+    final canDisplayRahleSpread = isTvMode || layout.supportsTwoPageSpread;
+    final isRahleActive = canDisplayRahleSpread &&
+        (isTvMode ||
+            settings.isRahleSpreadMode ||
+            (layout.isBookPosture && !_userDismissedAutoBookSpread));
 
     return TvRemoteNumberJumpWrapper(
       maxPage: book.totalPages,
@@ -548,23 +566,29 @@ class _IslamicBookReaderScreenState
           ],
         ),
         actions: [
-          // Rahlede Açık Çift Sayfa (TV / Geniş Ekran) Modu Butonu
-          IconButton(
-            tooltip: settings.isRahleSpreadMode
-                ? 'Normal Sayfa Görünümüne Dön'
-                : 'Rahlede Açık Kitap (Çift Sayfa Görünümü)',
-            onPressed: () {
-              HapticFeedback.selectionClick();
-              ref
-                  .read(islamicBookReaderSettingsProvider.notifier)
-                  .toggleRahleSpreadMode();
-            },
-            icon: Icon(
-              Icons.import_contacts_rounded,
-              color: settings.isRahleSpreadMode ? accentColor : textColor,
-              size: 21,
+          // Rahlede Açık Çift Sayfa (TV / Geniş Ekran / Katlanabilir) Modu Butonu
+          if (canDisplayRahleSpread)
+            IconButton(
+              tooltip: isRahleActive
+                  ? 'Normal Sayfa Görünümüne Dön'
+                  : 'Rahlede Açık Kitap (Çift Sayfa Görünümü)',
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                if (layout.isBookPosture && _userDismissedAutoBookSpread) {
+                  setState(() => _userDismissedAutoBookSpread = false);
+                } else {
+                  setState(() => _userDismissedAutoBookSpread = false);
+                  ref
+                      .read(islamicBookReaderSettingsProvider.notifier)
+                      .toggleRahleSpreadMode();
+                }
+              },
+              icon: Icon(
+                Icons.import_contacts_rounded,
+                color: isRahleActive ? accentColor : textColor,
+                size: 21,
+              ),
             ),
-          ),
           // Risale-i Nur Lügati Arama & Kelime Vurgusu
           IconButton(
             tooltip: 'Risale-i Nur Lügati Sözlüğü',
@@ -956,6 +980,7 @@ class _IslamicBookReaderScreenState
           }
         }
 
+        final isTvMode = ref.read(isTvModeProvider);
         return RahleOpenBookSpreadWidget(
           bookTitle: book.title,
           spreadSubtitle: spreadSubtitle,
@@ -976,6 +1001,16 @@ class _IslamicBookReaderScreenState
               _openTableOfContentsSheet(book, settings),
           onToggleBookmark: () => _toggleCurrentPageBookmark(book),
           onOpenSettings: () => _openSettingsSheet(settings),
+          onExitSpreadMode: !isTvMode
+              ? () {
+                  setState(() => _userDismissedAutoBookSpread = true);
+                  if (settings.isRahleSpreadMode) {
+                    ref
+                        .read(islamicBookReaderSettingsProvider.notifier)
+                        .toggleRahleSpreadMode();
+                  }
+                }
+              : null,
           onExit: () => Navigator.of(context).pop(),
           leftLeaf: RahleAutoFitLeafContent(
             leaf: leftLeafData,
