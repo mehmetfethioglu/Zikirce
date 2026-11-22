@@ -63,6 +63,214 @@ enum UserRole {
   const UserRole(this.label);
 }
 
+/// Buluttan geri yükleme (restore) stratejisi.
+enum CloudRestoreMode {
+  merge(
+    'Kayıpsız Birleştir',
+    'Mevcut yerel verileri korur, buluttaki yeni ve güncel kayıtları ekler.',
+  ),
+  replace(
+    'Tam Geri Yükle (Üzerine Yaz)',
+    'Yerel kayıtları temizler ve buluttaki son yedeğin birebir kopyasını yükler.',
+  );
+
+  final String label;
+  final String description;
+  const CloudRestoreMode(this.label, this.description);
+}
+
+/// Aynı şirket ve aynı bulut (Gmail) hesabı altında tanımlanabilen çoklu kullanıcı rolleri.
+enum AppUserRole {
+  superAdmin(
+    'Tam Yönetici',
+    UserRole.admin,
+    HasibuModule.activePhaseModules,
+  ),
+  hrManager(
+    'İK & PDKS Yöneticisi',
+    UserRole.admin,
+    <HasibuModule>[HasibuModule.pdksHr, HasibuModule.employeePortal],
+  ),
+  branchSupervisor(
+    'Şube Sorumlusu',
+    UserRole.admin,
+    <HasibuModule>[HasibuModule.pdksHr, HasibuModule.employeePortal],
+  ),
+  employee(
+    'Personel',
+    UserRole.employee,
+    <HasibuModule>[HasibuModule.employeePortal],
+  );
+
+  final String label;
+  final UserRole baseRole;
+  final List<HasibuModule> defaultModules;
+  const AppUserRole(this.label, this.baseRole, this.defaultModules);
+
+  static AppUserRole fromName(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return AppUserRole.hrManager;
+    final clean = raw.trim().toLowerCase();
+    for (final r in AppUserRole.values) {
+      if (r.name.toLowerCase() == clean) return r;
+    }
+    return AppUserRole.hrManager;
+  }
+}
+
+/// Çoklu yetkili kullanıcı hesabı (şirket veritabanı ve bulut yedeği içinde eşitlenir).
+@immutable
+class AppUserAccount {
+  final String id;
+  final String username;
+  final String displayName;
+  final String passwordHash;
+  final AppUserRole role;
+  final List<HasibuModule> allowedModules;
+  final int? allowedBranchId;
+  final String? linkedGmail;
+  final bool isActive;
+  final HasibuThemeMode themeMode;
+  final String createdAtIso;
+
+  const AppUserAccount({
+    required this.id,
+    required this.username,
+    required this.displayName,
+    required this.passwordHash,
+    this.role = AppUserRole.hrManager,
+    this.allowedModules = const <HasibuModule>[
+      HasibuModule.pdksHr,
+      HasibuModule.employeePortal,
+    ],
+    this.allowedBranchId,
+    this.linkedGmail,
+    this.isActive = true,
+    this.themeMode = HasibuThemeMode.light,
+    required this.createdAtIso,
+  });
+
+  AppUserAccount copyWith({
+    String? id,
+    String? username,
+    String? displayName,
+    String? passwordHash,
+    AppUserRole? role,
+    List<HasibuModule>? allowedModules,
+    int? Function()? allowedBranchId,
+    String? Function()? linkedGmail,
+    bool? isActive,
+    HasibuThemeMode? themeMode,
+    String? createdAtIso,
+  }) {
+    return AppUserAccount(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      displayName: displayName ?? this.displayName,
+      passwordHash: passwordHash ?? this.passwordHash,
+      role: role ?? this.role,
+      allowedModules: allowedModules ?? this.allowedModules,
+      allowedBranchId:
+          allowedBranchId != null ? allowedBranchId() : this.allowedBranchId,
+      linkedGmail: linkedGmail != null ? linkedGmail() : this.linkedGmail,
+      isActive: isActive ?? this.isActive,
+      themeMode: themeMode ?? this.themeMode,
+      createdAtIso: createdAtIso ?? this.createdAtIso,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'username': username,
+        'displayName': displayName,
+        'passwordHash': passwordHash,
+        'role': role.name,
+        'allowedModules': HasibuModule.toCsv(allowedModules),
+        'allowedBranchId': allowedBranchId,
+        'linkedGmail': linkedGmail,
+        'isActive': isActive,
+        'themeMode': themeMode.name,
+        'createdAtIso': createdAtIso,
+      };
+
+  factory AppUserAccount.fromJson(Map<String, dynamic> json) {
+    final role = AppUserRole.fromName(json['role'] as String?);
+    final rawModules = json['allowedModules'] as String?;
+    return AppUserAccount(
+      id: json['id'] as String? ?? '',
+      username: (json['username'] as String? ?? '').trim().toLowerCase(),
+      displayName: json['displayName'] as String? ?? '',
+      passwordHash: json['passwordHash'] as String? ?? '',
+      role: role,
+      allowedModules: rawModules == null || rawModules.trim().isEmpty
+          ? role.defaultModules
+          : HasibuModule.parseCsv(rawModules),
+      allowedBranchId: (json['allowedBranchId'] as num?)?.toInt(),
+      linkedGmail: json['linkedGmail'] as String?,
+      isActive: json['isActive'] as bool? ?? true,
+      themeMode: HasibuThemeMode.fromName(json['themeMode'] as String?),
+      createdAtIso:
+          json['createdAtIso'] as String? ?? DateTime.now().toIso8601String(),
+    );
+  }
+}
+
+/// Bulut yedeği geri yükleme/birleştirme işlemi detay özeti.
+@immutable
+class CloudRestoreSummary {
+  final CloudRestoreMode mode;
+  final int totalAppliedRecords;
+  final int branchesCount;
+  final int shiftsCount;
+  final int departmentsCount;
+  final int employeesCount;
+  final int attendanceLogsCount;
+  final int leaveRecordsCount;
+  final int hrRequestsCount;
+  final int documentsCount;
+  final int appUsersCount;
+  final int accountingCount;
+  final String sourceDeviceName;
+  final String cloudProfileId;
+  final String? exportedAtIso;
+
+  const CloudRestoreSummary({
+    required this.mode,
+    required this.totalAppliedRecords,
+    this.branchesCount = 0,
+    this.shiftsCount = 0,
+    this.departmentsCount = 0,
+    this.employeesCount = 0,
+    this.attendanceLogsCount = 0,
+    this.leaveRecordsCount = 0,
+    this.hrRequestsCount = 0,
+    this.documentsCount = 0,
+    this.appUsersCount = 0,
+    this.accountingCount = 0,
+    this.sourceDeviceName = 'Bulut Yedeği',
+    this.cloudProfileId = 'default',
+    this.exportedAtIso,
+  });
+
+  String toTurkishSummary() {
+    final parts = <String>[
+      if (branchesCount > 0) '$branchesCount şube',
+      if (shiftsCount > 0) '$shiftsCount vardiya',
+      if (departmentsCount > 0) '$departmentsCount bölüm',
+      if (employeesCount > 0) '$employeesCount personel',
+      if (appUsersCount > 0) '$appUsersCount kullanıcı',
+      if (attendanceLogsCount > 0) '$attendanceLogsCount hareket',
+      if (leaveRecordsCount > 0) '$leaveRecordsCount izin',
+      if (hrRequestsCount > 0) '$hrRequestsCount İK talebi',
+      if (documentsCount > 0) '$documentsCount evrak',
+      if (accountingCount > 0) '$accountingCount muhasebe kaydı',
+    ];
+    if (parts.isEmpty) {
+      return 'Şirket ayarları güncellendi';
+    }
+    return parts.join(', ');
+  }
+}
+
 @immutable
 class AuthSession {
   final bool isAuthenticated;
@@ -72,6 +280,8 @@ class AuthSession {
   final String? employeeCardNo;
   final List<HasibuModule> allowedModules;
   final String? errorMessage;
+  final String? appUserId;
+  final int? scopedBranchId;
 
   const AuthSession({
     this.isAuthenticated = false,
@@ -81,6 +291,8 @@ class AuthSession {
     this.employeeCardNo,
     this.allowedModules = HasibuModule.activePhaseModules,
     this.errorMessage,
+    this.appUserId,
+    this.scopedBranchId,
   });
 
   bool canAccess(HasibuModule module) =>
@@ -94,6 +306,8 @@ class AuthSession {
     String? employeeCardNo,
     List<HasibuModule>? allowedModules,
     String? Function()? errorMessage,
+    String? Function()? appUserId,
+    int? Function()? scopedBranchId,
   }) {
     return AuthSession(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -103,6 +317,9 @@ class AuthSession {
       employeeCardNo: employeeCardNo ?? this.employeeCardNo,
       allowedModules: allowedModules ?? this.allowedModules,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
+      appUserId: appUserId != null ? appUserId() : this.appUserId,
+      scopedBranchId:
+          scopedBranchId != null ? scopedBranchId() : this.scopedBranchId,
     );
   }
 }
@@ -201,6 +418,11 @@ class CompanySettings {
   final String licenseToken;
   final int lastVerifiedTimestamp;
   final String hardwareFingerprint;
+  final bool autoCloudBackupEnabled;
+  final int autoCloudBackupMinutes;
+  final bool autoCloudBackupOnChange;
+  final String cloudProfileId;
+  final String cloudProfileLabel;
 
   const CompanySettings({
     this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
@@ -216,6 +438,11 @@ class CompanySettings {
     this.licenseToken = '',
     this.lastVerifiedTimestamp = 0,
     this.hardwareFingerprint = '',
+    this.autoCloudBackupEnabled = true,
+    this.autoCloudBackupMinutes = 30,
+    this.autoCloudBackupOnChange = true,
+    this.cloudProfileId = 'default',
+    this.cloudProfileLabel = 'Ana İşletme Kasası',
   });
 
   CompanySettings copyWith({
@@ -232,6 +459,11 @@ class CompanySettings {
     String? licenseToken,
     int? lastVerifiedTimestamp,
     String? hardwareFingerprint,
+    bool? autoCloudBackupEnabled,
+    int? autoCloudBackupMinutes,
+    bool? autoCloudBackupOnChange,
+    String? cloudProfileId,
+    String? cloudProfileLabel,
   }) {
     return CompanySettings(
       companyName: companyName ?? this.companyName,
@@ -248,6 +480,14 @@ class CompanySettings {
       lastVerifiedTimestamp:
           lastVerifiedTimestamp ?? this.lastVerifiedTimestamp,
       hardwareFingerprint: hardwareFingerprint ?? this.hardwareFingerprint,
+      autoCloudBackupEnabled:
+          autoCloudBackupEnabled ?? this.autoCloudBackupEnabled,
+      autoCloudBackupMinutes:
+          autoCloudBackupMinutes ?? this.autoCloudBackupMinutes,
+      autoCloudBackupOnChange:
+          autoCloudBackupOnChange ?? this.autoCloudBackupOnChange,
+      cloudProfileId: cloudProfileId ?? this.cloudProfileId,
+      cloudProfileLabel: cloudProfileLabel ?? this.cloudProfileLabel,
     );
   }
 
@@ -265,6 +505,11 @@ class CompanySettings {
         'licenseToken': licenseToken,
         'lastVerifiedTimestamp': lastVerifiedTimestamp,
         'hardwareFingerprint': hardwareFingerprint,
+        'autoCloudBackupEnabled': autoCloudBackupEnabled,
+        'autoCloudBackupMinutes': autoCloudBackupMinutes,
+        'autoCloudBackupOnChange': autoCloudBackupOnChange,
+        'cloudProfileId': cloudProfileId,
+        'cloudProfileLabel': cloudProfileLabel,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> json) =>
@@ -285,6 +530,21 @@ class CompanySettings {
         lastVerifiedTimestamp:
             (json['lastVerifiedTimestamp'] as num?)?.toInt() ?? 0,
         hardwareFingerprint: json['hardwareFingerprint'] as String? ?? '',
+        autoCloudBackupEnabled: json['autoCloudBackupEnabled'] as bool? ?? true,
+        autoCloudBackupMinutes:
+            (json['autoCloudBackupMinutes'] as num?)?.toInt() ?? 30,
+        autoCloudBackupOnChange:
+            json['autoCloudBackupOnChange'] as bool? ?? true,
+        cloudProfileId:
+            (json['cloudProfileId'] as String? ?? 'default').trim().isEmpty
+                ? 'default'
+                : (json['cloudProfileId'] as String).trim(),
+        cloudProfileLabel:
+            (json['cloudProfileLabel'] as String? ?? 'Ana İşletme Kasası')
+                    .trim()
+                    .isEmpty
+                ? 'Ana İşletme Kasası'
+                : (json['cloudProfileLabel'] as String).trim(),
       );
 }
 

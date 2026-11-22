@@ -60,6 +60,10 @@ class PdksDashboardState {
   final List<AuditLogEntry> auditLogs;
   final int mockGpsAnomalyCount;
   final String? lastMockGpsAlert;
+  final List<AppUserAccount> appUsers;
+  final List<CloudBackupProfileInfo> availableCloudBackups;
+  final bool isCloudBusy;
+  final CloudRestoreSummary? lastRestoreSummary;
 
   const PdksDashboardState({
     this.authSession = const AuthSession(),
@@ -91,6 +95,10 @@ class PdksDashboardState {
     this.auditLogs = const <AuditLogEntry>[],
     this.mockGpsAnomalyCount = 0,
     this.lastMockGpsAlert,
+    this.appUsers = const <AppUserAccount>[],
+    this.availableCloudBackups = const <CloudBackupProfileInfo>[],
+    this.isCloudBusy = false,
+    this.lastRestoreSummary,
   });
 
   /// [LIC-05] Sistem Salt-Okunur (Read-Only) Abonelik Sonu veya Saat Manipülasyonu Kilidinde mi?
@@ -123,8 +131,15 @@ class PdksDashboardState {
 
   int get totalCount => filteredByBranch.length;
 
-  /// Aktif oturumdaki kullanıcının (Yönetici veya Personel) kendine özgü tema seçimi.
+  /// Aktif oturumdaki kullanıcının (Yönetici, Yetkili Kullanıcı veya Personel) kendine özgü tema seçimi.
   HasibuThemeMode get activeThemeMode {
+    if (authSession.isAuthenticated && authSession.appUserId != null) {
+      for (final u in appUsers) {
+        if (u.id == authSession.appUserId) {
+          return u.themeMode;
+        }
+      }
+    }
     if (authSession.isAuthenticated &&
         authSession.role == UserRole.employee &&
         authSession.employeeCardNo != null) {
@@ -256,6 +271,10 @@ class PdksDashboardState {
     List<AuditLogEntry>? auditLogs,
     int? mockGpsAnomalyCount,
     String? Function()? lastMockGpsAlert,
+    List<AppUserAccount>? appUsers,
+    List<CloudBackupProfileInfo>? availableCloudBackups,
+    bool? isCloudBusy,
+    CloudRestoreSummary? Function()? lastRestoreSummary,
   }) {
     return PdksDashboardState(
       authSession: authSession ?? this.authSession,
@@ -299,6 +318,13 @@ class PdksDashboardState {
       mockGpsAnomalyCount: mockGpsAnomalyCount ?? this.mockGpsAnomalyCount,
       lastMockGpsAlert:
           lastMockGpsAlert != null ? lastMockGpsAlert() : this.lastMockGpsAlert,
+      appUsers: appUsers ?? this.appUsers,
+      availableCloudBackups:
+          availableCloudBackups ?? this.availableCloudBackups,
+      isCloudBusy: isCloudBusy ?? this.isCloudBusy,
+      lastRestoreSummary: lastRestoreSummary != null
+          ? lastRestoreSummary()
+          : this.lastRestoreSummary,
     );
   }
 }
@@ -335,6 +361,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   final GoogleDriveSyncService _syncService;
   final GoogleAuthAdapter _googleAuthAdapter;
   Timer? _autoPollTimer;
+  Timer? _autoCloudBackupTimer;
   final Map<int, TenfeiZkClient> _activeClients = <int, TenfeiZkClient>{};
   final List<StreamSubscription<AttendanceLog>> _realtimeSubs =
       <StreamSubscription<AttendanceLog>>[];
@@ -355,6 +382,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         ) {
     refreshDashboard();
     _configureAutoPollTimer();
+    _configureAutoCloudBackupTimer();
     if (!kDebugMode &&
         (state.dailyStatuses.isEmpty ||
             state.dailyStatuses.every(
@@ -387,7 +415,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     return dateKey;
   }
 
-  /// Yönetici / İK Girişi doğrular (tüm modüllere tam yetki).
+  /// Yönetici / Yetkili Kullanıcı Girişi doğrular.
   bool loginAsAdmin({required String username, required String password}) {
     final u = username.trim().toLowerCase();
     final p = password.trim();
@@ -411,11 +439,47 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       return true;
     }
 
+    final appUser = _db.findAppUserByUsername(u);
+    if (appUser != null) {
+      if (!appUser.isActive) {
+        state = state.copyWith(
+          authSession: state.authSession.copyWith(
+            isAuthenticated: false,
+            errorMessage: () =>
+                'Kullanıcı hesabınız ($u) pasif duruma alınmış. Yöneticinizle iletişime geçin.',
+          ),
+        );
+        return false;
+      }
+      if (HasibuSecurityService.verifyPassword(p, appUser.passwordHash)) {
+        final modules = HasibuModule.filterActive(appUser.allowedModules);
+        final hasAdminLikeModule = modules.any(
+          (m) => m != HasibuModule.employeePortal,
+        );
+        HasibuSecurityService.setFlagSecureEnabled(hasAdminLikeModule);
+        state = state.copyWith(
+          authSession: AuthSession(
+            isAuthenticated: true,
+            username: appUser.username,
+            displayName: appUser.displayName,
+            role: appUser.role.baseRole,
+            allowedModules: modules,
+            appUserId: appUser.id,
+            scopedBranchId: appUser.allowedBranchId,
+          ),
+          activeModule: modules.first,
+          selectedBranchId: appUser.allowedBranchId != null
+              ? () => appUser.allowedBranchId
+              : null,
+        );
+        return true;
+      }
+    }
+
     state = state.copyWith(
       authSession: state.authSession.copyWith(
         isAuthenticated: false,
-        errorMessage: () =>
-            'Kullanıcı adı veya parola hatalı.',
+        errorMessage: () => 'Kullanıcı adı veya parola hatalı.',
       ),
     );
     return false;
@@ -519,6 +583,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final allLeaves = _db.getAllLeaveRecords();
     final allDocs = _db.getAllPersonnelDocuments();
     final allRequests = _db.getAllHrRequests();
+    final appUsers = _db.getAppUsers();
     final tamperedLogs = _db.getTamperedAttendanceLogs();
     final auditLogs = _db.getAuditLogs(limit: 200);
 
@@ -595,6 +660,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final currentSync = state.syncStatus;
     final DriveSyncStatus updatedSyncStatus = currentSync.copyWith(
       connectedGmail: companySettings.syncGmailAccount.trim(),
+      cloudProfileId: companySettings.cloudProfileId,
     );
 
     state = state.copyWith(
@@ -608,6 +674,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       allLeaveRecords: allLeaves,
       allPersonnelDocuments: allDocs,
       allHrRequests: allRequests,
+      appUsers: appUsers,
       syncStatus: updatedSyncStatus,
       isReadOnlySubscriptionLocked: isSubscriptionLocked,
       isClockTampered: isClockTampered,
@@ -824,10 +891,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     _db.saveCompanySettings(newSettings);
     refreshDashboard();
     _configureAutoPollTimer();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Ayarlar (${newSettings.companyName})',
+    _configureAutoCloudBackupTimer();
+    await _pushAutoBackupOnChange(
+      'Hasibu Ayarlar (${newSettings.companyName})',
+      force: false,
     );
-    state = state.copyWith(syncStatus: syncResult);
   }
 
   void toggleAutoPoll(bool enabled) {
@@ -852,6 +920,74 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       Duration(minutes: state.autoPollMinutes.clamp(1, 1440)),
       (_) => pullFromTenfeiTerminals(),
     );
+  }
+
+  void _configureAutoCloudBackupTimer() {
+    _autoCloudBackupTimer?.cancel();
+    _autoCloudBackupTimer = null;
+    if (!state.companySettings.autoCloudBackupEnabled) return;
+
+    _autoCloudBackupTimer = Timer.periodic(
+      Duration(
+        minutes: state.companySettings.autoCloudBackupMinutes.clamp(5, 1440),
+      ),
+      (_) => unawaited(runAutomaticCloudBackup()),
+    );
+  }
+
+  /// Zamanlayıcı tarafından tetiklenen periyodik otomatik bulut yedeklemesi.
+  Future<DriveSyncStatus> runAutomaticCloudBackup() async {
+    if (!mounted ||
+        state.isCommercialWriteLocked ||
+        state.isCloudBusy ||
+        !state.companySettings.autoCloudBackupEnabled) {
+      return state.syncStatus;
+    }
+    try {
+      final isEmployeePortal = state.authSession.role == UserRole.employee;
+      final status = await _syncService.pushToCloud(
+        deviceName: 'Hasibu Otomatik Bulut Yedekleme',
+        force: false,
+        isEmployeePortalOnly: isEmployeePortal,
+        employeeCardNo: state.authSession.employeeCardNo,
+        operationLabel: 'auto_backup',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: status);
+      }
+      return status;
+    } catch (e) {
+      debugPrint('Otomatik bulut yedekleme uyarısı: $e');
+      return state.syncStatus;
+    }
+  }
+
+  Future<void> _pushAutoBackupOnChange(
+    String deviceName, {
+    bool force = true,
+    bool isEmployeePortalOnly = false,
+    String? employeeCardNo,
+  }) async {
+    if (!mounted ||
+        state.isCommercialWriteLocked ||
+        !state.companySettings.autoCloudBackupEnabled ||
+        !state.companySettings.autoCloudBackupOnChange) {
+      return;
+    }
+    try {
+      final result = await _syncService.pushToCloud(
+        deviceName: deviceName,
+        force: force,
+        isEmployeePortalOnly: isEmployeePortalOnly,
+        employeeCardNo: employeeCardNo,
+        operationLabel: 'auto_backup',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: result);
+      }
+    } catch (e) {
+      debugPrint('$deviceName bulut senkronizasyon uyarısı: $e');
+    }
   }
 
   /// Doğrudan Tenfei D35 (192.168.9.150:4370 ve aktif şube terminalleri) üzerinden
@@ -1036,8 +1172,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     refreshDashboard();
     final logsForSelectedDate =
         _db.getAttendanceLogsForDate(state.selectedDate).length;
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Masaüstü (Tenfei D35 Köprüsü)',
+    await _pushAutoBackupOnChange(
+      'Hasibu Masaüstü (Tenfei D35 Köprüsü)',
+      force: false,
     );
 
     state = state.copyWith(
@@ -1046,7 +1183,6 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       terminalStatusMessage: messages.isEmpty
           ? 'Aktif terminal tanımlı değil.'
           : '${messages.join(' | ')} ($newInserted yeni, toplam $totalFetched)',
-      syncStatus: syncResult,
     );
 
     return TerminalPullSummary(
@@ -1123,11 +1259,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   Future<void> saveBranch(Branch branch) async {
     _db.upsertBranch(branch);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Şube/Cihaz Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Şube/Cihaz Yönetimi');
   }
 
   Future<void> deleteBranch(int branchId) async {
@@ -1136,43 +1268,27 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       state = state.copyWith(selectedBranchId: () => null);
     }
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Şube/Cihaz Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Şube/Cihaz Yönetimi');
   }
 
   /// Vardiya / Mesai Saat Aralığı ve Geç Kalma Toleransını ekler veya günceller.
   Future<void> saveShiftPlan(ShiftPlan shift) async {
     _db.upsertShift(shift);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Vardiya Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Vardiya Yönetimi');
   }
 
   Future<void> deleteShiftPlan(int shiftId) async {
     _db.deleteShift(shiftId);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Vardiya Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Vardiya Yönetimi');
   }
 
   /// Departman / Üretim Bölümü ekler veya günceller.
   Future<void> saveDepartment(Department dept) async {
     _db.upsertDepartment(dept);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Bölüm Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Bölüm Yönetimi');
   }
 
   /// Personel ekler veya mevcut personelin bilgilerini günceller.
@@ -1203,33 +1319,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       );
     }
     refreshDashboard();
-    try {
-      final syncResult = await _syncService.pushToCloud(
-        deviceName: 'Hasibu Personel Yönetimi',
-        force: true,
-      );
-      if (mounted) {
-        state = state.copyWith(syncStatus: syncResult);
-      }
-    } catch (e) {
-      debugPrint('Hasibu Personel Yönetimi bulut senkronizasyon uyarısı: $e');
-    }
+    await _pushAutoBackupOnChange('Hasibu Personel Yönetimi');
   }
 
   Future<void> deleteEmployee(int employeeId) async {
     _db.deleteEmployee(employeeId);
     refreshDashboard();
-    try {
-      final syncResult = await _syncService.pushToCloud(
-        deviceName: 'Hasibu Personel Yönetimi',
-        force: true,
-      );
-      if (mounted) {
-        state = state.copyWith(syncStatus: syncResult);
-      }
-    } catch (e) {
-      debugPrint('Hasibu Personel Yönetimi bulut senkronizasyon uyarısı: $e');
-    }
+    await _pushAutoBackupOnChange('Hasibu Personel Yönetimi');
   }
 
   /// Personel hareketini (Giriş veya Çıkış saatini) manuel ekler veya düzeltir.
@@ -1268,21 +1364,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     _db.upsertAttendanceLog(log);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Hareket Düzeltme',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Hareket Düzeltme');
   }
 
   Future<void> deleteAttendanceLog(String logId) async {
     _db.deleteAttendanceLog(logId);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Hareket Düzeltme',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Hareket Düzeltme');
   }
 
   /// Çoklu personel seçimiyle toplu giriş ve/veya çıkış saati uygular.
@@ -1301,11 +1389,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       replaceExistingForDay: replaceExistingForDay,
     );
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Toplu Hareket Düzeltme',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Toplu Hareket Düzeltme');
     return affected;
   }
 
@@ -1604,11 +1688,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     _db.upsertAttendanceLog(log);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Mobil (${branch.name})',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Mobil (${branch.name})');
     return '${employee.fullName} için ${branch.name} şubesinde ${source.label} ile ${isCheckIn ? "GİRİŞ" : "ÇIKIŞ"} kaydedildi.';
   }
 
@@ -1630,11 +1710,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     );
     _db.upsertLeaveRecord(record);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu İK Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu İK Yönetimi');
   }
 
   /// Başlangıç ve bitiş tarihleri arasındaki tüm günler için toplu izin/rapor kaydı oluşturur.
@@ -1669,22 +1745,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
 
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu İK İzin/Rapor Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu İK İzin/Rapor Yönetimi');
     return daysCount;
   }
 
   Future<void> deleteLeaveRecord(String leaveId) async {
     _db.deleteLeaveRecord(leaveId);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu İK İzin/Rapor Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu İK İzin/Rapor Yönetimi');
   }
 
   /// Personelin tüm tarihlerdeki giriş-çıkış, geç kalma ve izin/rapor geçmişini kronolojik olarak döndürür.
@@ -1823,11 +1891,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     _db.upsertAttendanceLogsBatch(logsToInsert);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Eksik Çıkış Otomasyonu',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Eksik Çıkış Otomasyonu');
     return logsToInsert.length;
   }
 
@@ -1835,13 +1899,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   Future<void> submitHrRequest(HrRequest request) async {
     _db.upsertHrRequest(request);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Personel Talep Merkezi',
-      force: true,
+    await _pushAutoBackupOnChange(
+      'Hasibu Personel Talep Merkezi',
       isEmployeePortalOnly: state.authSession.role == UserRole.employee,
       employeeCardNo: state.authSession.employeeCardNo,
     );
-    state = state.copyWith(syncStatus: syncResult);
   }
 
   /// İK Yöneticisi personel talebini Tek Tıkla Onaylar veya Reddeder.
@@ -1922,11 +1984,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
 
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu İK Onay Merkezi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu İK Onay Merkezi');
     return actionSummary;
   }
 
@@ -1960,11 +2018,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
     if (updatedCount > 0) {
       refreshDashboard();
-      final syncResult = await _syncService.pushToCloud(
-        deviceName: 'Hasibu 4857 İzin Hakediş Eşitleme',
-        force: true,
-      );
-      state = state.copyWith(syncStatus: syncResult);
+      await _pushAutoBackupOnChange('Hasibu 4857 İzin Hakediş Eşitleme');
     }
     return updatedCount;
   }
@@ -2257,26 +2311,24 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   Future<void> savePersonnelDocument(PersonnelDocument doc) async {
     _db.upsertPersonnelDocument(doc);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Özlük Dosyası Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Özlük Dosyası Yönetimi');
   }
 
   /// Personelin özlük dosyasından dijital evrak kaydını siler.
   Future<void> deletePersonnelDocument(String docId) async {
     _db.deletePersonnelDocument(docId);
     refreshDashboard();
-    final syncResult = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Özlük Dosyası Yönetimi',
-      force: true,
-    );
-    state = state.copyWith(syncStatus: syncResult);
+    await _pushAutoBackupOnChange('Hasibu Özlük Dosyası Yönetimi');
   }
 
-  /// Aktif kullanıcının (Yönetici veya Personel) kendine özgü temasını (Açık / Koyu / Sistem) günceller.
+  /// Aktif kullanıcının (Yönetici, Yetkili Kullanıcı veya Personel) kendine özgü temasını günceller.
   Future<void> setCurrentUserThemeMode(HasibuThemeMode mode) async {
+    if (state.authSession.isAuthenticated &&
+        state.authSession.appUserId != null) {
+      _db.updateAppUserThemeMode(state.authSession.appUserId!, mode);
+      refreshDashboard();
+      return;
+    }
     if (state.authSession.isAuthenticated &&
         state.authSession.role == UserRole.employee &&
         state.authSession.employeeCardNo != null) {
@@ -2322,22 +2374,288 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     final isEmployeePortal = state.authSession.role == UserRole.employee;
     state = state.copyWith(
+      isCloudBusy: true,
       syncStatus: state.syncStatus.copyWith(
         stage: DriveSyncStage.syncing,
         message: 'Google Drive (AES-256-GCM) ile eşitleniyor...',
       ),
     );
-    await _syncService.pullAndReconcile(
-      isEmployeePortalOnly: isEmployeePortal,
+    try {
+      await _syncService.pullAndReconcile(
+        isEmployeePortalOnly: isEmployeePortal,
+      );
+      final pushStatus = await _syncService.pushToCloud(
+        deviceName: 'Hasibu Cihaz Senkronizasyonu',
+        force: true,
+        isEmployeePortalOnly: isEmployeePortal,
+        employeeCardNo: state.authSession.employeeCardNo,
+        operationLabel: 'sync',
+      );
+      refreshDashboard();
+      if (mounted) {
+        state = state.copyWith(syncStatus: pushStatus);
+      }
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isCloudBusy: false);
+      }
+    }
+  }
+
+  /// Buluta anında manuel şifreli yedekleme yapar (Buluta Yedekle).
+  Future<DriveSyncStatus> backupToCloudNow({String? profileId}) async {
+    if (state.isCommercialWriteLocked) {
+      final errStatus = state.syncStatus.copyWith(
+        stage: DriveSyncStage.error,
+        message:
+            'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Buluta yedekleme devre dışı bırakıldı.',
+      );
+      state = state.copyWith(syncStatus: errStatus);
+      return errStatus;
+    }
+
+    final isEmployeePortal = state.authSession.role == UserRole.employee;
+    state = state.copyWith(
+      isCloudBusy: true,
+      syncStatus: state.syncStatus.copyWith(
+        stage: DriveSyncStage.syncing,
+        message: 'Bulut yedeği hazırlanıp yükleniyor...',
+      ),
     );
-    final pushStatus = await _syncService.pushToCloud(
-      deviceName: 'Hasibu Cihaz Senkronizasyonu',
-      force: true,
-      isEmployeePortalOnly: isEmployeePortal,
-      employeeCardNo: state.authSession.employeeCardNo,
+    try {
+      final status = await _syncService.pushToCloud(
+        deviceName: 'Hasibu Manuel Bulut Yedekleme',
+        force: true,
+        isEmployeePortalOnly: isEmployeePortal,
+        employeeCardNo: state.authSession.employeeCardNo,
+        profileId: profileId,
+        operationLabel: 'backup',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: status);
+      }
+      if (status.isTrulySynced) {
+        await refreshAvailableCloudBackups();
+      }
+      return status;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isCloudBusy: false);
+      }
+    }
+  }
+
+  /// Buluttan şifreli yedeği indirir ve seçilen stratejiye göre geri yükler (Buluttan Yükle).
+  Future<({DriveSyncStatus status, CloudRestoreSummary? summary})>
+      restoreFromCloudNow({
+    String? profileId,
+    CloudRestoreMode mode = CloudRestoreMode.merge,
+    bool cloudOnly = false,
+    String? overrideWorkspaceKey,
+  }) async {
+    if (state.isCommercialWriteLocked) {
+      final errStatus = state.syncStatus.copyWith(
+        stage: DriveSyncStage.error,
+        message:
+            'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Buluttan geri yükleme devre dışı bırakıldı.',
+      );
+      state = state.copyWith(syncStatus: errStatus);
+      return (status: errStatus, summary: null);
+    }
+
+    final isEmployeePortal = state.authSession.role == UserRole.employee;
+    state = state.copyWith(
+      isCloudBusy: true,
+      syncStatus: state.syncStatus.copyWith(
+        stage: DriveSyncStage.syncing,
+        message: 'Bulut yedeği indiriliyor ve uygulanıyor...',
+      ),
+    );
+    try {
+      final res = await _syncService.restoreFromCloud(
+        profileId: profileId,
+        mode: mode,
+        isEmployeePortalOnly: isEmployeePortal,
+        cloudOnly: cloudOnly,
+        overrideWorkspaceKey: overrideWorkspaceKey,
+      );
+      if (res.summary != null) {
+        refreshDashboard();
+        _configureAutoPollTimer();
+        _configureAutoCloudBackupTimer();
+      }
+      if (mounted) {
+        state = state.copyWith(
+          syncStatus: res.status,
+          lastRestoreSummary: res.summary != null ? () => res.summary : null,
+        );
+      }
+      return res;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isCloudBusy: false);
+      }
+    }
+  }
+
+  /// Bağlı Google Drive hesabındaki ve klasöründeki tüm yedek profillerini tarar.
+  Future<List<CloudBackupProfileInfo>> refreshAvailableCloudBackups() async {
+    final list = await _syncService.listAvailableCloudBackups();
+    if (mounted) {
+      state = state.copyWith(availableCloudBackups: list);
+    }
+    return list;
+  }
+
+  /// Otomatik bulut yedekleme ve aktif yedek profili (kasa) ayarlarını günceller.
+  Future<void> updateCloudBackupSettings({
+    bool? autoCloudBackupEnabled,
+    int? autoCloudBackupMinutes,
+    bool? autoCloudBackupOnChange,
+    String? cloudProfileId,
+    String? cloudProfileLabel,
+  }) async {
+    final normalizedProfile = cloudProfileId != null
+        ? GoogleDriveSyncService.normalizeCloudProfileId(cloudProfileId)
+        : null;
+    final updated = state.companySettings.copyWith(
+      autoCloudBackupEnabled: autoCloudBackupEnabled,
+      autoCloudBackupMinutes: autoCloudBackupMinutes?.clamp(5, 1440),
+      autoCloudBackupOnChange: autoCloudBackupOnChange,
+      cloudProfileId: normalizedProfile,
+      cloudProfileLabel: cloudProfileLabel?.trim().isNotEmpty == true
+          ? cloudProfileLabel!.trim()
+          : null,
+    );
+    _db.saveCompanySettings(updated);
+    refreshDashboard();
+    _configureAutoCloudBackupTimer();
+  }
+
+  Future<String> getCloudWorkspaceKey() => _syncService.getWorkspaceKey();
+
+  Future<void> updateCloudWorkspaceKey(String key) =>
+      _syncService.saveWorkspaceKey(key);
+
+  /// Aynı şirket (ve aynı Gmail bulut yedeği) altında yeni yetkili kullanıcı ekler veya günceller.
+  Future<String?> saveAppUser({
+    String? existingId,
+    required String username,
+    required String displayName,
+    String? plainPassword,
+    required AppUserRole role,
+    required List<HasibuModule> allowedModules,
+    int? allowedBranchId,
+    String? linkedGmail,
+    bool isActive = true,
+  }) async {
+    final cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.isEmpty) {
+      return 'Kullanıcı adı boş bırakılamaz.';
+    }
+    if (cleanUsername ==
+        state.companySettings.adminUsername.trim().toLowerCase()) {
+      return 'Ana yönetici kullanıcı adı ("$cleanUsername") ile aynı kullanıcı adı kullanılamaz.';
+    }
+
+    final duplicate = _db.findAppUserByUsername(cleanUsername);
+    if (duplicate != null && duplicate.id != existingId) {
+      return '"$cleanUsername" kullanıcı adı zaten kayıtlı.';
+    }
+
+    AppUserAccount? existingUser;
+    if (existingId != null && existingId.trim().isNotEmpty) {
+      for (final u in state.appUsers) {
+        if (u.id == existingId) {
+          existingUser = u;
+          break;
+        }
+      }
+    }
+
+    final trimmedPlain = plainPassword?.trim() ?? '';
+    if (existingUser == null && trimmedPlain.isEmpty) {
+      return 'Yeni kullanıcı için parola zorunludur.';
+    }
+
+    final passwordHash = trimmedPlain.isEmpty
+        ? existingUser!.passwordHash
+        : HasibuSecurityService.hashPassword(trimmedPlain);
+
+    final account = AppUserAccount(
+      id: existingUser?.id ?? 'USR-${DateTime.now().microsecondsSinceEpoch}',
+      username: cleanUsername,
+      displayName:
+          displayName.trim().isEmpty ? cleanUsername : displayName.trim(),
+      passwordHash: passwordHash,
+      role: role,
+      allowedModules: allowedModules.isEmpty ? role.defaultModules : allowedModules,
+      allowedBranchId: allowedBranchId,
+      linkedGmail: linkedGmail?.trim().isEmpty == true
+          ? null
+          : linkedGmail?.trim(),
+      isActive: isActive,
+      themeMode: existingUser?.themeMode ?? HasibuThemeMode.light,
+      createdAtIso:
+          existingUser?.createdAtIso ?? DateTime.now().toIso8601String(),
+    );
+
+    _db.upsertAppUser(account);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: existingUser == null ? 'APP_USER_CREATED' : 'APP_USER_UPDATED',
+      targetRecordId: cleanUsername,
+      oldValue: existingUser == null
+          ? 'NEW'
+          : 'role=${existingUser.role.name}, active=${existingUser.isActive}',
+      newValue:
+          'role=${account.role.name}, active=${account.isActive}, branch=${account.allowedBranchId ?? "ALL"}',
+    );
+
+    refreshDashboard();
+    await _pushAutoBackupOnChange('Hasibu Çoklu Kullanıcı Yönetimi');
+    return null;
+  }
+
+  Future<void> deleteAppUser(String userId) async {
+    _db.deleteAppUser(userId);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'APP_USER_DELETED',
+      targetRecordId: userId,
+      oldValue: 'active',
+      newValue: 'deleted',
     );
     refreshDashboard();
-    state = state.copyWith(syncStatus: pushStatus);
+    await _pushAutoBackupOnChange('Hasibu Çoklu Kullanıcı Yönetimi');
+  }
+
+  Future<void> toggleAppUserActive(String userId, bool isActive) async {
+    for (final u in state.appUsers) {
+      if (u.id == userId) {
+        final updated = u.copyWith(isActive: isActive);
+        _db.upsertAppUser(updated);
+        final actor = state.authSession.username.isEmpty
+            ? 'admin'
+            : state.authSession.username;
+        _db.appendAuditLog(
+          actorEmployeeId: actor,
+          actionType: 'APP_USER_STATUS_CHANGED',
+          targetRecordId: u.username,
+          oldValue: 'active=${u.isActive}',
+          newValue: 'active=$isActive',
+        );
+        refreshDashboard();
+        await _pushAutoBackupOnChange('Hasibu Çoklu Kullanıcı Yönetimi');
+        return;
+      }
+    }
   }
 
   /// [LIC-03] & [LIC-05] Yeni müşteri lisans tokenını (Ed25519) doğrular ve kaydeder.
@@ -2400,6 +2718,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   @override
   void dispose() {
     _autoPollTimer?.cancel();
+    _autoCloudBackupTimer?.cancel();
     for (final sub in _realtimeSubs) {
       sub.cancel();
     }

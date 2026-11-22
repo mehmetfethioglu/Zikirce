@@ -4,12 +4,14 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../features/pdks/domain/pdks_models.dart';
 import '../database/hasibu_database.dart';
 import '../security/hasibu_security_service.dart';
 
@@ -67,6 +69,8 @@ class DriveSyncStatus {
   final bool isDriveFolderMirrored;
   final String syncedFilePath;
   final int syncedBytes;
+  final String cloudProfileId;
+  final String lastOperation;
 
   const DriveSyncStatus({
     this.stage = DriveSyncStage.idle,
@@ -79,6 +83,8 @@ class DriveSyncStatus {
     this.isDriveFolderMirrored = false,
     this.syncedFilePath = '',
     this.syncedBytes = 0,
+    this.cloudProfileId = 'default',
+    this.lastOperation = '',
   });
 
   bool get isTrulySynced =>
@@ -96,6 +102,8 @@ class DriveSyncStatus {
     bool? isDriveFolderMirrored,
     String? syncedFilePath,
     int? syncedBytes,
+    String? cloudProfileId,
+    String? lastOperation,
   }) {
     return DriveSyncStatus(
       stage: stage ?? this.stage,
@@ -109,8 +117,30 @@ class DriveSyncStatus {
           isDriveFolderMirrored ?? this.isDriveFolderMirrored,
       syncedFilePath: syncedFilePath ?? this.syncedFilePath,
       syncedBytes: syncedBytes ?? this.syncedBytes,
+      cloudProfileId: cloudProfileId ?? this.cloudProfileId,
+      lastOperation: lastOperation ?? this.lastOperation,
     );
   }
+}
+
+/// Aynı Gmail Google Drive hesabı veya yerel klasörde bulunan yedek profili / kasa slotu özeti.
+@immutable
+class CloudBackupProfileInfo {
+  final String profileId;
+  final String fileName;
+  final String? remoteFileId;
+  final DateTime? modifiedTime;
+  final int sizeBytes;
+  final String source;
+
+  const CloudBackupProfileInfo({
+    required this.profileId,
+    required this.fileName,
+    this.remoteFileId,
+    this.modifiedTime,
+    this.sizeBytes = 0,
+    required this.source,
+  });
 }
 
 class _MirrorWriteOutcome {
@@ -140,6 +170,77 @@ class GoogleDriveSyncService {
   static const String masterVaultFileName = 'hasibu_master_vault.enc';
   static const String portalQueueFileName = 'hasibu_portal_queue.enc';
   static const String _legacyBackupFileName = 'Hasibu_CloudSync_v1.json';
+
+  static const Map<String, String> _turkishCharFoldMap = <String, String>{
+    'ç': 'c',
+    'Ç': 'c',
+    'ğ': 'g',
+    'Ğ': 'g',
+    'ı': 'i',
+    'İ': 'i',
+    'ö': 'o',
+    'Ö': 'o',
+    'ş': 's',
+    'Ş': 's',
+    'ü': 'u',
+    'Ü': 'u',
+  };
+
+  /// Aynı Gmail hesabı içinde farklı işletme / kullanıcı kasaları oluşturmak için
+  /// profil kimliğini güvenli dosya adı ekine (`slug`) dönüştürür.
+  static String normalizeCloudProfileId(String? raw) {
+    if (raw == null) return 'default';
+    final buf = StringBuffer();
+    for (final rune in raw.trim().runes) {
+      final ch = String.fromCharCode(rune);
+      buf.write(_turkishCharFoldMap[ch] ?? ch);
+    }
+    var slug = buf
+        .toString()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^[_-]+|[_-]+$'), '');
+    if (slug.length > 32) {
+      slug = slug.substring(0, 32).replaceAll(RegExp(r'^[_-]+|[_-]+$'), '');
+    }
+    if (slug.isEmpty ||
+        slug == 'default' ||
+        slug == 'varsayilan' ||
+        slug == 'ana') {
+      return 'default';
+    }
+    return slug;
+  }
+
+  static String backupFileNameForProfile(String? profileId) {
+    final slug = normalizeCloudProfileId(profileId);
+    return slug == 'default' ? backupFileName : 'hasibu_sync_$slug.enc';
+  }
+
+  static String masterVaultFileNameForProfile(String? profileId) {
+    final slug = normalizeCloudProfileId(profileId);
+    return slug == 'default'
+        ? masterVaultFileName
+        : 'hasibu_master_vault_$slug.enc';
+  }
+
+  static String portalQueueFileNameForProfile(String? profileId) {
+    final slug = normalizeCloudProfileId(profileId);
+    return slug == 'default'
+        ? portalQueueFileName
+        : 'hasibu_portal_queue_$slug.enc';
+  }
+
+  static String? parseProfileIdFromFileName(String fileName) {
+    final clean = fileName.trim();
+    if (clean == backupFileName) return 'default';
+    final match = RegExp(r'^hasibu_sync_([a-z0-9_-]+)\.enc$').firstMatch(clean);
+    if (match != null) {
+      return normalizeCloudProfileId(match.group(1));
+    }
+    return null;
+  }
   static const String _driveFilesEndpoint =
       'https://www.googleapis.com/drive/v3/files';
   static const String _driveUploadEndpoint =
@@ -1141,22 +1242,30 @@ class GoogleDriveSyncService {
     return dir.path;
   }
 
-  /// Yerel SQLite veritabanını arka plan izolatında (`compute`) serileştirir,
+  /// Yerel SQLite veritabanını arka plan izolatında serileştirir,
   /// [SYNC-01] & [SYNC-02] uyarınca `AES-256-GCM` ile şifreler:
-  /// - `hasibu_master_vault.enc` (& `hasibu_sync.enc`): İK/Yönetici tam veritabanı yedeği
+  /// - `hasibu_master_vault.enc` (& `hasibu_sync.enc` veya profil dosyası): İK/Yönetici tam veritabanı yedeği
   /// - `hasibu_portal_queue.enc`: Personel Portalı kısıtlı paketi (`hr_requests` + maskelenmiş vardiya)
   Future<DriveSyncStatus> pushToCloud({
     String deviceName = 'İşyeri Laptop (Merkez)',
     bool force = false,
     bool isEmployeePortalOnly = false,
     String? employeeCardNo,
+    String? profileId,
+    String operationLabel = 'backup',
   }) async {
     final now = DateTime.now();
     final settings = db.getCompanySettings();
     final gmail = settings.syncGmailAccount.trim();
+    final effectiveProfileId =
+        normalizeCloudProfileId(profileId ?? settings.cloudProfileId);
+    final primaryFileName = backupFileNameForProfile(effectiveProfileId);
+    final masterFileName = masterVaultFileNameForProfile(effectiveProfileId);
+    final portalFileName = portalQueueFileNameForProfile(effectiveProfileId);
 
     if (!force &&
         _lastCachedStatus != null &&
+        _lastCachedStatus!.cloudProfileId == effectiveProfileId &&
         now.difference(_lastSyncAttempt) < const Duration(seconds: 10)) {
       return _lastCachedStatus!;
     }
@@ -1188,11 +1297,14 @@ class GoogleDriveSyncService {
         : encryptedMasterPayload;
     final payloadBytes = utf8.encode(primaryEncryptedPayload);
     final hash = sha256.convert(payloadBytes).toString().substring(0, 12);
+    final cacheKey = '${effectiveProfileId}_$hash';
 
-    if (!force && hash == _lastPayloadHash && _lastCachedStatus != null) {
+    if (!force && cacheKey == _lastPayloadHash && _lastCachedStatus != null) {
       return _lastCachedStatus!.copyWith(
         lastSyncTime: now,
         lastHash: hash,
+        cloudProfileId: effectiveProfileId,
+        lastOperation: operationLabel,
       );
     }
 
@@ -1203,11 +1315,14 @@ class GoogleDriveSyncService {
     final mirrorOutcome = await _writeLocalMirror(
       primaryEncryptedPayload,
       effectiveFolder,
+      primaryFileName: primaryFileName,
+      masterFileName: masterFileName,
+      portalFileName: portalFileName,
       masterVaultEncrypted: isEmployeePortalOnly ? null : encryptedMasterPayload,
       portalQueueEncrypted: encryptedPortalPayload,
     );
     _lastSyncAttempt = now;
-    _lastPayloadHash = hash;
+    _lastPayloadHash = cacheKey;
 
     // 2. Google Drive OAuth token mevcutsa buluta yükle
     String? token;
@@ -1225,7 +1340,7 @@ class GoogleDriveSyncService {
     if (hasOAuthBearerToken) {
       try {
         final targetRemoteName =
-            isEmployeePortalOnly ? portalQueueFileName : backupFileName;
+            isEmployeePortalOnly ? portalFileName : primaryFileName;
         await _runWithTokenRefresh<void>(
           cleanToken,
           (activeToken) => _uploadEncryptedPayload(
@@ -1247,8 +1362,10 @@ class GoogleDriveSyncService {
           isDriveFolderMirrored: mirrorOutcome.wroteDriveFolder,
           syncedFilePath: mirrorOutcome.primaryPath,
           syncedBytes: payloadBytes.length,
+          cloudProfileId: effectiveProfileId,
+          lastOperation: operationLabel,
           message:
-              'Google Drive AES-256-GCM (${gmail.isEmpty ? "OAuth 2.0" : gmail}) buluta şifreli yüklendi (#$hash • ${(payloadBytes.length / 1024).toStringAsFixed(1)} KB)',
+              'Google Drive AES-256-GCM (${gmail.isEmpty ? "OAuth 2.0" : gmail} • Profil: $effectiveProfileId) buluta şifreli yüklendi (#$hash • ${(payloadBytes.length / 1024).toStringAsFixed(1)} KB)',
         );
         _lastCachedStatus = status;
         return status;
@@ -1264,6 +1381,8 @@ class GoogleDriveSyncService {
             isDriveFolderMirrored: true,
             syncedFilePath: mirrorOutcome.driveFilePath,
             syncedBytes: mirrorOutcome.bytesWritten,
+            cloudProfileId: effectiveProfileId,
+            lastOperation: operationLabel,
             message:
                 'Google API anahtarı süresi doldu ancak Google Drive klasörüne AES-256-GCM şifreli eşitlendi (${mirrorOutcome.driveFilePath} • #$hash)',
           );
@@ -1280,6 +1399,8 @@ class GoogleDriveSyncService {
           isDriveFolderMirrored: false,
           syncedFilePath: mirrorOutcome.localFilePath,
           syncedBytes: mirrorOutcome.bytesWritten,
+          cloudProfileId: effectiveProfileId,
+          lastOperation: operationLabel,
           message:
               'Google Drive API yüklemesi başarısız. Yalnızca yerel AES-256-GCM şifreli yedek alındı (#$hash).',
         );
@@ -1300,6 +1421,8 @@ class GoogleDriveSyncService {
         isDriveFolderMirrored: true,
         syncedFilePath: mirrorOutcome.driveFilePath,
         syncedBytes: mirrorOutcome.bytesWritten,
+        cloudProfileId: effectiveProfileId,
+        lastOperation: operationLabel,
         message:
             'Google Drive Klasörüne AES-256-GCM şifreli eşitlendi (${mirrorOutcome.driveFilePath} • #$hash • ${(mirrorOutcome.bytesWritten / 1024).toStringAsFixed(1)} KB)',
       );
@@ -1318,23 +1441,42 @@ class GoogleDriveSyncService {
       isDriveFolderMirrored: false,
       syncedFilePath: mirrorOutcome.localFilePath,
       syncedBytes: mirrorOutcome.bytesWritten,
+      cloudProfileId: effectiveProfileId,
+      lastOperation: operationLabel,
       message: gmail.isNotEmpty
-          ? 'Google OAuth 2.0 girişi doğrulanmadı ($gmail). Yerel AES-256-GCM yedek alındı ($backupFileName • #$hash).'
-          : 'Yerel AES-256-GCM şifreli yedek alındı ($backupFileName • #$hash). Google OAuth 2.0 veya Drive klasörü bağlandığında buluta eşitlenir.',
+          ? 'Google OAuth 2.0 girişi doğrulanmadı ($gmail). Yerel AES-256-GCM yedek alındı ($primaryFileName • #$hash).'
+          : 'Yerel AES-256-GCM şifreli yedek alındı ($primaryFileName • #$hash). Google OAuth 2.0 veya Drive klasörü bağlandığında buluta eşitlenir.',
     );
     _lastCachedStatus = status;
     return status;
   }
 
-  /// Google Drive'dan (veya yerel paylaşılan `.enc` yedek dosyasından) en güncel paketi
-  /// indirip `AES-256-GCM` şifresini çözer ve yerel SQLite ile birleştirir.
-  Future<DriveSyncStatus> pullAndReconcile({
+  /// Google Drive'dan (veya yerel paylaşılan `.enc` yedek dosyasından) seçili profilin
+  /// şifreli paketini indirip `AES-256-GCM` şifresini çözer ve yerel SQLite ile birleştirir
+  /// (`CloudRestoreMode.merge`) veya birebir geri yükler (`CloudRestoreMode.replace`).
+  Future<({DriveSyncStatus status, CloudRestoreSummary? summary})>
+      restoreFromCloud({
+    String? profileId,
+    CloudRestoreMode mode = CloudRestoreMode.merge,
     bool isEmployeePortalOnly = false,
+    bool cloudOnly = false,
+    String? overrideWorkspaceKey,
   }) async {
     final now = DateTime.now();
     final settings = db.getCompanySettings();
     final gmail = settings.syncGmailAccount.trim();
+    final effectiveProfileId =
+        normalizeCloudProfileId(profileId ?? settings.cloudProfileId);
+    final primaryFileName = backupFileNameForProfile(effectiveProfileId);
+    final masterFileName = masterVaultFileNameForProfile(effectiveProfileId);
+    final portalFileName = portalQueueFileNameForProfile(effectiveProfileId);
+
     try {
+      if (overrideWorkspaceKey != null &&
+          overrideWorkspaceKey.trim().isNotEmpty) {
+        await saveWorkspaceKey(overrideWorkspaceKey.trim());
+      }
+
       String? token;
       try {
         token = await getAccessToken();
@@ -1352,7 +1494,7 @@ class GoogleDriveSyncService {
           cleanToken.isNotEmpty && cleanToken.startsWith('ya29.');
 
       final preferredFile =
-          isEmployeePortalOnly ? portalQueueFileName : backupFileName;
+          isEmployeePortalOnly ? portalFileName : primaryFileName;
 
       if (isDirectGoogleApiToken) {
         try {
@@ -1362,6 +1504,8 @@ class GoogleDriveSyncService {
             (activeToken) => _downloadEncryptedPayload(
               activeToken,
               preferredFile: preferredFile,
+              fallbackMasterFile: masterFileName,
+              includeLegacyDefault: effectiveProfileId == 'default',
             ),
           );
           if (cloudPayload != null) {
@@ -1377,17 +1521,19 @@ class GoogleDriveSyncService {
         }
       }
 
+      final candidateNames = <String>[
+        preferredFile,
+        if (masterFileName != preferredFile) masterFileName,
+        if (primaryFileName != preferredFile) primaryFileName,
+        if (effectiveProfileId == 'default') _legacyBackupFileName,
+      ];
+
       final effectiveFolder = await _resolveEffectiveSyncFolder(
         settings.syncFolderPath,
       );
       if (rawPayload == null || rawPayload.isEmpty) {
         if (effectiveFolder.isNotEmpty) {
-          for (final candidateName in <String>[
-            preferredFile,
-            masterVaultFileName,
-            backupFileName,
-            _legacyBackupFileName,
-          ]) {
+          for (final candidateName in candidateNames) {
             final driveFile = File(p.join(effectiveFolder, candidateName));
             if (await driveFile.exists()) {
               rawPayload = await driveFile.readAsString();
@@ -1399,37 +1545,59 @@ class GoogleDriveSyncService {
         }
       }
 
-      if (rawPayload == null || rawPayload.isEmpty) {
-        rawPayload = await _readLocalMirror('');
+      if (!cloudOnly && (rawPayload == null || rawPayload.isEmpty)) {
+        rawPayload = await _readLocalMirror(
+          '',
+          candidateNames: candidateNames,
+        );
         if (rawPayload != null && rawPayload.isNotEmpty) {
           try {
             final dir = await getApplicationSupportDirectory();
-            sourcePath = p.join(dir.path, backupFileName);
+            sourcePath = p.join(dir.path, primaryFileName);
           } catch (_) {
-            sourcePath = backupFileName;
+            sourcePath = primaryFileName;
           }
         }
       }
 
       if (rawPayload == null || rawPayload.isEmpty) {
-        return DriveSyncStatus(
-          stage: DriveSyncStage.idle,
+        final status = DriveSyncStatus(
+          stage: cloudOnly ? DriveSyncStage.error : DriveSyncStage.idle,
           lastSyncTime: now,
           connectedGmail: gmail,
           isCloudApiVerified: false,
           isDriveFolderMirrored: false,
-          message: 'Henüz bulut veya yerel şifreli yedek dosyası bulunamadı.',
+          cloudProfileId: effectiveProfileId,
+          lastOperation: 'restore',
+          message: cloudOnly
+              ? 'Google Drive bulutunda "$effectiveProfileId" profiline ait şifreli yedek ($primaryFileName) bulunamadı.'
+              : 'Henüz bulut veya yerel şifreli yedek dosyası bulunamadı.',
         );
+        return (status: status, summary: null);
       }
 
       final workspaceKey = await getWorkspaceKey();
-      final decoded = await HasibuSecurityService.decryptSyncJsonPayload(
-        rawPayload,
-        workspaceKey: workspaceKey,
-      );
-      final merged = db.reconcileCloudSnapshot(decoded);
-      final remoteDevice =
-          decoded['deviceName'] as String? ?? 'İşyeri Laptop (Merkez)';
+      final Map<String, dynamic> decoded;
+      try {
+        decoded = await HasibuSecurityService.decryptSyncJsonPayload(
+          rawPayload,
+          workspaceKey: workspaceKey,
+        );
+      } on SecretBoxAuthenticationError {
+        final status = DriveSyncStatus(
+          stage: DriveSyncStage.error,
+          lastSyncTime: now,
+          connectedGmail: gmail,
+          cloudProfileId: effectiveProfileId,
+          lastOperation: 'restore',
+          message:
+              'Bulut yedeği çözülemedi: Bu yedek başka bir cihazdaki farklı Çalışma Alanı Anahtarı (Workspace Key) ile şifrelenmiş. Diğer cihazdan aldığınız anahtarı "Şifreleme Anahtarı" alanına girip tekrar deneyin.',
+        );
+        return (status: status, summary: null);
+      }
+
+      final summary = db.restoreCloudSnapshot(decoded, mode: mode);
+      final remoteDevice = summary.sourceDeviceName;
       final bytesLen = utf8.encode(rawPayload).length;
 
       final bool trulySynced = fromCloudApi || fromDriveFolder;
@@ -1442,19 +1610,158 @@ class GoogleDriveSyncService {
         isDriveFolderMirrored: fromDriveFolder,
         syncedFilePath: sourcePath,
         syncedBytes: bytesLen,
+        cloudProfileId: effectiveProfileId,
+        lastOperation: 'restore',
         message: trulySynced
-            ? 'AES-256-GCM şifreli Drive yedeği çözüldü ve uzlaştırıldı ($remoteDevice) • $merged kayıt birleştirildi.'
-            : 'Yerel AES-256-GCM şifreli yedek çözüldü ($remoteDevice • $merged kayıt).',
+            ? 'Buluttan yüklendi (${mode.label} • $remoteDevice • Profil: $effectiveProfileId): ${summary.toTurkishSummary()}'
+            : 'Yerel yedekten yüklendi (${mode.label} • $remoteDevice): ${summary.toTurkishSummary()}',
       );
       _lastCachedStatus = status;
-      return status;
+      return (status: status, summary: summary);
     } catch (e) {
-      return DriveSyncStatus(
+      final status = DriveSyncStatus(
         stage: DriveSyncStage.error,
         lastSyncTime: now,
         connectedGmail: gmail,
-        message: 'Şifreli senkronizasyon hatası: $e',
+        cloudProfileId: effectiveProfileId,
+        lastOperation: 'restore',
+        message: 'Buluttan yükleme hatası: $e',
       );
+      return (status: status, summary: null);
+    }
+  }
+
+  /// Google Drive'dan (veya yerel paylaşılan `.enc` yedek dosyasından) en güncel paketi
+  /// indirip `AES-256-GCM` şifresini çözer ve yerel SQLite ile birleştirir.
+  Future<DriveSyncStatus> pullAndReconcile({
+    bool isEmployeePortalOnly = false,
+  }) async {
+    final result = await restoreFromCloud(
+      mode: CloudRestoreMode.merge,
+      isEmployeePortalOnly: isEmployeePortalOnly,
+    );
+    return result.status;
+  }
+
+  /// Bağlı Google Drive hesabında ve yerel/Drive klasörlerinde bulunan yedek profillerini listeler.
+  Future<List<CloudBackupProfileInfo>> listAvailableCloudBackups() async {
+    final byProfile = <String, CloudBackupProfileInfo>{};
+    final settings = db.getCompanySettings();
+
+    String? token;
+    try {
+      token = await getAccessToken();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+    final cleanToken = (token ?? '').trim();
+    if (cleanToken.isNotEmpty && cleanToken.startsWith('ya29.')) {
+      try {
+        final files = await _runWithTokenRefresh<List<dynamic>>(
+          cleanToken,
+          (activeToken) async {
+            final resp = await _dio.get<Map<String, dynamic>>(
+              _driveFilesEndpoint,
+              queryParameters: {
+                'q': "name contains 'hasibu_sync' and trashed = false",
+                'spaces': 'drive',
+                'fields': 'files(id, name, modifiedTime, size)',
+                'orderBy': 'modifiedTime desc',
+                'pageSize': 50,
+              },
+              options: Options(
+                headers: {HttpHeaders.authorizationHeader: 'Bearer $activeToken'},
+              ),
+            );
+            return resp.data?['files'] as List<dynamic>? ?? const <dynamic>[];
+          },
+        );
+        for (final raw in files) {
+          if (raw is! Map) continue;
+          final f = Map<String, dynamic>.from(raw);
+          final name = (f['name'] as String? ?? '').trim();
+          final profileId = parseProfileIdFromFileName(name);
+          if (profileId == null) continue;
+          if (byProfile.containsKey(profileId)) continue;
+          final size = int.tryParse((f['size'] ?? '0').toString()) ?? 0;
+          final modified = DateTime.tryParse(
+            (f['modifiedTime'] as String? ?? '').trim(),
+          );
+          byProfile[profileId] = CloudBackupProfileInfo(
+            profileId: profileId,
+            fileName: name,
+            remoteFileId: f['id'] as String?,
+            modifiedTime: modified,
+            sizeBytes: size,
+            source: 'Google Drive Bulut',
+          );
+        }
+      } catch (e) {
+        _lastSyncWarning = e.toString();
+        debugPrint(
+          'GoogleDriveSyncService: listAvailableCloudBackups API uyarısı: $e',
+        );
+      }
+    }
+
+    final effectiveFolder =
+        await _resolveEffectiveSyncFolder(settings.syncFolderPath);
+    if (effectiveFolder.isNotEmpty) {
+      await _collectDirectoryBackupProfiles(
+        Directory(effectiveFolder),
+        source: 'Google Drive Klasörü',
+        byProfile: byProfile,
+      );
+    }
+
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      await _collectDirectoryBackupProfiles(
+        supportDir,
+        source: 'Yerel Yedek',
+        byProfile: byProfile,
+      );
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+
+    final sorted = byProfile.values.toList()
+      ..sort((a, b) {
+        final am = a.modifiedTime;
+        final bm = b.modifiedTime;
+        if (am == null && bm == null) {
+          return a.profileId.compareTo(b.profileId);
+        }
+        if (am == null) return 1;
+        if (bm == null) return -1;
+        return bm.compareTo(am);
+      });
+    return List<CloudBackupProfileInfo>.unmodifiable(sorted);
+  }
+
+  Future<void> _collectDirectoryBackupProfiles(
+    Directory dir, {
+    required String source,
+    required Map<String, CloudBackupProfileInfo> byProfile,
+  }) async {
+    try {
+      if (!await dir.exists()) return;
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        final profileId = parseProfileIdFromFileName(name);
+        if (profileId == null || byProfile.containsKey(profileId)) continue;
+        final stat = await entity.stat();
+        byProfile[profileId] = CloudBackupProfileInfo(
+          profileId: profileId,
+          fileName: name,
+          modifiedTime: stat.modified,
+          sizeBytes: stat.size,
+          source: source,
+        );
+      }
+    } catch (e) {
+      _lastSyncWarning = e.toString();
     }
   }
 
@@ -1530,19 +1837,25 @@ class GoogleDriveSyncService {
   Future<({String rawPayload, String fileId})?> _downloadEncryptedPayload(
     String token, {
     required String preferredFile,
+    String fallbackMasterFile = masterVaultFileName,
+    bool includeLegacyDefault = true,
   }) async {
-    final fileId = await _findRemoteFileId(
-          token,
-          fileName: preferredFile,
-        ) ??
-        await _findRemoteFileId(
-          token,
-          fileName: masterVaultFileName,
-        ) ??
-        await _findRemoteFileId(
-          token,
-          fileName: _legacyBackupFileName,
-        );
+    String? fileId = await _findRemoteFileId(
+      token,
+      fileName: preferredFile,
+    );
+    if (fileId == null && fallbackMasterFile != preferredFile) {
+      fileId = await _findRemoteFileId(
+        token,
+        fileName: fallbackMasterFile,
+      );
+    }
+    if (fileId == null && includeLegacyDefault) {
+      fileId = await _findRemoteFileId(
+        token,
+        fileName: _legacyBackupFileName,
+      );
+    }
     if (fileId == null) return null;
 
     final resp = await _dio.get<String>(
@@ -1616,6 +1929,9 @@ class GoogleDriveSyncService {
   Future<_MirrorWriteOutcome> _writeLocalMirror(
     String jsonPayload,
     String customFolderPath, {
+    String primaryFileName = backupFileName,
+    String masterFileName = masterVaultFileName,
+    String portalFileName = portalQueueFileName,
     String? masterVaultEncrypted,
     String? portalQueueEncrypted,
   }) async {
@@ -1632,14 +1948,14 @@ class GoogleDriveSyncService {
         final rootPrefix = p.rootPrefix(cleanFolder);
         if (rootPrefix.isEmpty || Directory(rootPrefix).existsSync()) {
           await customDir.create(recursive: true);
-          final customFile = File(p.join(customDir.path, backupFileName));
+          final customFile = File(p.join(customDir.path, primaryFileName));
           await customFile.writeAsString(jsonPayload, flush: true);
           if (masterVaultEncrypted != null) {
-            await File(p.join(customDir.path, masterVaultFileName))
+            await File(p.join(customDir.path, masterFileName))
                 .writeAsString(masterVaultEncrypted, flush: true);
           }
           if (portalQueueEncrypted != null) {
-            await File(p.join(customDir.path, portalQueueFileName))
+            await File(p.join(customDir.path, portalFileName))
                 .writeAsString(portalQueueEncrypted, flush: true);
           }
           if (customFile.existsSync() && customFile.lengthSync() > 0) {
@@ -1657,14 +1973,14 @@ class GoogleDriveSyncService {
     try {
       final dir = await getApplicationSupportDirectory();
       await dir.create(recursive: true);
-      final file = File(p.join(dir.path, backupFileName));
+      final file = File(p.join(dir.path, primaryFileName));
       await file.writeAsString(jsonPayload, flush: true);
       if (masterVaultEncrypted != null) {
-        await File(p.join(dir.path, masterVaultFileName))
+        await File(p.join(dir.path, masterFileName))
             .writeAsString(masterVaultEncrypted, flush: true);
       }
       if (portalQueueEncrypted != null) {
-        await File(p.join(dir.path, portalQueueFileName))
+        await File(p.join(dir.path, portalFileName))
             .writeAsString(portalQueueEncrypted, flush: true);
       }
       if (file.existsSync()) {
@@ -1685,15 +2001,18 @@ class GoogleDriveSyncService {
     );
   }
 
-  Future<String?> _readLocalMirror(String customFolderPath) async {
+  Future<String?> _readLocalMirror(
+    String customFolderPath, {
+    List<String> candidateNames = const <String>[
+      backupFileName,
+      masterVaultFileName,
+      portalQueueFileName,
+      _legacyBackupFileName,
+    ],
+  }) async {
     try {
       if (customFolderPath.trim().isNotEmpty) {
-        for (final name in <String>[
-          backupFileName,
-          masterVaultFileName,
-          portalQueueFileName,
-          _legacyBackupFileName,
-        ]) {
+        for (final name in candidateNames) {
           final customFile = File(p.join(customFolderPath.trim(), name));
           if (await customFile.exists()) {
             return await customFile.readAsString();
@@ -1701,12 +2020,7 @@ class GoogleDriveSyncService {
         }
       }
       final dir = await getApplicationSupportDirectory();
-      for (final name in <String>[
-        backupFileName,
-        masterVaultFileName,
-        portalQueueFileName,
-        _legacyBackupFileName,
-      ]) {
+      for (final name in candidateNames) {
         final file = File(p.join(dir.path, name));
         if (await file.exists()) {
           return await file.readAsString();

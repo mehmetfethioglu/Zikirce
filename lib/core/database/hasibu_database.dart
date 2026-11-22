@@ -84,7 +84,12 @@ class HasibuDatabase {
         admin_theme_mode TEXT NOT NULL DEFAULT 'light',
         license_token TEXT NOT NULL DEFAULT '',
         last_verified_timestamp INTEGER NOT NULL DEFAULT 0,
-        hardware_fingerprint TEXT NOT NULL DEFAULT ''
+        hardware_fingerprint TEXT NOT NULL DEFAULT '',
+        auto_cloud_backup_enabled INTEGER NOT NULL DEFAULT 1,
+        auto_cloud_backup_minutes INTEGER NOT NULL DEFAULT 30,
+        auto_cloud_backup_on_change INTEGER NOT NULL DEFAULT 1,
+        cloud_profile_id TEXT NOT NULL DEFAULT 'default',
+        cloud_profile_label TEXT NOT NULL DEFAULT 'Ana İşletme Kasası'
       );
     ''');
 
@@ -228,6 +233,23 @@ class HasibuDatabase {
       BEGIN
         SELECT RAISE(ABORT, 'Guvenlik Ihlali: audit_logs tablosundaki kayitlar degistirilemez!');
       END;
+
+      CREATE TABLE IF NOT EXISTS app_users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'hrManager',
+        allowed_modules TEXT NOT NULL DEFAULT 'pdksHr,employeePortal',
+        allowed_branch_id INTEGER,
+        linked_gmail TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        theme_mode TEXT NOT NULL DEFAULT 'light',
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_app_users_username
+        ON app_users(username);
     ''');
 
     // Mevcut veritabanı yükseltmesi (migration)
@@ -242,6 +264,11 @@ class HasibuDatabase {
       "ALTER TABLE company_settings ADD COLUMN license_token TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE company_settings ADD COLUMN last_verified_timestamp INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE company_settings ADD COLUMN hardware_fingerprint TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_enabled INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_minutes INTEGER NOT NULL DEFAULT 30",
+      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_on_change INTEGER NOT NULL DEFAULT 1",
+      "ALTER TABLE company_settings ADD COLUMN cloud_profile_id TEXT NOT NULL DEFAULT 'default'",
+      "ALTER TABLE company_settings ADD COLUMN cloud_profile_label TEXT NOT NULL DEFAULT 'Ana İşletme Kasası'",
       "ALTER TABLE branches ADD COLUMN terminal_comm_key TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE branches ADD COLUMN qr_secret TEXT NOT NULL DEFAULT 'HSB-TOTP-SECRET-2026'",
       "ALTER TABLE attendance_logs ADD COLUMN integrity_hash TEXT NOT NULL DEFAULT ''",
@@ -428,6 +455,9 @@ class HasibuDatabase {
     final rows = _db.select('SELECT * FROM company_settings WHERE id = 1');
     if (rows.isEmpty) return const CompanySettings();
     final r = rows.first;
+    final rawProfileId = (r['cloud_profile_id'] as String? ?? 'default').trim();
+    final rawProfileLabel =
+        (r['cloud_profile_label'] as String? ?? 'Ana İşletme Kasası').trim();
     return CompanySettings(
       companyName: r['company_name'] as String,
       autoPollEnabled: (r['auto_poll_enabled'] as int) == 1,
@@ -444,6 +474,15 @@ class HasibuDatabase {
       lastVerifiedTimestamp:
           (r['last_verified_timestamp'] as num?)?.toInt() ?? 0,
       hardwareFingerprint: r['hardware_fingerprint'] as String? ?? '',
+      autoCloudBackupEnabled:
+          ((r['auto_cloud_backup_enabled'] as int?) ?? 1) == 1,
+      autoCloudBackupMinutes:
+          ((r['auto_cloud_backup_minutes'] as int?) ?? 30).clamp(5, 1440),
+      autoCloudBackupOnChange:
+          ((r['auto_cloud_backup_on_change'] as int?) ?? 1) == 1,
+      cloudProfileId: rawProfileId.isEmpty ? 'default' : rawProfileId,
+      cloudProfileLabel:
+          rawProfileLabel.isEmpty ? 'Ana İşletme Kasası' : rawProfileLabel,
     );
   }
 
@@ -464,11 +503,17 @@ class HasibuDatabase {
         : (settings.lastVerifiedTimestamp > 0
             ? settings.lastVerifiedTimestamp
             : existing.lastVerifiedTimestamp);
+    final cleanProfileId = settings.cloudProfileId.trim().isEmpty
+        ? 'default'
+        : settings.cloudProfileId.trim();
+    final cleanProfileLabel = settings.cloudProfileLabel.trim().isEmpty
+        ? 'Ana İşletme Kasası'
+        : settings.cloudProfileLabel.trim();
 
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO company_settings
-      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, admin_theme_mode, license_token, last_verified_timestamp, hardware_fingerprint)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, admin_theme_mode, license_token, last_verified_timestamp, hardware_fingerprint, auto_cloud_backup_enabled, auto_cloud_backup_minutes, auto_cloud_backup_on_change, cloud_profile_id, cloud_profile_label)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       settings.companyName.trim().isEmpty
@@ -494,6 +539,11 @@ class HasibuDatabase {
       effectiveToken,
       effectiveVerifiedTs,
       effectiveHw,
+      settings.autoCloudBackupEnabled ? 1 : 0,
+      settings.autoCloudBackupMinutes.clamp(5, 1440),
+      settings.autoCloudBackupOnChange ? 1 : 0,
+      cleanProfileId,
+      cleanProfileLabel,
     ]);
     stmt.dispose();
   }
@@ -1651,6 +1701,97 @@ class HasibuDatabase {
     return list;
   }
 
+  // ---------------------------------------------------------------------------
+  // Çoklu Yetkili Kullanıcı (`app_users`) CRUD İşlemleri
+  // ---------------------------------------------------------------------------
+
+  AppUserAccount _mapAppUserRow(Row r) {
+    final role = AppUserRole.fromName(r['role'] as String?);
+    final rawModules = r['allowed_modules'] as String?;
+    return AppUserAccount(
+      id: r['id'] as String,
+      username: (r['username'] as String? ?? '').trim().toLowerCase(),
+      displayName: r['display_name'] as String? ?? '',
+      passwordHash: r['password_hash'] as String? ?? '',
+      role: role,
+      allowedModules: rawModules == null || rawModules.trim().isEmpty
+          ? role.defaultModules
+          : HasibuModule.parseCsv(rawModules),
+      allowedBranchId: (r['allowed_branch_id'] as num?)?.toInt(),
+      linkedGmail: r['linked_gmail'] as String?,
+      isActive: ((r['is_active'] as int?) ?? 1) == 1,
+      themeMode: HasibuThemeMode.fromName(r['theme_mode'] as String?),
+      createdAtIso: r['created_at'] as String? ?? '',
+    );
+  }
+
+  List<AppUserAccount> getAppUsers() {
+    final rows = _db.select(
+      'SELECT * FROM app_users ORDER BY LOWER(display_name) ASC, LOWER(username) ASC',
+    );
+    return rows.map(_mapAppUserRow).toList(growable: false);
+  }
+
+  AppUserAccount? findAppUserByUsername(String username) {
+    final clean = username.trim().toLowerCase();
+    if (clean.isEmpty) return null;
+    final stmt = _db.prepare(
+      'SELECT * FROM app_users WHERE LOWER(username) = LOWER(?) LIMIT 1',
+    );
+    final rows = stmt.select([clean]);
+    final user = rows.isEmpty ? null : _mapAppUserRow(rows.first);
+    stmt.dispose();
+    return user;
+  }
+
+  void upsertAppUser(AppUserAccount user) {
+    final cleanUsername = user.username.trim().toLowerCase();
+    final rawPass = user.passwordHash.trim().isEmpty
+        ? '1234'
+        : user.passwordHash.trim();
+    final hashedPwd = HasibuSecurityService.hashPassword(rawPass);
+    final cleanDisplay = user.displayName.trim().isEmpty
+        ? cleanUsername
+        : user.displayName.trim();
+    final cleanModules = user.allowedModules.isEmpty
+        ? user.role.defaultModules
+        : user.allowedModules;
+
+    final stmt = _db.prepare('''
+      INSERT OR REPLACE INTO app_users
+      (id, username, display_name, password_hash, role, allowed_modules, allowed_branch_id, linked_gmail, is_active, theme_mode, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''');
+    stmt.execute([
+      user.id.trim(),
+      cleanUsername,
+      cleanDisplay,
+      hashedPwd,
+      user.role.name,
+      HasibuModule.toCsv(cleanModules),
+      user.allowedBranchId,
+      user.linkedGmail?.trim().isEmpty == true ? null : user.linkedGmail?.trim(),
+      user.isActive ? 1 : 0,
+      user.themeMode.name,
+      user.createdAtIso.trim().isEmpty
+          ? DateTime.now().toIso8601String()
+          : user.createdAtIso.trim(),
+    ]);
+    stmt.dispose();
+  }
+
+  void deleteAppUser(String userId) {
+    final stmt = _db.prepare('DELETE FROM app_users WHERE id = ?');
+    stmt.execute([userId.trim()]);
+    stmt.dispose();
+  }
+
+  void updateAppUserThemeMode(String userId, HasibuThemeMode mode) {
+    final stmt = _db.prepare('UPDATE app_users SET theme_mode = ? WHERE id = ?');
+    stmt.execute([mode.name, userId.trim()]);
+    stmt.dispose();
+  }
+
   /// [SYNC-02] Personel Portalı (`hasibu_portal_queue.enc`) için yalnızca ilgili personelin
   /// kendi `hr_requests` kayıtlarını ve maskelenmiş vardiya bilgisini içeren kısıtlı paket.
   Map<String, dynamic> exportPortalQueueSnapshot({
@@ -1748,18 +1889,22 @@ class HasibuDatabase {
         )
         .toList(growable: false);
 
+    final companySettings = getCompanySettings();
     return <String, dynamic>{
-      'schemaVersion': 4,
+      'schemaVersion': 5,
       'vaultRole': 'master_vault',
       'exportedAt': DateTime.now().toIso8601String(),
       'deviceName': deviceName,
-      'companySettings': getCompanySettings().toJson(),
+      'cloudProfileId': companySettings.cloudProfileId,
+      'cloudProfileLabel': companySettings.cloudProfileLabel,
+      'companySettings': companySettings.toJson(),
       'branches': getBranches().map((e) => e.toJson()).toList(growable: false),
       'shifts': getShifts().map((e) => e.toJson()).toList(growable: false),
       'departments':
           getDepartments().map((e) => e.toJson()).toList(growable: false),
       'employees':
           getEmployees().map((e) => e.toJson()).toList(growable: false),
+      'appUsers': getAppUsers().map((e) => e.toJson()).toList(growable: false),
       'attendanceLogs': logs,
       'leaveRecords': leaves,
       'personnelDocuments': getAllPersonnelDocuments()
@@ -1785,114 +1930,233 @@ class HasibuDatabase {
     };
   }
 
-  /// Google Drive'dan gelen bulut yedeğini yerel veritabanı ile kayıpsız (Union Merge) uzlaştırır.
-  int reconcileCloudSnapshot(Map<String, dynamic> snapshot) {
-    int mergedCount = 0;
+  /// Google Drive'dan gelen bulut yedeğini yerel veritabanı ile birleştirir (`merge`)
+  /// veya eksiksiz Yönetici yedeği ile birebir geri yükler (`replace`).
+  CloudRestoreSummary restoreCloudSnapshot(
+    Map<String, dynamic> snapshot, {
+    CloudRestoreMode mode = CloudRestoreMode.merge,
+  }) {
+    if (mode == CloudRestoreMode.replace &&
+        (snapshot['vaultRole'] == 'portal_queue' ||
+            (!snapshot.containsKey('companySettings') &&
+                !snapshot.containsKey('branches') &&
+                !snapshot.containsKey('employees')))) {
+      throw StateError(
+        'Tam geri yükleme yalnızca eksiksiz Yönetici (master_vault) bulut yedeği ile yapılabilir.',
+      );
+    }
+
+    int branchesCount = 0;
+    int shiftsCount = 0;
+    int departmentsCount = 0;
+    int employeesCount = 0;
+    int appUsersCount = 0;
+    int attendanceLogsCount = 0;
+    int leaveRecordsCount = 0;
+    int documentsCount = 0;
+    int hrRequestsCount = 0;
+    int accountingCount = 0;
+
+    final sourceDeviceName =
+        (snapshot['deviceName'] as String? ?? 'Bulut Yedeği').trim();
+    final exportedAtIso = snapshot['exportedAt'] as String?;
+    String resolvedProfileId =
+        (snapshot['cloudProfileId'] as String? ?? '').trim();
+
     _db.execute('BEGIN TRANSACTION;');
     try {
+      if (mode == CloudRestoreMode.replace) {
+        // [AUD-01] Güvenlik: audit_logs tablosuna ASLA DELETE çalıştırılmaz (trigger korumalı).
+        for (final table in const <String>[
+          'attendance_logs',
+          'leave_records',
+          'employee_documents',
+          'hr_requests',
+          'employees',
+          'departments',
+          'shifts',
+          'branches',
+          'app_users',
+          'accounting_accounts',
+          'accounting_transactions',
+          'container_movements',
+          'stock_burn_items',
+          'checks_and_notes',
+        ]) {
+          _db.execute('DELETE FROM $table;');
+        }
+      }
+
       final rawCompany = snapshot['companySettings'];
-      if (rawCompany is Map<String, dynamic>) {
-        saveCompanySettings(CompanySettings.fromJson(rawCompany));
+      if (rawCompany is Map) {
+        final incoming = CompanySettings.fromJson(
+          Map<String, dynamic>.from(rawCompany),
+        );
+        final existing = getCompanySettings();
+        final incomingFolder = incoming.syncFolderPath.trim();
+        final isIncomingWindowsPath =
+            RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(incomingFolder) ||
+                incomingFolder.startsWith(r'\\');
+        final preserveFolder = incomingFolder.isEmpty ||
+            (!Platform.isWindows && isIncomingWindowsPath);
+        final effectiveProfileId = incoming.cloudProfileId.trim().isEmpty
+            ? existing.cloudProfileId
+            : incoming.cloudProfileId.trim();
+        if (resolvedProfileId.isEmpty) {
+          resolvedProfileId = effectiveProfileId;
+        }
+        final mergedSettings = incoming.copyWith(
+          hardwareFingerprint: existing.hardwareFingerprint.trim().isNotEmpty
+              ? existing.hardwareFingerprint.trim()
+              : incoming.hardwareFingerprint,
+          licenseToken: existing.licenseToken.trim().isNotEmpty
+              ? existing.licenseToken.trim()
+              : incoming.licenseToken,
+          syncGmailAccount: incoming.syncGmailAccount.trim().isEmpty
+              ? existing.syncGmailAccount
+              : incoming.syncGmailAccount,
+          syncFolderPath:
+              preserveFolder ? existing.syncFolderPath : incomingFolder,
+          cloudProfileId: effectiveProfileId,
+        );
+        saveCompanySettings(mergedSettings);
       }
 
       final rawBranches = snapshot['branches'] as List<dynamic>? ?? const [];
       for (final item in rawBranches) {
-        if (item is Map<String, dynamic>) {
-          upsertBranch(Branch.fromJson(item));
+        if (item is Map) {
+          upsertBranch(Branch.fromJson(Map<String, dynamic>.from(item)));
+          branchesCount++;
         }
       }
 
       final rawShifts = snapshot['shifts'] as List<dynamic>? ?? const [];
       for (final item in rawShifts) {
-        if (item is Map<String, dynamic>) {
-          upsertShift(ShiftPlan.fromJson(item));
+        if (item is Map) {
+          upsertShift(ShiftPlan.fromJson(Map<String, dynamic>.from(item)));
+          shiftsCount++;
         }
       }
 
       final rawDepts = snapshot['departments'] as List<dynamic>? ?? const [];
       for (final item in rawDepts) {
-        if (item is Map<String, dynamic>) {
-          upsertDepartment(Department.fromJson(item));
+        if (item is Map) {
+          upsertDepartment(
+            Department.fromJson(Map<String, dynamic>.from(item)),
+          );
+          departmentsCount++;
         }
       }
 
       final rawEmployees = snapshot['employees'] as List<dynamic>? ?? const [];
       for (final item in rawEmployees) {
-        if (item is Map<String, dynamic>) {
-          upsertEmployee(Employee.fromJson(item));
+        if (item is Map) {
+          upsertEmployee(Employee.fromJson(Map<String, dynamic>.from(item)));
+          employeesCount++;
+        }
+      }
+
+      final rawAppUsers = snapshot['appUsers'] as List<dynamic>? ?? const [];
+      for (final item in rawAppUsers) {
+        if (item is Map) {
+          upsertAppUser(
+            AppUserAccount.fromJson(Map<String, dynamic>.from(item)),
+          );
+          appUsersCount++;
         }
       }
 
       final rawLogs = snapshot['attendanceLogs'] as List<dynamic>? ?? const [];
       for (final item in rawLogs) {
-        if (item is Map<String, dynamic>) {
-          final log = AttendanceLog.fromJson(item);
+        if (item is Map) {
+          final log = AttendanceLog.fromJson(Map<String, dynamic>.from(item));
           if (upsertAttendanceLog(log)) {
-            mergedCount++;
+            attendanceLogsCount++;
           }
         }
       }
 
       final rawLeaves = snapshot['leaveRecords'] as List<dynamic>? ?? const [];
       for (final item in rawLeaves) {
-        if (item is Map<String, dynamic>) {
-          upsertLeaveRecord(LeaveRecord.fromJson(item));
+        if (item is Map) {
+          upsertLeaveRecord(
+            LeaveRecord.fromJson(Map<String, dynamic>.from(item)),
+          );
+          leaveRecordsCount++;
         }
       }
 
       final rawDocs =
           snapshot['personnelDocuments'] as List<dynamic>? ?? const [];
       for (final item in rawDocs) {
-        if (item is Map<String, dynamic>) {
-          upsertPersonnelDocument(PersonnelDocument.fromJson(item));
+        if (item is Map) {
+          upsertPersonnelDocument(
+            PersonnelDocument.fromJson(Map<String, dynamic>.from(item)),
+          );
+          documentsCount++;
         }
       }
 
       final rawReqs = snapshot['hrRequests'] as List<dynamic>? ?? const [];
       for (final item in rawReqs) {
-        if (item is Map<String, dynamic>) {
-          upsertHrRequest(HrRequest.fromJson(item));
+        if (item is Map) {
+          upsertHrRequest(HrRequest.fromJson(Map<String, dynamic>.from(item)));
+          hrRequestsCount++;
         }
       }
 
       final rawAccounts =
           snapshot['accountingAccounts'] as List<dynamic>? ?? const [];
       for (final item in rawAccounts) {
-        if (item is Map<String, dynamic>) {
-          upsertAccountingAccount(AccountingAccount.fromJson(item));
+        if (item is Map) {
+          upsertAccountingAccount(
+            AccountingAccount.fromJson(Map<String, dynamic>.from(item)),
+          );
+          accountingCount++;
         }
       }
 
       final rawTransactions =
           snapshot['accountingTransactions'] as List<dynamic>? ?? const [];
       for (final item in rawTransactions) {
-        if (item is Map<String, dynamic>) {
-          upsertAccountingTransaction(AccountingTransaction.fromJson(item));
-          mergedCount++;
+        if (item is Map) {
+          upsertAccountingTransaction(
+            AccountingTransaction.fromJson(Map<String, dynamic>.from(item)),
+          );
+          accountingCount++;
         }
       }
 
       final rawContainers =
           snapshot['containerMovements'] as List<dynamic>? ?? const [];
       for (final item in rawContainers) {
-        if (item is Map<String, dynamic>) {
-          upsertContainerMovement(ContainerMovement.fromJson(item));
+        if (item is Map) {
+          upsertContainerMovement(
+            ContainerMovement.fromJson(Map<String, dynamic>.from(item)),
+          );
+          accountingCount++;
         }
       }
 
       final rawStocks =
           snapshot['stockBurnItems'] as List<dynamic>? ?? const [];
       for (final item in rawStocks) {
-        if (item is Map<String, dynamic>) {
-          upsertStockBurnItem(StockBurnItem.fromJson(item));
+        if (item is Map) {
+          upsertStockBurnItem(
+            StockBurnItem.fromJson(Map<String, dynamic>.from(item)),
+          );
+          accountingCount++;
         }
       }
 
       final rawChecks =
           snapshot['checksAndNotes'] as List<dynamic>? ?? const [];
       for (final item in rawChecks) {
-        if (item is Map<String, dynamic>) {
-          upsertCheckOrNote(CheckOrAlertNote.fromJson(item));
+        if (item is Map) {
+          upsertCheckOrNote(
+            CheckOrAlertNote.fromJson(Map<String, dynamic>.from(item)),
+          );
+          accountingCount++;
         }
       }
       _db.execute('COMMIT;');
@@ -1900,7 +2164,54 @@ class HasibuDatabase {
       _db.execute('ROLLBACK;');
       rethrow;
     }
-    return mergedCount;
+
+    final totalApplied = branchesCount +
+        shiftsCount +
+        departmentsCount +
+        employeesCount +
+        appUsersCount +
+        attendanceLogsCount +
+        leaveRecordsCount +
+        documentsCount +
+        hrRequestsCount +
+        accountingCount;
+    final finalProfileId =
+        resolvedProfileId.isEmpty ? getCompanySettings().cloudProfileId : resolvedProfileId;
+    final summary = CloudRestoreSummary(
+      mode: mode,
+      totalAppliedRecords: totalApplied,
+      branchesCount: branchesCount,
+      shiftsCount: shiftsCount,
+      departmentsCount: departmentsCount,
+      employeesCount: employeesCount,
+      attendanceLogsCount: attendanceLogsCount,
+      leaveRecordsCount: leaveRecordsCount,
+      hrRequestsCount: hrRequestsCount,
+      documentsCount: documentsCount,
+      appUsersCount: appUsersCount,
+      accountingCount: accountingCount,
+      sourceDeviceName: sourceDeviceName,
+      cloudProfileId: finalProfileId,
+      exportedAtIso: exportedAtIso,
+    );
+
+    appendAuditLog(
+      actorEmployeeId: 'CLOUD_SYNC',
+      actionType: mode == CloudRestoreMode.replace
+          ? 'CLOUD_RESTORE_REPLACE'
+          : 'CLOUD_RESTORE_MERGE',
+      targetRecordId: finalProfileId,
+      oldValue: 'device=$sourceDeviceName',
+      newValue: summary.toTurkishSummary(),
+    );
+
+    return summary;
+  }
+
+  /// Google Drive'dan gelen bulut yedeğini yerel veritabanı ile kayıpsız (Union Merge) uzlaştırır.
+  int reconcileCloudSnapshot(Map<String, dynamic> snapshot) {
+    return restoreCloudSnapshot(snapshot, mode: CloudRestoreMode.merge)
+        .totalAppliedRecords;
   }
 
   void dispose() {

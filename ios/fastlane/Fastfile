@@ -126,10 +126,11 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Hasibu v1.0.10 TestFlight Surumu:
-      • Temiz sifir kurulum veritabani (ornek/sahsi veri icermez).
-      • Google ile dogrudan OAuth 2.0 girisi ve sifreli bulut yedekleme.
-      • PDKS, vardiya, izin, dijital ozelik arsivi ve yonetim kokpiti.
+      Hasibu v1.0.11 (Build 12) TestFlight Surumu:
+      • Buluta Yedekle, Buluttan Yukle (birlestir/tam geri yukle) ve Otomatik Bulut Yedekleme.
+      • Ayni Gmail/Google Drive hesabinda coklu kullanici ve izole kasa profili destegi.
+      • Uygulama ici Surum Notlari (Yenilikler) ekrani.
+      • Resmi Hasibu uygulama ikonu (iOS AppIcon ve Android Adaptive Icon).
     CHANGELOG
 
     upload_to_testflight(

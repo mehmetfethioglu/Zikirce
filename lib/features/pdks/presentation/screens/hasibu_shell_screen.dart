@@ -6,13 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../../../core/release/hasibu_release_notes.dart';
 import '../../../../core/security/hasibu_security_service.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
 import 'attendance_absence_report_view.dart';
+import 'cloud_backup_center_dialog.dart';
 import 'employee_portal_view.dart';
 import 'hasibu_login_screen.dart';
+import 'hasibu_release_notes_dialog.dart';
 import 'hasibu_settings_view.dart';
 
 export 'hasibu_settings_view.dart' show showCreateHrRequestDialog;
@@ -349,6 +352,10 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen>
                     _selectDestination(dest);
                     Navigator.of(context).pop();
                   },
+                  onOpenReleaseNotes: () {
+                    Navigator.of(context).pop();
+                    showHasibuReleaseNotesDialog(context);
+                  },
                 ),
               ),
             ),
@@ -439,6 +446,7 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen>
             _CloudSyncAppBarBadge(compact: !isWide),
           const SizedBox(width: 4),
           const UserThemeSelectorBar(compact: true),
+          if (isWide) const ReleaseNotesAppBarButton(),
           if (authSession.canAccess(HasibuModule.systemSettings) && isWide)
             IconButton(
               key: const ValueKey('appbar_settings_button'),
@@ -558,6 +566,8 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen>
                               selectedDestId: selectedDest.id,
                               showHeader: false,
                               onSelect: _selectDestination,
+                              onOpenReleaseNotes: () =>
+                                  showHasibuReleaseNotesDialog(context),
                             ),
                           ),
                           VerticalDivider(
@@ -645,6 +655,7 @@ class _HasibuSidebar extends StatelessWidget {
   final String selectedDestId;
   final bool showHeader;
   final ValueChanged<_ShellNavDestination> onSelect;
+  final VoidCallback? onOpenReleaseNotes;
 
   const _HasibuSidebar({
     required this.companySettings,
@@ -652,6 +663,7 @@ class _HasibuSidebar extends StatelessWidget {
     required this.selectedDestId,
     required this.showHeader,
     required this.onSelect,
+    this.onOpenReleaseNotes,
   });
 
   @override
@@ -735,6 +747,62 @@ class _HasibuSidebar extends StatelessWidget {
               ],
             ),
           ),
+          if (onOpenReleaseNotes != null) ...[
+            Divider(height: 1, color: pal.border),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                key: const ValueKey('sidebar_release_notes_button'),
+                onTap: onOpenReleaseNotes,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.new_releases_outlined,
+                        size: 18,
+                        color: Color(0xFF0284C7),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Sürüm Notları',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: pal.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0284C7).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          'v$hasibuAppVersion',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0284C7),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -836,6 +904,8 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final syncStatus =
         ref.watch(pdksDashboardProvider.select((s) => s.syncStatus));
+    final isCloudBusy =
+        ref.watch(pdksDashboardProvider.select((s) => s.isCloudBusy));
     final isPolling =
         ref.watch(pdksDashboardProvider.select((s) => s.isPollingTerminal));
     final lastReachable =
@@ -897,7 +967,13 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
             visualDensity: VisualDensity.compact,
             tooltip: 'Gmail & Bulut Eşitleme',
             onPressed: () => showGmailDriveSyncDialog(context, ref),
-            icon: Icon(Icons.cloud_sync_outlined, size: 19, color: dotColor),
+            icon: isCloudBusy
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(Icons.cloud_sync_outlined, size: 19, color: dotColor),
           ),
         ],
       );
@@ -993,20 +1069,28 @@ class _CloudSyncAppBarBadge extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: dotColor,
-                    shape: BoxShape.circle,
+                if (isCloudBusy)
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else ...[
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 5),
-                Icon(
-                  Icons.cloud_sync_outlined,
-                  size: 14,
-                  color: pal.textSecondary,
-                ),
+                  const SizedBox(width: 5),
+                  Icon(
+                    Icons.cloud_sync_outlined,
+                    size: 14,
+                    color: pal.textSecondary,
+                  ),
+                ],
                 const SizedBox(width: 4),
                 Text(
                   'Bulut',
@@ -1894,6 +1978,16 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
         ref.watch(pdksDashboardProvider.select((s) => s.autoPollEnabled));
     final syncStatus =
         ref.watch(pdksDashboardProvider.select((s) => s.syncStatus));
+    final isCloudBusy =
+        ref.watch(pdksDashboardProvider.select((s) => s.isCloudBusy));
+    final autoCloudEnabled = ref.watch(
+      pdksDashboardProvider
+          .select((s) => s.companySettings.autoCloudBackupEnabled),
+    );
+    final autoCloudMinutes = ref.watch(
+      pdksDashboardProvider
+          .select((s) => s.companySettings.autoCloudBackupMinutes),
+    );
     final gmail = ref.watch(
       pdksDashboardProvider.select((s) => s.companySettings.syncGmailAccount),
     );
@@ -1978,6 +2072,15 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                             color: pal.textSecondary,
                           ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Otomatik Bulut Yedekleme: ${autoCloudEnabled ? "Aktif (Her $autoCloudMinutes dk)" : "Kapalı"}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: pal.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                     Wrap(
@@ -2010,9 +2113,39 @@ class _TenfeiTerminalsAndSyncView extends ConsumerWidget {
                           label: const Text('Gmail Hesabı Tanımla'),
                         ),
                         FilledButton.tonalIcon(
-                          onPressed: () => ref
-                              .read(pdksDashboardProvider.notifier)
-                              .syncWithGoogleDriveNow(),
+                          key: const ValueKey('tenfei_btn_cloud_backup'),
+                          onPressed: isCloudBusy
+                              ? null
+                              : () async {
+                                  final res = await ref
+                                      .read(pdksDashboardProvider.notifier)
+                                      .backupToCloudNow();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(res.message)),
+                                    );
+                                  }
+                                },
+                          icon: const Icon(Icons.cloud_upload_rounded, size: 16),
+                          label: const Text('Buluta Yedekle'),
+                        ),
+                        OutlinedButton.icon(
+                          key: const ValueKey('tenfei_btn_cloud_restore'),
+                          onPressed: isCloudBusy
+                              ? null
+                              : () => showCloudRestoreDialog(context, ref),
+                          icon: const Icon(
+                            Icons.cloud_download_rounded,
+                            size: 16,
+                          ),
+                          label: const Text('Buluttan Yükle'),
+                        ),
+                        FilledButton.tonalIcon(
+                          onPressed: isCloudBusy
+                              ? null
+                              : () => ref
+                                  .read(pdksDashboardProvider.notifier)
+                                  .syncWithGoogleDriveNow(),
                           icon: const Icon(Icons.cloud_sync_rounded, size: 16),
                           label: const Text('Şimdi Eşitle'),
                         ),

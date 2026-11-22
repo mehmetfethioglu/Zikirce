@@ -1,0 +1,5 @@
+What's new in v1.0.11:
+• Cloud Backup, Cloud Restore (merge/full replace), and Automatic Cloud Backup
+• Multi-user roles and isolated vault profiles on the same Gmail/Google Drive account
+• In-app Release Notes viewer
+• Official Hasibu app icon and Android Adaptive Icon support

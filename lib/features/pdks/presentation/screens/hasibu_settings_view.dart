@@ -4,10 +4,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/services/google_drive_sync_service.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
+import 'app_users_management_card.dart';
+import 'cloud_backup_center_dialog.dart';
+import 'hasibu_release_notes_dialog.dart';
 
 // ============================================================================
 // ORTAK BİLEŞEN 0: MİNİMALİST TEMA PALETİ (AÇIK / KOYU / SİSTEM UYUMLU)
@@ -2536,507 +2538,12 @@ class _EmployeeHistorySummaryChip extends StatelessWidget {
 Future<void> showGmailDriveSyncDialog(
   BuildContext context,
   WidgetRef ref,
-) async {
-  final initState = ref.read(pdksDashboardProvider);
-  final defaultFolder = initState.companySettings.syncFolderPath.trim().isEmpty
-      ? GoogleDriveSyncService.detectDefaultGoogleDrivePath()
-      : initState.companySettings.syncFolderPath.trim();
-  final gmailCtrl = TextEditingController(
-    text: initState.companySettings.syncGmailAccount,
+) {
+  return showCloudBackupCenterDialog(
+    context,
+    ref,
+    onPickFolder: EmployeeProfileAvatar.pickFolderFromDesktop,
   );
-  final folderCtrl = TextEditingController(text: defaultFolder);
-  final tokenCtrl = TextEditingController();
-  final clientIdCtrl = TextEditingController();
-  final clientSecretCtrl = TextEditingController();
-  final syncSvc = ref.read(googleDriveSyncServiceProvider);
-  final isNativeGoogleAuth = ref.read(googleAuthAdapterProvider).isNativePlatform;
-  syncSvc.getSavedOAuthClientId().then((val) {
-    if (val.isNotEmpty && clientIdCtrl.text.isEmpty) {
-      clientIdCtrl.text = val;
-    }
-  }).catchError((e) {
-    debugPrint('HasibuSettingsView: getSavedOAuthClientId hata: $e');
-  });
-  syncSvc.getSavedOAuthClientSecret().then((val) {
-    if (val.isNotEmpty && clientSecretCtrl.text.isEmpty) {
-      clientSecretCtrl.text = val;
-    }
-  }).catchError((e) {
-    debugPrint('HasibuSettingsView: getSavedOAuthClientSecret hata: $e');
-  });
-  bool isConnecting = false;
-  String? statusFeedback;
-  bool isFeedbackSuccess = false;
-
-  await showDialog<void>(
-    context: context,
-    builder: (dialogCtx) => StatefulBuilder(
-      builder: (ctx, setDialogState) {
-        final pal = HasibuPalette.of(ctx);
-        final liveState = ref.watch(pdksDashboardProvider);
-        final syncStatus = liveState.syncStatus;
-        final connectedEmail =
-            liveState.companySettings.syncGmailAccount.trim();
-        final isTrulySynced = syncStatus.isTrulySynced;
-
-        Future<void> startBrowserOAuthFlow() async {
-          setDialogState(() {
-            isConnecting = true;
-            statusFeedback = isNativeGoogleAuth
-                ? 'Google oturum açma ekranı açıldı. Lütfen hesabınızı seçip Drive erişimini onaylayın...'
-                : 'Edge tarayıcısında Google OAuth 2.0 giriş sayfası açıldı. Lütfen tarayıcıda Google hesabınızla yetkilendirmeyi tamamlayın...';
-            isFeedbackSuccess = false;
-          });
-          final browserResult = await ref
-              .read(pdksDashboardProvider.notifier)
-              .signInWithGoogleViaBrowser(
-                emailHint: gmailCtrl.text.trim(),
-                customClientId: clientIdCtrl.text.trim(),
-                customClientSecret: clientSecretCtrl.text.trim(),
-                syncFolderPath: folderCtrl.text.trim(),
-              );
-          if (dialogCtx.mounted) {
-            final latestSync = ref.read(pdksDashboardProvider).syncStatus;
-            final latestEmail = ref
-                .read(pdksDashboardProvider)
-                .companySettings
-                .syncGmailAccount;
-            if (latestEmail.isNotEmpty) {
-              gmailCtrl.text = latestEmail;
-            }
-            setDialogState(() {
-              isConnecting = false;
-              isFeedbackSuccess =
-                  browserResult.success && latestSync.isTrulySynced;
-              statusFeedback = browserResult.success
-                  ? '✓ ${browserResult.message} • ${latestSync.message}'
-                  : '⚠️ ${browserResult.message}';
-            });
-          }
-        }
-
-        Future<void> verifyAndSaveSettings() async {
-          final targetEmail = gmailCtrl.text.trim();
-          final resolvedEmail = targetEmail.isEmpty
-              ? ''
-              : (targetEmail.contains('@')
-                  ? targetEmail
-                  : '$targetEmail@gmail.com');
-          if (resolvedEmail.isNotEmpty) {
-            gmailCtrl.text = resolvedEmail;
-          }
-          setDialogState(() {
-            isConnecting = true;
-            statusFeedback = null;
-          });
-          final resultStatus =
-              await ref.read(pdksDashboardProvider.notifier).saveGmailSyncAccount(
-                    gmailAccount: resolvedEmail,
-                    syncFolderPath: folderCtrl.text.trim(),
-                    accessToken: tokenCtrl.text.trim().isEmpty
-                        ? null
-                        : tokenCtrl.text.trim(),
-                  );
-          if (dialogCtx.mounted) {
-            final updatedEmail = ref
-                .read(pdksDashboardProvider)
-                .companySettings
-                .syncGmailAccount;
-            if (updatedEmail.isNotEmpty) {
-              gmailCtrl.text = updatedEmail;
-            }
-            setDialogState(() {
-              isConnecting = false;
-              if (resultStatus.isTrulySynced) {
-                isFeedbackSuccess = true;
-                statusFeedback = '✓ Doğrulandı ve Eşitlendi: ${resultStatus.message}';
-              } else if (resultStatus.stage == DriveSyncStage.error) {
-                isFeedbackSuccess = false;
-                statusFeedback = '❌ Doğrulama Hatası: ${resultStatus.message}';
-              } else {
-                isFeedbackSuccess = false;
-                statusFeedback =
-                    '⚠️ Tek başına e-posta yazmak Google hesabına giriş yapmaz! '
-                    '${resultStatus.message} '
-                    'Gerçek bulut eşitlemesi için yukarıdaki "Tarayıcıda Google ile Giriş Yap (OAuth 2.0)" butonunu kullanın veya Google Drive klasör yolunu seçin.';
-              }
-            });
-          }
-        }
-
-        final Color statusBorderColor = isTrulySynced
-            ? const Color(0xFF10B981)
-            : (syncStatus.stage == DriveSyncStage.error
-                ? const Color(0xFFEF4444)
-                : const Color(0xFFF59E0B));
-
-        return AlertDialog(
-          insetPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(Icons.cloud_sync_rounded, color: Color(0xFF10B981)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Google OAuth 2.0 & Drive Veri Eşitleme Merkezi',
-                  style: TextStyle(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w800,
-                    color: pal.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 560,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 1. GERÇEK DOĞRULAMA DURUM KARTI
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: statusBorderColor.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: statusBorderColor.withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              isTrulySynced
-                                  ? Icons.verified_rounded
-                                  : (syncStatus.stage == DriveSyncStage.error
-                                      ? Icons.error_outline_rounded
-                                      : Icons.warning_amber_rounded),
-                              color: statusBorderColor,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                isTrulySynced
-                                    ? (syncStatus.isCloudApiVerified
-                                        ? 'Doğrulanmış Google OAuth 2.0 Hesabı: ${connectedEmail.isEmpty ? "Aktif" : connectedEmail}'
-                                        : 'Google Drive Masaüstü Klasörü Aktif: ${connectedEmail.isEmpty ? "Yerel Drive" : connectedEmail}')
-                                    : (connectedEmail.isNotEmpty
-                                        ? 'E-Posta Kayıtlı ($connectedEmail) • OAuth 2.0 / Drive Doğrulanmadı'
-                                        : 'Henüz Doğrulanmış Google Bağlantısı Yok'),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13.5,
-                                  color: pal.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (connectedEmail.isNotEmpty || isTrulySynced)
-                              TextButton.icon(
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  foregroundColor: const Color(0xFFEF4444),
-                                ),
-                                onPressed: () async {
-                                  await ref
-                                      .read(pdksDashboardProvider.notifier)
-                                      .disconnectGmailSyncAccount();
-                                  if (dialogCtx.mounted) {
-                                    setDialogState(() {
-                                      gmailCtrl.clear();
-                                      tokenCtrl.clear();
-                                      isFeedbackSuccess = false;
-                                      statusFeedback =
-                                          'Google hesap bağlantısı ve OAuth anahtarı kaldırıldı.';
-                                    });
-                                  }
-                                },
-                                icon:
-                                    const Icon(Icons.link_off_rounded, size: 15),
-                                label: const Text(
-                                  'Bağlantıyı Kes',
-                                  style: TextStyle(fontSize: 11.5),
-                                ),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          syncStatus.message,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: pal.textSecondary,
-                          ),
-                        ),
-                        if (syncStatus.syncedFilePath.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.insert_drive_file_outlined,
-                                size: 14,
-                                color: Color(0xFF0284C7),
-                              ),
-                              const SizedBox(width: 5),
-                              Expanded(
-                                child: Text(
-                                  'Yedek Dosyası: ${syncStatus.syncedFilePath} (${(syncStatus.syncedBytes / 1024).toStringAsFixed(1)} KB)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: pal.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // 2. GERÇEK TARAYICI TABANLI GOOGLE OAUTH 2.0 GİRİŞ BUTONU
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      key: const ValueKey('btn_google_browser_oauth'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 13,
-                        ),
-                      ),
-                      onPressed: isConnecting ? null : startBrowserOAuthFlow,
-                      icon: isConnecting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Icon(
-                              isNativeGoogleAuth
-                                  ? Icons.account_circle_outlined
-                                  : Icons.open_in_browser_rounded,
-                              size: 20,
-                            ),
-                      label: Text(
-                        isConnecting
-                            ? (isNativeGoogleAuth
-                                ? 'Google OAuth 2.0 Onayı Bekleniyor...'
-                                : 'Tarayıcıda Google OAuth 2.0 Onayı Bekleniyor...')
-                            : (isNativeGoogleAuth
-                                ? 'Google ile Giriş Yap (OAuth 2.0)'
-                                : 'Tarayıcıda Google ile Giriş Yap (Gerçek OAuth 2.0)'),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  TextField(
-                    key: const ValueKey('gmail_account_input_field'),
-                    controller: gmailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Google (Gmail) E-Posta Adresi',
-                      hintText: 'ornek.isletme@gmail.com',
-                      prefixIcon: Icon(Icons.alternate_email_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: folderCtrl,
-                          decoration: const InputDecoration(
-                            labelText:
-                                'Google Drive Masaüstü Klasörü (Otomatik / Seçimli)',
-                            hintText: r"G:\Drive'ım\Hasibu\CloudSync",
-                            prefixIcon: Icon(Icons.folder_shared_outlined),
-                          ),
-                        ),
-                      ),
-                      if (Platform.isWindows) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final picked = await EmployeeProfileAvatar
-                                .pickFolderFromDesktop();
-                            if (picked != null) {
-                              setDialogState(() => folderCtrl.text = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.folder_open_rounded, size: 18),
-                          label: const Text('Seç'),
-                        ),
-                        const SizedBox(width: 6),
-                        OutlinedButton.icon(
-                          key: const ValueKey('btn_open_sync_folder_explorer'),
-                          onPressed: () async {
-                            final openedPath = await ref
-                                .read(pdksDashboardProvider.notifier)
-                                .openCloudSyncFolder(folderCtrl.text.trim());
-                            if (dialogCtx.mounted) {
-                              setDialogState(() {
-                                statusFeedback =
-                                    'Yedek klasörü Windows Gezgini\'nde açıldı: $openedPath';
-                              });
-                            }
-                          },
-                          icon: const Icon(Icons.launch_rounded, size: 16),
-                          label: const Text('Klasörü Aç'),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (!isNativeGoogleAuth) ...[
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: clientIdCtrl,
-                            decoration: const InputDecoration(
-                              labelText:
-                                  'ihasibu Google Cloud OAuth 2.0 Client ID',
-                              hintText: '123456-abc.apps.googleusercontent.com',
-                              prefixIcon: Icon(Icons.cloud_queue_rounded),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: clientSecretCtrl,
-                            obscureText: true,
-                            decoration: const InputDecoration(
-                              labelText: 'OAuth 2.0 Client Secret (Masaüstü/Web)',
-                              hintText: 'GOCSPX-...',
-                              prefixIcon: Icon(Icons.lock_outline_rounded),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: tokenCtrl,
-                    obscureText: false,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Google OAuth 2.0 Erişim Anahtarı (Bearer ya29...)',
-                      hintText:
-                          'Doğrudan Google Drive API doğrulaması için ya29.a0...',
-                      prefixIcon: Icon(Icons.vpn_key_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      key: const ValueKey('google_quick_connect_button'),
-                      onPressed: isConnecting ? null : verifyAndSaveSettings,
-                      icon: isConnecting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.fact_check_rounded, size: 18),
-                      label: Text(
-                        isConnecting
-                            ? 'Doğrulanıyor ve Eşitleniyor...'
-                            : 'Anahtarı / Drive Klasörünü Doğrula & Şimdi Eşitle',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                  if (statusFeedback != null) ...[
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(11),
-                      decoration: BoxDecoration(
-                        color: (isFeedbackSuccess
-                                ? const Color(0xFF10B981)
-                                : const Color(0xFFF59E0B))
-                            .withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: (isFeedbackSuccess
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFFF59E0B))
-                              .withValues(alpha: 0.45),
-                        ),
-                      ),
-                      child: Text(
-                        statusFeedback!,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: isFeedbackSuccess
-                              ? const Color(0xFF10B981)
-                              : const Color(0xFFD97706),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Kapat'),
-            ),
-            FilledButton.icon(
-              onPressed: isConnecting
-                  ? null
-                  : () async {
-                      await verifyAndSaveSettings();
-                      if (dialogCtx.mounted &&
-                          ref
-                              .read(pdksDashboardProvider)
-                              .syncStatus
-                              .isTrulySynced) {
-                        Navigator.of(dialogCtx).pop();
-                      }
-                    },
-              icon: const Icon(Icons.cloud_done_rounded, size: 18),
-              label: const Text('Doğrula & Kaydet'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-
-  gmailCtrl.dispose();
-  folderCtrl.dispose();
-  tokenCtrl.dispose();
-  clientIdCtrl.dispose();
-  clientSecretCtrl.dispose();
 }
 
 // ============================================================================
@@ -3096,9 +2603,11 @@ class _CompanyAndBranchesSettingsViewState
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
     final pal = HasibuPalette.of(context);
 
-    return ListView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         // KART 1: ŞİRKET LOGOSU, KİŞİSEL TEMA & KURUMSAL KİMLİK AYARLARI
         Container(
           padding: const EdgeInsets.all(20),
@@ -3381,6 +2890,10 @@ class _CompanyAndBranchesSettingsViewState
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              const CloudBackupQuickCard(
+                onPickFolder: EmployeeProfileAvatar.pickFolderFromDesktop,
+              ),
             ],
           ),
         ),
@@ -3539,7 +3052,12 @@ class _CompanyAndBranchesSettingsViewState
               ],
             ),
           ),
-      ],
+        const SizedBox(height: 12),
+        const AppUsersManagementCard(),
+        const SizedBox(height: 12),
+        const HasibuReleaseNotesQuickCard(),
+        ],
+      ),
     );
   }
 

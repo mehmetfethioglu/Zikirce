@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/release/hasibu_release_notes.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_release_notes_dialog.dart';
 import 'hasibu_settings_view.dart';
 
 /// Hasibu Kurumsal Oturum Açma (Login Gate) Ekranı.
@@ -496,7 +498,7 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                   const SizedBox(height: 12),
                   Text(
                     _selectedRole == UserRole.admin
-                        ? 'İlk Kurulum Yönetici: admin / 123'
+                        ? 'Yönetici veya yetkili kullanıcı adınız ile giriş yapın (İlk kurulum: admin / 123)'
                         : (kDebugMode
                             ? 'Örnek Personel: Kart No 00064 / Parola: 1234'
                             : 'Personel kart numaranız ve kişisel parolanız ile giriş yapın'),
@@ -504,6 +506,19 @@ class _HasibuLoginScreenState extends ConsumerState<HasibuLoginScreen> {
                     style: TextStyle(
                       fontSize: 11.5,
                       color: pal.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    key: const ValueKey('login_release_notes_button'),
+                    onPressed: () => showHasibuReleaseNotesDialog(context),
+                    icon: const Icon(Icons.new_releases_outlined, size: 16),
+                    label: const Text(
+                      'Sürüm Notları • v$hasibuAppVersion',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
