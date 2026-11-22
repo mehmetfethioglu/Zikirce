@@ -1,0 +1,5 @@
+v2.2.0:
+• Simplified Settings: Moved Watch Planner out of Settings into a dedicated Plan button on the remote.
+• Swipeable Plan Cards: Modern, minimal watch plan cards sorted nearest-to-farthest right below YouTube & Netflix.
+• Share from YouTube: Share any YouTube video/playlist directly into your CueDeck watch plan in one tap.
+• Refined Icons & Touchpad: Modern mic & cursor arrow icons plus a smoother high-precision bottom touchpad.

@@ -40,14 +40,14 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '2.2.0+29';
+  static const String currentVersion = '2.2.0+30';
   static const String currentShortVersion = 'v2.2.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
     CueReleaseVersionEntry(
-      version: '2.2.0+29',
-      versionLabel: 'v2.2.0 (Build 29)',
+      version: '2.2.0+30',
+      versionLabel: 'v2.2.0 (Build 30)',
       releaseDate: '22 Kasım 2026',
       headline:
           'Sadeleştirilmiş Ayarlar, Kumanda Altı Plan Kartları, YouTube Paylaş → Plana Ekle & Hassas Touchpad',

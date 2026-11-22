@@ -1,4 +1,4 @@
-name: App Store Connect — Create v2.2.0, Attach Build 29 & Submit for Review
+name: App Store Connect — Create v2.2.0, Attach Build 30 & Submit for Review
 
 on:
   workflow_dispatch:
@@ -8,13 +8,13 @@ on:
         required: false
         default: "2.2.0"
       build_number:
-        description: "TestFlight Build Number (e.g. 29)"
+        description: "TestFlight Build Number (e.g. 30)"
         required: false
-        default: "29"
+        default: "30"
 
 jobs:
   submit-appstore:
-    name: Submit v2.2.0 (Build 29) to App Store Connect
+    name: Submit v2.2.0 (Build 30) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -22,7 +22,7 @@ jobs:
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
       TARGET_VERSION: ${{ github.event.inputs.version_string || '2.2.0' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '29' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '30' }}
 
     steps:
       - name: Checkout repository
@@ -31,7 +31,7 @@ jobs:
       - name: Install PyJWT, Cryptography, Requests & Pillow
         run: pip install pyjwt cryptography requests pillow
 
-      - name: Sync 8-Locale ASO, Upload Screenshots, Attach Build 29 (Icon), Configure v2.2.0 & Submit to Review
+      - name: Sync 8-Locale ASO, Upload Screenshots, Attach Build 30 (Icon), Configure v2.2.0 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, hashlib, jwt, requests
@@ -41,7 +41,7 @@ jobs:
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
           target_version = os.environ.get("TARGET_VERSION", "2.2.0").strip()
-          target_build = os.environ.get("TARGET_BUILD", "29").strip()
+          target_build = os.environ.get("TARGET_BUILD", "30").strip()
           bundle_id_str = "com.akarworks.cuedeck"
 
           PRIVACY_URL = "https://mehmetfethioglu.github.io/cuedeck-indir/"

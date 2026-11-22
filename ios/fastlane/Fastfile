@@ -146,13 +146,13 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v2.2.0 (Build 29) Yenilikleri:
+      CueDeck v2.2.0 (Build 30) Yenilikleri:
       • Sadeleştirilmiş Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumanda üzerindeki yeni Plan tuşuna taşındı.
       • Kaydırılabilir Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları YouTube ve Netflix altına eklendi.
       • YouTube Paylaş → Plana Ekle: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.
       • Yeni İkonlar & Alt Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad.
 
-      What's New in CueDeck v2.2.0 (Build 29):
+      What's New in CueDeck v2.2.0 (Build 30):
       • Simplified Settings: Moved Watch Planner out of Settings into a dedicated Plan button on the remote.
       • Swipeable Plan Cards: Modern, minimal watch plan cards sorted nearest-to-farthest right below YouTube & Netflix.
       • Share from YouTube: Share any YouTube video or playlist directly into your CueDeck watch plan in one tap.

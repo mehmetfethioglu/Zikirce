@@ -1,0 +1,5 @@
+v2.2.0:
+• Paramètres simplifiés : Le planificateur est désormais accessible via le nouveau bouton Plan sur la télécommande.
+• Cartes balayables : Cartes modernes triées de la plus proche à la plus lointaine sous YouTube et Netflix.
+• Partager depuis YouTube : Ajoutez une vidéo ou playlist YouTube au plan CueDeck en un clic.
+• Icônes & Touchpad affinés : Nouvelles icônes micro et curseur, plus un pavé tactile inférieur plus précis.
