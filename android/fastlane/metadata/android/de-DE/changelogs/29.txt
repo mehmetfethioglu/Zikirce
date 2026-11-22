@@ -1,0 +1,5 @@
+v2.2.0:
+• Aufgeräumte Einstellungen: Der Sehplaner wurde in eine eigene Plan-Taste auf der Fernbedienung verschoben.
+• Wischbare Plankarten: Moderne, nach Zeit sortierte Plankarten direkt unter YouTube & Netflix.
+• Von YouTube teilen: YouTube-Videos direkt über Teilen in Ihren CueDeck-Plan aufnehmen.
+• Neue Symbole & Touchpad: Modernes Mikrofon- & Mauszeiger-Symbol sowie ein präziseres Touchpad im unteren Bereich.

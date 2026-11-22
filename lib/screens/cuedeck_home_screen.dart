@@ -45,6 +45,7 @@ class CueDeckHomeScreen extends ConsumerStatefulWidget {
 class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen>
     with WidgetsBindingObserver {
   bool _checkedStartupReleaseNotes = false;
+  bool _isShareSheetOpen = false;
 
   @override
   void initState() {
@@ -54,9 +55,22 @@ class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen>
       _maybeShowStartupReleaseNotes();
       final pending = ref.read(cueDeckProvider).pendingSharedPayload;
       if (pending != null && mounted) {
-        showShareToTvBeamSheet(context, pending);
+        unawaited(_presentShareSheet(pending));
       }
     });
+  }
+
+  Future<void> _presentShareSheet(SharedCuePayload payload) async {
+    if (_isShareSheetOpen || !mounted) return;
+    _isShareSheetOpen = true;
+    try {
+      await showShareToTvBeamSheet(context, payload);
+    } finally {
+      _isShareSheetOpen = false;
+      if (mounted && ref.read(cueDeckProvider).pendingSharedPayload != null) {
+        ref.read(cueDeckProvider.notifier).clearPendingSharedPayload();
+      }
+    }
   }
 
   @override
@@ -94,7 +108,7 @@ class _CueDeckHomeScreenState extends ConsumerState<CueDeckHomeScreen>
       cueDeckProvider.select((s) => s.pendingSharedPayload),
       (SharedCuePayload? previous, SharedCuePayload? next) {
         if (next != null && next != previous && mounted) {
-          showShareToTvBeamSheet(context, next);
+          unawaited(_presentShareSheet(next));
         }
       },
     );

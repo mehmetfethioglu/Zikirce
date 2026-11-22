@@ -6,16 +6,15 @@ import '../../models/cue_models.dart';
 import '../../providers/cuedeck_providers.dart';
 import '../../screens/cuedeck_settings_screen.dart';
 import '../cuetv_channel_studio_sheet.dart';
-import '../modals/share_to_tv_beam_sheet.dart';
 import '../modals/tv_discovery_pairing_sheets.dart';
 import '../modals/voice_and_keyboard_sheets.dart';
-import '../modals/wake_on_lan_setup_sheet.dart';
 import 'quick_launch_app_dock.dart';
+import 'remote_bottom_deck.dart';
 import 'tactile_dpad_touchpad.dart';
 
 /// Google TV G10 Reference Physical Remote Control Chassis supporting True Black
 /// Dark Mode and Classic White Light Mode, Universal Smart TV protocols, IR Blaster,
-/// Wake-on-LAN, and 1-tap Link Beaming.
+/// Wake-on-LAN, and the swipeable Bottom Plan / Touchpad Deck.
 class G10PhysicalRemoteChassis extends ConsumerWidget {
   const G10PhysicalRemoteChassis({super.key, required this.isDarkMode});
 
@@ -43,11 +42,13 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
       ref.read(cueDeckProvider.notifier).sendRemoteKey(cmd);
     }
 
-    final isTouchpadMode = ref.watch(
-      cueDeckProvider.select((s) => s.isTouchpadMode),
+    final isPlanDeckActive = ref.watch(
+      cueDeckProvider.select((s) => s.isPlanDeckActive),
     );
-    final selectedDevice = ref.watch(
-      cueDeckProvider.select((s) => s.selectedDevice),
+    final upcomingPlanCount = ref.watch(
+      cueDeckProvider.select(
+        (s) => s.cueItems.where((e) => !e.isCompleted).length,
+      ),
     );
     final isMuted = ref.watch(
       cueDeckProvider.select((s) => s.isMuted),
@@ -61,7 +62,7 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
       constraints: const BoxConstraints(maxWidth: 316),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
         decoration: BoxDecoration(
           color: chassisColor,
           borderRadius: BorderRadius.circular(44),
@@ -93,7 +94,7 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                 ),
                 _TvConnectionIconOnlyIndicator(
                   isDarkMode: isDarkMode,
-                  onTap: () => _showSettingsAndPlannerModal(context),
+                  onTap: () => _showSettingsModal(context),
                 ),
                 _RoundRemoteKeyButton(
                   icon: Icons.input_rounded,
@@ -107,56 +108,60 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
 
-            // ROW 2: Keyboard | Voice Mic | Settings & Planner
+            // ROW 2: Watch Plan Toggle | Modern Mic Voice | Settings
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: isTouchpadMode
-                  ? CrossAxisAlignment.center
-                  : CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Padding(
-                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 18),
+                  padding: const EdgeInsets.only(top: 18),
                   child: _RoundRemoteKeyButton(
-                    icon: Icons.bookmark_border_rounded,
-                    tooltip: 'TV Klavye & Kısayol',
+                    key: const Key('remote_plan_toggle_button'),
+                    icon: Icons.event_note_rounded,
+                    tooltip: 'İzleme Planı',
                     isDarkMode: isDarkMode,
+                    isActive: isPlanDeckActive,
+                    activeColor: const Color(0xFFE2A84B),
+                    badgeCount: isPlanDeckActive ? 0 : upcomingPlanCount,
                     size: 44,
                     iconSize: 20,
-                    onTap: () => _showRemoteKeyboardSheet(context),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref.read(cueDeckProvider.notifier).togglePlanDeck();
+                    },
                   ),
                 ),
                 _AssistantVoiceCenterButton(
+                  key: const Key('remote_voice_button'),
                   isDarkMode: isDarkMode,
                   onTap: () => _showVoiceControlSheet(context, ref),
                 ),
                 Padding(
-                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 18),
+                  padding: const EdgeInsets.only(top: 18),
                   child: _RoundRemoteKeyButton(
                     icon: Icons.settings_outlined,
-                    tooltip: 'Ayarlar & İzleme Planı',
+                    tooltip: 'Ayarlar',
                     isDarkMode: isDarkMode,
                     size: 44,
                     iconSize: 20,
-                    onTap: () => _showSettingsAndPlannerModal(context),
+                    onTap: () => _showSettingsModal(context),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: isTouchpadMode ? 8 : 6),
+            const SizedBox(height: 6),
 
-            // ROW 3: Center Donut D-Pad Ring OR Multi-Zone Touchpad Cockpit
+            // ROW 3: Center Donut D-Pad Ring (with Keyboard & Mouse Cursor toggles)
             TactileDpadDialWidget(isDarkMode: isDarkMode),
-            SizedBox(height: isTouchpadMode ? 8 : 6),
+            const SizedBox(height: 6),
 
             // ROW 4: Back | Home | CueTV Live Channels
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: isTouchpadMode
-                  ? CrossAxisAlignment.center
-                  : CrossAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: <Widget>[
                 Padding(
-                  padding: EdgeInsets.only(bottom: isTouchpadMode ? 0 : 14),
+                  padding: const EdgeInsets.only(bottom: 14),
                   child: _RoundRemoteKeyButton(
                     icon: Icons.arrow_back_rounded,
                     tooltip: 'Geri',
@@ -167,14 +172,14 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.only(top: isTouchpadMode ? 0 : 12),
+                  padding: const EdgeInsets.only(top: 12),
                   child: _DarkHomeCircleButton(
                     isDarkMode: isDarkMode,
                     onTap: () => sendKey(TvKeyCommand.home),
                   ),
                 ),
                 Padding(
-                  padding: EdgeInsets.only(bottom: isTouchpadMode ? 0 : 14),
+                  padding: const EdgeInsets.only(bottom: 14),
                   child: _RoundRemoteKeyButton(
                     icon: Icons.live_tv_rounded,
                     tooltip: 'CueTV Ulusal Kanal Stüdyosu',
@@ -186,7 +191,7 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
                 ),
               ],
             ),
-            SizedBox(height: isTouchpadMode ? 10 : 14),
+            const SizedBox(height: 14),
 
             // ROW 5: Volume Rocker | Mute | Channel Rocker
             Row(
@@ -229,70 +234,16 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
 
-            // ROW 6: 2-Column Pill App Launch Buttons
+            // ROW 6: 2-Button Quick App Launch Dock (YouTube | NETFLIX)
             QuickLaunchAppDock(isDarkMode: isDarkMode),
             const SizedBox(height: 12),
 
-            // ROW 7: Compact Utility Chips (Link Beam, IR Mode, Wake-on-LAN)
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 6,
-              runSpacing: 6,
-              children: <Widget>[
-                _RemoteUtilityChip(
-                  key: const Key('remote_link_beam_chip'),
-                  label: '📲 Link Işınla',
-                  isDarkMode: isDarkMode,
-                  onTap: () => _openLinkBeam(context, ref),
-                ),
-                _RemoteUtilityChip(
-                  key: const Key('remote_ir_mode_chip'),
-                  label: '📡 IR Kumanda',
-                  isDarkMode: isDarkMode,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    showIrBlasterBrandPickerSheet(context);
-                  },
-                ),
-                if (!selectedDevice.isOnline && !selectedDevice.isIrBlaster)
-                  _RemoteUtilityChip(
-                    key: const Key('remote_wake_tv_chip'),
-                    label: '⚡ TV Uyandır',
-                    isDarkMode: isDarkMode,
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      if (selectedDevice.hasValidMac) {
-                        ref.read(cueDeckProvider.notifier).wakeUpSelectedTv();
-                      } else {
-                        showWakeOnLanSetupSheet(context);
-                      }
-                    },
-                  ),
-              ],
-            ),
+            // ROW 7: Dynamic Bottom Deck (Watch Plan Cards Carousel or Touchpad)
+            RemoteBottomDeck(isDarkMode: isDarkMode),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _openLinkBeam(BuildContext context, WidgetRef ref) async {
-    HapticFeedback.mediumImpact();
-    final foundFromClipboard = await ref
-        .read(cueDeckProvider.notifier)
-        .importClipboardAsSharedPayload();
-    if (!context.mounted) return;
-    if (!foundFromClipboard) {
-      await showShareToTvBeamSheet(
-        context,
-        SharedCuePayload(
-          url: '',
-          title: '',
-          platform: StreamingPlatform.youtube,
-          receivedAtEpochMs: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-    }
   }
 
   void _showVoiceControlSheet(BuildContext context, WidgetRef ref) {
@@ -307,71 +258,11 @@ class G10PhysicalRemoteChassis extends ConsumerWidget {
     });
   }
 
-  void _showRemoteKeyboardSheet(BuildContext context) {
-    HapticFeedback.selectionClick();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const RemoteKeyboardSheet(),
-    );
-  }
-
-  void _showSettingsAndPlannerModal(BuildContext context) {
+  void _showSettingsModal(BuildContext context) {
     HapticFeedback.selectionClick();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => const CueDeckSettingsScreen(),
-      ),
-    );
-  }
-}
-
-class _RemoteUtilityChip extends StatelessWidget {
-  const _RemoteUtilityChip({
-    super.key,
-    required this.label,
-    required this.isDarkMode,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isDarkMode;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final fillColor =
-        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFECEDF2);
-    final borderColor = isDarkMode
-        ? const Color(0xFFE2A84B).withValues(alpha: 0.35)
-        : const Color(0xFFCFD4DE);
-    final textColor =
-        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFF23272F);
-
-    return Material(
-      color: fillColor,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor, width: 1.0),
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: textColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 10,
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -465,6 +356,8 @@ class _RoundRemoteKeyButton extends StatelessWidget {
     required this.isDarkMode,
     required this.onTap,
     this.isActive = false,
+    this.activeColor,
+    this.badgeCount = 0,
     this.size = 44,
     this.iconSize = 20,
   });
@@ -474,37 +367,66 @@ class _RoundRemoteKeyButton extends StatelessWidget {
   final bool isDarkMode;
   final VoidCallback onTap;
   final bool isActive;
+  final Color? activeColor;
+  final int badgeCount;
   final double size;
   final double iconSize;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedActive = activeColor ?? const Color(0xFFFF5252);
     final fillColor = isActive
-        ? (isDarkMode ? const Color(0xFF2B1418) : const Color(0xFFFFEBEE))
+        ? resolvedActive.withValues(alpha: isDarkMode ? 0.16 : 0.14)
         : (isDarkMode ? const Color(0xFF111318) : const Color(0xFFECEDF2));
     final borderColor = isActive
-        ? const Color(0xFFFF5252)
+        ? resolvedActive
         : (isDarkMode ? const Color(0xFF252832) : const Color(0xFFCFD4DE));
     final iconColor = isActive
-        ? (isDarkMode ? const Color(0xFFFF6B6B) : const Color(0xFFD32F2F))
+        ? resolvedActive
         : (isDarkMode ? const Color(0xFFF2F4F8) : const Color(0xFF23272F));
 
     return Tooltip(
       message: tooltip,
-      child: Material(
-        color: fillColor,
-        shape: CircleBorder(
-          side: BorderSide(color: borderColor, width: 1.1),
-        ),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: Icon(icon, color: iconColor, size: iconSize),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          Material(
+            color: fillColor,
+            shape: CircleBorder(
+              side: BorderSide(color: borderColor, width: isActive ? 1.25 : 1.1),
+            ),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onTap,
+              child: SizedBox(
+                width: size,
+                height: size,
+                child: Icon(icon, color: iconColor, size: iconSize),
+              ),
+            ),
           ),
-        ),
+          if (badgeCount > 0)
+            Positioned(
+              top: 2,
+              right: 2,
+              child: IgnorePointer(
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFE2A84B),
+                    border: Border.all(
+                      color: isDarkMode
+                          ? const Color(0xFF000000)
+                          : const Color(0xFFF5F6F9),
+                      width: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -512,6 +434,7 @@ class _RoundRemoteKeyButton extends StatelessWidget {
 
 class _AssistantVoiceCenterButton extends ConsumerWidget {
   const _AssistantVoiceCenterButton({
+    super.key,
     required this.isDarkMode,
     required this.onTap,
   });
@@ -553,7 +476,7 @@ class _AssistantVoiceCenterButton extends ConsumerWidget {
                       color: Colors.white,
                       size: 22,
                     )
-                  : const _GoogleAssistantDotsGraphic(),
+                  : const _ModernMicrophoneIcon(),
             ),
           ),
         ),
@@ -562,68 +485,98 @@ class _AssistantVoiceCenterButton extends ConsumerWidget {
   }
 }
 
-class _GoogleAssistantDotsGraphic extends StatelessWidget {
-  const _GoogleAssistantDotsGraphic();
+class _ModernMicrophoneIcon extends StatelessWidget {
+  const _ModernMicrophoneIcon();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return const SizedBox(
       width: 24,
-      height: 22,
-      child: Stack(
-        children: <Widget>[
-          Positioned(
-            left: 1,
-            top: 2,
-            child: Container(
-              width: 10,
-              height: 10,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF4285F4),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 11,
-            top: 10,
-            child: Container(
-              width: 5.5,
-              height: 5.5,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFEA4335),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 11,
-            top: 16.5,
-            child: Container(
-              width: 6.5,
-              height: 6.5,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFFFBBC05),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 17.5,
-            top: 6,
-            child: Container(
-              width: 4,
-              height: 4,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF34A853),
-              ),
-            ),
-          ),
-        ],
+      height: 24,
+      child: CustomPaint(
+        painter: _ModernMicrophonePainter(),
       ),
     );
   }
+}
+
+class _ModernMicrophonePainter extends CustomPainter {
+  const _ModernMicrophonePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+
+    // 1. Sleek studio microphone capsule with luminous silver-gold vertical sheen
+    final capsuleRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(cx, size.height * 0.36),
+        width: 7.4,
+        height: 11.4,
+      ),
+      const Radius.circular(3.7),
+    );
+    final capsulePaint = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Color(0xFFFDF8EC),
+          Color(0xFFE6C17A),
+          Color(0xFFC89B4B),
+        ],
+      ).createShader(capsuleRect.outerRect);
+    canvas.drawRRect(capsuleRect, capsulePaint);
+
+    // 2. Subtle acoustic grille slits inside capsule
+    final slitPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.85
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF181B24).withValues(alpha: 0.35);
+    canvas.drawLine(
+      Offset(cx - 1.6, size.height * 0.28),
+      Offset(cx + 1.6, size.height * 0.28),
+      slitPaint,
+    );
+    canvas.drawLine(
+      Offset(cx - 1.6, size.height * 0.36),
+      Offset(cx + 1.6, size.height * 0.36),
+      slitPaint,
+    );
+
+    // 3. Clean thin U-cradle arc & minimalist stem base
+    final framePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.65
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFFF2F4F8);
+
+    final cradleRect = Rect.fromCenter(
+      center: Offset(cx, size.height * 0.44),
+      width: 13.0,
+      height: 11.5,
+    );
+    canvas.drawArc(cradleRect, 0.15, 2.84, false, framePaint);
+
+    // Vertical stem
+    canvas.drawLine(
+      Offset(cx, size.height * 0.69),
+      Offset(cx, size.height * 0.85),
+      framePaint,
+    );
+
+    // Base foot
+    canvas.drawLine(
+      Offset(cx - 3.6, size.height * 0.86),
+      Offset(cx + 3.6, size.height * 0.86),
+      framePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ModernMicrophonePainter oldDelegate) => false;
 }
 
 class _DarkHomeCircleButton extends StatelessWidget {

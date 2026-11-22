@@ -1,0 +1,5 @@
+v2.2.0:
+• Sade Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumandadaki yeni Plan tuşuna taşındı.
+• Modern Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları kumanda altına eklendi.
+• YouTube Paylaş → Planla: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.
+• Yeni İkonlar & Hassas Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad.

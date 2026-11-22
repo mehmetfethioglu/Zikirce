@@ -55,31 +55,11 @@ class QuickLaunchAppDock extends ConsumerWidget {
       );
     }
 
-    return Column(
+    return Row(
       children: <Widget>[
-        Row(
-          children: <Widget>[
-            buildSlot(0),
-            const SizedBox(width: 10),
-            buildSlot(1),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: <Widget>[
-            buildSlot(2),
-            const SizedBox(width: 10),
-            buildSlot(3),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: <Widget>[
-            buildSlot(4),
-            const SizedBox(width: 10),
-            buildSlot(5),
-          ],
-        ),
+        buildSlot(0),
+        const SizedBox(width: 10),
+        buildSlot(1),
       ],
     );
   }

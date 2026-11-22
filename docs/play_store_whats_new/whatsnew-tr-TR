@@ -1,5 +1,5 @@
-v2.1.0:
-• Kapalı TV Uyandırma (Wake-on-LAN): IR vericisi olmayan iPhone ve Android telefonlarla kapalı TV'leri açın.
-• Manuel MAC Kurulumu: Kumanda («⚡ TV Uyandır»), Ayarlar ve ağ taramadan MAC adresini kolayca kaydedip uyandırın.
-• Otomatik MAC Keşfi: Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel ve Android/Google TV'lerden otomatik MAC algılama.
-• Tüm sürücülerde Güç tuşuna otomatik Wake-on-LAN yedeklemesi eklendi.
+v2.2.0:
+• Sade Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumandadaki yeni Plan tuşuna taşındı.
+• Modern Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları kumanda altına eklendi.
+• YouTube Paylaş → Planla: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.
+• Yeni İkonlar & Hassas Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad.

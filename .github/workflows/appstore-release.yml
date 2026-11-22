@@ -1,28 +1,28 @@
-name: App Store Connect — Create v2.1.0, Attach Build 28 & Submit for Review
+name: App Store Connect — Create v2.2.0, Attach Build 29 & Submit for Review
 
 on:
   workflow_dispatch:
     inputs:
       version_string:
-        description: "App Store Version String (e.g. 2.1.0)"
+        description: "App Store Version String (e.g. 2.2.0)"
         required: false
-        default: "2.1.0"
+        default: "2.2.0"
       build_number:
-        description: "TestFlight Build Number (e.g. 28)"
+        description: "TestFlight Build Number (e.g. 29)"
         required: false
-        default: "28"
+        default: "29"
 
 jobs:
   submit-appstore:
-    name: Submit v2.1.0 (Build 28) to App Store Connect
+    name: Submit v2.2.0 (Build 29) to App Store Connect
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
       APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
-      TARGET_VERSION: ${{ github.event.inputs.version_string || '2.1.0' }}
-      TARGET_BUILD: ${{ github.event.inputs.build_number || '28' }}
+      TARGET_VERSION: ${{ github.event.inputs.version_string || '2.2.0' }}
+      TARGET_BUILD: ${{ github.event.inputs.build_number || '29' }}
 
     steps:
       - name: Checkout repository
@@ -31,7 +31,7 @@ jobs:
       - name: Install PyJWT, Cryptography, Requests & Pillow
         run: pip install pyjwt cryptography requests pillow
 
-      - name: Sync 8-Locale ASO, Upload Screenshots, Attach Build 28 (Icon), Configure v2.1.0 & Submit to Review
+      - name: Sync 8-Locale ASO, Upload Screenshots, Attach Build 29 (Icon), Configure v2.2.0 & Submit to Review
         run: |
           python3 - << 'EOF'
           import os, sys, time, json, hashlib, jwt, requests
@@ -40,8 +40,8 @@ jobs:
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
-          target_version = os.environ.get("TARGET_VERSION", "2.1.0").strip()
-          target_build = os.environ.get("TARGET_BUILD", "28").strip()
+          target_version = os.environ.get("TARGET_VERSION", "2.2.0").strip()
+          target_build = os.environ.get("TARGET_BUILD", "29").strip()
           bundle_id_str = "com.akarworks.cuedeck"
 
           PRIVACY_URL = "https://mehmetfethioglu.github.io/cuedeck-indir/"
@@ -212,15 +212,17 @@ jobs:
           # 3. Define 8-Locale ASO Metadata (Apple Poka-Yoke verified: Title<=30, Subtitle<=30, Keywords<=100 bytes)
           whats_new_tr = (
               f"CueDeck v{target_version} (Build {target_build}) Yenilikleri:\n"
-              "• Kapalı TV Uyandırma (Wake-on-LAN): IR vericisi olmayan iPhone'lardan kapalı TV'leri ağ üzerinden açın.\n"
-              "• Manuel MAC Kurulumu & Otomatik MAC Keşfi: Kumanda, Ayarlar ve ağ taramadan MAC kaydedin; Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arçelik/Vestel ve Android/Google TV'lerden otomatik MAC algılama.\n"
-              "• Tüm sürücülerde Güç tuşuna otomatik Wake-on-LAN yedeklemesi eklendi."
+              "• Sadeleştirilmiş Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumandadaki yeni Plan tuşuna taşındı.\n"
+              "• Kaydırılabilir Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları YouTube ve Netflix altına eklendi.\n"
+              "• YouTube Paylaş → Plana Ekle: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.\n"
+              "• Yeni İkonlar & Alt Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad."
           )
           whats_new_en = (
               f"What's New in CueDeck v{target_version} (Build {target_build}):\n"
-              "• Wake Turned-Off TVs (Wake-on-LAN): Power on compatible TVs from iPhones without an IR blaster.\n"
-              "• Manual MAC Setup & Auto Discovery: Save your TV's MAC in one tap; automatic MAC extraction across Samsung, LG, Roku, Philips v6, VIDAA MQTT, Sony, Arcelik/Vestel, and Android/Google TV.\n"
-              "• Automatic Power-key Wake-on-LAN fallback across every TV driver."
+              "• Simplified Settings: Moved Watch Planner out of Settings into a dedicated Plan button on the remote.\n"
+              "• Swipeable Plan Cards: Modern, minimal watch plan cards sorted nearest-to-farthest right below YouTube & Netflix.\n"
+              "• Share from YouTube: Share any YouTube video or playlist directly into your CueDeck watch plan in one tap.\n"
+              "• Refined Icons & Touchpad: Modern microphone & cursor arrow icons plus a smoother high-precision bottom touchpad."
           )
 
           ASO_LOCALES = {

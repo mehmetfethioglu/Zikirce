@@ -127,6 +127,8 @@ class AdbTvService {
   final Map<String, bool> _mouseIs64BitKernelByIp = <String, bool>{};
   int _virtualCursorX = 960;
   int _virtualCursorY = 540;
+  double _fallbackDpadAccumX = 0;
+  double _fallbackDpadAccumY = 0;
 
   bool get lastConnectRequiredPairingPrompt =>
       _lastConnectRequiredPairingPrompt;
@@ -2796,6 +2798,8 @@ class AdbTvService {
   }
 
   Future<bool> enableTvMouseCursor(TvDevice device) async {
+    _fallbackDpadAccumX = 0;
+    _fallbackDpadAccumY = 0;
     if (supportsCapability(device, TvCapability.pointerCursor) &&
         device.protocol != TvConnectionProtocol.adbPort5555) {
       return _driverRegistry.driverFor(device.protocol)?.movePointer(device, 4, 2) ??
@@ -2866,6 +2870,8 @@ class AdbTvService {
   }
 
   Future<void> disableTvMouseCursor(TvDevice device) async {
+    _fallbackDpadAccumX = 0;
+    _fallbackDpadAccumY = 0;
     final ip = device.ip.trim();
     if (!isValidIp(ip) || device.protocol.isNonAndroidSmartTv) return;
     await _executeShellCommand(
@@ -2888,24 +2894,33 @@ class AdbTvService {
     final ip = device.ip.trim();
     if (!isValidIp(ip) && !device.isIrBlaster) return false;
 
-    final scaledDx = (dx * 1.85).round().clamp(-140, 140);
-    final scaledDy = (dy * 1.85).round().clamp(-140, 140);
-    if (scaledDx == 0 && scaledDy == 0) return true;
-
     if (device.protocol.isNonAndroidSmartTv ||
         (device.protocol == TvConnectionProtocol.remotePort6466 &&
             device.port == 6466)) {
-      if (scaledDx.abs() >= scaledDy.abs()) {
-        return sendKeyCommand(
-          device,
-          scaledDx > 0 ? TvKeyCommand.right : TvKeyCommand.left,
-        );
+      const double stepThreshold = 28.0;
+      _fallbackDpadAccumX += dx;
+      _fallbackDpadAccumY += dy;
+      if (_fallbackDpadAccumX.abs() >= _fallbackDpadAccumY.abs() &&
+          _fallbackDpadAccumX.abs() >= stepThreshold) {
+        final cmd =
+            _fallbackDpadAccumX > 0 ? TvKeyCommand.right : TvKeyCommand.left;
+        _fallbackDpadAccumX = 0;
+        _fallbackDpadAccumY = 0;
+        return sendKeyCommand(device, cmd);
       }
-      return sendKeyCommand(
-        device,
-        scaledDy > 0 ? TvKeyCommand.down : TvKeyCommand.up,
-      );
+      if (_fallbackDpadAccumY.abs() >= stepThreshold) {
+        final cmd =
+            _fallbackDpadAccumY > 0 ? TvKeyCommand.down : TvKeyCommand.up;
+        _fallbackDpadAccumX = 0;
+        _fallbackDpadAccumY = 0;
+        return sendKeyCommand(device, cmd);
+      }
+      return true;
     }
+
+    final scaledDx = (dx * 1.45).round().clamp(-160, 160);
+    final scaledDy = (dy * 1.45).round().clamp(-160, 160);
+    if (scaledDx == 0 && scaledDy == 0) return true;
 
     final prevX = _virtualCursorX;
     final prevY = _virtualCursorY;

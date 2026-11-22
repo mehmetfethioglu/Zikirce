@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/cue_models.dart';
 import '../../providers/cuedeck_providers.dart';
 
-/// Opens the bottom sheet to change which streaming app is assigned to [slotIndex] (0..5)
+/// Opens the bottom sheet to change which streaming app is assigned to [slotIndex]
 /// on the G10 physical remote chassis.
 void showRemoteShortcutPickerSheet(
   BuildContext context, {
@@ -19,17 +19,13 @@ void showRemoteShortcutPickerSheet(
   );
 }
 
-/// Settings card allowing users to customize all 6 app shortcut buttons on the G10 remote.
-class RemoteShortcutCustomizationCard extends ConsumerWidget {
-  const RemoteShortcutCustomizationCard({super.key});
+/// Compact 2-slot quick-launch customization row for the simplified Settings card.
+class RemoteShortcutSlotPairRow extends ConsumerWidget {
+  const RemoteShortcutSlotPairRow({super.key});
 
   static const List<String> _slotPositionLabels = <String>[
-    '1. Sol Üst',
-    '2. Sağ Üst',
-    '3. Sol Orta',
-    '4. Sağ Orta',
-    '5. Sol Alt',
-    '6. Sağ Alt',
+    '1. Sol Tuş',
+    '2. Sağ Tuş',
   ];
 
   @override
@@ -38,11 +34,10 @@ class RemoteShortcutCustomizationCard extends ConsumerWidget {
     final shortcuts = ref.watch(
       cueDeckProvider.select((s) => s.remoteShortcuts),
     );
-    final slots = shortcuts.length == 6
+    final slots = shortcuts.length >= 2
         ? shortcuts
         : StreamingPlatform.defaultRemoteShortcuts;
 
-    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final subSurfaceBg =
         isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
     final borderColor = isDarkMode
@@ -55,7 +50,7 @@ class RemoteShortcutCustomizationCard extends ConsumerWidget {
     final goldText =
         isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
 
-    Widget buildEditableSlot(int index) {
+    Widget buildSlot(int index) {
       final platform = slots[index];
       return Expanded(
         child: InkWell(
@@ -116,6 +111,34 @@ class RemoteShortcutCustomizationCard extends ConsumerWidget {
       );
     }
 
+    return Row(
+      children: <Widget>[
+        buildSlot(0),
+        const SizedBox(width: 8),
+        buildSlot(1),
+      ],
+    );
+  }
+}
+
+/// Standalone settings card allowing users to customize the 2 active app shortcut buttons.
+class RemoteShortcutCustomizationCard extends ConsumerWidget {
+  const RemoteShortcutCustomizationCard({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
+    final borderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.09)
+        : const Color(0xFFE2E8F0);
+    final primaryText =
+        isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
+    final secondaryText =
+        isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final goldText =
+        isDarkMode ? const Color(0xFFE6C17A) : const Color(0xFFB48328);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -132,7 +155,7 @@ class RemoteShortcutCustomizationCard extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Kumanda Uygulama Tuşları (6 Yuva)',
+                  'Hızlı Uygulama Tuşları (2 Yuva)',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -165,40 +188,18 @@ class RemoteShortcutCustomizationCard extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Değiştirmek istediğiniz tuşa dokunun (veya kumandada tuşa basılı tutun).',
+            'Değiştirmek istediğiniz tuşa dokunun (veya kumandada basılı tutun).',
             style: TextStyle(color: secondaryText, fontSize: 11.5),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: <Widget>[
-              buildEditableSlot(0),
-              const SizedBox(width: 8),
-              buildEditableSlot(1),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Row(
-            children: <Widget>[
-              buildEditableSlot(2),
-              const SizedBox(width: 8),
-              buildEditableSlot(3),
-            ],
-          ),
-          const SizedBox(height: 7),
-          Row(
-            children: <Widget>[
-              buildEditableSlot(4),
-              const SizedBox(width: 8),
-              buildEditableSlot(5),
-            ],
-          ),
+          const RemoteShortcutSlotPairRow(),
         ],
       ),
     );
   }
 }
 
-/// Modal sheet letting the user reassign any of the 6 physical shortcut slots.
+/// Modal sheet letting the user reassign either of the 2 physical shortcut slots.
 class RemoteShortcutPickerSheet extends ConsumerWidget {
   const RemoteShortcutPickerSheet({super.key, required this.slotIndex});
 

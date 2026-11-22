@@ -8,6 +8,8 @@ import 'package:cuedeck/screens/cuedeck_home_screen.dart';
 import 'package:cuedeck/services/adb_tv_service.dart';
 import 'package:cuedeck/services/cue_monetization_service.dart';
 import 'package:cuedeck/services/cue_notification_service.dart';
+import 'package:cuedeck/services/share/cue_share_intent_service.dart';
+import 'package:cuedeck/widgets/tactile_dpad_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -222,8 +224,13 @@ void main() {
   });
 
   testWidgets(
-    'CueDeck renders G10 Reference Remote, True Black (#000000) / White Theme, and Advanced Watch Planner with YouTube Playlist & Recurrence',
+    'CueDeck renders G10 Reference Remote, Plan Card Carousel, Bottom Touchpad, Simplified Settings, and Theme Switcher',
     (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       final fakeNotifications = _FakeCueNotificationService();
       await tester.pumpWidget(
         ProviderScope(
@@ -242,26 +249,75 @@ void main() {
       expect(find.byType(NavigationBar), findsNothing);
       expect(fakeNotifications.syncedAlarmCount, greaterThan(0));
 
-      // 2. Verify icon-only TV status on main remote (no IP or TV name text clutter on main screen)
+      // 2. Verify icon-only TV status on main remote
       expect(find.byIcon(Icons.tv_rounded), findsOneWidget);
       expect(find.text('Redline Android TV (Salon)'), findsNothing);
 
-      // 3. Verify G10 physical remote keys & 2x3 app capsules
+      // 3. Verify G10 remote keys, Plan toggle, Modern Mic, Mouse Cursor Arrow & 2-slot App Dock
       expect(find.byIcon(Icons.power_settings_new_rounded), findsOneWidget);
       expect(find.byIcon(Icons.input_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.bookmark_border_rounded), findsOneWidget);
+      expect(find.byKey(const Key('remote_plan_toggle_button')), findsOneWidget);
+      expect(find.byIcon(Icons.bookmark_border_rounded), findsNothing);
+      expect(find.byKey(const Key('remote_voice_button')), findsOneWidget);
       expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
       expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
       expect(
         find.byKey(const Key('remote_keyboard_toggle_button')),
         findsOneWidget,
       );
+      final touchpadToggle = find.byKey(
+        const Key('remote_touchpad_toggle_button'),
+      );
+      expect(touchpadToggle, findsOneWidget);
       expect(
-        find.byKey(const Key('remote_touchpad_toggle_button')),
+        find.descendant(
+          of: touchpadToggle,
+          matching: find.byType(MouseCursorArrowIcon),
+        ),
         findsOneWidget,
       );
 
-      // Open symmetrical top-left Keyboard button and type live with phone keyboard
+      // Only 2 quick-launch app buttons (YouTube & NETFLIX) and no bottom utility chips
+      final appDock = find.byType(QuickLaunchAppDock);
+      expect(
+        find.descendant(of: appDock, matching: find.text('YouTube')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: appDock, matching: find.text('NETFLIX')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: appDock, matching: find.text('beIN')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: appDock, matching: find.text('tabii')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: appDock, matching: find.text('CueTV Ulusal')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: appDock, matching: find.text('Zikirce')),
+        findsNothing,
+      );
+      expect(find.byKey(const Key('remote_link_beam_chip')), findsNothing);
+      expect(find.byKey(const Key('remote_ir_mode_chip')), findsNothing);
+
+      // Plan deck is active by default; toggling Plan hides & re-opens it WITHOUT opening keyboard
+      expect(find.byKey(const Key('remote_plan_deck')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('remote_plan_toggle_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote_keyboard_sheet')), findsNothing);
+      expect(find.byKey(const Key('remote_plan_deck')), findsNothing);
+
+      await tester.tap(find.byKey(const Key('remote_plan_toggle_button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote_plan_deck')), findsOneWidget);
+
+      // Open Keyboard button and type live with phone keyboard
       await tester.tap(find.byKey(const Key('remote_keyboard_toggle_button')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('remote_keyboard_sheet')), findsOneWidget);
@@ -275,16 +331,22 @@ void main() {
       await tester.tap(find.byKey(const Key('remote_keyboard_send_button')));
       await tester.pumpAndSettle();
 
-      // Toggle D-Pad into rectangular Mouse / Touchpad surface + Tactile Scroll Wheel and back
-      await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
+      // Switch Bottom Deck to Touchpad while keeping Donut D-Pad visible
+      await tester.tap(touchpadToggle);
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
+      expect(find.byKey(const Key('remote_touchpad_deck')), findsOneWidget);
       expect(find.byKey(const Key('dpad_touchpad_surface')), findsOneWidget);
       expect(find.byKey(const Key('touchpad_scroll_wheel')), findsOneWidget);
       expect(find.byKey(const Key('touchpad_wheel_up_button')), findsOneWidget);
       expect(find.byKey(const Key('touchpad_wheel_down_button')), findsOneWidget);
       expect(find.byKey(const Key('touchpad_left_click_button')), findsOneWidget);
       expect(find.byKey(const Key('touchpad_right_click_button')), findsOneWidget);
+      expect(find.byKey(const Key('touchpad_sensitivity_chip')), findsOneWidget);
       expect(find.text('TOUCHPAD'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('touchpad_sensitivity_chip')));
+      await tester.pump();
       await tester.tap(find.byKey(const Key('touchpad_wheel_up_button')));
       await tester.pump();
       await tester.tap(find.byKey(const Key('touchpad_wheel_down_button')));
@@ -296,70 +358,110 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
       await tester.tap(find.byKey(const Key('dpad_touchpad_surface')));
       await tester.pump();
-      await tester.tap(find.byKey(const Key('remote_touchpad_toggle_button')));
+      await tester.drag(
+        find.byKey(const Key('dpad_touchpad_surface')),
+        const Offset(35, -20),
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+
+      // Tapping Plan button switches smoothly from Touchpad back to Plan Cards
+      await tester.tap(find.byKey(const Key('remote_plan_toggle_button')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('remote_plan_deck')), findsOneWidget);
+      expect(find.byKey(const Key('remote_touchpad_deck')), findsNothing);
       expect(find.byKey(const Key('dpad_ok')), findsOneWidget);
       expect(find.byIcon(Icons.home_filled), findsOneWidget);
-      expect(find.text('YouTube'), findsOneWidget);
-      expect(find.text('NETFLIX'), findsOneWidget);
-      expect(find.text('beIN'), findsOneWidget);
-      expect(find.text('tabii'), findsOneWidget);
 
-      // 4. Open Full-Screen Settings & Watch Planner via Settings (⚙️) button
+      // 4. Add a YouTube Playlist from the remote's "+ Ekle" button on Plan Carousel
+      final addDeckPlanBtn = find.byKey(const Key('deck_add_plan_button'));
+      await tester.ensureVisible(addDeckPlanBtn);
+      await tester.tap(addDeckPlanBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Yeni Kişisel İzleme Planı Ekle'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'İçerik / Oynatma Listesi Adı'),
+        'Flutter 120 FPS Eğitim Serisi',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'YouTube Playlist / Video Linki'),
+        'https://www.youtube.com/playlist?list=PLflutter120fps99',
+      );
+      await tester.pump();
+      expect(
+        find.text(
+          '✓ YouTube Oynatma Listesi (Playlist) algılandı — TV\'de doğrudan liste açılacak',
+        ),
+        findsOneWidget,
+      );
+
+      final weekendChip = find.text('Hafta Sonu');
+      await tester.ensureVisible(weekendChip);
+      await tester.tap(weekendChip);
+      await tester.pump();
+
+      final saveBtn = find.text('Plana Ekle');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(saveBtn);
+      await tester.pumpAndSettle();
+
+      // Nearest plan card is visible; tap it to open WatchPlanDetailSheet and test +Seans & reminder
+      final nearestCard = find.byKey(
+        const Key('plan_deck_card_cue_yt_playlist_1'),
+      );
+      await tester.ensureVisible(nearestCard);
+      await tester.tap(nearestCard);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('watch_plan_detail_sheet')), findsOneWidget);
+      await tester.tap(find.textContaining('+Seans').first);
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.notifications_active_outlined).first);
+      await tester.pumpAndSettle();
+      expect(fakeNotifications.shownNotificationCount, greaterThanOrEqualTo(1));
+      expect(find.text('TV\'de Aç'), findsWidgets);
+
+      Navigator.of(
+        tester.element(find.byKey(const Key('watch_plan_detail_sheet'))),
+      ).pop();
+      await tester.pumpAndSettle();
+
+      // 5. Open Simplified Settings Screen via Settings (⚙️) button
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
       expect(find.byType(CueDeckSettingsScreen), findsOneWidget);
-      expect(find.byType(DraggableScrollableSheet), findsNothing);
-      expect(find.textContaining('Tahrir'), findsNothing);
-      expect(
-        find.text('Ayarlar & İzleme Planı'),
-        findsOneWidget,
-      );
-      expect(find.text('CueDeck'), findsOneWidget);
-      expect(find.text('Redline Android TV (Salon)'), findsNothing);
+      expect(find.text('Ayarlar'), findsOneWidget);
+      expect(find.text('Ayarlar & İzleme Planı'), findsNothing);
+      expect(find.text('GÜNLÜK İZLEME PLANI TAMAMLAMA'), findsNothing);
+      expect(find.text('3 Adımda Kolay Eşleştirme & Bağlantı'), findsNothing);
       expect(find.text('TCL Google TV (Salon)'), findsOneWidget);
       expect(
         find.byKey(const Key('scan_network_devices_button')),
         findsOneWidget,
       );
-      expect(find.text('🔍 Ağdaki Cihazları Ara'), findsOneWidget);
-      expect(
-        find.text('3 Adımda Kolay Eşleştirme & Bağlantı'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('Sony BRAVIA 4K TV (192.168.1.145)'),
-        findsOneWidget,
-      );
-      expect(find.text('🔐 TV Eşleştir (RSA Onayı)'), findsOneWidget);
-      expect(find.text('🔢 PIN Eşleştir (6466)'), findsOneWidget);
-      expect(
-        find.text('Kumanda Uygulama Tuşları (6 Yuva)'),
-        findsOneWidget,
-      );
-      expect(
-        find.text('CueDeck Pro & 24s Pass'),
-        findsOneWidget,
-      );
-      expect(find.text('REKLAM'), findsOneWidget);
+      expect(find.text('Ağdaki Cihazları Ara'), findsOneWidget);
+      expect(find.text('Kumanda & Görünüm'), findsOneWidget);
+      expect(find.text('CueDeck Pro'), findsOneWidget);
       expect(find.text('Bulut & Yerel Yedekleme'), findsOneWidget);
-      expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
-      expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
-      expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(
-        find.text('GÜNLÜK İZLEME PLANI TAMAMLAMA'),
-        findsOneWidget,
-      );
+      expect(find.text('REKLAM'), findsOneWidget);
 
-      // Open Modern TV Discovery Popup via "🔍 Ağdaki Cihazları Ara" and select Sony BRAVIA 4K TV
+      // Expand Gelişmiş Bağlantı to verify RSA / PIN / IP actions
+      await tester.tap(
+        find.byKey(const Key('settings_advanced_connection_toggle')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('pair_tv_rsa_button')), findsOneWidget);
+      expect(find.byKey(const Key('pair_tv_pin_button')), findsOneWidget);
+
+      // Open Modern TV Discovery Popup via "Ağdaki Cihazları Ara" and select Sony BRAVIA 4K TV
       final scanBtn = find.byKey(const Key('scan_network_devices_button'));
       await tester.ensureVisible(scanBtn);
       await tester.pumpAndSettle();
       await tester.tap(scanBtn);
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('tv_discovery_modal_sheet')), findsOneWidget);
-      expect(find.text('📡 Ağdaki Akıllı TV Cihazları'), findsOneWidget);
 
       final sonyCard = find.byKey(const Key('discovered_tv_card_192.168.1.145'));
       await tester.ensureVisible(sonyCard);
@@ -367,7 +469,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Sony BRAVIA 4K TV'), findsWidgets);
 
-      // Open Interactive RSA Pairing Sheet via "🔐 TV Eşleştir (RSA Onayı)"
+      // Open Interactive RSA Pairing Sheet
       final pairBtn = find.byKey(const Key('pair_tv_rsa_button'));
       await tester.ensureVisible(pairBtn);
       await tester.pumpAndSettle();
@@ -377,16 +479,12 @@ void main() {
         find.byKey(const Key('interactive_tv_pairing_sheet')),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('Eşleşti ve Bağlandı: Sony BRAVIA 4K TV'),
-        findsWidgets,
-      );
       Navigator.of(
         tester.element(find.byKey(const Key('interactive_tv_pairing_sheet'))),
       ).pop();
       await tester.pumpAndSettle();
 
-      // Test customizing Remote Shortcut Slot 0 ("1. Sol Üst") to Prime Video
+      // Customize Remote Shortcut Slot 0 ("1. Sol Tuş") to Prime Video and reset
       final slot0 = find.byKey(const Key('settings_shortcut_slot_0'));
       await tester.ensureVisible(slot0);
       await tester.pumpAndSettle();
@@ -397,106 +495,44 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Prime Video'), findsWidgets);
 
-      // Reset remote shortcuts back to defaults
       final resetBtn = find.text('Sıfırla');
       await tester.ensureVisible(resetBtn);
       await tester.pumpAndSettle();
       await tester.tap(resetBtn);
       await tester.pumpAndSettle();
 
-      // 5. Switch to Classic White Light Theme and verify Light Mode & True Black (#000000) Dark Mode
-      final whiteThemeChip = find.text('Klasik Beyaz Kumanda');
-      await tester.ensureVisible(whiteThemeChip);
-      await tester.pumpAndSettle();
-      await tester.tap(whiteThemeChip);
+      // Switch between Light and True Black Dark themes
+      final lightThemeChip = find.byKey(const Key('theme_light_chip'));
+      await tester.ensureVisible(lightThemeChip);
+      await tester.tap(lightThemeChip);
       await tester.pumpAndSettle();
       final lightScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
       expect(lightScaffold.backgroundColor, const Color(0xFFF3F6FA));
 
-      final blackChipInLightMode = tester.widget<ChoiceChip>(
-        find.widgetWithText(ChoiceChip, 'Gerçek Siyah (#000000)'),
-      );
-      expect(
-        blackChipInLightMode.labelStyle?.color,
-        const Color(0xFF2C3342),
-      );
-
-      await tester.tap(find.text('Gerçek Siyah (#000000)'));
+      final darkThemeChip = find.byKey(const Key('theme_dark_chip'));
+      await tester.tap(darkThemeChip);
       await tester.pumpAndSettle();
       final darkScaffold = tester.widget<Scaffold>(find.byType(Scaffold).last);
       expect(darkScaffold.backgroundColor, Colors.black);
 
-      // 6. Open AddWatchCueSheet ("Plan Ekle") and add a YouTube Playlist with Recurrence & Clock
-      final addPlanBtn = find.text('Plan Ekle');
-      await tester.ensureVisible(addPlanBtn);
+      // Open Backup Management bottom sheet
+      final backupTile = find.byKey(const Key('settings_backup_tile'));
+      await tester.ensureVisible(backupTile);
+      await tester.tap(backupTile);
       await tester.pumpAndSettle();
-      await tester.tap(addPlanBtn);
+      expect(find.byKey(const Key('backup_management_sheet')), findsOneWidget);
+      expect(find.text('Google Hesabını Bağla'), findsOneWidget);
+      expect(find.text('Dosyaya Yedekle'), findsOneWidget);
+      expect(find.text('Dosyadan Yükle'), findsOneWidget);
+      Navigator.of(
+        tester.element(find.byKey(const Key('backup_management_sheet'))),
+      ).pop();
       await tester.pumpAndSettle();
-
-      expect(find.text('Yeni Kişisel İzleme Planı Ekle'), findsOneWidget);
-
-      // Enter Title and YouTube Playlist URL
-      await tester.enterText(
-        find.widgetWithText(TextField, 'İçerik / Oynatma Listesi Adı'),
-        'Flutter 120 FPS Eğitim Serisi',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'YouTube Playlist / Video Linki'),
-        'https://www.youtube.com/playlist?list=PLflutter120fps99',
-      );
-      await tester.pump();
-
-      // Verify smart YouTube Playlist detection badge appears
-      expect(
-        find.text(
-          '✓ YouTube Oynatma Listesi (Playlist) algılandı — TV\'de doğrudan liste açılacak',
-        ),
-        findsOneWidget,
-      );
-
-      // Select "Hafta Sonu" recurrence and "21:30" clock preset
-      final weekendChip = find.text('Hafta Sonu');
-      await tester.ensureVisible(weekendChip);
-      await tester.tap(weekendChip);
-      await tester.pump();
-
-      final clockPreset = find.text('21:30');
-      await tester.ensureVisible(clockPreset);
-      await tester.tap(clockPreset);
-      await tester.pump();
-
-      // Save the new YouTube Playlist watch plan
-      final saveBtn = find.text('Plana Ekle');
-      await tester.ensureVisible(saveBtn);
-      await tester.pumpAndSettle();
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      // Verify newly added YouTube Playlist card and schedule badge render
-      expect(find.text('Flutter 120 FPS Eğitim Serisi'), findsOneWidget);
-      expect(find.text('YouTube Playlist (8 Video)'), findsWidgets);
-      expect(find.text('Bağlantı Aktif'), findsWidgets);
-
-      // 7. Test +Seans button and Real OS Reminder Notification trigger
-      final sessionButtons = find.textContaining('+Seans');
-      await tester.ensureVisible(sessionButtons.first);
-      await tester.pumpAndSettle();
-      await tester.tap(sessionButtons.first);
-      await tester.pump();
-
-      final reminderButtons = find.byIcon(Icons.notifications_active_outlined);
-      await tester.ensureVisible(reminderButtons.first);
-      await tester.pumpAndSettle();
-      await tester.tap(reminderButtons.first);
-      await tester.pumpAndSettle();
-
-      expect(fakeNotifications.shownNotificationCount, greaterThanOrEqualTo(1));
-      expect(find.text('TV\'de Aç'), findsWidgets);
     },
   );
 
   testWidgets(
-    'CueDeck has zero RenderFlex overflow on narrow 340x680 mobile viewport and executes Assistant Voice Sheet',
+    'CueDeck has zero RenderFlex overflow on narrow 340x680 mobile viewport and executes Assistant Voice Sheet & Release Notes',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(340, 680);
       tester.view.devicePixelRatio = 1.0;
@@ -512,9 +548,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
 
-      // Open Voice Sheet via the center Google Assistant button (auto-starts voice listening with 1 tap)
-      await tester.tap(find.byTooltip('Sesli Komut (Asistan)'));
+      // Open Voice Sheet via the center Modern Mic button
+      await tester.tap(find.byKey(const Key('remote_voice_button')));
       await tester.pumpAndSettle();
 
       expect(find.text('Sesli Komut & Akıllı TV Arama'), findsOneWidget);
@@ -523,25 +560,17 @@ void main() {
         findsOneWidget,
       );
 
-      // Close Voice Sheet and open Settings on narrow 340x680 screen to verify Backup section has zero overflow
+      // Close Voice Sheet and open Simplified Settings on narrow 340x680 screen
       Navigator.of(tester.element(find.text('Telefon Mikrofonuyla Konuş'))).pop();
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
 
-      expect(find.text('🔑 Google Hesabını Bağla'), findsOneWidget);
-      expect(find.text('💾 Dosyaya Yedekle'), findsOneWidget);
-      expect(find.text('📂 Dosyadan Yükle'), findsOneWidget);
-      expect(
-        find.text('📋 Sürüm Notları (${CueReleaseNotesCatalog.currentShortVersion})'),
-        findsOneWidget,
-      );
-
-      // Open Release Notes modal from Settings and verify version highlights render
-      await tester.tap(
-        find.text('📋 Sürüm Notları (${CueReleaseNotesCatalog.currentShortVersion})'),
-      );
+      final releaseTile = find.byKey(const Key('settings_release_notes_tile'));
+      await tester.ensureVisible(releaseTile);
+      await tester.tap(releaseTile);
       await tester.pumpAndSettle();
       expect(find.text('📋 CueDeck Sürüm Notları'), findsOneWidget);
       expect(
@@ -550,6 +579,118 @@ void main() {
       );
       await tester.tap(find.text('Harika, Devam Et'));
       await tester.pumpAndSettle();
+    },
+  );
+
+  test(
+    'WatchCueItem.sortNearestFirst orders upcoming items nearest-to-farthest and relativeScheduleLabel formats accurately',
+    () {
+      final now = DateTime(2026, 11, 22, 15, 0); // Sunday
+      final completedSoon = WatchCueItem(
+        id: 'done',
+        title: 'Tamamlanan',
+        subtitle: '',
+        platform: StreamingPlatform.youtube,
+        scheduledTime: now.add(const Duration(minutes: 5)),
+        totalMinutes: 30,
+        watchedMinutes: 30,
+        recurrence: WatchRecurrence.once,
+      );
+      final in15m = WatchCueItem(
+        id: 'in_15m',
+        title: '15 dk',
+        subtitle: '',
+        platform: StreamingPlatform.youtube,
+        scheduledTime: now.add(const Duration(minutes: 15)),
+        totalMinutes: 30,
+        recurrence: WatchRecurrence.once,
+      );
+      final todayEvening = WatchCueItem(
+        id: 'today_21',
+        title: 'Bugün 21:00',
+        subtitle: '',
+        platform: StreamingPlatform.netflix,
+        scheduledTime: DateTime(2026, 11, 22, 21, 0),
+        totalMinutes: 45,
+        recurrence: WatchRecurrence.daily,
+      );
+      final tomorrowMorning = WatchCueItem(
+        id: 'tomorrow',
+        title: 'Yarın 09:00',
+        subtitle: '',
+        platform: StreamingPlatform.youtube,
+        scheduledTime: DateTime(2026, 11, 23, 9, 0),
+        totalMinutes: 45,
+        recurrence: WatchRecurrence.once,
+      );
+      final nextFriday = WatchCueItem(
+        id: 'next_fri',
+        title: 'Cuma 20:00',
+        subtitle: '',
+        platform: StreamingPlatform.tabii,
+        scheduledTime: DateTime(2026, 11, 27, 20, 0),
+        totalMinutes: 60,
+        recurrence: WatchRecurrence.once,
+      );
+
+      final sorted = WatchCueItem.sortNearestFirst(
+        <WatchCueItem>[
+          nextFriday,
+          completedSoon,
+          tomorrowMorning,
+          todayEvening,
+          in15m,
+        ],
+        now: now,
+      );
+      expect(
+        sorted.map((e) => e.id).toList(),
+        <String>['in_15m', 'today_21', 'tomorrow', 'next_fri', 'done'],
+      );
+      expect(in15m.relativeScheduleLabel(now: now), '15 dk sonra');
+      expect(todayEvening.relativeScheduleLabel(now: now), 'Bugün 21:00');
+      expect(tomorrowMorning.relativeScheduleLabel(now: now), 'Yarın 09:00');
+      expect(nextFriday.relativeScheduleLabel(now: now), 'Cum 20:00');
+      expect(completedSoon.relativeScheduleLabel(now: now), 'Tamamlandı');
+    },
+  );
+
+  test(
+    'CueShareIntentService parses YouTube watch, youtu.be, shorts, live, and playlist links',
+    () {
+      final watch = CueShareIntentService.parseSharedText(
+        'Harika Belgesel: https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      expect(watch, isNotNull);
+      expect(watch!.platform, StreamingPlatform.youtube);
+      expect(watch.title, 'Harika Belgesel');
+
+      final short = CueShareIntentService.parseSharedText(
+        'https://www.youtube.com/shorts/short999',
+      );
+      expect(short, isNotNull);
+      expect(short!.platform, StreamingPlatform.youtube);
+      expect(short.title, 'YouTube Shorts');
+
+      final live = CueShareIntentService.parseSharedText(
+        'https://www.youtube.com/live/liveStream1',
+      );
+      expect(live, isNotNull);
+      expect(live!.platform, StreamingPlatform.youtube);
+      expect(live.title, 'YouTube Videosu');
+
+      final playlist = CueShareIntentService.parseSharedText(
+        'https://www.youtube.com/playlist?list=PLplaylist123',
+      );
+      expect(playlist, isNotNull);
+      expect(playlist!.platform, StreamingPlatform.youtube);
+      expect(playlist.title, 'YouTube Oynatma Listesi');
+
+      final shortUrl = CueShareIntentService.parseSharedText(
+        'https://youtu.be/abc12345678',
+      );
+      expect(shortUrl, isNotNull);
+      expect(shortUrl!.platform, StreamingPlatform.youtube);
     },
   );
 

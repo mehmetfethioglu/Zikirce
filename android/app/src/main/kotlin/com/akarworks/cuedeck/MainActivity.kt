@@ -72,10 +72,27 @@ class MainActivity : FlutterActivity() {
     private fun extractSharedPayload(intent: Intent?): Map<String, String>? {
         if (intent == null) return null
         val action = intent.action ?: return null
-        if (action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
-            val sharedText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        if (action == Intent.ACTION_SEND &&
+            (intent.type == null || intent.type?.startsWith("text/") == true)
+        ) {
+            val extraText = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+            val clipText = if (extraText.isEmpty()) {
+                intent.clipData
+                    ?.takeIf { it.itemCount > 0 }
+                    ?.getItemAt(0)
+                    ?.coerceToText(this)
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+            } else {
+                ""
+            }
+            val sharedText = if (extraText.isNotEmpty()) extraText else clipText
             if (sharedText.isEmpty()) return null
-            val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
+            val subject = intent.getStringExtra(Intent.EXTRA_SUBJECT)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: intent.getStringExtra(Intent.EXTRA_TITLE)?.trim().orEmpty()
             return mapOf("text" to sharedText, "subject" to subject)
         }
         if (action == Intent.ACTION_VIEW) {
@@ -344,6 +361,9 @@ class MainActivity : FlutterActivity() {
                 "consumeInitialSharedContent" -> {
                     val payload = pendingSharedPayload ?: extractSharedPayload(intent)
                     pendingSharedPayload = null
+                    if (intent?.action == Intent.ACTION_SEND) {
+                        intent.action = Intent.ACTION_MAIN
+                    }
                     result.success(payload)
                 }
                 else -> result.notImplemented()

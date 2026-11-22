@@ -6,6 +6,123 @@ import '../../models/cue_models.dart';
 import '../../providers/cuedeck_providers.dart';
 import '../tactile_dpad_painter.dart';
 
+/// Opens a compact detail sheet wrapping [WatchCueCard] so users can adjust
+/// sliders, progress steps, edit, delete, test reminders, or beam directly from
+/// the remote's plan carousel.
+Future<void> showWatchPlanDetailSheet(
+  BuildContext context,
+  WatchCueItem item,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => WatchPlanDetailSheet(cueId: item.id, initialItem: item),
+  );
+}
+
+/// Interactive detail bottom sheet hosting a single [WatchCueCard].
+class WatchPlanDetailSheet extends ConsumerWidget {
+  const WatchPlanDetailSheet({
+    super.key,
+    required this.cueId,
+    required this.initialItem,
+  });
+
+  final String cueId;
+  final WatchCueItem initialItem;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
+    final cueItems = ref.watch(cueDeckProvider.select((s) => s.cueItems));
+    final activePlayingId = ref.watch(
+      cueDeckProvider.select((s) => s.activePlayingCueId),
+    );
+
+    WatchCueItem? liveItem;
+    for (final candidate in cueItems) {
+      if (candidate.id == cueId) {
+        liveItem = candidate;
+        break;
+      }
+    }
+
+    if (liveItem == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+      return const SizedBox.shrink();
+    }
+
+    final sheetBg =
+        isDarkMode ? const Color(0xFF10131C) : const Color(0xFFF3F6FA);
+    final primaryText =
+        isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
+    final secondaryText =
+        isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+
+    return Container(
+      key: const Key('watch_plan_detail_sheet'),
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: secondaryText.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      'Plan Detayı & İlerleme',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: secondaryText),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              WatchCueCard(
+                item: liveItem,
+                isPlayingOnTv: liveItem.id == activePlayingId,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Header card summarizing daily watch plan progress (`WatchPlanMasteryHeader`).
 class WatchPlanMasteryHeader extends ConsumerWidget {
   const WatchPlanMasteryHeader({super.key});

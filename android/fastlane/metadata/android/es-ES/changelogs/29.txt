@@ -1,0 +1,5 @@
+v2.2.0:
+• Ajustes simplificados: El planificador pasó a un botón dedicado en el control remoto.
+• Tarjetas deslizables: Tarjetas modernas ordenadas de la más cercana a la más lejana bajo YouTube y Netflix.
+• Compartir desde YouTube: Agrega videos o listas de YouTube a tu plan CueDeck con un toque.
+• Nuevos iconos y Touchpad: Iconos modernos de micrófono y puntero, además de un touchpad inferior más preciso.

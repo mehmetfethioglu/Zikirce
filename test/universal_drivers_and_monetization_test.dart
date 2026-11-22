@@ -509,6 +509,75 @@ void main() {
   );
 
   testWidgets(
+    'ShareToTvBeamSheet 1-tap Plana Ekle adds shared YouTube video to watch plan, opens Plan deck, and clears pending payload',
+    (WidgetTester tester) async {
+      final fakeAdb = _TestAdbTvService();
+      late ProviderContainer container;
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adbTvServiceProvider.overrideWithValue(fakeAdb),
+            cueNotificationServiceProvider.overrideWithValue(
+              _TestCueNotificationService(),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (BuildContext context) {
+                  return Center(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        container = ProviderScope.containerOf(context);
+                        showShareToTvBeamSheet(
+                          context,
+                          SharedCuePayload(
+                            url: 'https://youtu.be/shareVid99',
+                            title: 'Paylaşılan YouTube Videosu',
+                            platform: StreamingPlatform.youtube,
+                            receivedAtEpochMs: 1700000000000,
+                          ),
+                        );
+                      },
+                      child: const Text('Open YouTube Share'),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open YouTube Share'));
+      await tester.pumpAndSettle();
+
+      final initialCount = container.read(cueDeckProvider).cueItems.length;
+      expect(find.byKey(const Key('share_to_tv_beam_sheet')), findsOneWidget);
+      expect(find.text('Plana Ekle'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('share_sheet_schedule_button')));
+      await tester.pumpAndSettle();
+
+      final updatedState = container.read(cueDeckProvider);
+      expect(find.byKey(const Key('share_to_tv_beam_sheet')), findsNothing);
+      expect(updatedState.cueItems.length, initialCount + 1);
+      expect(
+        updatedState.cueItems.any(
+          (item) =>
+              item.title == 'Paylaşılan YouTube Videosu' &&
+              item.deepLinkUrl == 'https://youtu.be/shareVid99',
+        ),
+        isTrue,
+      );
+      expect(updatedState.bottomDeckMode, RemoteBottomDeckMode.plan);
+      expect(updatedState.pendingSharedPayload, isNull);
+    },
+  );
+
+  testWidgets(
     'CueProPaywallSheet renders with zero RenderFlex overflow on 340x680 viewport and switches plans',
     (WidgetTester tester) async {
       tester.view.physicalSize = const Size(340, 680);

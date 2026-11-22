@@ -8,15 +8,14 @@ import '../models/cue_models.dart';
 import '../providers/cuedeck_providers.dart';
 import '../widgets/modals/cue_pro_paywall_sheet.dart';
 import '../widgets/modals/google_oauth_sheet.dart';
+import '../widgets/modals/share_to_tv_beam_sheet.dart';
 import '../widgets/modals/tv_discovery_pairing_sheets.dart';
 import '../widgets/modals/wake_on_lan_setup_sheet.dart';
-import '../widgets/planner/watch_planner_widgets.dart';
 import '../widgets/remote/cue_ad_banner.dart';
 import '../widgets/remote/quick_launch_app_dock.dart';
 import '../widgets/remote/remote_shortcut_picker_sheet.dart';
 
-/// Full-Screen Settings, Theme Switcher, TV Connection Details, Backup, Pro Upgrade
-/// & Watch Planner Screen opened via Settings (`⚙️`) or Top-Center TV Status Icon.
+/// Simplified, calm Settings screen opened via Settings (`⚙️`) or Top-Center TV Status Icon.
 class CueDeckSettingsScreen extends ConsumerStatefulWidget {
   const CueDeckSettingsScreen({super.key});
 
@@ -29,6 +28,7 @@ class _CueDeckSettingsScreenState
     extends ConsumerState<CueDeckSettingsScreen> {
   late final TextEditingController _ipController;
   late final FocusNode _ipFocusNode;
+  bool _showAdvancedConnection = false;
 
   @override
   void initState() {
@@ -49,20 +49,6 @@ class _CueDeckSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<bool>(
-      cueDeckProvider.select((s) => s.shouldPromptPaywall),
-      (bool? previous, bool next) {
-        if (next && mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
-          ref.read(cueDeckProvider.notifier).dismissPaywallPrompt();
-          showCueProPaywallSheet(
-            context,
-            reasonMessage:
-                'Ücretsiz planda en fazla ${CueProProductCatalog.maxFreeWatchPlans} özel izleme planı veya günlük ${CueProProductCatalog.maxFreeDailyBeams} ışınlama eklenebilir.',
-          );
-        }
-      },
-    );
-
     final isDarkMode = ref.watch(cueDeckProvider.select((s) => s.isDarkMode));
     final device = ref.watch(cueDeckProvider.select((s) => s.selectedDevice));
     final discoveredDevices = ref.watch(
@@ -72,22 +58,30 @@ class _CueDeckSettingsScreenState
     final status = ref.watch(
       cueDeckProvider.select((s) => s.lastCommandStatus),
     );
-    final cueItems = ref.watch(cueDeckProvider.select((s) => s.cueItems));
-    final activePlayingId = ref.watch(
-      cueDeckProvider.select((s) => s.activePlayingCueId),
-    );
     final localWifiIp = ref.watch(
       cueDeckProvider.select((s) => s.localWifiIp),
     );
     final localNetworkPermissionDenied = ref.watch(
       cueDeckProvider.select((s) => s.localNetworkPermissionDenied),
     );
+    final sensitivity = ref.watch(
+      cueDeckProvider.select((s) => s.touchpadSensitivity),
+    );
+    final isGoogleSignedIn = ref.watch(
+      cueDeckProvider.select((s) => s.isGoogleSignedIn),
+    );
+    final googleEmail = ref.watch(
+      cueDeckProvider.select((s) => s.googleUserEmail),
+    );
 
     final pageBg = isDarkMode ? Colors.black : const Color(0xFFF3F6FA);
     final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final cardBorder = isDarkMode
-        ? Colors.white.withValues(alpha: 0.09)
+        ? Colors.white.withValues(alpha: 0.08)
         : const Color(0xFFE2E8F0);
+    final dividerColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.06)
+        : const Color(0xFFEDF2F7);
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
     final secondaryText =
@@ -125,33 +119,18 @@ class _CueDeckSettingsScreenState
                     ),
                   ),
                   const SizedBox(width: 4),
-                  const CueDeckBrandBadge(size: 34),
+                  const CueDeckBrandBadge(size: 32),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Text(
-                          'CueDeck',
-                          style: TextStyle(
-                            color: goldText,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11.5,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        Text(
-                          'Ayarlar & İzleme Planı',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: primaryText,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 15,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Ayarlar',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                      ),
                     ),
                   ),
                   Container(
@@ -177,7 +156,7 @@ class _CueDeckSettingsScreenState
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          device.isOnline ? 'Çevrimiçi' : 'Simülasyon',
+                          device.isOnline ? 'Çevrimiçi' : 'Bağlı Değil',
                           style: TextStyle(
                             color: device.isOnline ? softMint : softAmber,
                             fontWeight: FontWeight.w700,
@@ -189,181 +168,14 @@ class _CueDeckSettingsScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              const ReminderAlertBanner(),
+              const SizedBox(height: 12),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.only(bottom: bottomSafePadding + 28),
+                  padding: EdgeInsets.only(bottom: bottomSafePadding + 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      // 1. COMPACT THEME PILL CARD
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cardBg,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: cardBorder),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              children: <Widget>[
-                                Icon(
-                                  isDarkMode
-                                      ? Icons.dark_mode_outlined
-                                      : Icons.light_mode_outlined,
-                                  color: goldText,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'Görünüm Teması',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: primaryText,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13.5,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(20),
-                                    onTap: () {
-                                      HapticFeedback.selectionClick();
-                                      showCueWhatsNewModal(
-                                        context,
-                                        isDarkMode: isDarkMode,
-                                        initialStartupMode: false,
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: goldText.withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: goldText.withValues(
-                                            alpha: 0.35,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '📋 Sürüm Notları (${CueReleaseNotesCatalog.currentShortVersion})',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: goldText,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 10.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: <Widget>[
-                                Expanded(
-                                  child: ChoiceChip(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 4,
-                                    ),
-                                    label: const Text(
-                                      'Gerçek Siyah (#000000)',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    selected: isDarkMode,
-                                    backgroundColor: isDarkMode
-                                        ? const Color(0xFF11141E)
-                                        : const Color(0xFFF1F5F9),
-                                    selectedColor: isDarkMode
-                                        ? const Color(0xFF2D2920)
-                                        : const Color(0xFFFEF3C7),
-                                    checkmarkColor: goldText,
-                                    side: BorderSide(
-                                      color: isDarkMode
-                                          ? goldText.withValues(alpha: 0.55)
-                                          : const Color(0xFFCBD5E1),
-                                    ),
-                                    labelStyle: TextStyle(
-                                      color: isDarkMode
-                                          ? const Color(0xFFF1F5F9)
-                                          : const Color(0xFF2C3342),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                    ),
-                                    onSelected: (_) {
-                                      ref
-                                          .read(cueDeckProvider.notifier)
-                                          .setDarkMode(true);
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: ChoiceChip(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 4,
-                                    ),
-                                    label: const Text(
-                                      'Klasik Beyaz Kumanda',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    selected: !isDarkMode,
-                                    backgroundColor: isDarkMode
-                                        ? const Color(0xFF11141E)
-                                        : const Color(0xFFF1F5F9),
-                                    selectedColor: isDarkMode
-                                        ? const Color(0xFF2D2920)
-                                        : const Color(0xFFFEF3C7),
-                                    checkmarkColor: goldText,
-                                    side: BorderSide(
-                                      color: !isDarkMode
-                                          ? goldText.withValues(alpha: 0.65)
-                                          : cardBorder,
-                                    ),
-                                    labelStyle: TextStyle(
-                                      color: !isDarkMode
-                                          ? const Color(0xFF1E293B)
-                                          : const Color(0xFFCBD5E1),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                    ),
-                                    onSelected: (_) {
-                                      ref
-                                          .read(cueDeckProvider.notifier)
-                                          .setDarkMode(false);
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // 2. UNIVERSAL SMART TV CONNECTION CARD
+                      // CARD 1: TV BAĞLANTISI
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
@@ -379,141 +191,67 @@ class _CueDeckSettingsScreenState
                                 Icon(
                                   Icons.tv_rounded,
                                   color: device.isOnline ? softMint : goldText,
-                                  size: 18,
+                                  size: 19,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 10),
                                 Expanded(
-                                  child: Text(
-                                    device.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: primaryText,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        device.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: primaryText,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        isScanning
+                                            ? 'Ağdaki TV cihazları aranıyor...'
+                                            : '${device.displayEndpoint} • $status',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: device.isOnline
+                                              ? softMint
+                                              : secondaryText,
+                                          fontSize: 11,
+                                          fontWeight: device.isOnline
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    device.displayEndpoint,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: secondaryText,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                if (device.hasValidIp) ...<Widget>[
-                                  const SizedBox(width: 4),
-                                  InkWell(
+                                if (device.hasValidIp)
+                                  IconButton(
                                     key: const Key('disconnect_tv_button'),
-                                    borderRadius: BorderRadius.circular(14),
-                                    onTap: () {
+                                    tooltip: 'Bağlantıyı Sıfırla',
+                                    visualDensity: VisualDensity.compact,
+                                    onPressed: () {
                                       HapticFeedback.selectionClick();
                                       _ipController.clear();
                                       ref
                                           .read(cueDeckProvider.notifier)
                                           .disconnectCurrentTv();
                                     },
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(2),
-                                      child: Icon(
-                                        Icons.link_off_rounded,
-                                        size: 17,
-                                        color: secondaryText,
-                                      ),
+                                    icon: Icon(
+                                      Icons.link_off_rounded,
+                                      size: 18,
+                                      color: secondaryText,
                                     ),
                                   ),
-                                ],
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: () => _openTvSetupGuideSheet(context),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(2),
-                                    child: Icon(
-                                      Icons.help_outline_rounded,
-                                      size: 17,
-                                      color: goldText,
-                                    ),
-                                  ),
-                                ),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isScanning
-                                  ? '📡 Ağdaki Akıllı TV ve Android TV cihazları aranıyor...'
-                                  : status,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: device.isOnline ? softMint : secondaryText,
-                                fontSize: 11.5,
-                                fontWeight: device.isOnline
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                            if (localWifiIp.isNotEmpty) ...<Widget>[
-                              const SizedBox(height: 3),
-                              Text(
-                                '📱 Telefon Wi-Fi IP: $localWifiIp',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: goldText,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                            if (!device.isIrBlaster) ...<Widget>[
-                              const SizedBox(height: 4),
-                              InkWell(
-                                key: const Key('settings_edit_mac_button'),
-                                borderRadius: BorderRadius.circular(8),
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  showWakeOnLanSetupSheet(context);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 2,
-                                  ),
-                                  child: Row(
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.power_settings_new_rounded,
-                                        size: 13,
-                                        color: goldText,
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Expanded(
-                                        child: Text(
-                                          device.hasValidMac
-                                              ? '⚡ WoL MAC: ${device.macAddress} • Düzenle'
-                                              : '⚡ WoL MAC ekle (kapalı TV açmak için)',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: goldText,
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
+
                             if (localNetworkPermissionDenied) ...<Widget>[
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(10),
@@ -528,7 +266,7 @@ class _CueDeckSettingsScreenState
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: <Widget>[
                                     const Text(
-                                      '⚠️ iPhone "Yerel Ağ" İzni Kapalı!',
+                                      'iPhone "Yerel Ağ" İzni Kapalı',
                                       style: TextStyle(
                                         color: Color(0xFFFCA5A5),
                                         fontWeight: FontWeight.w800,
@@ -537,23 +275,21 @@ class _CueDeckSettingsScreenState
                                     ),
                                     const SizedBox(height: 4),
                                     const Text(
-                                      'iOS güvenlik ayarı nedeniyle CueDeck\'in Wi-Fi ağındaki TV\'ye erişimi engelleniyor. Lütfen iPhone Ayarlar > Uygulamalar > CueDeck > Yerel Ağ anahtarını açın.',
+                                      'Ayarlar > CueDeck > Yerel Ağ anahtarını açın.',
                                       style: TextStyle(
                                         color: Color(0xFFFECACA),
                                         fontSize: 10.5,
-                                        height: 1.35,
                                       ),
                                     ),
                                     const SizedBox(height: 8),
                                     SizedBox(
                                       width: double.infinity,
-                                      child: FilledButton.icon(
+                                      child: FilledButton(
                                         style: FilledButton.styleFrom(
                                           backgroundColor:
                                               const Color(0xFFF87171),
                                           foregroundColor: Colors.black,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
                                             vertical: 8,
                                           ),
                                           shape: RoundedRectangleBorder(
@@ -566,12 +302,8 @@ class _CueDeckSettingsScreenState
                                               .read(cueDeckProvider.notifier)
                                               .openIosLocalNetworkSettings();
                                         },
-                                        icon: const Icon(
-                                          Icons.settings_suggest_rounded,
-                                          size: 16,
-                                        ),
-                                        label: const Text(
-                                          '📲 iPhone Ayarlarında "Yerel Ağ" İznini Aç',
+                                        child: const Text(
+                                          'Ayarlarda Yerel Ağ İznini Aç',
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
@@ -585,8 +317,8 @@ class _CueDeckSettingsScreenState
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 10),
 
+                            const SizedBox(height: 12),
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton.icon(
@@ -619,8 +351,8 @@ class _CueDeckSettingsScreenState
                                 ),
                                 label: Text(
                                   isScanning
-                                      ? 'Ağdaki Cihazlar Aranıyor... (Listeyi Aç)'
-                                      : '🔍 Ağdaki Cihazları Ara',
+                                      ? 'Cihazlar Aranıyor...'
+                                      : 'Ağdaki Cihazları Ara',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -630,6 +362,49 @@ class _CueDeckSettingsScreenState
                                 ),
                               ),
                             ),
+
+                            if (discoveredDevices.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 10),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: discoveredDevices.map((d) {
+                                    final isSelected = d.ip == device.ip;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: ChoiceChip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text(
+                                          '${d.name} (${d.ip})',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        selected: isSelected,
+                                        backgroundColor: inputFill,
+                                        selectedColor: isDarkMode
+                                            ? const Color(0xFF2D2920)
+                                            : const Color(0xFFFEF3C7),
+                                        checkmarkColor: goldText,
+                                        side: BorderSide(
+                                          color: isSelected
+                                              ? goldText.withValues(alpha: 0.65)
+                                              : cardBorder,
+                                        ),
+                                        labelStyle: TextStyle(
+                                          color: isSelected
+                                              ? primaryText
+                                              : secondaryText,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                        ),
+                                        onSelected: (_) =>
+                                            _connectDiscoveredDevice(d),
+                                      ),
+                                    );
+                                  }).toList(growable: false),
+                                ),
+                              ),
+                            ],
 
                             const SizedBox(height: 8),
                             Row(
@@ -655,17 +430,17 @@ class _CueDeckSettingsScreenState
                                       showIrBlasterBrandPickerSheet(context);
                                     },
                                     child: const Text(
-                                      '📡 Kızılötesi (IR) Kumanda',
+                                      'IR Kumanda',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 11,
+                                        fontSize: 11.5,
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: OutlinedButton(
                                     key: const Key('settings_wake_wol_button'),
@@ -691,12 +466,12 @@ class _CueDeckSettingsScreenState
                                       }
                                     },
                                     child: const Text(
-                                      '⚡ TV Uyandır (WoL)',
+                                      'TV Uyandır',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 11,
+                                        fontSize: 11.5,
                                       ),
                                     ),
                                   ),
@@ -704,370 +479,237 @@ class _CueDeckSettingsScreenState
                               ],
                             ),
 
-                            if (discoveredDevices.isNotEmpty) ...<Widget>[
-                              const SizedBox(height: 10),
-                              Row(
-                                children: <Widget>[
-                                  Expanded(
-                                    child: Text(
-                                      'Ağda Bulunan TV\'ler (${discoveredDevices.length}) — Bağlanmak için seçin:',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                            const SizedBox(height: 6),
+                            InkWell(
+                              key: const Key(
+                                'settings_advanced_connection_toggle',
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() {
+                                  _showAdvancedConnection =
+                                      !_showAdvancedConnection;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                  horizontal: 2,
+                                ),
+                                child: Row(
+                                  children: <Widget>[
+                                    Text(
+                                      'Gelişmiş Bağlantı',
                                       style: TextStyle(
                                         color: secondaryText,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ),
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(8),
-                                    onTap: () => showTvDiscoveryModal(context),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 2,
-                                      ),
-                                      child: Text(
-                                        'Tümünü Gör',
-                                        style: TextStyle(
-                                          color: goldText,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 6,
-                                children: discoveredDevices.map((d) {
-                                  final isSelected = d.ip == device.ip;
-                                  return ChoiceChip(
-                                    visualDensity: VisualDensity.compact,
-                                    label: Text(
-                                      '${d.isOnline ? "🟢" : "⚪"} ${d.name} (${d.ip})',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    selected: isSelected,
-                                    backgroundColor: inputFill,
-                                    selectedColor: isDarkMode
-                                        ? const Color(0xFF2D2920)
-                                        : const Color(0xFFFEF3C7),
-                                    checkmarkColor: goldText,
-                                    side: BorderSide(
-                                      color: isSelected
-                                          ? goldText.withValues(alpha: 0.65)
-                                          : cardBorder,
-                                    ),
-                                    labelStyle: TextStyle(
-                                      color: isSelected
-                                          ? primaryText
-                                          : secondaryText,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                    ),
-                                    onSelected: (_) async {
-                                      HapticFeedback.selectionClick();
-                                      _ipController.text = d.ip;
-                                      final ok = await ref
-                                          .read(cueDeckProvider.notifier)
-                                          .connectAndPairDevice(d);
-                                      if (!context.mounted) return;
-                                      if ((d.protocol ==
-                                                  TvConnectionProtocol
-                                                      .remotePort6466 &&
-                                              d.port == 6466 &&
-                                              !d.isPaired) ||
-                                          ((d.protocol ==
-                                                      TvConnectionProtocol
-                                                          .philipsJointSpace1925 ||
-                                                  d.protocol ==
-                                                      TvConnectionProtocol
-                                                          .vidaaSmart36669) &&
-                                              !d.isPaired &&
-                                              !ok)) {
-                                        _openPin6466Dialog(context, d.ip);
-                                      } else if (!ok) {
-                                        _openInteractiveRsaPairingSheet(
-                                          context,
-                                          d.ip,
-                                        );
-                                      }
-                                    },
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-
-                            const SizedBox(height: 10),
-
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(11),
-                              decoration: BoxDecoration(
-                                color: inputFill,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: goldText.withValues(alpha: 0.25),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Row(
-                                    children: <Widget>[
-                                      Icon(
-                                        Icons.tips_and_updates_outlined,
-                                        color: goldText,
-                                        size: 15,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          '3 Adımda Kolay Eşleştirme & Bağlantı',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: goldText,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 11.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '1️⃣ Yukarıdan "🔍 Ağdaki Cihazları Ara"ya basın. Samsung, LG, Roku, Philips, VIDAA, Sony, Arçelik/Vestel veya Android TV cihazınızı seçin.\n'
-                                    '2️⃣ Android TV ise Ayarlar > Cihaz Tercihleri > Hakkında > Yapı Numarası (7 kez) > Geliştirici Seçenekleri > ADB Hata Ayıklama\'yı açın.\n'
-                                    '3️⃣ Aşağıdaki "🔐 TV Eşleştir (RSA Onayı)" veya TV ekranındaki 6 haneli PIN ile bağlanın.',
-                                    style: TextStyle(
+                                    const Spacer(),
+                                    Icon(
+                                      _showAdvancedConnection
+                                          ? Icons.keyboard_arrow_up_rounded
+                                          : Icons.keyboard_arrow_down_rounded,
+                                      size: 18,
                                       color: secondaryText,
-                                      fontSize: 11,
-                                      height: 1.4,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
 
-                            const SizedBox(height: 10),
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              child: _showAdvancedConnection
+                                  ? _buildAdvancedConnectionPanel(
+                                      context: context,
+                                      device: device,
+                                      localWifiIp: localWifiIp,
+                                      primaryText: primaryText,
+                                      secondaryText: secondaryText,
+                                      goldText: goldText,
+                                      cardBorder: cardBorder,
+                                      inputFill: inputFill,
+                                    )
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
+                      // CARD 2: KUMANDA & GÖRÜNÜM
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: cardBorder),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Kumanda & Görünüm',
+                              style: TextStyle(
+                                color: primaryText,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
                             Row(
                               children: <Widget>[
                                 Expanded(
-                                  child: TextField(
-                                    controller: _ipController,
-                                    focusNode: _ipFocusNode,
+                                  child: Text(
+                                    'Tema',
                                     style: TextStyle(
-                                      color: primaryText,
-                                      fontSize: 13,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: 'TV IP (192.168.1.x)',
-                                      hintStyle: TextStyle(
-                                        color: secondaryText,
-                                        fontSize: 12,
-                                      ),
-                                      isDense: true,
-                                      filled: true,
-                                      fillColor: inputFill,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide:
-                                            BorderSide(color: cardBorder),
-                                      ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
+                                      color: secondaryText,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: goldText,
-                                    side: BorderSide(
-                                      color: goldText.withValues(alpha: 0.45),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                _SegmentedOptionPill(
+                                  key: const Key('theme_dark_chip'),
+                                  label: 'Koyu',
+                                  selected: isDarkMode,
+                                  goldColor: goldText,
+                                  fillColor: inputFill,
+                                  borderColor: cardBorder,
+                                  primaryText: primaryText,
+                                  secondaryText: secondaryText,
+                                  onTap: () => ref
+                                      .read(cueDeckProvider.notifier)
+                                      .setDarkMode(true),
+                                ),
+                                const SizedBox(width: 6),
+                                _SegmentedOptionPill(
+                                  key: const Key('theme_light_chip'),
+                                  label: 'Açık',
+                                  selected: !isDarkMode,
+                                  goldColor: goldText,
+                                  fillColor: inputFill,
+                                  borderColor: cardBorder,
+                                  primaryText: primaryText,
+                                  secondaryText: secondaryText,
+                                  onTap: () => ref
+                                      .read(cueDeckProvider.notifier)
+                                      .setDarkMode(false),
+                                ),
+                              ],
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Divider(height: 1, color: dividerColor),
+                            ),
+                            Row(
+                              children: <Widget>[
+                                Expanded(
+                                  child: Text(
+                                    'Hızlı Tuşlar',
+                                    style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                                ),
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: goldText,
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
                                   onPressed: () {
-                                    HapticFeedback.mediumImpact();
-                                    final ip = _ipController.text.trim();
-                                    unawaited(
-                                      ref
-                                          .read(cueDeckProvider.notifier)
-                                          .scanNetworkForTvs(customIp: ip),
-                                    );
-                                    if (ip.isEmpty) {
-                                      showTvDiscoveryModal(context);
-                                    }
+                                    HapticFeedback.selectionClick();
+                                    ref
+                                        .read(cueDeckProvider.notifier)
+                                        .resetRemoteShortcutsToDefault();
                                   },
                                   child: const Text(
-                                    'Tara ve Bağlan',
+                                    'Sıfırla',
                                     style: TextStyle(
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 11.5,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
+                            const RemoteShortcutSlotPairRow(),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              child: Divider(height: 1, color: dividerColor),
+                            ),
+                            Text(
+                              'Mouse Hassasiyeti',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: secondaryText,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
                             Row(
                               children: <Widget>[
                                 Expanded(
-                                  child: OutlinedButton(
-                                    key: const Key('pair_tv_rsa_button'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: goldText,
-                                      backgroundColor:
-                                          goldText.withValues(alpha: 0.10),
-                                      side: BorderSide(
-                                        color: goldText.withValues(alpha: 0.45),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 9,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      HapticFeedback.mediumImpact();
-                                      final ip = _ipController.text.trim();
-                                      _openInteractiveRsaPairingSheet(
-                                        context,
-                                        ip,
-                                      );
-                                    },
-                                    child: const Text(
-                                      '🔐 TV Eşleştir (RSA Onayı)',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 11,
-                                      ),
-                                    ),
+                                  child: _SegmentedOptionPill(
+                                    label: 'Hassas',
+                                    centered: true,
+                                    selected: sensitivity <= 0.95,
+                                    goldColor: goldText,
+                                    fillColor: inputFill,
+                                    borderColor: cardBorder,
+                                    primaryText: primaryText,
+                                    secondaryText: secondaryText,
+                                    onTap: () => ref
+                                        .read(cueDeckProvider.notifier)
+                                        .setTouchpadSensitivity(0.85),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
-                                  child: OutlinedButton(
-                                    key: const Key('pair_tv_pin_button'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: primaryText,
-                                      side: BorderSide(color: cardBorder),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 9,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    onPressed: () {
-                                      HapticFeedback.mediumImpact();
-                                      final ip = _ipController.text.trim();
-                                      _openPin6466Dialog(context, ip);
-                                    },
-                                    child: const Text(
-                                      '🔢 PIN Eşleştir (6466)',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 11,
-                                      ),
-                                    ),
+                                  child: _SegmentedOptionPill(
+                                    label: 'Normal',
+                                    centered: true,
+                                    selected:
+                                        sensitivity > 0.95 && sensitivity <= 1.5,
+                                    goldColor: goldText,
+                                    fillColor: inputFill,
+                                    borderColor: cardBorder,
+                                    primaryText: primaryText,
+                                    secondaryText: secondaryText,
+                                    onTap: () => ref
+                                        .read(cueDeckProvider.notifier)
+                                        .setTouchpadSensitivity(1.25),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: <Widget>[
+                                const SizedBox(width: 6),
                                 Expanded(
-                                  child: TextButton.icon(
-                                    key: const Key('switch_tv_profile_button'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: goldText,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    onPressed: () {
-                                      HapticFeedback.selectionClick();
-                                      showModalBottomSheet<void>(
-                                        context: context,
-                                        isScrollControlled: true,
-                                        backgroundColor: Colors.transparent,
-                                        builder: (_) =>
-                                            const TvAlternativeProfileSheet(),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.tune_rounded,
-                                      size: 15,
-                                    ),
-                                    label: const Text(
-                                      '🔄 Alternatif Profil',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: TextButton.icon(
-                                    key: const Key('tv_diagnostic_report_button'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: secondaryText,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    onPressed: () {
-                                      HapticFeedback.selectionClick();
-                                      showModalBottomSheet<void>(
-                                        context: context,
-                                        isScrollControlled: true,
-                                        backgroundColor: Colors.transparent,
-                                        builder: (_) =>
-                                            const ConnectionDiagnosticSheet(),
-                                      );
-                                    },
-                                    icon: const Icon(
-                                      Icons.medical_information_outlined,
-                                      size: 15,
-                                    ),
-                                    label: const Text(
-                                      '🩺 Tanılama Raporu',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 11,
-                                      ),
-                                    ),
+                                  child: _SegmentedOptionPill(
+                                    label: 'Hızlı',
+                                    centered: true,
+                                    selected: sensitivity > 1.5,
+                                    goldColor: goldText,
+                                    fillColor: inputFill,
+                                    borderColor: cardBorder,
+                                    primaryText: primaryText,
+                                    secondaryText: secondaryText,
+                                    onTap: () => ref
+                                        .read(cueDeckProvider.notifier)
+                                        .setTouchpadSensitivity(1.85),
                                   ),
                                 ),
                               ],
@@ -1077,66 +719,77 @@ class _CueDeckSettingsScreenState
                       ),
                       const SizedBox(height: 12),
 
-                      const RemoteShortcutCustomizationCard(),
-                      const SizedBox(height: 12),
-
+                      // CARD 3: CUEDECK PRO
                       const CueDeckProPassAndUpgradeSection(),
                       const SizedBox(height: 12),
 
-                      const _GoogleDriveBackupSection(),
-                      const SizedBox(height: 14),
-
-                      const WatchPlanMasteryHeader(),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              'İzleme Planı (${cueItems.length})',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: primaryText,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14.5,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: softAccentFill,
-                              foregroundColor: const Color(0xFF141824),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () => _openAddCueModal(context),
-                            icon: const Icon(Icons.add_rounded, size: 17),
-                            label: const Text(
-                              'Plan Ekle',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      for (final item in cueItems)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: WatchCueCard(
-                            item: item,
-                            isPlayingOnTv: item.id == activePlayingId,
-                          ),
+                      // CARD 4: YEDEKLEME & HAKKINDA
+                      Container(
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: cardBorder),
                         ),
+                        child: Column(
+                          children: <Widget>[
+                            _SettingsNavTile(
+                              key: const Key('settings_backup_tile'),
+                              icon: isGoogleSignedIn
+                                  ? Icons.cloud_done_outlined
+                                  : Icons.cloud_upload_outlined,
+                              iconColor:
+                                  isGoogleSignedIn ? softMint : goldText,
+                              title: 'Bulut & Yerel Yedekleme',
+                              subtitle: isGoogleSignedIn &&
+                                      googleEmail.isNotEmpty
+                                  ? googleEmail
+                                  : 'Yedekle / Geri Yükle',
+                              primaryText: primaryText,
+                              secondaryText: secondaryText,
+                              onTap: () => _showBackupManagementSheet(context),
+                            ),
+                            Divider(
+                              height: 1,
+                              indent: 48,
+                              color: dividerColor,
+                            ),
+                            _SettingsNavTile(
+                              key: const Key('settings_link_beam_tile'),
+                              icon: Icons.cast_connected_rounded,
+                              iconColor: goldText,
+                              title: 'Link Işınla veya Planla',
+                              subtitle: 'YouTube veya video bağlantısı ekle',
+                              primaryText: primaryText,
+                              secondaryText: secondaryText,
+                              onTap: () => _openLinkBeam(context),
+                            ),
+                            Divider(
+                              height: 1,
+                              indent: 48,
+                              color: dividerColor,
+                            ),
+                            _SettingsNavTile(
+                              key: const Key('settings_release_notes_tile'),
+                              icon: Icons.article_outlined,
+                              iconColor: secondaryText,
+                              title: 'Sürüm Notları',
+                              trailingBadge:
+                                  CueReleaseNotesCatalog.currentShortVersion,
+                              primaryText: primaryText,
+                              secondaryText: secondaryText,
+                              goldText: goldText,
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                showCueWhatsNewModal(
+                                  context,
+                                  isDarkMode: isDarkMode,
+                                  initialStartupMode: false,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1152,21 +805,335 @@ class _CueDeckSettingsScreenState
     );
   }
 
-  void _openAddCueModal(BuildContext context) {
-    final notifier = ref.read(cueDeckProvider.notifier);
-    if (!notifier.canAddMoreWatchPlans) {
-      showCueProPaywallSheet(
+  Widget _buildAdvancedConnectionPanel({
+    required BuildContext context,
+    required TvDevice device,
+    required String localWifiIp,
+    required Color primaryText,
+    required Color secondaryText,
+    required Color goldText,
+    required Color cardBorder,
+    required Color inputFill,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: TextField(
+                  controller: _ipController,
+                  focusNode: _ipFocusNode,
+                  style: TextStyle(color: primaryText, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'TV IP (192.168.1.x)',
+                    hintStyle: TextStyle(color: secondaryText, fontSize: 12),
+                    isDense: true,
+                    filled: true,
+                    fillColor: inputFill,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: cardBorder),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: goldText,
+                  side: BorderSide(color: goldText.withValues(alpha: 0.45)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  final ip = _ipController.text.trim();
+                  unawaited(
+                    ref
+                        .read(cueDeckProvider.notifier)
+                        .scanNetworkForTvs(customIp: ip),
+                  );
+                  if (ip.isEmpty) {
+                    showTvDiscoveryModal(context);
+                  }
+                },
+                child: const Text(
+                  'Bağlan',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('pair_tv_rsa_button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: goldText,
+                    side: BorderSide(color: goldText.withValues(alpha: 0.45)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    _openInteractiveRsaPairingSheet(
+                      context,
+                      _ipController.text.trim(),
+                    );
+                  },
+                  child: const Text(
+                    'RSA Eşleştir',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('pair_tv_pin_button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryText,
+                    side: BorderSide(color: cardBorder),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    _openPin6466Dialog(context, _ipController.text.trim());
+                  },
+                  child: const Text(
+                    'PIN Eşleştir',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('switch_tv_profile_button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryText,
+                    side: BorderSide(color: cardBorder),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const TvAlternativeProfileSheet(),
+                    );
+                  },
+                  child: const Text(
+                    'Alternatif Profil',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('tv_diagnostic_report_button'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: secondaryText,
+                    side: BorderSide(color: cardBorder),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const ConnectionDiagnosticSheet(),
+                    );
+                  },
+                  child: const Text(
+                    'Tanılama Raporu',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: <Widget>[
+              if (!device.isIrBlaster)
+                Expanded(
+                  child: InkWell(
+                    key: const Key('settings_edit_mac_button'),
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      showWakeOnLanSetupSheet(context);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        device.hasValidMac
+                            ? 'WoL MAC: ${device.macAddress}'
+                            : 'WoL MAC Ekle',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: goldText,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => _openTvSetupGuideSheet(context),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 4,
+                    horizontal: 6,
+                  ),
+                  child: Text(
+                    'Kurulum Rehberi',
+                    style: TextStyle(
+                      color: goldText,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (localWifiIp.isNotEmpty)
+            Text(
+              'Wi-Fi IP: $localWifiIp',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: secondaryText, fontSize: 10.5),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _connectDiscoveredDevice(TvDevice d) async {
+    HapticFeedback.selectionClick();
+    _ipController.text = d.ip;
+    final ok = await ref
+        .read(cueDeckProvider.notifier)
+        .connectAndPairDevice(d);
+    if (!mounted) return;
+    if ((d.protocol == TvConnectionProtocol.remotePort6466 &&
+            d.port == 6466 &&
+            !d.isPaired) ||
+        ((d.protocol == TvConnectionProtocol.philipsJointSpace1925 ||
+                d.protocol == TvConnectionProtocol.vidaaSmart36669) &&
+            !d.isPaired &&
+            !ok)) {
+      _openPin6466Dialog(context, d.ip);
+    } else if (!ok) {
+      _openInteractiveRsaPairingSheet(context, d.ip);
+    }
+  }
+
+  Future<void> _openLinkBeam(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final foundFromClipboard = await ref
+        .read(cueDeckProvider.notifier)
+        .importClipboardAsSharedPayload();
+    if (!context.mounted) return;
+    if (!foundFromClipboard) {
+      await showShareToTvBeamSheet(
         context,
-        reasonMessage:
-            'Ücretsiz sürümde en fazla ${CueProProductCatalog.maxFreeWatchPlans} özel izleme planı ekleyebilirsiniz.',
+        SharedCuePayload(
+          url: '',
+          title: '',
+          platform: StreamingPlatform.youtube,
+          receivedAtEpochMs: DateTime.now().millisecondsSinceEpoch,
+        ),
       );
       return;
     }
+    final payload = ref.read(cueDeckProvider).pendingSharedPayload;
+    if (payload != null) {
+      await showShareToTvBeamSheet(context, payload);
+    }
+  }
+
+  void _showBackupManagementSheet(BuildContext context) {
+    HapticFeedback.selectionClick();
+    final isDarkMode = ref.read(cueDeckProvider).isDarkMode;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const AddWatchCueSheet(),
+      builder: (_) => Container(
+        key: const Key('backup_management_sheet'),
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF10131C) : const Color(0xFFF3F6FA),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+        child: const SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            child: _GoogleDriveBackupSection(),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1198,7 +1165,162 @@ class _CueDeckSettingsScreenState
   }
 }
 
-/// CueDeck Pro Lifetime + 3-Tier Paywall Launch + 24-Hour Rewarded Pro Pass + Loyalty card.
+class _SegmentedOptionPill extends StatelessWidget {
+  const _SegmentedOptionPill({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.goldColor,
+    required this.fillColor,
+    required this.borderColor,
+    required this.primaryText,
+    required this.secondaryText,
+    required this.onTap,
+    this.centered = false,
+  });
+
+  final String label;
+  final bool selected;
+  final Color goldColor;
+  final Color fillColor;
+  final Color borderColor;
+  final Color primaryText;
+  final Color secondaryText;
+  final VoidCallback onTap;
+  final bool centered;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: Container(
+        alignment: centered ? Alignment.center : null,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? goldColor.withValues(alpha: 0.16) : fillColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? goldColor : borderColor,
+            width: selected ? 1.2 : 1.0,
+          ),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: selected ? primaryText : secondaryText,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+            fontSize: 11,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsNavTile extends StatelessWidget {
+  const _SettingsNavTile({
+    super.key,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.primaryText,
+    required this.secondaryText,
+    required this.onTap,
+    this.subtitle,
+    this.trailingBadge,
+    this.goldText,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String? subtitle;
+  final String? trailingBadge;
+  final Color primaryText;
+  final Color secondaryText;
+  final Color? goldText;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        child: Row(
+          children: <Widget>[
+            Icon(icon, color: iconColor, size: 19),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: primaryText,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: secondaryText,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (trailingBadge != null) ...<Widget>[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: (goldText ?? secondaryText).withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  trailingBadge!,
+                  style: TextStyle(
+                    color: goldText ?? secondaryText,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            Icon(
+              Icons.chevron_right_rounded,
+              color: secondaryText,
+              size: 19,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Calm CueDeck Pro & 24-Hour Rewarded Pass card.
 class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
   const CueDeckProPassAndUpgradeSection({super.key});
 
@@ -1211,7 +1333,6 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
     final isPassActive = entitlement.isProPassActive();
     final isSubActive = entitlement.isSubscriptionActive();
     final rewardedDays = entitlement.rewardedDaysCount;
-    final isLoyaltyUnlocked = entitlement.isLoyaltyDiscountUnlocked;
 
     final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final primaryText =
@@ -1225,7 +1346,7 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
     final subSurfaceBg =
         isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
     final borderColor = isDarkMode
-        ? Colors.white.withValues(alpha: 0.09)
+        ? Colors.white.withValues(alpha: 0.08)
         : const Color(0xFFE2E8F0);
 
     void showToast(String message) {
@@ -1248,7 +1369,7 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: borderColor),
       ),
       child: Column(
@@ -1266,7 +1387,7 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  isProLifetime ? 'CueDeck Pro' : 'CueDeck Pro & 24s Pass',
+                  'CueDeck Pro',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -1288,7 +1409,7 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
                   isProLifetime
                       ? 'ÖMÜR BOYU'
                       : (isSubActive
-                            ? 'ABONELİK AKTİF'
+                            ? 'AKTİF'
                             : (isPassActive
                                   ? 'PASS (${entitlement.formattedRemainingProPass()})'
                                   : 'ÜCRETSİZ')),
@@ -1306,62 +1427,49 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
           const SizedBox(height: 6),
           if (isProLifetime || isSubActive) ...<Widget>[
             Text(
-              'Reklamsız kullanım, sınırsız izleme planı, Share-to-TV ışınlama ve bulut yedekleme aktif.',
-              style: TextStyle(
-                color: secondaryText,
-                fontSize: 12,
-              ),
+              'Reklamsız kullanım, sınırsız izleme planı ve bulut yedekleme aktif.',
+              style: TextStyle(color: secondaryText, fontSize: 11.5),
             ),
           ] else ...<Widget>[
             Text(
-              '3 Gün Ücretsiz Yıllık Deneme, Tek Seferlik Ömür Boyu veya 1 Reklamla 24s Pro.',
-              style: TextStyle(
-                color: secondaryText,
-                fontSize: 12,
-              ),
+              'Reklamsız deneyim, sınırsız izleme planı ve ışınlama.',
+              style: TextStyle(color: secondaryText, fontSize: 11.5),
             ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: subSurfaceBg,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            if (rewardedDays > 0) ...<Widget>[
+              const SizedBox(height: 8),
+              Row(
                 children: <Widget>[
-                  Text(
-                    isLoyaltyUnlocked
-                        ? '🎉 %40 Sadakat İndirimi Açıldı (${CueProProductCatalog.priceLoyalty40Tr})'
-                        : '🎁 Sadakat İndirimi: $rewardedDays/${CueProProductCatalog.loyaltyDiscountTargetDays} Gün (%40 İndirim)',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: goldText,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11.5,
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: entitlement.loyaltyProgressRatio,
+                        minHeight: 4,
+                        backgroundColor: isDarkMode
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.06),
+                        valueColor: AlwaysStoppedAnimation<Color>(goldText),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: entitlement.loyaltyProgressRatio,
-                      minHeight: 4,
-                      backgroundColor: isDarkMode
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.06),
-                      valueColor: AlwaysStoppedAnimation<Color>(goldText),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$rewardedDays/${CueProProductCatalog.loyaltyDiscountTargetDays} gün',
+                    style: TextStyle(
+                      color: goldText,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10.5,
                     ),
                   ),
                 ],
               ),
-            ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: <Widget>[
                 Expanded(
                   child: FilledButton(
+                    key: const Key('settings_open_paywall_button'),
                     style: FilledButton.styleFrom(
                       backgroundColor: goldText,
                       foregroundColor: const Color(0xFF0A0C12),
@@ -1374,20 +1482,15 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(11),
                       ),
                     ),
-                    onPressed: () async {
-                      HapticFeedback.mediumImpact();
-                      final res = await ref
-                          .read(cueDeckProvider.notifier)
-                          .purchaseLifetimePro();
-                      showToast(res.message);
+                    onPressed: () {
+                      HapticFeedback.selectionClick();
+                      showCueProPaywallSheet(context);
                     },
-                    child: Text(
-                      isLoyaltyUnlocked
-                          ? '💎 Pro Al (${CueProProductCatalog.priceLoyalty40Tr})'
-                          : '💎 Pro Al (${CueProProductCatalog.priceLaunchTr})',
+                    child: const Text(
+                      'Pro Planları',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
                       ),
@@ -1417,53 +1520,27 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
                       showToast(res.message);
                     },
                     child: const Text(
-                      '🎬 24 Saat Ücretsiz Aç',
+                      '24s Reklamsız',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
+                        fontSize: 12,
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                key: const Key('settings_open_paywall_button'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: goldText,
-                  side: BorderSide(color: goldText.withValues(alpha: 0.45)),
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                ),
-                onPressed: () {
-                  HapticFeedback.selectionClick();
-                  showCueProPaywallSheet(context);
-                },
-                child: const Text(
-                  '✨ Tüm Planları Gör (3 Gün Ücretsiz Dene)',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
-                ),
-              ),
-            ),
           ],
           if (isProLifetime || isSubActive || isPassActive) ...<Widget>[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             SizedBox(
               width: double.infinity,
-              child: TextButton.icon(
+              child: TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: secondaryText,
                   visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
                 ),
                 onPressed: () async {
                   HapticFeedback.selectionClick();
@@ -1472,15 +1549,9 @@ class CueDeckProPassAndUpgradeSection extends ConsumerWidget {
                       .resetProPassToFree();
                   showToast(res.message);
                 },
-                icon: const Icon(Icons.restart_alt_rounded, size: 15),
-                label: Text(
-                  isProLifetime
-                      ? 'Ücretsiz Sürüme Dön (Test Pro Sıfırla)'
-                      : 'Ücretsiz Sürüme Dön (Pass Sıfırla)',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: const Text(
+                  'Ücretsiz Sürüme Dön',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -1516,7 +1587,6 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
       cueDeckProvider.select((s) => s.isProcessingBackup),
     );
 
-    final cardBg = isDarkMode ? const Color(0xFF0A0C12) : Colors.white;
     final primaryText =
         isDarkMode ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B);
     final secondaryText =
@@ -1526,7 +1596,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
     final mintText =
         isDarkMode ? const Color(0xFF6EE7B7) : const Color(0xFF059669);
     final subSurfaceBg =
-        isDarkMode ? const Color(0xFF11141E) : const Color(0xFFF8FAFC);
+        isDarkMode ? const Color(0xFF161A26) : Colors.white;
     final buttonBorder = isDarkMode
         ? Colors.white.withValues(alpha: 0.09)
         : const Color(0xFFE2E8F0);
@@ -1550,319 +1620,225 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
         );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              Icon(
-                isSignedIn
-                    ? Icons.cloud_done_rounded
-                    : Icons.cloud_upload_rounded,
-                color: isSignedIn ? mintText : goldText,
-                size: 19,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Bulut & Yerel Yedekleme',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: primaryText,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (isProcessing)
-                SizedBox(
-                  width: 15,
-                  height: 15,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: goldText,
-                  ),
-                ),
-            ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Center(
+          child: Container(
+            width: 38,
+            height: 4,
+            decoration: BoxDecoration(
+              color: secondaryText.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
-          const SizedBox(height: 8),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: <Widget>[
+            Icon(
+              isSignedIn ? Icons.cloud_done_rounded : Icons.cloud_upload_rounded,
+              color: isSignedIn ? mintText : goldText,
+              size: 19,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Bulut & Yerel Yedekleme',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: primaryText,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            if (isProcessing)
+              SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: goldText,
+                ),
+              ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              onPressed: () => Navigator.of(context).pop(),
+              icon: Icon(Icons.close_rounded, color: secondaryText),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
 
-          if (!isSignedIn) ...<Widget>[
-            Text(
-              'Planlarınızı Google Drive veya yerel dosyaya yedekleyin.',
-              style: TextStyle(
-                color: secondaryText,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: goldText,
-                  foregroundColor: const Color(0xFF141824),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(11),
-                  ),
-                ),
-                onPressed: isProcessing
-                    ? null
-                    : () async {
-                        HapticFeedback.mediumImpact();
-                        final ok = await GoogleOAuthSheet.startOAuth(context);
-                        if (!context.mounted) return;
-                        if (ok) {
-                          final notifier = ref.read(cueDeckProvider.notifier);
-                          await notifier.refreshGoogleDriveStatus();
-                          final syncRes =
-                              await notifier.syncDevicesWithCloud();
-                          showMessage(syncRes.message);
-                        }
-                      },
-                child: const Text(
-                  '🔑 Google Hesabını Bağla',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+        if (!isSignedIn) ...<Widget>[
+          Text(
+            'Planlarınızı Google Drive veya yerel dosyaya yedekleyin.',
+            style: TextStyle(color: secondaryText, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: goldText,
+                foregroundColor: const Color(0xFF141824),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11),
                 ),
               ),
-            ),
-          ] else ...<Widget>[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: subSurfaceBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: borderColor),
+              onPressed: isProcessing
+                  ? null
+                  : () async {
+                      HapticFeedback.mediumImpact();
+                      final ok = await GoogleOAuthSheet.startOAuth(context);
+                      if (!context.mounted) return;
+                      if (ok) {
+                        final notifier = ref.read(cueDeckProvider.notifier);
+                        await notifier.refreshGoogleDriveStatus();
+                        final syncRes = await notifier.syncDevicesWithCloud();
+                        showMessage(syncRes.message);
+                      }
+                    },
+              child: const Text(
+                'Google Hesabını Bağla',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: mintText,
-                        ),
+            ),
+          ),
+        ] else ...<Widget>[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: subSurfaceBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: mintText,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          userEmail.isNotEmpty
-                              ? '${userName.isNotEmpty ? userName : "Google Drive"} ($userEmail)'
-                              : (userName.isNotEmpty
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        userEmail.isNotEmpty
+                            ? '${userName.isNotEmpty ? userName : "Google Drive"} ($userEmail)'
+                            : (userName.isNotEmpty
                                   ? userName
                                   : 'Google Drive Bağlı'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: primaryText,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: primaryText,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Google Hesabından Çıkış Yap',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: isProcessing
+                    ),
+                    IconButton(
+                      tooltip: 'Google Hesabından Çıkış Yap',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: isProcessing
+                          ? null
+                          : () async {
+                              final res = await ref
+                                  .read(cueDeckProvider.notifier)
+                                  .signOutGoogleDrive();
+                              showMessage(res.message);
+                            },
+                      icon: Icon(
+                        Icons.close_rounded,
+                        color: secondaryText,
+                        size: 16,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'Otomatik yedekleme • Son: $lastBackupFormatted',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: secondaryText, fontSize: 11),
+                      ),
+                    ),
+                    Transform.scale(
+                      scale: 0.82,
+                      child: Switch(
+                        value: isAutoEnabled,
+                        activeThumbColor: mintText,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: isProcessing
                             ? null
-                            : () async {
-                                final res = await ref
+                            : (val) {
+                                HapticFeedback.selectionClick();
+                                ref
                                     .read(cueDeckProvider.notifier)
-                                    .signOutGoogleDrive();
-                                showMessage(res.message);
+                                    .toggleAutoCloudBackup(val);
                               },
-                        icon: Icon(
-                          Icons.close_rounded,
-                          color: secondaryText,
-                          size: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          'Otomatik yedekleme • Son: $lastBackupFormatted',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: secondaryText,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                      Transform.scale(
-                        scale: 0.82,
-                        child: Switch(
-                          value: isAutoEnabled,
-                          activeThumbColor: mintText,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          onChanged: isProcessing
-                              ? null
-                              : (val) {
-                                  HapticFeedback.selectionClick();
-                                  ref
-                                      .read(cueDeckProvider.notifier)
-                                      .toggleAutoCloudBackup(val);
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: mintText,
-                      foregroundColor: const Color(0xFF0F172A),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 9,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: isProcessing
-                        ? null
-                        : () async {
-                            HapticFeedback.mediumImpact();
-                            final res = await ref
-                                .read(cueDeckProvider.notifier)
-                                .syncDevicesWithCloud();
-                            showMessage(res.message);
-                          },
-                    child: const Text(
-                      '🔄 Eşitle',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: goldText,
-                      side: BorderSide(color: buttonBorder),
-                      backgroundColor: subSurfaceBg,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 9,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: isProcessing
-                        ? null
-                        : () async {
-                            HapticFeedback.mediumImpact();
-                            final res = await ref
-                                .read(cueDeckProvider.notifier)
-                                .backupNowToCloud();
-                            showMessage(res.message);
-                          },
-                    child: const Text(
-                      '☁️ Yedekle',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: primaryText,
-                      side: BorderSide(color: buttonBorder),
-                      backgroundColor: subSurfaceBg,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 9,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    onPressed: isProcessing
-                        ? null
-                        : () async {
-                            HapticFeedback.selectionClick();
-                            final notifier =
-                                ref.read(cueDeckProvider.notifier);
-                            final backups =
-                                await notifier.fetchAvailableBackups();
-                            if (!context.mounted) return;
-                            if (backups.isEmpty) {
-                              showMessage(
-                                'Bulutta veya cihazda kayıtlı yedek bulunamadı.',
-                              );
-                              return;
-                            }
-                            _showCloudBackupPickerSheet(
-                              context,
-                              ref,
-                              backups,
-                              showMessage,
-                            );
-                          },
-                    child: const Text(
-                      '☁️ Yükle',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
               ],
             ),
-          ],
-
+          ),
           const SizedBox(height: 8),
-
           Row(
             children: <Widget>[
               Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: mintText,
+                    foregroundColor: const Color(0xFF0F172A),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 9,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: isProcessing
+                      ? null
+                      : () async {
+                          HapticFeedback.mediumImpact();
+                          final res = await ref
+                              .read(cueDeckProvider.notifier)
+                              .syncDevicesWithCloud();
+                          showMessage(res.message);
+                        },
+                  child: const Text(
+                    'Eşitle',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryText,
+                    foregroundColor: goldText,
                     side: BorderSide(color: buttonBorder),
                     backgroundColor: subSurfaceBg,
                     padding: const EdgeInsets.symmetric(
@@ -1876,24 +1852,21 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                   onPressed: isProcessing
                       ? null
                       : () async {
-                          HapticFeedback.selectionClick();
+                          HapticFeedback.mediumImpact();
                           final res = await ref
                               .read(cueDeckProvider.notifier)
-                              .exportLocalBackupFile();
+                              .backupNowToCloud();
                           showMessage(res.message);
                         },
                   child: const Text(
-                    '💾 Dosyaya Yedekle',
+                    'Yedekle',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11.5,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
@@ -1912,26 +1885,103 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                       ? null
                       : () async {
                           HapticFeedback.selectionClick();
-                          final res = await ref
-                              .read(cueDeckProvider.notifier)
-                              .importLocalBackupFile();
-                          showMessage(res.message);
+                          final notifier = ref.read(cueDeckProvider.notifier);
+                          final backups = await notifier.fetchAvailableBackups();
+                          if (!context.mounted) return;
+                          if (backups.isEmpty) {
+                            showMessage(
+                              'Bulutta veya cihazda kayıtlı yedek bulunamadı.',
+                            );
+                            return;
+                          }
+                          _showCloudBackupPickerSheet(
+                            context,
+                            ref,
+                            backups,
+                            showMessage,
+                          );
                         },
                   child: const Text(
-                    '📂 Dosyadan Yükle',
+                    'Yükle',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 11.5,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5),
                   ),
                 ),
               ),
             ],
           ),
         ],
-      ),
+
+        const SizedBox(height: 8),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryText,
+                  side: BorderSide(color: buttonBorder),
+                  backgroundColor: subSurfaceBg,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 9,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: isProcessing
+                    ? null
+                    : () async {
+                        HapticFeedback.selectionClick();
+                        final res = await ref
+                            .read(cueDeckProvider.notifier)
+                            .exportLocalBackupFile();
+                        showMessage(res.message);
+                      },
+                child: const Text(
+                  'Dosyaya Yedekle',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryText,
+                  side: BorderSide(color: buttonBorder),
+                  backgroundColor: subSurfaceBg,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 9,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: isProcessing
+                    ? null
+                    : () async {
+                        HapticFeedback.selectionClick();
+                        final res = await ref
+                            .read(cueDeckProvider.notifier)
+                            .importLocalBackupFile();
+                        showMessage(res.message);
+                      },
+                child: const Text(
+                  'Dosyadan Yükle',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1943,7 +1993,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
   ) {
     final isDarkMode = ref.read(cueDeckProvider).isDarkMode;
     final sheetBg =
-        isDarkMode ? const Color(0xFF10131C) : const Color(0xFFF3F5F9);
+        isDarkMode ? const Color(0xFF10131C) : const Color(0xFFF3F6FA);
     final itemBg = isDarkMode ? const Color(0xFF161A26) : Colors.white;
     final primaryText = isDarkMode ? Colors.white : const Color(0xFF141821);
     final secondaryText = isDarkMode
@@ -1972,7 +2022,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          '☁️ Bulut Yedeği Seçin',
+                          'Bulut Yedeği Seçin',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -2020,15 +2070,18 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                                     ? const Color(0xFFE2A84B)
                                         .withValues(alpha: 0.65)
                                     : (isDarkMode
-                                        ? Colors.white.withValues(alpha: 0.10)
-                                        : const Color(0xFFD8DEE8)),
+                                          ? Colors.white.withValues(alpha: 0.10)
+                                          : const Color(0xFFD8DEE8)),
                               ),
                             ),
                             child: Row(
                               children: <Widget>[
-                                Text(
-                                  item.isLocal ? '💾' : '☁️',
-                                  style: const TextStyle(fontSize: 20),
+                                Icon(
+                                  item.isLocal
+                                      ? Icons.save_alt_rounded
+                                      : Icons.cloud_outlined,
+                                  color: goldText,
+                                  size: 20,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -2065,7 +2118,7 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                                                     BorderRadius.circular(6),
                                               ),
                                               child: Text(
-                                                '⭐ EN YENİ',
+                                                'EN YENİ',
                                                 style: TextStyle(
                                                   color: goldText,
                                                   fontWeight: FontWeight.w800,
@@ -2078,8 +2131,8 @@ class _GoogleDriveBackupSection extends ConsumerWidget {
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
-                                        '📅 ${item.formattedDate} • 📱 ${item.deviceName}'
-                                        '${item.planCount != null ? ' • 🎬 Plan: ${item.planCount}' : ''}',
+                                        '${item.formattedDate} • ${item.deviceName}'
+                                        '${item.planCount != null ? ' • Plan: ${item.planCount}' : ''}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +45,7 @@ const String _kPrefsCueItemsKey = 'cuedeck_watch_items_v1';
 const String _kPrefsTvDeviceV2Key = 'cuedeck_tv_device_v2';
 const String _kPrefsDarkModeKey = 'cuedeck_dark_mode_v1';
 const String _kPrefsRemoteShortcutsKey = 'cuedeck_remote_shortcuts_v1';
+const String _kPrefsTouchpadSensitivityKey = 'cuedeck_touchpad_sensitivity_v1';
 
 final adbTvServiceProvider = Provider<AdbTvService>((ref) {
   final service = AdbTvService();
@@ -175,7 +177,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       selectedDevice: TvDevice.unconfigured,
       discoveredDevices: const <TvDevice>[],
       isScanning: false,
-      isTouchpadMode: false,
+      bottomDeckMode: RemoteBottomDeckMode.plan,
       lastPressedDirection: null,
       lastCommandStatus: 'Ağdaki TV cihazları aranıyor...',
       cueItems: defaultCues,
@@ -415,6 +417,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       final prefs = await SharedPreferences.getInstance();
       final savedDeviceRaw = prefs.getString(_kPrefsTvDeviceV2Key);
       final savedDark = prefs.getBool(_kPrefsDarkModeKey);
+      final savedSensitivity = prefs.getDouble(_kPrefsTouchpadSensitivityKey);
       final rawJson = prefs.getString(_kPrefsCueItemsKey);
       final savedShortcuts = prefs.getStringList(_kPrefsRemoteShortcutsKey);
 
@@ -457,6 +460,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
       state = state.copyWith(
         isDarkMode: savedDark ?? state.isDarkMode,
+        touchpadSensitivity: savedSensitivity != null
+            ? savedSensitivity.clamp(0.6, 2.4)
+            : state.touchpadSensitivity,
         selectedDevice: loadedDevice ?? state.selectedDevice,
         cueItems: (loadedItems != null && loadedItems.isNotEmpty)
             ? loadedItems
@@ -472,6 +478,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     if (!ref.mounted) return;
     final currentDevice = state.selectedDevice;
     final currentDark = state.isDarkMode;
+    final currentSensitivity = state.touchpadSensitivity;
     final currentShortcuts = state.remoteShortcuts;
     final currentItems = state.cueItems;
     try {
@@ -485,6 +492,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
         await prefs.remove(_kPrefsTvDeviceV2Key);
       }
       await prefs.setBool(_kPrefsDarkModeKey, currentDark);
+      await prefs.setDouble(
+        _kPrefsTouchpadSensitivityKey,
+        currentSensitivity.clamp(0.6, 2.4),
+      );
       await prefs.setStringList(
         _kPrefsRemoteShortcutsKey,
         currentShortcuts.map((e) => e.name).toList(growable: false),
@@ -810,18 +821,59 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     state = state.copyWith(activeTab: index);
   }
 
-  void toggleTouchpadMode() {
-    final nextMode = !state.isTouchpadMode;
+  void togglePlanDeck() {
+    final wasTouchpad = state.bottomDeckMode == RemoteBottomDeckMode.touchpad;
+    final nextMode = state.bottomDeckMode == RemoteBottomDeckMode.plan
+        ? RemoteBottomDeckMode.none
+        : RemoteBottomDeckMode.plan;
+    _pendingMouseDx = 0;
+    _pendingMouseDy = 0;
     state = state.copyWith(
-      isTouchpadMode: nextMode,
-      lastCommandStatus: nextMode
+      bottomDeckMode: nextMode,
+      lastCommandStatus: nextMode == RemoteBottomDeckMode.plan
+          ? '📅 İzleme Planı kartları açıldı'
+          : 'İzleme Planı gizlendi',
+    );
+    if (wasTouchpad) {
+      final device = state.selectedDevice;
+      if (device.hasValidIp) {
+        unawaited(ref.read(adbTvServiceProvider).disableTvMouseCursor(device));
+      }
+    }
+  }
+
+  void openPlanDeck() {
+    final wasTouchpad = state.bottomDeckMode == RemoteBottomDeckMode.touchpad;
+    _pendingMouseDx = 0;
+    _pendingMouseDy = 0;
+    state = state.copyWith(
+      bottomDeckMode: RemoteBottomDeckMode.plan,
+    );
+    if (wasTouchpad) {
+      final device = state.selectedDevice;
+      if (device.hasValidIp) {
+        unawaited(ref.read(adbTvServiceProvider).disableTvMouseCursor(device));
+      }
+    }
+  }
+
+  void toggleTouchpadMode() {
+    final nextIsTouchpad = !state.isTouchpadMode;
+    final nextMode = nextIsTouchpad
+        ? RemoteBottomDeckMode.touchpad
+        : RemoteBottomDeckMode.plan;
+    _pendingMouseDx = 0;
+    _pendingMouseDy = 0;
+    state = state.copyWith(
+      bottomDeckMode: nextMode,
+      lastCommandStatus: nextIsTouchpad
           ? '🖱️ TV Mouse Oku & Touchpad modu aktif'
-          : 'Klasik D-Pad Kadran modu aktif',
+          : 'Klasik D-Pad & İzleme Planı aktif',
     );
     final device = state.selectedDevice;
     if (device.hasValidIp) {
       final service = ref.read(adbTvServiceProvider);
-      if (nextMode) {
+      if (nextIsTouchpad) {
         unawaited(service.enableTvMouseCursor(device));
       } else {
         unawaited(service.disableTvMouseCursor(device));
@@ -829,32 +881,79 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
+  void setTouchpadSensitivity(double value) {
+    final clamped = value.clamp(0.6, 2.4);
+    if ((state.touchpadSensitivity - clamped).abs() < 0.01) return;
+    final label = clamped <= 0.95
+        ? 'Hassas'
+        : (clamped <= 1.5 ? 'Normal' : 'Hızlı');
+    state = state.copyWith(
+      touchpadSensitivity: clamped,
+      lastCommandStatus: '🖱️ Mouse hassasiyeti: $label',
+    );
+    _persistState(triggerAutoBackup: false);
+  }
+
+  void cycleTouchpadSensitivity() {
+    final cur = state.touchpadSensitivity;
+    final next = cur <= 0.95 ? 1.25 : (cur <= 1.5 ? 1.85 : 0.85);
+    setTouchpadSensitivity(next);
+  }
+
   void moveTouchpadCursor(double dx, double dy) {
-    _pendingMouseDx += dx;
-    _pendingMouseDy += dy;
+    final speed = math.sqrt(dx * dx + dy * dy);
+    final double accel;
+    if (speed < 3.0) {
+      accel = 0.85;
+    } else {
+      accel = 0.85 + ((speed - 3.0).clamp(0.0, 22.0) / 22.0) * 1.55;
+    }
+    final factor = accel * state.touchpadSensitivity;
+    _pendingMouseDx += dx * factor;
+    _pendingMouseDy += dy * factor;
     if (_mouseMoveBatchTimer?.isActive ?? false) return;
     _mouseMoveBatchTimer = Timer(
-      const Duration(milliseconds: 42),
+      const Duration(milliseconds: 18),
       _flushPendingMouseMove,
     );
   }
 
   Future<void> _flushPendingMouseMove() async {
     if (_isSendingMouseMove) return;
-    final dx = _pendingMouseDx;
-    final dy = _pendingMouseDy;
-    if (dx.abs() < 0.8 && dy.abs() < 0.8) return;
-    _pendingMouseDx = 0;
-    _pendingMouseDy = 0;
+    if (_pendingMouseDx.abs() < 0.5 && _pendingMouseDy.abs() < 0.5) {
+      if (_pendingMouseDx.abs() < 0.01) _pendingMouseDx = 0;
+      if (_pendingMouseDy.abs() < 0.01) _pendingMouseDy = 0;
+      return;
+    }
+    final stepX = _pendingMouseDx.abs() >= 0.5
+        ? _pendingMouseDx.truncateToDouble()
+        : 0.0;
+    final stepY = _pendingMouseDy.abs() >= 0.5
+        ? _pendingMouseDy.truncateToDouble()
+        : 0.0;
+    final sendX = stepX != 0.0
+        ? stepX
+        : (_pendingMouseDx.abs() >= 0.5 ? _pendingMouseDx.sign : 0.0);
+    final sendY = stepY != 0.0
+        ? stepY
+        : (_pendingMouseDy.abs() >= 0.5 ? _pendingMouseDy.sign : 0.0);
+    if (sendX == 0.0 && sendY == 0.0) return;
+
+    _pendingMouseDx -= sendX;
+    _pendingMouseDy -= sendY;
+    if (_pendingMouseDx.abs() < 0.01) _pendingMouseDx = 0;
+    if (_pendingMouseDy.abs() < 0.01) _pendingMouseDy = 0;
 
     final device = state.selectedDevice;
     if (!device.hasControlTarget) return;
     _isSendingMouseMove = true;
     try {
-      await ref.read(adbTvServiceProvider).moveTvMouseCursor(device, dx, dy);
+      await ref
+          .read(adbTvServiceProvider)
+          .moveTvMouseCursor(device, sendX, sendY);
     } finally {
       _isSendingMouseMove = false;
-      if (_pendingMouseDx.abs() >= 1.5 || _pendingMouseDy.abs() >= 1.5) {
+      if (_pendingMouseDx.abs() >= 0.5 || _pendingMouseDy.abs() >= 0.5) {
         unawaited(_flushPendingMouseMove());
       }
     }
@@ -1614,6 +1713,10 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     SharedCuePayload payload, {
     required int hour,
     required int minute,
+    DateTime? scheduledDateTime,
+    WatchRecurrence recurrence = WatchRecurrence.once,
+    int? totalMinutes,
+    int? totalEpisodes,
   }) {
     if (!canAddMoreWatchPlans) {
       state = state.copyWith(
@@ -1624,20 +1727,40 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return false;
     }
     final now = DateTime.now();
-    final scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+    late final DateTime scheduled;
+    if (scheduledDateTime != null) {
+      scheduled = scheduledDateTime;
+    } else {
+      final candidate = DateTime(now.year, now.month, now.day, hour, minute);
+      scheduled = candidate.isAfter(now)
+          ? candidate
+          : candidate.add(const Duration(days: 1));
+    }
+
+    final isPlaylist = CueShareIntentService.isYoutubePlaylistUrl(payload.url);
+    final isShort = CueShareIntentService.isYoutubeShortUrl(payload.url);
+    final resolvedTotalMins = totalMinutes ??
+        (isPlaylist ? 90 : (isShort ? 10 : 30));
+    final resolvedSessionMins =
+        isPlaylist ? 45 : resolvedTotalMins.clamp(5, 45);
+    final resolvedTotalEps = totalEpisodes ?? (isPlaylist ? 8 : 1);
+
     final item = WatchCueItem(
       id: 'cue_share_${now.millisecondsSinceEpoch}',
       title: payload.title,
       subtitle: '${payload.platform.label} • Paylaşımdan Planlandı',
       platform: payload.platform,
       scheduledTime: scheduled,
-      totalMinutes: 45,
-      sessionMinutes: 45,
+      totalMinutes: resolvedTotalMins,
+      sessionMinutes: resolvedSessionMins,
+      totalEpisodes: resolvedTotalEps,
       deepLinkUrl: payload.url,
-      recurrence: WatchRecurrence.once,
+      recurrence: recurrence,
+      activeWeekdays: recurrence.defaultDays,
     );
     addWatchCue(item);
     clearPendingSharedPayload();
+    openPlanDeck();
     return true;
   }
 

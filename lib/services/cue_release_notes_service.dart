@@ -40,11 +40,38 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '2.1.0+28';
-  static const String currentShortVersion = 'v2.1.0';
+  static const String currentVersion = '2.2.0+29';
+  static const String currentShortVersion = 'v2.2.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '2.2.0+29',
+      versionLabel: 'v2.2.0 (Build 29)',
+      releaseDate: '22 Kasım 2026',
+      headline:
+          'Sadeleştirilmiş Ayarlar, Kumanda Altı Plan Kartları, YouTube Paylaş → Plana Ekle & Hassas Touchpad',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'PLAN KARTLARI',
+          title: 'Kumanda Altında Yakından Uzağa Plan Kartları',
+          description:
+              'İzleme Planı Ayarlar\'dan kumanda üzerindeki yeni Plan tuşuna taşındı; yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları eklendi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'YOUTUBE PAYLAŞ',
+          title: 'YouTube Paylaş Menüsünden CueDeck Planına Ekleme',
+          description:
+              'YouTube\'dan "Paylaş → CueDeck" ile otomatik başlık çekme ve tek dokunuşla izleme planına ekleme özelliği eklendi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'TOUCHPAD & İKONLAR',
+          title: 'Yenilenen İkonlar, Sade Ayarlar & Alt Bölge Touchpad',
+          description:
+              'Mouse yüzeyi alt bölgeye taşındı, hassasiyet (Hassas/Normal/Hızlı) iyileştirildi; mikrofon ve mouse oku ikonları yenilendi, Ayarlar sadeleştirildi.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '2.1.0+28',
       versionLabel: 'v2.1.0 (Build 28)',

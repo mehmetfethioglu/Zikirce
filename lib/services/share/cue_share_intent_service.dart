@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show HttpClient, Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -111,13 +112,79 @@ class CueShareIntentService {
     return StreamingPlatform.tvBrowser;
   }
 
-  static String defaultTitleForUrl(StreamingPlatform platform, String url) {
+  /// Returns true when [url] represents a YouTube playlist URL.
+  static bool isYoutubePlaylistUrl(String url) {
     final uri = Uri.tryParse(url);
-    final listId = uri?.queryParameters['list'] ?? '';
-    if (platform == StreamingPlatform.youtube && listId.isNotEmpty) {
-      return 'YouTube Oynatma Listesi';
+    final listId = uri?.queryParameters['list']?.trim() ?? '';
+    if (listId.isNotEmpty) return true;
+    return uri != null &&
+        uri.path.toLowerCase().contains('/playlist') &&
+        url.toLowerCase().contains('list=');
+  }
+
+  /// Returns true when [url] represents a YouTube Shorts URL.
+  static bool isYoutubeShortUrl(String url) {
+    final uri = Uri.tryParse(url);
+    return (uri?.path.toLowerCase() ?? '').contains('/shorts/');
+  }
+
+  static String defaultTitleForUrl(StreamingPlatform platform, String url) {
+    if (platform == StreamingPlatform.youtube) {
+      if (isYoutubeShortUrl(url)) {
+        return 'YouTube Shorts';
+      }
+      if (isYoutubePlaylistUrl(url)) {
+        return 'YouTube Oynatma Listesi';
+      }
+      return 'YouTube Videosu';
     }
     return '${platform.label} Paylaşımı';
+  }
+
+  /// Fetches the real video or playlist title from YouTube oEmbed when available.
+  /// Returns `null` in test/web environments or on any network/parsing failure.
+  Future<String?> fetchYoutubeTitle(String url) async {
+    if (kIsWeb || Platform.environment.containsKey('FLUTTER_TEST')) {
+      return null;
+    }
+    final cleanUrl = url.trim();
+    if (cleanUrl.isEmpty ||
+        detectPlatformFromUrl(cleanUrl) != StreamingPlatform.youtube) {
+      return null;
+    }
+
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 3);
+    try {
+      final endpoint = Uri.https('www.youtube.com', '/oembed', <String, String>{
+        'url': cleanUrl,
+        'format': 'json',
+      });
+      final request = await client
+          .getUrl(endpoint)
+          .timeout(const Duration(seconds: 3));
+      final response = await request
+          .close()
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode != 200) {
+        await response.drain<void>();
+        return null;
+      }
+      final body = await utf8.decodeStream(response).timeout(
+            const Duration(seconds: 3),
+          );
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final title = (decoded['title'] as String?)?.trim() ?? '';
+        if (title.isNotEmpty) return title;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('CueShareIntentService fetchYoutubeTitle skipped: $e');
+      return null;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   /// Queries any pending initial Share Intent captured by `MainActivity` / `AppDelegate`

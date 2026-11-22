@@ -11,10 +11,11 @@ class CueDeckState {
     required this.selectedDevice,
     required this.discoveredDevices,
     required this.isScanning,
-    required this.isTouchpadMode,
     required this.lastPressedDirection,
     required this.lastCommandStatus,
     required this.cueItems,
+    this.bottomDeckMode = RemoteBottomDeckMode.plan,
+    this.touchpadSensitivity = 1.25,
     this.remoteShortcuts = StreamingPlatform.defaultRemoteShortcuts,
     this.isDarkMode = true,
     this.isListeningVoice = false,
@@ -41,7 +42,8 @@ class CueDeckState {
   final TvDevice selectedDevice;
   final List<TvDevice> discoveredDevices;
   final bool isScanning;
-  final bool isTouchpadMode;
+  final RemoteBottomDeckMode bottomDeckMode;
+  final double touchpadSensitivity;
   final TvKeyCommand? lastPressedDirection;
   final String lastCommandStatus;
   final List<WatchCueItem> cueItems;
@@ -65,6 +67,12 @@ class CueDeckState {
   final SharedCuePayload? pendingSharedPayload;
   final bool shouldPromptPaywall;
   final bool isMuted;
+
+  bool get isTouchpadMode => bottomDeckMode == RemoteBottomDeckMode.touchpad;
+  bool get isPlanDeckActive => bottomDeckMode == RemoteBottomDeckMode.plan;
+
+  List<WatchCueItem> sortedUpcomingCueItems([DateTime? now]) =>
+      WatchCueItem.sortNearestFirst(cueItems, now: now);
 
   bool get isProLifetime => entitlement.isProLifetime;
   bool get isProPassActive => entitlement.isProPassActive();
@@ -121,6 +129,8 @@ class CueDeckState {
     List<TvDevice>? discoveredDevices,
     bool? isScanning,
     bool? isTouchpadMode,
+    RemoteBottomDeckMode? bottomDeckMode,
+    double? touchpadSensitivity,
     TvKeyCommand? lastPressedDirection,
     bool clearPressedDirection = false,
     String? lastCommandStatus,
@@ -149,12 +159,19 @@ class CueDeckState {
     bool? shouldPromptPaywall,
     bool? isMuted,
   }) {
+    final resolvedDeckMode = bottomDeckMode ??
+        (isTouchpadMode == null
+            ? this.bottomDeckMode
+            : (isTouchpadMode
+                  ? RemoteBottomDeckMode.touchpad
+                  : RemoteBottomDeckMode.plan));
     return CueDeckState(
       activeTab: activeTab ?? this.activeTab,
       selectedDevice: selectedDevice ?? this.selectedDevice,
       discoveredDevices: discoveredDevices ?? this.discoveredDevices,
       isScanning: isScanning ?? this.isScanning,
-      isTouchpadMode: isTouchpadMode ?? this.isTouchpadMode,
+      bottomDeckMode: resolvedDeckMode,
+      touchpadSensitivity: touchpadSensitivity ?? this.touchpadSensitivity,
       lastPressedDirection: clearPressedDirection
           ? null
           : (lastPressedDirection ?? this.lastPressedDirection),

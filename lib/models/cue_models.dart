@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../domain/tv_network_validators.dart';
 
+/// Active bottom deck panel displayed below the quick-launch dock on the G10 remote.
+enum RemoteBottomDeckMode { none, plan, touchpad }
+
 /// Supported streaming platforms and TV apps with Android TV package identifiers
 /// and verified leanback/main launcher activities.
 enum StreamingPlatform {
@@ -769,6 +772,22 @@ class WatchCueItem {
   /// honoring [recurrence] and [activeWeekdays].
   DateTime? nextWatchDateTime(DateTime now) {
     if (isCompleted) return null;
+    if (recurrence == WatchRecurrence.once) {
+      if (scheduledTime.isAfter(now)) {
+        return scheduledTime;
+      }
+      final todayCandidate = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        scheduledTime.hour,
+        scheduledTime.minute,
+      );
+      if (todayCandidate.isAfter(now)) {
+        return todayCandidate;
+      }
+      return todayCandidate.add(const Duration(days: 1));
+    }
     for (var dayOffset = 0; dayOffset <= 7; dayOffset++) {
       final day =
           DateTime(now.year, now.month, now.day).add(Duration(days: dayOffset));
@@ -783,6 +802,65 @@ class WatchCueItem {
       if (candidate.isAfter(now)) return candidate;
     }
     return null;
+  }
+
+  /// Returns a sorted copy of [items] ordered nearest-to-farthest upcoming watch time,
+  /// placing completed items at the end.
+  static List<WatchCueItem> sortNearestFirst(
+    List<WatchCueItem> items, {
+    DateTime? now,
+  }) {
+    final refNow = now ?? DateTime.now();
+    final indexed = items.asMap().entries.toList(growable: false);
+    indexed.sort((a, b) {
+      final itemA = a.value;
+      final itemB = b.value;
+      if (itemA.isCompleted != itemB.isCompleted) {
+        return itemA.isCompleted ? 1 : -1;
+      }
+      if (!itemA.isCompleted) {
+        final nextA = itemA.nextWatchDateTime(refNow);
+        final nextB = itemB.nextWatchDateTime(refNow);
+        if (nextA != null && nextB != null) {
+          final cmp = nextA.compareTo(nextB);
+          if (cmp != 0) return cmp;
+        } else if (nextA != null || nextB != null) {
+          return nextA != null ? -1 : 1;
+        }
+      }
+      final schedCmp = itemA.scheduledTime.compareTo(itemB.scheduledTime);
+      if (schedCmp != 0) return schedCmp;
+      final idCmp = itemA.id.compareTo(itemB.id);
+      if (idCmp != 0) return idCmp;
+      return a.key.compareTo(b.key);
+    });
+    return indexed.map((e) => e.value).toList(growable: false);
+  }
+
+  /// Returns a compact Turkish relative schedule label (e.g. `'15 dk sonra'`,
+  /// `'Bugün 21:30'`, `'Yarın 20:00'`, `'Çar 21:00'`).
+  String relativeScheduleLabel({DateTime? now}) {
+    if (isCompleted) return 'Tamamlandı';
+    final refNow = now ?? DateTime.now();
+    final next = nextWatchDateTime(refNow);
+    if (next == null) return formattedClock;
+
+    final diff = next.difference(refNow);
+    if (diff.inMinutes <= 1) return 'Şimdi';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} dk sonra';
+
+    final today = DateTime(refNow.year, refNow.month, refNow.day);
+    final targetDay = DateTime(next.year, next.month, next.day);
+    final dayDiff = targetDay.difference(today).inDays;
+
+    if (dayDiff == 0) return 'Bugün $formattedClock';
+    if (dayDiff == 1) return 'Yarın $formattedClock';
+    if (dayDiff > 1 && dayDiff < 7) {
+      return '${weekdayShortLabels[next.weekday - 1]} $formattedClock';
+    }
+    final dd = next.day.toString().padLeft(2, '0');
+    final mm = next.month.toString().padLeft(2, '0');
+    return '$dd.$mm $formattedClock';
   }
 
   /// Computes the next upcoming reminder [DateTime] (`scheduledTime - reminderMinutesBefore`)

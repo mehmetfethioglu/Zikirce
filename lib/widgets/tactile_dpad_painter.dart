@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cue_models.dart';
@@ -418,15 +419,15 @@ class TactileScrollWheelPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..color = Colors.black.withValues(alpha: 0.65 * alphaFactor);
 
-      final insetX = 6.0 + (normDist * 2.5);
+      final insetX = 5.0 + (normDist * 1.6);
       canvas.drawLine(
         Offset(wheelRect.left + insetX, y),
         Offset(wheelRect.right - insetX, y),
         ridgeHighlightPaint,
       );
       canvas.drawLine(
-        Offset(wheelRect.left + insetX, y + 1.8),
-        Offset(wheelRect.right - insetX, y + 1.8),
+        Offset(wheelRect.left + insetX, y + 1.5),
+        Offset(wheelRect.right - insetX, y + 1.5),
         ridgeShadowPaint,
       );
     }
@@ -434,12 +435,12 @@ class TactileScrollWheelPainter extends CustomPainter {
     // 3. Center gold index ring marker
     final centerBandPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = accentColor.withValues(alpha: isScrolling ? 0.22 : 0.10);
+      ..color = accentColor.withValues(alpha: isScrolling ? 0.28 : 0.12);
     canvas.drawRect(
       Rect.fromCenter(
         center: wheelRect.center,
         width: wheelRect.width,
-        height: 14,
+        height: 12,
       ),
       centerBandPaint,
     );
@@ -448,10 +449,10 @@ class TactileScrollWheelPainter extends CustomPainter {
     // 4. Outer metallic rim border
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = isScrolling ? 1.5 : 1.1
+      ..strokeWidth = isScrolling ? 1.4 : 1.0
       ..color = isScrolling
           ? accentColor
-          : accentColor.withValues(alpha: 0.48);
+          : accentColor.withValues(alpha: 0.42);
     canvas.drawRRect(wheelRRect, borderPaint);
   }
 
@@ -462,4 +463,197 @@ class TactileScrollWheelPainter extends CustomPainter {
         oldDelegate.isDarkMode != isDarkMode ||
         oldDelegate.isScrolling != isScrolling;
   }
+}
+
+/// Sleek glassmorphic 120 FPS CustomPainter for the modern bottom-deck touchpad surface.
+class ModernTouchpadPainter extends CustomPainter {
+  const ModernTouchpadPainter({
+    required this.isDarkMode,
+    required this.accentColor,
+    this.touchPosition,
+    this.trailPoints = const <Offset>[],
+    this.isTouching = false,
+  });
+
+  final bool isDarkMode;
+  final Color accentColor;
+  final Offset? touchPosition;
+  final List<Offset> trailPoints;
+  final bool isTouching;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final padRect = Rect.fromLTWH(1, 1, size.width - 2, size.height - 2);
+    final padRRect = RRect.fromRectAndRadius(
+      padRect,
+      const Radius.circular(18),
+    );
+
+    final bgPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: isDarkMode
+            ? const <Color>[
+                Color(0xFF151923),
+                Color(0xFF0E1118),
+                Color(0xFF090B10),
+              ]
+            : const <Color>[
+                Color(0xFF232833),
+                Color(0xFF191D26),
+                Color(0xFF12151C),
+              ],
+      ).createShader(padRect);
+    canvas.drawRRect(padRRect, bgPaint);
+
+    canvas.save();
+    canvas.clipRRect(padRRect);
+
+    // Subtle inner top sheen
+    final sheenPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: <Color>[
+          Colors.white.withValues(alpha: isTouching ? 0.09 : 0.05),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(padRect.left, padRect.top, padRect.width, 36));
+    canvas.drawRect(
+      Rect.fromLTWH(padRect.left, padRect.top, padRect.width, 36),
+      sheenPaint,
+    );
+
+    // Faint radial-faded micro-dot matrix
+    final center = padRect.center;
+    final maxDist = math.max(1.0, padRect.width * 0.55);
+    final dotPaint = Paint()..style = PaintingStyle.fill;
+    for (double x = padRect.left + 16; x <= padRect.right - 16; x += 18) {
+      for (double y = padRect.top + 14; y <= padRect.bottom - 14; y += 18) {
+        final dist = (Offset(x, y) - center).distance;
+        final fade = (1.0 - (dist / maxDist)).clamp(0.0, 1.0);
+        if (fade <= 0.04) continue;
+        dotPaint.color = Colors.white.withValues(alpha: 0.08 * fade);
+        canvas.drawCircle(Offset(x, y), 0.9, dotPaint);
+      }
+    }
+
+    // Silky smooth fading touch trail
+    if (trailPoints.length >= 2) {
+      for (var i = 1; i < trailPoints.length; i++) {
+        final t = i / trailPoints.length;
+        final segPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 1.6 + (t * 2.4)
+          ..color = accentColor.withValues(alpha: 0.12 + (t * 0.36));
+        canvas.drawLine(trailPoints[i - 1], trailPoints[i], segPaint);
+      }
+    }
+
+    // Luminous concentric ripple around active touch position
+    if (touchPosition != null) {
+      final clamped = Offset(
+        touchPosition!.dx.clamp(padRect.left + 8, padRect.right - 8),
+        touchPosition!.dy.clamp(padRect.top + 8, padRect.bottom - 8),
+      );
+      final glowPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = accentColor.withValues(alpha: 0.18);
+      canvas.drawCircle(clamped, 18, glowPaint);
+
+      final ringPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = accentColor.withValues(alpha: 0.58);
+      canvas.drawCircle(clamped, 12, ringPaint);
+
+      final corePaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = accentColor;
+      canvas.drawCircle(clamped, 4.0, corePaint);
+    }
+
+    canvas.restore();
+
+    final borderPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isTouching ? 1.4 : 1.0
+      ..color = isTouching
+          ? accentColor.withValues(alpha: 0.85)
+          : (isDarkMode
+                ? Colors.white.withValues(alpha: 0.10)
+                : Colors.white.withValues(alpha: 0.16));
+    canvas.drawRRect(padRRect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant ModernTouchpadPainter oldDelegate) {
+    return oldDelegate.isDarkMode != isDarkMode ||
+        oldDelegate.accentColor != accentColor ||
+        oldDelegate.touchPosition != touchPosition ||
+        oldDelegate.isTouching != isTouching ||
+        !listEquals(oldDelegate.trailPoints, trailPoints);
+  }
+}
+
+/// Crisp classic angled mouse pointer cursor arrow icon.
+class MouseCursorArrowIcon extends StatelessWidget {
+  const MouseCursorArrowIcon({
+    super.key,
+    this.size = 16,
+    this.color = Colors.white,
+  });
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _MouseCursorArrowPainter(color: color),
+      ),
+    );
+  }
+}
+
+class _MouseCursorArrowPainter extends CustomPainter {
+  const _MouseCursorArrowPainter({required this.color});
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final path = Path()
+      ..moveTo(w * 0.18, h * 0.10)
+      ..lineTo(w * 0.18, h * 0.84)
+      ..lineTo(w * 0.39, h * 0.65)
+      ..lineTo(w * 0.55, h * 0.92)
+      ..lineTo(w * 0.68, h * 0.85)
+      ..lineTo(w * 0.52, h * 0.58)
+      ..lineTo(w * 0.84, h * 0.54)
+      ..close();
+
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color;
+    canvas.drawPath(path, fillPaint);
+
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = math.max(0.8, w * 0.05)
+      ..strokeJoin = StrokeJoin.round
+      ..color = color;
+    canvas.drawPath(path, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MouseCursorArrowPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
