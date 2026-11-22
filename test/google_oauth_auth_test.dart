@@ -356,5 +356,45 @@ void main() {
         isEmpty,
       );
     });
+
+    test(
+        'getSavedOAuthClientId and getSavedOAuthClientSecret purge foreign-project Zikirce OAuth entries while preserving workspace key',
+        () async {
+      const storage = FlutterSecureStorage();
+      FlutterSecureStorage.setMockInitialValues(<String, String>{
+        'hasibu_google_oauth_client_id':
+            '497197680323-cg9ra0da0iavgjlb47tlmnr1aqgrgq6u.apps.googleusercontent.com',
+        'hasibu_google_oauth_client_secret': 'stale-foreign-secret',
+        'hasibu_workspace_sync_key_v1': 'keep-my-workspace-key',
+      });
+
+      final db = HasibuDatabase.inMemory();
+      addTearDown(db.dispose);
+      final syncService = GoogleDriveSyncService(
+        db: db,
+        secureStorage: storage,
+      );
+
+      final resolvedSecret = await syncService.getSavedOAuthClientSecret();
+      final resolvedClientId = await syncService.getSavedOAuthClientId();
+
+      expect(
+        resolvedClientId,
+        equals(GoogleDriveSyncService.defaultIhasibuClientId),
+      );
+      expect(resolvedSecret, isNot(equals('stale-foreign-secret')));
+      expect(
+        await storage.read(key: 'hasibu_google_oauth_client_id'),
+        isNull,
+      );
+      expect(
+        await storage.read(key: 'hasibu_google_oauth_client_secret'),
+        isNull,
+      );
+      expect(
+        await storage.read(key: 'hasibu_workspace_sync_key_v1'),
+        equals('keep-my-workspace-key'),
+      );
+    });
   });
 }

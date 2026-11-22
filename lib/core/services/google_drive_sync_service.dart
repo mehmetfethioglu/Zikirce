@@ -423,11 +423,42 @@ class GoogleDriveSyncService {
     }
   }
 
+  static String _extractGoogleProjectNumber(String clientId) {
+    final trimmed = clientId.trim();
+    final dash = trimmed.indexOf('-');
+    if (dash <= 0) return '';
+    final prefix = trimmed.substring(0, dash);
+    return RegExp(r'^\d+$').hasMatch(prefix) ? prefix : '';
+  }
+
+  /// Kayıtlı/girilen Client ID'nin `ihasibu` Google Cloud projesine ait olup olmadığını doğrular.
+  static bool isCompatibleIhasibuClientId(String clientId) {
+    final trimmed = clientId.trim();
+    if (trimmed.isEmpty) return false;
+    final expectedProject = _extractGoogleProjectNumber(defaultIhasibuClientId);
+    if (expectedProject.isEmpty) return true;
+    final candidateProject = _extractGoogleProjectNumber(trimmed);
+    return candidateProject.isNotEmpty && candidateProject == expectedProject;
+  }
+
+  Future<void> _purgeForeignOAuthCredentials() async {
+    await _secureStorage.delete(key: _kOAuthClientId);
+    await _secureStorage.delete(key: _kOAuthClientSecret);
+  }
+
   Future<String> getSavedOAuthClientId() async {
     try {
       final stored = (await _secureStorage.read(key: _kOAuthClientId) ?? '')
           .trim();
-      if (stored.isNotEmpty) return stored;
+      if (stored.isNotEmpty) {
+        if (isCompatibleIhasibuClientId(stored)) {
+          return stored;
+        }
+        debugPrint(
+          'GoogleDriveSyncService: Farklı Google Cloud projesine ait eski OAuth Client ID ($stored) temizlendi.',
+        );
+        await _purgeForeignOAuthCredentials();
+      }
     } catch (e) {
       _lastSyncWarning = e.toString();
       debugPrint('GoogleDriveSyncService: getSavedOAuthClientId okuma uyarısı: $e');
@@ -444,9 +475,18 @@ class GoogleDriveSyncService {
 
   Future<String> getSavedOAuthClientSecret() async {
     try {
-      final stored =
-          (await _secureStorage.read(key: _kOAuthClientSecret) ?? '').trim();
-      if (stored.isNotEmpty && !stored.contains('****')) return stored;
+      final storedId = (await _secureStorage.read(key: _kOAuthClientId) ?? '')
+          .trim();
+      if (storedId.isNotEmpty && !isCompatibleIhasibuClientId(storedId)) {
+        debugPrint(
+          'GoogleDriveSyncService: Uyumsuz OAuth Client ID ($storedId) nedeniyle önbellekteki gizli anahtar atlandı.',
+        );
+        await _purgeForeignOAuthCredentials();
+      } else {
+        final stored =
+            (await _secureStorage.read(key: _kOAuthClientSecret) ?? '').trim();
+        if (stored.isNotEmpty && !stored.contains('****')) return stored;
+      }
     } catch (e) {
       _lastSyncWarning = e.toString();
       debugPrint('GoogleDriveSyncService: getSavedOAuthClientSecret okuma uyarısı: $e');
