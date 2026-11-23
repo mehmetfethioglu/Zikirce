@@ -7,6 +7,10 @@ on:
         description: "Optional Run ID containing kilerce-ios-signed-ipa to upload straight to TestFlight"
         required: false
         default: ""
+      sync_aso_only:
+        description: "Sync Apple App Store Connect ASO metadata & TestFlight notes without building"
+        required: false
+        default: "false"
   push:
     branches: [ kilerce-ios ]
     paths-ignore:
@@ -17,7 +21,7 @@ on:
 jobs:
   register-bundle-id:
     name: Register Bundle ID & Check App Store Connect App
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.upload_only_run_id == '' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (github.event.inputs.upload_only_run_id == '' && github.event.inputs.sync_aso_only != 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -92,7 +96,7 @@ jobs:
   build-ios:
     name: Build iOS (macOS Apple Silicon) & Upload TestFlight
     needs: register-bundle-id
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.upload_only_run_id == '' }}
+    if: ${{ github.event_name != 'workflow_dispatch' || (github.event.inputs.upload_only_run_id == '' && github.event.inputs.sync_aso_only != 'true') }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -198,3 +202,261 @@ jobs:
             --ipa ../build/ios/ipa/Kilerce.ipa \
             --app_identifier com.akarworks.kilerce \
             --skip_waiting_for_build_processing true
+
+  sync-ios-aso:
+    name: Sync App Store Connect ASO Metadata & TestFlight Notes
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sync_aso_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Install PyJWT, Cryptography & Requests
+        run: pip install pyjwt cryptography requests
+
+      - name: 3. Sync Bilingual ASO Metadata, Categories, Version 3.2.2 & TestFlight Notes
+        run: |
+          python3 - << 'EOF'
+          import os, sys, time, json, pathlib, jwt, requests
+
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+
+          def make_headers():
+              now = int(time.time())
+              token = jwt.encode(
+                  {"iss": issuer_id, "iat": now - 30, "exp": now + 900, "aud": "appstoreconnect-v1"},
+                  private_key,
+                  algorithm="ES256",
+                  headers={"kid": key_id, "typ": "JWT"},
+              )
+              return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          BUNDLE_ID = "com.akarworks.kilerce"
+          TARGET_VERSION = "3.2.2"
+          TARGET_BUILD = "16"
+
+          # Load ASO metadata files
+          meta_root = pathlib.Path("ios/fastlane/metadata")
+          locales_cfg = {}
+          for folder, aliases in [("tr", ["tr", "tr-TR"]), ("en-US", ["en-US", "en-GB"])]:
+              fdir = meta_root / folder
+              data = {}
+              for fname in ("name.txt", "subtitle.txt", "keywords.txt", "promotional_text.txt", "description.txt"):
+                  data[fname.replace(".txt", "")] = (fdir / fname).read_text(encoding="utf-8").strip()
+              assert len(data["name"]) <= 30, f"{folder} name > 30"
+              assert len(data["subtitle"]) <= 30, f"{folder} subtitle > 30"
+              assert len(data["keywords"].encode("utf-8")) <= 100, f"{folder} keywords > 100B"
+              assert len(data["promotional_text"]) <= 170, f"{folder} promo > 170"
+              assert len(data["description"]) <= 4000, f"{folder} desc > 4000"
+              locales_cfg[folder] = {"aliases": aliases, **data}
+
+          # 1. Find App ID
+          app_r = requests.get(f"{BASE}/apps?filter[bundleId]={BUNDLE_ID}", headers=make_headers())
+          app_r.raise_for_status()
+          apps = app_r.json().get("data", [])
+          if not apps:
+              print(f"ERROR: App {BUNDLE_ID} not found in App Store Connect")
+              sys.exit(1)
+          app_id = apps[0]["id"]
+          print(f"APP_FOUND: id={app_id} name={apps[0]['attributes'].get('name')}")
+
+          # 2. Update editable App Store Version -> 3.2.2 + copyright
+          ver_r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
+          ver_r.raise_for_status()
+          versions = ver_r.json().get("data", [])
+          target_version_id = None
+          editable_version = None
+          for v in versions:
+              v_str = v["attributes"]["versionString"]
+              v_state = v["attributes"]["appStoreState"]
+              print(f"  Version found: {v_str} state={v_state} id={v['id']}")
+              if v_str == TARGET_VERSION:
+                  target_version_id = v["id"]
+                  break
+              if v_state in ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"):
+                  editable_version = v
+
+          if not target_version_id and editable_version:
+              target_version_id = editable_version["id"]
+
+          if not target_version_id:
+              print("ERROR: No editable App Store Version found!")
+              sys.exit(1)
+
+          pv = requests.patch(
+              f"{BASE}/appStoreVersions/{target_version_id}",
+              headers=make_headers(),
+              json={
+                  "data": {
+                      "type": "appStoreVersions",
+                      "id": target_version_id,
+                      "attributes": {"versionString": TARGET_VERSION, "copyright": "2026 Akarworks"},
+                  }
+              },
+          )
+          print(f"PATCH appStoreVersions ({TARGET_VERSION}): {pv.status_code} {pv.text[:250] if pv.status_code >= 400 else ''}")
+          if pv.status_code >= 400:
+              sys.exit(1)
+
+          # 3. Update AppInfo categories (FOOD_AND_DRINK + HEALTH_AND_FITNESS) & appInfoLocalizations (tr + en-US)
+          ai_r = requests.get(f"{BASE}/apps/{app_id}/appInfos", headers=make_headers())
+          ai_r.raise_for_status()
+          app_infos = ai_r.json().get("data", [])
+          editable_states = ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "WAITING_FOR_REVIEW", "IN_REVIEW")
+          chosen_ai = next((x for x in app_infos if x["attributes"].get("appStoreState") in editable_states), app_infos[0])
+          app_info_id = chosen_ai["id"]
+          print(f"AppInfo selected: id={app_info_id} state={chosen_ai['attributes'].get('appStoreState')}")
+
+          cat_p = requests.patch(
+              f"{BASE}/appInfos/{app_info_id}",
+              headers=make_headers(),
+              json={
+                  "data": {
+                      "type": "appInfos",
+                      "id": app_info_id,
+                      "relationships": {
+                          "primaryCategory": {"data": {"type": "appCategories", "id": "FOOD_AND_DRINK"}},
+                          "secondaryCategory": {"data": {"type": "appCategories", "id": "HEALTH_AND_FITNESS"}},
+                      },
+                  }
+              },
+          )
+          print(f"PATCH appInfos categories: {cat_p.status_code} {cat_p.text[:300] if cat_p.status_code >= 400 else ''}")
+          if cat_p.status_code >= 400:
+              sys.exit(1)
+
+          ail_r = requests.get(f"{BASE}/appInfos/{app_info_id}/appInfoLocalizations", headers=make_headers())
+          ail_r.raise_for_status()
+          existing_ail = {x["attributes"]["locale"]: x["id"] for x in ail_r.json().get("data", [])}
+          print("Existing appInfoLocalizations:", list(existing_ail.keys()))
+
+          for loc_key, cfg in locales_cfg.items():
+              matched = next((a for a in cfg["aliases"] if a in existing_ail), None)
+              attrs = {"name": cfg["name"], "subtitle": cfg["subtitle"]}
+              if matched:
+                  lid = existing_ail[matched]
+                  resp = requests.patch(
+                      f"{BASE}/appInfoLocalizations/{lid}",
+                      headers=make_headers(),
+                      json={"data": {"type": "appInfoLocalizations", "id": lid, "attributes": attrs}},
+                  )
+                  print(f"PATCH appInfoLocalization ({matched}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
+              else:
+                  resp = requests.post(
+                      f"{BASE}/appInfoLocalizations",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "appInfoLocalizations",
+                              "attributes": {"locale": loc_key, **attrs},
+                              "relationships": {"appInfo": {"data": {"type": "appInfos", "id": app_info_id}}},
+                          }
+                      },
+                  )
+                  print(f"POST appInfoLocalization ({loc_key}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
+              if resp.status_code >= 400:
+                  sys.exit(1)
+
+          # 4. Update appStoreVersionLocalizations (tr + en-US)
+          vloc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
+          vloc_r.raise_for_status()
+          existing_vloc = {x["attributes"]["locale"]: x["id"] for x in vloc_r.json().get("data", [])}
+          print("Existing appStoreVersionLocalizations:", list(existing_vloc.keys()))
+
+          for loc_key, cfg in locales_cfg.items():
+              matched = next((a for a in cfg["aliases"] if a in existing_vloc), None)
+              attrs = {
+                  "keywords": cfg["keywords"],
+                  "promotionalText": cfg["promotional_text"],
+                  "description": cfg["description"],
+              }
+              if matched:
+                  lid = existing_vloc[matched]
+                  resp = requests.patch(
+                      f"{BASE}/appStoreVersionLocalizations/{lid}",
+                      headers=make_headers(),
+                      json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": attrs}},
+                  )
+                  print(f"PATCH appStoreVersionLocalization ({matched}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
+              else:
+                  resp = requests.post(
+                      f"{BASE}/appStoreVersionLocalizations",
+                      headers=make_headers(),
+                      json={
+                          "data": {
+                              "type": "appStoreVersionLocalizations",
+                              "attributes": {"locale": loc_key, **attrs},
+                              "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}}},
+                          }
+                      },
+                  )
+                  print(f"POST appStoreVersionLocalization ({loc_key}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
+              if resp.status_code >= 400:
+                  sys.exit(1)
+
+          # 5. Check Build 16 & update usesNonExemptEncryption + TestFlight betaBuildLocalizations
+          br = requests.get(f"{BASE}/builds?filter[app]={app_id}&filter[version]={TARGET_BUILD}&sort=-uploadedDate&limit=3", headers=make_headers())
+          br.raise_for_status()
+          builds = br.json().get("data", [])
+          if builds:
+              b = builds[0]
+              build_id = b["id"]
+              proc_state = b["attributes"].get("processingState")
+              print(f"Build {TARGET_BUILD} found: id={build_id} processingState={proc_state}")
+              if proc_state == "VALID":
+                  enc = requests.patch(
+                      f"{BASE}/builds/{build_id}",
+                      headers=make_headers(),
+                      json={"data": {"type": "builds", "id": build_id, "attributes": {"usesNonExemptEncryption": False}}},
+                  )
+                  print(f"PATCH build usesNonExemptEncryption=False: {enc.status_code}")
+
+              beta_tr = (
+                  "Kilerce v3.2.2 (Build 16) TestFlight Sürümü:\n"
+                  "• Barkod, market fişi OCR ve 6 barkodsuz pazar/kasap kanalından buzdolabı, kiler ve dondurucu stok takibini test edin.\n"
+                  "• 7 bölgeden 100 Türk ev yemeği tarifinde kiler eşleşmesini, porsiyon ölçeklemeyi ve alışveriş listesi aktarımını kontrol edin.\n"
+                  "• E-kodu, Helal hassasiyeti ve temiz içerik puanlamasını inceleyin."
+              )
+              beta_en = (
+                  "Kilerce v3.2.2 (Build 16) TestFlight:\n"
+                  "• Test fridge, pantry, and freezer stock tracking via barcode scan, receipt OCR, and 6 unbarcoded market intake channels.\n"
+                  "• Explore 100 regional Turkish home recipes across 7 regions with pantry matching, portion scaling, and smart shopping list sync.\n"
+                  "• Verify E-number, Halal sensitivity, and clean-label food scoring."
+              )
+              bloc_r = requests.get(f"{BASE}/builds/{build_id}/betaBuildLocalizations", headers=make_headers())
+              existing_bloc = {x["attributes"]["locale"]: x["id"] for x in bloc_r.json().get("data", [])} if bloc_r.status_code == 200 else {}
+              for loc_code, loc_text in [("tr", beta_tr), ("en-US", beta_en)]:
+                  if loc_code in existing_bloc:
+                      b_res = requests.patch(
+                          f"{BASE}/betaBuildLocalizations/{existing_bloc[loc_code]}",
+                          headers=make_headers(),
+                          json={"data": {"type": "betaBuildLocalizations", "id": existing_bloc[loc_code], "attributes": {"whatsNew": loc_text}}},
+                      )
+                      print(f"PATCH betaBuildLocalization ({loc_code}): {b_res.status_code}")
+                  else:
+                      b_res = requests.post(
+                          f"{BASE}/betaBuildLocalizations",
+                          headers=make_headers(),
+                          json={
+                              "data": {
+                                  "type": "betaBuildLocalizations",
+                                  "attributes": {"locale": loc_code, "whatsNew": loc_text},
+                                  "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
+                              }
+                          },
+                      )
+                      print(f"POST betaBuildLocalization ({loc_code}): {b_res.status_code} {b_res.text[:200] if b_res.status_code >= 400 else ''}")
+          else:
+              print(f"Build {TARGET_BUILD} not yet visible in /v1/builds (still queued for processing).")
+
+          print("=== APP STORE CONNECT ASO SYNC COMPLETE ===")
+          EOF

@@ -1,0 +1,20 @@
+Kilerce is a smart kitchen inventory, barcode food scanner, clean-label analyzer, and regional Turkish home recipe assistant designed to reduce food waste and simplify meal planning.
+
+Smart Fridge, Pantry & Freezer Tracking
+- Manage ingredients across your Fridge, Pantry, and Freezer with clear freshness and stock indicators.
+- Scan packaged food barcodes or snap paper grocery receipts with on-device OCR to import items in seconds.
+- Add unbarcoded butcher, produce, seafood, spice, and homemade staples in batches using natural-text entry.
+- Catch expiring or long-waiting ingredients early with waste-rescue recipe alerts.
+
+100 Regional Turkish Recipes & Smart Chef
+- Browse 100 Turkish home dishes across 7 regions with live portion scaling, calories, and step-by-step instructions.
+- Discover recipes matched to what is already in your kitchen and plan your weekly menu.
+- Cooked dishes automatically deduct stock while missing ingredients flow directly to your Smart Shopping List.
+
+Clean-Label, E-Number & Halal Food Analysis
+- Inspect food additives, E-numbers (E120, E441, E471, and more), and allergens with transparent health scoring.
+- Filter by gluten, lactose, added sugar, palm oil, Halal rules, and official adulteration records.
+
+Offline Database & Optional Cloud Backup
+- Check barcodes reliably in low-connectivity stores using the built-in offline product catalog.
+- Optionally back up your pantry and profile to your own Google Drive app folder.

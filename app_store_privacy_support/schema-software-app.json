@@ -1,0 +1,51 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Kilerce: Barkod, Dolap & Tarif",
+      "alternateName": "Kilerce",
+      "operatingSystem": "Android, iOS",
+      "applicationCategory": "LifestyleApplication",
+      "applicationSubCategory": "Food & Drink",
+      "softwareVersion": "3.2.2",
+      "description": "Kilerce is a smart kitchen inventory, barcode & receipt OCR food scanner, clean-label E-number/Halal analyzer, and 100-recipe regional Turkish home cooking assistant developed by Akarworks.",
+      "url": "https://akarworks.com/kilerce",
+      "inLanguage": [
+        "tr-TR",
+        "en-US"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks",
+        "url": "https://akarworks.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Kilerce nedir ve ne işe yarar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Kilerce; buzdolabı, kiler ve dondurucu stoklarını barkod okutma, market fişi OCR ve barkodsuz pazar/kasap girişiyle yöneten, 7 bölgeden 100 Türk ev yemeği tarifi öneren ve 35+ E-kodu ile Helal/temiz içerik analizi yapan akıllı mutfak asistanıdır."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Kilerce?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Kilerce is a cross-platform iOS and Android kitchen inventory, barcode and receipt OCR scanner, clean-label E-number/Halal checker, and 100-recipe Turkish home cooking app built by Akarworks."
+          }
+        }
+      ]
+    }
+  ]
+}

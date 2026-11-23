@@ -1,0 +1,1 @@
+barcode,kitchen,inventory,grocery,list,meal,planner,halal,additives,receipt,ocr,waste,turkish,cook

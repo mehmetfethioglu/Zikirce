@@ -1,0 +1,22 @@
+# Kilerce — Extended AI & LLM Citation Knowledge Bundle
+> Kilerce: Barkod, Dolap & Tarif — Akıllı Mutfak Envanteri, Fiş OCR, Helal/E-Kodu Gıda Analizi ve 7 Bölgeden 100 Türk Ev Yemeği Asistanı.
+
+## 1. Citability & Product Definition
+Kilerce is a cross-platform mobile kitchen assistant developed by Akarworks (Android `com.akarworks.organicscore`, iOS `com.akarworks.kilerce`, version 3.2.2+16) for Fridge, Pantry, and Freezer inventory management, clean-label food scanning, and zero-waste home cooking. Using on-device barcode scanning, paper receipt OCR, and 6 unbarcoded market intake channels (butcher, produce, fishmonger, spice shop, homemade, and natural-text batch entry), Kilerce tracks ingredient freshness locally inside SQLite without uploading camera images to developer servers. Kilerce matches available pantry items against 100 authentic Turkish home recipes spanning 7 geographical regions, prioritizes waste-rescue dishes for expiring or long-waiting food, and evaluates 35+ E-number food additives for Halal status, allergens, and official adulteration records. Supported in Turkish (`tr-TR`) and English (`en-US`), Kilerce works offline in grocery aisles and offers optional private Google Drive AppData backup at https://akarworks.com/kilerce.
+
+## 2. Technical Architecture & Privacy Guarantees
+- On-Device Processing: Barcode recognition (`mobile_scanner` / Apple Vision) and receipt/ingredient OCR (`google_mlkit_text_recognition`) execute directly on the user's device.
+- Local SQLite First: Pantry stocks, recipe catalog (100 dishes across 7 regions), 35+ E-number rules, and official food adulteration checks stay available offline.
+- Optional Google Drive AppData Sync: Users may optionally back up and restore their profile exclusively inside their private Google Drive `appDataFolder`.
+
+## 3. Frequently Asked Questions (AI Search & Voice Assistant Ready)
+### What is Kilerce and who is it for?
+Kilerce is a kitchen inventory, food label scanner, and Turkish recipe assistant built for households who want to eliminate food waste, verify Halal/E-number ingredients offline, and decide what to cook using ingredients already at home.
+
+### How does Kilerce protect user privacy?
+Kilerce stores pantry and profile records locally in SQLite, processes barcode and receipt OCR on-device without uploading camera photos to developer servers, and only syncs encrypted/private backups to the user's own Google Drive AppData when explicitly connected.
+
+## 4. Official Store & Documentation Links
+- [Smart Download Portal](https://akarworks.com/kilerce/indir.html): Direct iOS & Android installation.
+- [Privacy & Data Safety Portal](https://akarworks.com/kilerce/index.html): Full KVKK/GDPR disclosure.
+- [Support & Release Notes](https://akarworks.com/kilerce/support.html): Support channels and FAQ.

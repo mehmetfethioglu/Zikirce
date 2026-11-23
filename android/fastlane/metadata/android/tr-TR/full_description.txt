@@ -1,0 +1,20 @@
+Kilerce, market alışverişinizden mutfaktaki tencerenize kadar tüm kiler yönetimi, barkodlu ürün tarama, temiz içerik analizi ve ev yemeği planlama sürecini tek uygulamada birleştiren akıllı mutfak asistanıdır.
+
+Akıllı Kiler, Buzdolabı ve Dondurucu Yönetimi
+- Buzdolabı, kiler ve dondurucu bölmelerindeki tüm malzemelerinizi düzenli stok seviyeleriyle takip edin.
+- Paketli ürünlerin barkodunu kamerayla okutun veya market fişinizin fotoğrafını çekerek (OCR) tüm alışveriş kalemlerini saniyeler içinde kilerinize aktarın.
+- Kasap, manav, balıkçı, aktar ve ev yapımı kışlık ürünleri ("yarım kilo kıyma, 2 kg domates" gibi) doğal dil sepetiyle toplu ekleyin.
+- Tazeliği azalan veya dolapta uzun süredir bekleyen malzemeleri erkenden görerek mutfak israfını azaltın.
+
+7 Bölgeden 100 Türk Ev Yemeği ve Akıllı Şef
+- Marmara'dan Güneydoğu'ya Türkiye'nin 7 bölgesinden seçilmiş 100 Türk ev yemeği tarifini adım adım yapılışlarıyla inceleyin.
+- Evdeki malzemelerle tam eşleşen yemekleri, bekleyen ürünleri kurtaran tarifleri ve porsiyona göre ölçeklenen kalori ile makro değerlerini anında görün.
+- Haftalık Yöresel Sofra planlayıcı ile menünüzü kurun; yemek piştiğinde malzemeler stoktan otomatik düşsün, eksikler akıllı alışveriş listenize eklensin.
+
+Helal, E-Kodu ve Temiz İçerik Analizi
+- Ürün etiketlerindeki katkı maddelerini, E-kodlarını (E120, E441, E471 vb.) ve alerjen risklerini anlaşılır sağlık puanıyla değerlendirin.
+- Gluten, laktoz, ilave şeker, palmiye yağı, helal hassasiyeti ve bakanlık taklit/tağşiş duyurularıyla aileniz için güvenli ürünleri seçin.
+
+İnternetsiz Kullanım ve Bulut Yedekleme
+- İnternetin çekmediği market reyonlarında dahi yerleşik Türkiye ürün veri tabanıyla kesintisiz barkod ve içerik sorgulayın.
+- İsteğe bağlı Google hesabınızla kiler stoklarınızı ve profilinizi güvenle yedekleyin.
