@@ -143,10 +143,71 @@ extension ThemeContextExtension on BuildContext {
   bool get isDarkMode => Theme.of(this).brightness == Brightness.dark;
   Color get surfaceColor => Theme.of(this).cardColor;
   Color get glassSurfaceColor => isDarkMode ? AppColors.amoledSurfaceGlass : AppColors.lightSurfaceGlass;
+  Color get subtleSurfaceColor => isDarkMode ? const Color(0xFF18181B) : const Color(0xFFF1F5F9);
   Color get cardBorderColor => isDarkMode ? AppColors.amoledCardBorder : AppColors.lightCardBorder;
   Color get borderColor => cardBorderColor;
   Color get textPrimaryColor => isDarkMode ? AppColors.darkTextPrimary : AppColors.lightTextPrimary;
   Color get textSecondaryColor => isDarkMode ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+}
+
+/// Unified "Bio-Zen Minimalist" Design System Widgets (Pokémon GO + Yuka + HVFTkE5_SHA)
+class BioMinimalUi {
+  static BoxDecoration cardDecoration(
+    BuildContext context, {
+    Color? accentBorder,
+    double radius = 24,
+  }) {
+    return BoxDecoration(
+      color: context.surfaceColor,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(
+        color: accentBorder ?? context.cardBorderColor,
+        width: 1.0,
+      ),
+    );
+  }
+
+  static Widget sectionHeader(
+    BuildContext context, {
+    required String overline,
+    required String title,
+    Color? overlineColor,
+    Widget? trailing,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                overline.toUpperCase(),
+                style: TextStyle(
+                  color: overlineColor ?? AppColors.primaryEmerald,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                title,
+                style: TextStyle(
+                  color: context.textPrimaryColor,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.4,
+                  height: 1.15,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ?trailing,
+      ],
+    );
+  }
 }
 
 class ThemeController extends ValueNotifier<ThemeMode> {

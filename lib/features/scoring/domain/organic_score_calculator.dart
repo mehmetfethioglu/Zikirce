@@ -967,4 +967,220 @@ class OrganicScoreCalculator {
       hasCriticalViolation: hasCritical,
     );
   }
+
+  /// Evaluates raw ingredients and matched E-codes for Halal & Clean Label compliance.
+  static HalalEvaluationResult evaluateHalalAndCleanStatus({
+    required String rawIngredients,
+    List<({String code, String name, String category})> matchedAdditives =
+        const [],
+  }) {
+    final String lower = rawIngredients.toLowerCase();
+    final List<HalalFinding> haramFindings = [];
+    final List<HalalFinding> doubtfulFindings = [];
+    final List<String> cleanHighlights = [];
+
+    // 1. Check strictly forbidden (Haram / Kaçınılmalı) ingredients
+    if (lower.contains('domuz') || lower.contains('pork') || lower.contains('lard') || lower.contains('bacon')) {
+      haramFindings.add(const HalalFinding(
+        title: 'Domuz Türevi Bileşen',
+        reason: 'İçindekiler metninde domuz / domuz yağı kaynaklı bileşen tespit edildi.',
+        isHaram: true,
+      ));
+    }
+    if (RegExp(r'\b(alkol|etanol|etil alkol|şarap|likör|rom|bira|konyak)\b').hasMatch(lower)) {
+      haramFindings.add(const HalalFinding(
+        title: 'Etil Alkol / Alkollü Çözücü',
+        reason: 'İçindekiler metninde alkol veya alkollü içki türevi tespit edildi.',
+        isHaram: true,
+      ));
+    }
+    if (lower.contains('e120') || lower.contains('karmin') || lower.contains('koşinil') || lower.contains('cochineal')) {
+      haramFindings.add(const HalalFinding(
+        title: 'E120 Karmin (Koşinil Böceği)',
+        reason: 'Böcek kaynaklı kırmızı renklendirici; Helal beslenmede kaçınılmalıdır.',
+        isHaram: true,
+      ));
+    }
+    if (lower.contains('e542') || lower.contains('kemik fosfat')) {
+      haramFindings.add(const HalalFinding(
+        title: 'E542 Yenilebilir Kemik Fosfatı',
+        reason: 'Hayvan kemiklerinden üretilen katkı maddesi.',
+        isHaram: true,
+      ));
+    }
+
+    // 2. Check doubtful (Şüpheli / Helal Sertifikası veya Bitkisel Kaynak Sorulmalı) ingredients
+    if (lower.contains('jelatin') || lower.contains('e441')) {
+      final bool explicitlyHalalBeef = lower.contains('helal') && lower.contains('sığır jelatini');
+      doubtfulFindings.add(HalalFinding(
+        title: explicitlyHalalBeef ? 'Sığır Jelatini (Helal Beyanlı)' : 'Yenilebilir Jelatin (E441)',
+        reason: explicitlyHalalBeef
+            ? 'Üründe sığır jelatini bulunuyor; bağımsız Helal kesim sertifikası kontrol edilmelidir.'
+            : 'Jelatinin kaynağı (bitkisel alternatif mi, Helal kesim sığır mı, ithal jelatin mi) mutlaka doğrulanmalıdır.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('e471') || lower.contains('mono ve digliseri') || lower.contains('mono- ve digliseri')) {
+      final bool isPlantSpecified = lower.contains('bitkisel') && lower.contains('e471');
+      doubtfulFindings.add(HalalFinding(
+        title: 'E471 Mono ve Digliseridler',
+        reason: isPlantSpecified
+            ? 'Bitkisel yağ kaynaklı olduğu belirtilmiş; yine de ultra-işlenmiş emülgatör sınıfındadır.'
+            : 'Bitkisel yağdan mı yoksa hayvansal yağdan mı üretildiği etikette açıkça belirtilmelidir.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('e472') || lower.contains('datem')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'E472 Mono/Digliserid Esterleri',
+        reason: 'Yağ asidi kaynağının bitkisel olduğu doğrulanmalıdır.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('e904') || lower.contains('şellak') || lower.contains('shellac')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'E904 Şellak (Parlatıcı)',
+        reason: 'Lak böceği salgısından elde edilir ve alkolde çözündürülmüş olabilir.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('e920') || lower.contains('sistein') || lower.contains('cysteine')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'E920 L-Sistein',
+        reason: 'Tüy/kıl kaynaklı mı yoksa mikrobiyal fermantasyon mu olduğu sorgulanmalıdır.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('e631') || lower.contains('inosinat')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'E631 Disodyum İnosinat',
+        reason: 'Et/balık dokusundan veya tapioka nişastasından üretilebilir; kaynağı sorulmalıdır.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('peynir mayası') || lower.contains('şirden')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'Peynir Mayası / Şirden Enzimi',
+        reason: 'Hayvansal şirden mayası ise Helal kesim sertifikası, mikrobiyal ise bitkisel kaynak aranmalıdır.',
+        isHaram: false,
+      ));
+    }
+    if (lower.contains('aroma verici') || lower.contains('aroma')) {
+      doubtfulFindings.add(const HalalFinding(
+        title: 'Sentetik / Doğala Özdeş Aroma Verici',
+        reason: 'Aroma taşıyıcı çözücüsünde etil alkol kullanılmadığı ve Helal sertifikası bulunduğu teyit edilmelidir.',
+        isHaram: false,
+      ));
+    }
+
+    // Also inspect matched SQLite additives for any additional Halal tags
+    for (final additive in matchedAdditives) {
+      final descUpper = additive.category.toUpperCase();
+      if (descUpper.contains('HARAM') &&
+          !haramFindings.any((f) => f.title.contains(additive.code))) {
+        haramFindings.add(HalalFinding(
+          title: '${additive.code} ${additive.name}',
+          reason: additive.category,
+          isHaram: true,
+        ));
+      } else if (descUpper.contains('ŞÜPHELİ') &&
+          !doubtfulFindings.any((f) => f.title.contains(additive.code))) {
+        doubtfulFindings.add(HalalFinding(
+          title: '${additive.code} ${additive.name}',
+          reason: additive.category,
+          isHaram: false,
+        ));
+      }
+    }
+
+    // 3. Clean label highlights
+    if (matchedAdditives.isEmpty) {
+      cleanHighlights.add('E-Kodu / Sentetik Katkı Tespit Edilmedi');
+    }
+    if (!lower.contains('palm') && !lower.contains('palmiye')) {
+      cleanHighlights.add('Palm Yağı İçermiyor');
+    }
+    if (!lower.contains('glikoz şurubu') && !lower.contains('fruktoz şurubu') && !lower.contains('mısır şurubu')) {
+      cleanHighlights.add('Endüstriyel Nişasta Bazlı Şurup Yok');
+    }
+
+    if (rawIngredients.trim().isEmpty) {
+      return const HalalEvaluationResult(
+        status: HalalStatusLevel.unknown,
+        badgeLabel: 'İçindekiler Metni Bekleniyor',
+        summary: 'Bu ürünün içindekiler listesi henüz doğrulanmadı. Paketin arkasındaki içindekiler etiketini kamerayla (OCR) tarayarak anında Helal ve E-kod analizi yapabilirsiniz.',
+        haramFindings: [],
+        doubtfulFindings: [],
+        cleanHighlights: [],
+      );
+    }
+
+    if (haramFindings.isNotEmpty) {
+      return HalalEvaluationResult(
+        status: HalalStatusLevel.haramRisk,
+        badgeLabel: 'Helal Açısından Uygun Değil (${haramFindings.length} Kritik)',
+        summary: 'İçindekiler listesinde Helal beslenme kurallarına aykırı (${haramFindings.map((e) => e.title).join(", ")}) bileşen tespit edildi.',
+        haramFindings: haramFindings,
+        doubtfulFindings: doubtfulFindings,
+        cleanHighlights: cleanHighlights,
+      );
+    }
+
+    if (doubtfulFindings.isNotEmpty) {
+      return HalalEvaluationResult(
+        status: HalalStatusLevel.doubtful,
+        badgeLabel: 'Şüpheli Katkı / Kaynak Doğrulaması Gerekli (${doubtfulFindings.length})',
+        summary: 'Üründe kaynağına göre hükmü değişen (${doubtfulFindings.map((e) => e.title).join(", ")}) bileşenler var. Pakette bağımsız Helal Sertifikası veya "Bitkisel Kaynaklı" beyanı aranmalıdır.',
+        haramFindings: const [],
+        doubtfulFindings: doubtfulFindings,
+        cleanHighlights: cleanHighlights,
+      );
+    }
+
+    return HalalEvaluationResult(
+      status: HalalStatusLevel.halalClean,
+      badgeLabel: 'Helal Açısından Riskli Bileşen Tespit Edilmedi',
+      summary: 'İçindekiler metninde domuz türevi, alkol, E120 karmin veya şüpheli hayvansal emülgatör tespit edilmedi.',
+      haramFindings: const [],
+      doubtfulFindings: const [],
+      cleanHighlights: cleanHighlights,
+    );
+  }
+}
+
+enum HalalStatusLevel {
+  halalClean,
+  doubtful,
+  haramRisk,
+  unknown,
+}
+
+class HalalFinding {
+  final String title;
+  final String reason;
+  final bool isHaram;
+
+  const HalalFinding({
+    required this.title,
+    required this.reason,
+    required this.isHaram,
+  });
+}
+
+class HalalEvaluationResult {
+  final HalalStatusLevel status;
+  final String badgeLabel;
+  final String summary;
+  final List<HalalFinding> haramFindings;
+  final List<HalalFinding> doubtfulFindings;
+  final List<String> cleanHighlights;
+
+  const HalalEvaluationResult({
+    required this.status,
+    required this.badgeLabel,
+    required this.summary,
+    required this.haramFindings,
+    required this.doubtfulFindings,
+    required this.cleanHighlights,
+  });
 }

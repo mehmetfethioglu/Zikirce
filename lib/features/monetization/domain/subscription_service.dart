@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -54,15 +55,24 @@ class SubscriptionService {
   static const String testBannerAdUnitId = 'ca-app-pub-3940256099942544/6300978111';
   static const String testRewardedAdUnitId = 'ca-app-pub-3940256099942544/5224354917';
   static const String testInterstitialAdUnitId = 'ca-app-pub-3940256099942544/1033173712';
+  static const String testIosBannerAdUnitId = 'ca-app-pub-3940256099942544/2934735716';
+  static const String testIosRewardedAdUnitId = 'ca-app-pub-3940256099942544/1712485313';
+  static const String testIosInterstitialAdUnitId = 'ca-app-pub-3940256099942544/4411468910';
 
   static String get bannerAdUnitId =>
-      (useTestAdsForClosedTesting || kDebugMode) ? testBannerAdUnitId : prodBannerAdUnitId;
+      (useTestAdsForClosedTesting || kDebugMode)
+          ? ((!kIsWeb && Platform.isIOS) ? testIosBannerAdUnitId : testBannerAdUnitId)
+          : prodBannerAdUnitId;
 
   static String get rewardedAdUnitId =>
-      (useTestAdsForClosedTesting || kDebugMode) ? testRewardedAdUnitId : prodRewardedAdUnitId;
+      (useTestAdsForClosedTesting || kDebugMode)
+          ? ((!kIsWeb && Platform.isIOS) ? testIosRewardedAdUnitId : testRewardedAdUnitId)
+          : prodRewardedAdUnitId;
 
   static String get interstitialAdUnitId =>
-      (useTestAdsForClosedTesting || kDebugMode) ? testInterstitialAdUnitId : prodInterstitialAdUnitId;
+      (useTestAdsForClosedTesting || kDebugMode)
+          ? ((!kIsWeb && Platform.isIOS) ? testIosInterstitialAdUnitId : testInterstitialAdUnitId)
+          : prodInterstitialAdUnitId;
 
   Future<void> initAdMob() async {
     try {

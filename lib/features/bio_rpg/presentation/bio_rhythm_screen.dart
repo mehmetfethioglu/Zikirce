@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../../core/database/database_helper.dart';
 import '../../../core/theme/app_theme.dart';
-import '../domain/bio_rhythm_telemetry_service.dart';
+import '../../product/presentation/product_result_screen.dart';
+import '../domain/bio_rpg_models.dart';
 import '../domain/bio_rpg_service.dart';
 
 class BioRhythmScreen extends StatefulWidget {
@@ -11,426 +13,583 @@ class BioRhythmScreen extends StatefulWidget {
 }
 
 class _BioRhythmScreenState extends State<BioRhythmScreen> {
-  bool _isSyncingWatch = false;
+  List<Map<String, dynamic>> _sqliteHistory = [];
+  bool _isLoadingHistory = true;
+  int _selectedFilter = 0; // 0: Tüm Tarananlar, 1: Tükettiklerim, 2: Rafa Bıraktıklarım
 
-  Future<void> _syncWearable(WearableDeviceProfile device) async {
-    setState(() => _isSyncingWatch = true);
-    final int addedSteps = await BioRhythmTelemetryService.instance.syncWearableTelemetry(device);
+  @override
+  void initState() {
+    super.initState();
+    _loadSqliteHistory();
+  }
+
+  Future<void> _loadSqliteHistory() async {
+    try {
+      final rows = await DatabaseHelper().getScanHistory(limit: 50);
+      if (mounted) {
+        setState(() {
+          _sqliteHistory = rows;
+          _isLoadingHistory = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingHistory = false);
+      }
+    }
+  }
+
+  Future<void> _clearAllHistory() async {
+    await DatabaseHelper().clearProductHistory();
+    await BioRpgService.instance.clearScanHistory();
+    await _loadSqliteHistory();
     if (!mounted) return;
-    setState(() => _isSyncingWatch = false);
-
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${device.iconLabel} ${device.name} senkronize edildi! +$addedSteps Adım ve Biyo-Enerji aktarıldı.',
-        ),
+      const SnackBar(
+        content: Text('Tarama ve tüketim günlüğü temizlendi.'),
         backgroundColor: AppColors.primaryEmerald,
       ),
     );
   }
 
+  Color _scoreColor(int score) {
+    if (score >= 80) return AppColors.primaryEmerald;
+    if (score >= 60) return AppColors.primaryMint;
+    if (score >= 40) return AppColors.cautionGold;
+    return AppColors.dangerRed;
+  }
+
+  String _formatTimestamp(int epochMs) {
+    if (epochMs <= 0) return '';
+    final dt = DateTime.fromMillisecondsSinceEpoch(epochMs);
+    final String day = dt.day.toString().padLeft(2, '0');
+    final String month = dt.month.toString().padLeft(2, '0');
+    final String hour = dt.hour.toString().padLeft(2, '0');
+    final String min = dt.minute.toString().padLeft(2, '0');
+    return '$day.$month.${dt.year} $hour:$min';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final textSecondary = context.textSecondaryColor;
+
     return ValueListenableBuilder<PersonalOrganicScoreState>(
       valueListenable: BioRpgService.instance,
       builder: (context, state, _) {
-        final double stepProgress = state.dailyStepGoal > 0
-            ? (state.dailySteps / state.dailyStepGoal).clamp(0.0, 1.0)
-            : 0.0;
-        final int stepsToNextEnergy = 1000 - (state.dailySteps % 1000);
-        final int bmr = BioRhythmTelemetryService.calculateEstimatedBmr(
-          heightCm: state.heightCm,
-          weightKg: state.weightKg,
-        );
+        final List<MetabolicScanRecord> decisions = state.scanHistory;
+        final List<MetabolicScanRecord> consumedList = decisions
+            .where((d) => d.decision == ScanDecisionType.consumed)
+            .toList();
+        final List<MetabolicScanRecord> rejectedList = decisions
+            .where((d) => d.decision == ScanDecisionType.rejected)
+            .toList();
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              const Text(
-                '🏃‍♂️ BİYO-RİTİM, ADIMSAYAR & AKILLI SAAT KÖPRÜSÜ',
-                style: TextStyle(
-                  color: AppColors.cautionGold,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.1,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Adımlarını Biyo-Enerjiye Dönüştür',
-                style: TextStyle(
-                  color: context.textPrimaryColor,
-                  fontSize: 19,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 14),
+        // Compute real average score from consumed items (or from SQLite history if no explicit decision yet)
+        int? realAverageScore;
+        if (consumedList.isNotEmpty) {
+          realAverageScore = (consumedList
+                      .map((e) => e.productScore)
+                      .reduce((a, b) => a + b) /
+                  consumedList.length)
+              .round();
+        } else if (_sqliteHistory.isNotEmpty) {
+          final validScores = _sqliteHistory
+              .map((r) => (r['organicscore'] as num?)?.toInt() ?? -1)
+              .where((s) => s >= 0)
+              .toList();
+          if (validScores.isNotEmpty) {
+            realAverageScore =
+                (validScores.reduce((a, b) => a + b) / validScores.length)
+                    .round();
+          }
+        }
 
-              // STEP REACTOR & STAMINA GENERATOR CARD
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      const Color(0xFF0F172A),
-                      AppColors.cautionGold.withValues(alpha: 0.22),
-                      AppColors.primaryEmerald.withValues(alpha: 0.18),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.cautionGold.withValues(alpha: 0.6), width: 1.5),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        // Circular Step Gauge
-                        SizedBox(
-                          width: 110,
-                          height: 110,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox(
-                                width: 102,
-                                height: 102,
-                                child: CircularProgressIndicator(
-                                  value: stepProgress,
-                                  strokeWidth: 10,
-                                  backgroundColor: Colors.white12,
-                                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.cautionGold),
-                                ),
+        final int naturalCount = _sqliteHistory
+            .where((r) => ((r['nova_group'] as num?)?.toInt() ?? 3) <= 2)
+            .length;
+        final int ultraProcessedCount = _sqliteHistory
+            .where((r) => ((r['nova_group'] as num?)?.toInt() ?? 3) == 4)
+            .length;
+
+        return RefreshIndicator(
+          color: AppColors.primaryEmerald,
+          onRefresh: _loadSqliteHistory,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                BioMinimalUi.sectionHeader(
+                  context,
+                  overline: 'GERÇEK TÜKETİM & TARAMA VERİLERİ',
+                  title: 'Beslenme Günlüğüm',
+                  trailing: (_sqliteHistory.isNotEmpty || decisions.isNotEmpty)
+                      ? GestureDetector(
+                          onTap: _clearAllHistory,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: context.subtleSurfaceColor,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              'Temizle',
+                              style: TextStyle(
+                                color: textSecondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
                               ),
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.directions_walk_rounded, color: AppColors.cautionGold, size: 22),
-                                  Text(
-                                    '${state.dailySteps}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                                  ),
-                                  Text(
-                                    '/ ${state.dailyStepGoal} adım',
-                                    style: const TextStyle(color: Colors.white60, fontSize: 10),
-                                  ),
-                                ],
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryEmerald.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  state.smartwatchConnected
-                                      ? '⌚ Bağlı: ${state.smartwatchName}'
-                                      : '📱 Kaynak: ${state.smartwatchName}',
-                                  style: const TextStyle(
-                                    color: AppColors.primaryEmerald,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '🔥 Aktif Yakılan: ${state.activeCaloriesBurned} kcal',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '⚡ Sonraki +1 Biyo-Enerji ve +10 💎 için $stepsToNextEnergy adım kaldı!',
-                                style: const TextStyle(color: Colors.white70, fontSize: 11.5),
-                              ),
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => BioRpgService.instance.addSteps(500),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.cautionGold,
-                                        foregroundColor: Colors.black,
-                                        padding: const EdgeInsets.symmetric(vertical: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                      icon: const Icon(Icons.add_road_rounded, size: 16),
-                                      label: const Text(
-                                        '+500 Adım',
-                                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () => BioRpgService.instance.addSteps(1000),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primaryEmerald,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(vertical: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                      ),
-                                      icon: const Icon(Icons.bolt_rounded, size: 16),
-                                      label: const Text(
-                                        '+1.000 Adım',
-                                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        )
+                      : null,
                 ),
-              ),
-
-              // ACTIVE DETOX QUEST BANNER (IF ANY)
-              if (state.hasActiveDetoxQuest) ...[
                 const SizedBox(height: 16),
+
+                // =========================================================================
+                // 1. REAL METRICS SUMMARY CARD (ZERO FAKE VALUES)
+                // =========================================================================
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.dangerRed.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.dangerRed, width: 1.5),
-                  ),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BioMinimalUi.cardDecoration(context),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.cleaning_services_rounded, color: AppColors.dangerRed, size: 20),
-                          SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              '☠️ AKTİF METABOLİK DETOKS GÖREVİ',
-                              style: TextStyle(
-                                color: AppColors.dangerRed,
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                              ),
+                            child: _buildStatBox(
+                              context,
+                              label: 'Taranan Ürün',
+                              value: '${_sqliteHistory.length}',
+                              subtitle: 'SQLite Geçmişi',
+                              accent: AppColors.primaryEmerald,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildStatBox(
+                              context,
+                              label: 'Ort. Gıda Skoru',
+                              value: realAverageScore != null
+                                  ? '$realAverageScore/100'
+                                  : '—',
+                              subtitle: consumedList.isNotEmpty
+                                  ? '${consumedList.length} tüketilen ürün'
+                                  : 'Taranan ortalaması',
+                              accent: realAverageScore != null
+                                  ? _scoreColor(realAverageScore)
+                                  : textSecondary,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Tükettiğin katkı maddeli ürünün toksik sisini temizlemek ve +5 Kişisel OrganicScore geri kazanmak için adım hedefini tamamla!',
-                        style: TextStyle(color: context.textPrimaryColor, fontSize: 12),
-                      ),
                       const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: state.detoxProgress,
-                          minHeight: 10,
-                          backgroundColor: Colors.black26,
-                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primaryEmerald),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'İlerleme: ${state.detoxCurrentSteps} / ${state.activeDetoxTargetSteps} Adım',
-                        style: TextStyle(
-                          color: context.textPrimaryColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatBox(
+                              context,
+                              label: 'Rafa Bırakılan',
+                              value: '${rejectedList.length}',
+                              subtitle: 'Kaçınılan riskli ürün',
+                              accent: AppColors.primaryMint,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildStatBox(
+                              context,
+                              label: 'Doğal vs NOVA 4',
+                              value: '$naturalCount / $ultraProcessedCount',
+                              subtitle: 'Doğal / Ultra-İşlenmiş',
+                              accent: ultraProcessedCount > naturalCount
+                                  ? AppColors.cautionGold
+                                  : AppColors.primaryEmerald,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ],
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 22),
 
-              // BODY METRICS (BOY / KİLO / BMI / BMR) CONFIGURATOR
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: context.surfaceColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: context.cardBorderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '📏 Boy, Kilo & Metabolik Profil',
-                          style: TextStyle(
-                            color: context.textPrimaryColor,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryEmerald.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'BMI: ${state.bmi.toStringAsFixed(1)} • BMR: $bmr kcal',
-                            style: const TextStyle(
-                              color: AppColors.primaryEmerald,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Boy: ${state.heightCm.round()} cm',
-                      style: TextStyle(
-                        color: context.textPrimaryColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Slider(
-                      value: state.heightCm.clamp(120.0, 220.0),
-                      min: 120.0,
-                      max: 220.0,
-                      divisions: 100,
-                      activeColor: AppColors.primaryEmerald,
-                      label: '${state.heightCm.round()} cm',
-                      onChanged: (val) {
-                        BioRpgService.instance.updateBodyMetrics(
-                          heightCm: val,
-                          weightKg: state.weightKg,
-                        );
-                      },
-                    ),
-                    Text(
-                      'Kilo: ${state.weightKg.toStringAsFixed(1)} kg',
-                      style: TextStyle(
-                        color: context.textPrimaryColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Slider(
-                      value: state.weightKg.clamp(35.0, 160.0),
-                      min: 35.0,
-                      max: 160.0,
-                      divisions: 250,
-                      activeColor: AppColors.cautionGold,
-                      label: '${state.weightKg.toStringAsFixed(1)} kg',
-                      onChanged: (val) {
-                        BioRpgService.instance.updateBodyMetrics(
-                          heightCm: state.heightCm,
-                          weightKg: val,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // SMARTWATCH & HEALTH CONNECT / HEALTHKIT BRIDGE
-              Text(
-                '⌚ Akıllı Saat & Sağlık Servisleri Senkronizasyonu',
-                style: TextStyle(
-                  color: context.textPrimaryColor,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Akıllı saatinden veya Health Connect / Apple HealthKit üzerinden adım ve kalori verilerini çek:',
-                style: TextStyle(color: context.textSecondaryColor, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-
-              ...BioRhythmTelemetryService.supportedWearables.map((device) {
-                final bool isCurrent = state.smartwatchName == device.name;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: context.surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: isCurrent ? AppColors.primaryEmerald : context.cardBorderColor,
-                      width: isCurrent ? 1.8 : 1.0,
-                    ),
-                  ),
+                // =========================================================================
+                // 2. FILTER PILLS FOR LOGGED ITEMS
+                // =========================================================================
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      Text(device.iconLabel, style: const TextStyle(fontSize: 24)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              device.name,
-                              style: TextStyle(
-                                color: context.textPrimaryColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13.5,
-                              ),
-                            ),
-                            Text(
-                              device.protocol,
-                              style: TextStyle(color: context.textSecondaryColor, fontSize: 11.5),
-                            ),
-                          ],
-                        ),
+                      _buildFilterChip(
+                        0,
+                        'Taranan Ürünler (${_sqliteHistory.length})',
                       ),
-                      ElevatedButton(
-                        onPressed: _isSyncingWatch ? null : () => _syncWearable(device),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isCurrent ? AppColors.primaryEmerald : AppColors.amoledCardBorder,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        1,
+                        'Tükettiklerim (${consumedList.length})',
+                      ),
+                      const SizedBox(width: 8),
+                      _buildFilterChip(
+                        2,
+                        'Rafa Bıraktıklarım (${rejectedList.length})',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // =========================================================================
+                // 3. CHRONOLOGICAL REAL HISTORY LIST
+                // =========================================================================
+                if (_isLoadingHistory)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(
+                        color: AppColors.primaryEmerald,
+                      ),
+                    ),
+                  )
+                else if (_selectedFilter == 0)
+                  _buildSqliteHistoryList(context)
+                else if (_selectedFilter == 1)
+                  _buildDecisionList(
+                    context,
+                    consumedList,
+                    emptyText:
+                        'Henüz "Tükettim" olarak işaretlediğiniz bir ürün yok. Ürün inceleme ekranında tüketim tercihinizi kaydedebilirsiniz.',
+                  )
+                else
+                  _buildDecisionList(
+                    context,
+                    rejectedList,
+                    emptyText:
+                        'Henüz "Rafa Bıraktım / Vazgeçtim" olarak işaretlediğiniz bir ürün yok.',
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatBox(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required String subtitle,
+    required Color accent,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: context.subtleSurfaceColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.cardBorderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: context.textSecondaryColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: accent,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: context.textSecondaryColor,
+              fontSize: 10.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(int index, String label) {
+    final bool selected = _selectedFilter == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedFilter = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.primaryEmerald.withValues(alpha: 0.15)
+              : context.subtleSurfaceColor,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? AppColors.primaryEmerald
+                : context.cardBorderColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected
+                ? AppColors.primaryEmerald
+                : context.textSecondaryColor,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSqliteHistoryList(BuildContext context) {
+    if (_sqliteHistory.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BioMinimalUi.cardDecoration(context),
+        child: Column(
+          children: [
+            Icon(
+              Icons.qr_code_scanner_rounded,
+              size: 36,
+              color: context.textSecondaryColor,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Henüz Taranmış Ürün Yok',
+              style: TextStyle(
+                color: context.textPrimaryColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Barkod okuttuğunuz veya katalogdan incelediğiniz tüm gıdalar gerçek skorları ve NOVA sınıflarıyla burada listelenir.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: context.textSecondaryColor,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _sqliteHistory.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final row = _sqliteHistory[index];
+        final String barcode = row['barcode'] as String? ?? '';
+        final String name = row['product_name'] as String? ?? 'Ürün';
+        final String brand = row['brand'] as String? ?? '';
+        final int score = (row['organicscore'] as num?)?.toInt() ?? 50;
+        final int nova = (row['nova_group'] as num?)?.toInt() ?? 3;
+        final int scannedAt = (row['scanned_at'] as num?)?.toInt() ?? 0;
+        final Color sColor = _scoreColor(score);
+
+        return GestureDetector(
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProductResultScreen(
+                  barcode: barcode,
+                  ingredientsOcrText: null,
+                ),
+              ),
+            );
+            _loadSqliteHistory();
+          },
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BioMinimalUi.cardDecoration(context, radius: 18),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: sColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$score',
+                      style: TextStyle(
+                        color: sColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: context.textPrimaryColor,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
                         ),
-                        child: Text(
-                          isCurrent ? 'Senkronize Et' : 'Bağla & Çek',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${brand.isNotEmpty ? "$brand • " : ""}NOVA $nova • ${_formatTimestamp(scannedAt)}',
+                        style: TextStyle(
+                          color: context.textSecondaryColor,
+                          fontSize: 11.5,
                         ),
                       ),
                     ],
                   ),
-                );
-              }),
-            ],
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: context.textSecondaryColor,
+                  size: 18,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDecisionList(
+    BuildContext context,
+    List<MetabolicScanRecord> records, {
+    required String emptyText,
+  }) {
+    if (records.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BioMinimalUi.cardDecoration(context),
+        child: Text(
+          emptyText,
+          style: TextStyle(
+            color: context.textSecondaryColor,
+            fontSize: 12.5,
+            height: 1.4,
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: records.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final item = records[index];
+        final Color sColor = _scoreColor(item.productScore);
+        final bool isConsumed = item.decision == ScanDecisionType.consumed;
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProductResultScreen(
+                  barcode: item.barcode,
+                  ingredientsOcrText: null,
+                ),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BioMinimalUi.cardDecoration(context, radius: 18),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: sColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '${item.productScore}',
+                      style: TextStyle(
+                        color: sColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.productName,
+                        style: TextStyle(
+                          color: context.textPrimaryColor,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${isConsumed ? "Tüketildi" : "Rafa Bırakıldı"} • ${_formatTimestamp(item.timestamp)}',
+                        style: TextStyle(
+                          color: isConsumed
+                              ? context.textSecondaryColor
+                              : AppColors.primaryEmerald,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: context.textSecondaryColor,
+                  size: 18,
+                ),
+              ],
+            ),
           ),
         );
       },

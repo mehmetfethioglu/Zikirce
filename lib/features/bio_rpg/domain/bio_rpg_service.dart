@@ -107,10 +107,10 @@ class PersonalOrganicScoreState {
 
   String get bmiCategory {
     final double val = bmi;
-    if (val < 18.5) return 'Hafif / Çevik Biyo-Form';
-    if (val < 25.0) return 'Optimal Biyo-Denge';
-    if (val < 30.0) return 'Güç Odaklı Metabolizma';
-    return 'Direnç & Detoks Modu';
+    if (val < 18.5) return 'Düşük Kilolu (DSÖ < 18.5)';
+    if (val < 25.0) return 'İdeal / Normal Aralık (DSÖ 18.5–24.9)';
+    if (val < 30.0) return 'Fazla Kilolu (DSÖ 25.0–29.9)';
+    return 'Yüksek VKİ / Obezite Sınırı (DSÖ ≥ 30.0)';
   }
 
   int get activeCaloriesBurned => (dailySteps * 0.042 * (weightKg / 70.0)).round();
@@ -940,10 +940,63 @@ class BioRpgService extends ValueNotifier<PersonalOrganicScoreState> {
     await _saveState();
   }
 
+  Future<void> selectCharacterSkin(String characterId) async {
+    if (!value.avatarConfig.isCharacterUnlocked(characterId) && !value.hasOrganicPass) {
+      return;
+    }
+    value = value.copyWith(
+      avatarConfig: value.avatarConfig.copyWith(selectedCharacterId: characterId),
+    );
+    await _saveState();
+  }
+
+  Future<bool> unlockCharacterWithCrystals(String characterId, int crystalCost) async {
+    if (value.avatarConfig.isCharacterUnlocked(characterId)) {
+      await selectCharacterSkin(characterId);
+      return true;
+    }
+    if (value.bioCrystals < crystalCost && !value.hasOrganicPass) {
+      return false;
+    }
+    final List<String> updatedUnlocked = {
+      ...value.avatarConfig.unlockedCharacterIds,
+      characterId,
+    }.toList();
+
+    value = value.copyWith(
+      bioCrystals: value.hasOrganicPass ? value.bioCrystals : value.bioCrystals - crystalCost,
+      avatarConfig: value.avatarConfig.copyWith(
+        selectedCharacterId: characterId,
+        unlockedCharacterIds: updatedUnlocked,
+      ),
+    );
+    await _saveState();
+    return true;
+  }
+
+  Future<void> purchaseCharacterWithStore(String characterId) async {
+    final List<String> updatedUnlocked = {
+      ...value.avatarConfig.unlockedCharacterIds,
+      characterId,
+    }.toList();
+
+    value = value.copyWith(
+      bioCrystals: value.bioCrystals + 100,
+      avatarConfig: value.avatarConfig.copyWith(
+        selectedCharacterId: characterId,
+        unlockedCharacterIds: updatedUnlocked,
+      ),
+    );
+    await _saveState();
+  }
+
   Future<void> activateOrganicPass() async {
-    // Unlocks legendary guardians and boosts max energy
+    // Unlocks legendary guardians, all 3D Pixar characters, and boosts max energy
     final List<BioCharacter> unlockedAll = value.guardians
         .map((g) => g.copyWith(isUnlocked: true))
+        .toList();
+    final List<String> allCharIds = PixarCharacterSkin.catalog
+        .map((c) => c.id)
         .toList();
     value = value.copyWith(
       hasOrganicPass: true,
@@ -951,6 +1004,9 @@ class BioRpgService extends ValueNotifier<PersonalOrganicScoreState> {
       bioEnergy: 20,
       bioCrystals: value.bioCrystals + 300,
       guardians: unlockedAll,
+      avatarConfig: value.avatarConfig.copyWith(
+        unlockedCharacterIds: allCharIds,
+      ),
     );
     await _saveState();
   }
@@ -968,6 +1024,16 @@ class BioRpgService extends ValueNotifier<PersonalOrganicScoreState> {
     if (value.activeBosses.isNotEmpty) return;
     value = value.copyWith(
       bossQueue: [...defaultStarterBosses(), ...value.bossQueue.take(10)],
+    );
+    await _saveState();
+  }
+
+  Future<void> clearScanHistory() async {
+    value = value.copyWith(
+      scanHistory: const [],
+      willpowerStreak: 0,
+      activeDetoxTargetSteps: 0,
+      detoxCurrentSteps: 0,
     );
     await _saveState();
   }

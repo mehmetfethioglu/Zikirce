@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../domain/bio_rpg_models.dart';
 
 /// Pixar-grade 3D Layered Subsurface Scattering (SSS), Specular Catchlight,
-/// and Interactive Matrix4 Perspective Skeletal Renderer (Option A - Zero Muda).
+/// and Interactive Matrix4 Perspective Skeletal Renderer for Battle Guardians.
 class Pixar3DGuardianStage extends StatefulWidget {
   final BioCharacter guardian;
   final double size;
@@ -117,7 +117,6 @@ class _PixarGuardianPainter extends CustomPainter {
     final Offset center = Offset(size.width / 2, size.height / 2);
     final double r = size.width * 0.34;
 
-    // 1. 3D Ground Ambient Occlusion Shadow
     final Paint shadowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -140,7 +139,6 @@ class _PixarGuardianPainter extends CustomPainter {
       shadowPaint,
     );
 
-    // 2. Volumetric Back Rim Aura
     final Paint auraPaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -151,7 +149,6 @@ class _PixarGuardianPainter extends CustomPainter {
       ).createShader(Rect.fromCircle(center: center, radius: r * 1.45));
     canvas.drawCircle(center, r * 1.45, auraPaint);
 
-    // 3. Archetype-specific 3D Ears / Crest / Wings behind torso
     final Paint secondary3DPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
@@ -165,7 +162,6 @@ class _PixarGuardianPainter extends CustomPainter {
 
     switch (guardian.archetype) {
       case GuardianArchetype.kefirSprite:
-        // Floating 3D Water/Probiotic Droplet Crown & Ears
         canvas.drawOval(
           Rect.fromCenter(
             center: Offset(center.dx - r * 0.78, center.dy - r * 0.55),
@@ -184,25 +180,41 @@ class _PixarGuardianPainter extends CustomPainter {
         );
         break;
       case GuardianArchetype.oliveKnight:
-        // Golden Leaf Paladin Crest & Shoulder Pauldrons
         final Path crest = Path()
           ..moveTo(center.dx, center.dy - r * 1.35)
-          ..quadraticBezierTo(center.dx + r * 0.55, center.dy - r * 0.9, center.dx, center.dy - r * 0.6)
-          ..quadraticBezierTo(center.dx - r * 0.55, center.dy - r * 0.9, center.dx, center.dy - r * 1.35);
+          ..quadraticBezierTo(
+            center.dx + r * 0.55,
+            center.dy - r * 0.9,
+            center.dx,
+            center.dy - r * 0.6,
+          )
+          ..quadraticBezierTo(
+            center.dx - r * 0.55,
+            center.dy - r * 0.9,
+            center.dx,
+            center.dy - r * 1.35,
+          );
         canvas.drawPath(crest, secondary3DPaint);
         break;
       case GuardianArchetype.oatTitan:
-        // Heavy 3D Golem Shoulder Plates
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromCenter(center: Offset(center.dx - r * 0.95, center.dy), width: r * 0.5, height: r * 0.85),
+            Rect.fromCenter(
+              center: Offset(center.dx - r * 0.95, center.dy),
+              width: r * 0.5,
+              height: r * 0.85,
+            ),
             const Radius.circular(14),
           ),
           secondary3DPaint,
         );
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromCenter(center: Offset(center.dx + r * 0.95, center.dy), width: r * 0.5, height: r * 0.85),
+            Rect.fromCenter(
+              center: Offset(center.dx + r * 0.95, center.dy),
+              width: r * 0.5,
+              height: r * 0.85,
+            ),
             const Radius.circular(14),
           ),
           secondary3DPaint,
@@ -211,13 +223,19 @@ class _PixarGuardianPainter extends CustomPainter {
       case GuardianArchetype.chiaDragon:
       case GuardianArchetype.honeyPaladin:
       case GuardianArchetype.avocadoSage:
-        // Floating Energy Wings
-        canvas.drawCircle(Offset(center.dx - r * 0.92, center.dy - r * 0.2), r * 0.42, secondary3DPaint);
-        canvas.drawCircle(Offset(center.dx + r * 0.92, center.dy - r * 0.2), r * 0.42, secondary3DPaint);
+        canvas.drawCircle(
+          Offset(center.dx - r * 0.92, center.dy - r * 0.2),
+          r * 0.42,
+          secondary3DPaint,
+        );
+        canvas.drawCircle(
+          Offset(center.dx + r * 0.92, center.dy - r * 0.2),
+          r * 0.42,
+          secondary3DPaint,
+        );
         break;
     }
 
-    // 4. Core Pixar 3D Subsurface-Scattered (SSS) Body Sphere/Capsule
     final Rect bodyRect = Rect.fromCenter(
       center: center,
       width: r * 1.95,
@@ -240,7 +258,6 @@ class _PixarGuardianPainter extends CustomPainter {
       bodyPaint,
     );
 
-    // 5. Specular Top-Left Studio Softbox Highlight (Pixar Vinyl Toy Sheen)
     final Paint specularPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
@@ -259,18 +276,19 @@ class _PixarGuardianPainter extends CustomPainter {
       specularPaint,
     );
 
-    // 6. Expressive Pixar 3D Eyes with Dual Catchlights
     final double eyeOffsetX = r * 0.36;
     final double eyeY = center.dy - r * 0.08;
     for (final double dir in [-1.0, 1.0]) {
       final Offset eyeCenter = Offset(center.dx + (dir * eyeOffsetX), eyeY);
-      // Sclera shadow
       canvas.drawOval(
         Rect.fromCenter(center: eyeCenter, width: r * 0.44, height: r * 0.50),
         Paint()..color = Colors.white,
       );
-      // Iris 3D gradient
-      final Rect irisRect = Rect.fromCenter(center: eyeCenter, width: r * 0.32, height: r * 0.38);
+      final Rect irisRect = Rect.fromCenter(
+        center: eyeCenter,
+        width: r * 0.32,
+        height: r * 0.38,
+      );
       canvas.drawOval(
         irisRect,
         Paint()
@@ -281,15 +299,12 @@ class _PixarGuardianPainter extends CustomPainter {
             ],
           ).createShader(irisRect),
       );
-      // Pupil
       canvas.drawCircle(eyeCenter, r * 0.10, Paint()..color = Colors.black);
-      // Primary Pixar Specular Catchlight
       canvas.drawCircle(
         Offset(eyeCenter.dx - r * 0.06, eyeCenter.dy - r * 0.08),
         r * 0.065,
         Paint()..color = Colors.white,
       );
-      // Secondary Rim Catchlight
       canvas.drawCircle(
         Offset(eyeCenter.dx + r * 0.05, eyeCenter.dy + r * 0.07),
         r * 0.03,
@@ -297,7 +312,6 @@ class _PixarGuardianPainter extends CustomPainter {
       );
     }
 
-    // 7. Happy Confident Pixar Smile / Expression
     final Path smilePath = Path()
       ..moveTo(center.dx - r * 0.22, center.dy + r * 0.24)
       ..quadraticBezierTo(
@@ -315,7 +329,6 @@ class _PixarGuardianPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    // 8. Orbiting Bio-Elemental Particles or Shield Bubble
     for (int i = 0; i < 3; i++) {
       final double angle = (animPhase * math.pi * 2) + (i * (math.pi * 2 / 3));
       final Offset orbPos = Offset(
@@ -357,7 +370,7 @@ class _PixarGuardianPainter extends CustomPainter {
   }
 }
 
-/// Pixar-Villain 3D Toxic Boss Renderer (Emülgo-Slime, Glüten Golem, MSG Phantom, etc.)
+/// Pixar-Villain 3D Toxic Boss Renderer
 class Pixar3DBossStage extends StatefulWidget {
   final ToxicBoss boss;
   final double size;
@@ -437,7 +450,6 @@ class _PixarBossPainter extends CustomPainter {
     final Offset center = Offset(size.width / 2, size.height / 2);
     final double r = size.width * 0.35;
 
-    // 1. Toxic Puddle Shadow
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(center.dx, size.height * 0.89),
@@ -447,7 +459,6 @@ class _PixarBossPainter extends CustomPainter {
       Paint()..color = boss.primaryColor.withValues(alpha: 0.35),
     );
 
-    // 2. Spiky / Bubbling Chemical Silhouettes
     final Paint spikePaint = Paint()
       ..shader = LinearGradient(
         colors: [boss.secondaryColor, boss.primaryColor],
@@ -462,8 +473,11 @@ class _PixarBossPainter extends CustomPainter {
       canvas.drawCircle(bubblePos, r * 0.28, spikePaint);
     }
 
-    // 3. 3D Subsurface Boss Core
-    final Rect coreRect = Rect.fromCenter(center: center, width: r * 1.95, height: r * 1.8);
+    final Rect coreRect = Rect.fromCenter(
+      center: center,
+      width: r * 1.95,
+      height: r * 1.8,
+    );
     final Paint corePaint = Paint()
       ..shader = RadialGradient(
         center: const Alignment(-0.3, -0.4),
@@ -480,7 +494,6 @@ class _PixarBossPainter extends CustomPainter {
       corePaint,
     );
 
-    // 4. Glossy Slime / Crystal Specular Highlight
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(center.dx - r * 0.3, center.dy - r * 0.42),
@@ -490,14 +503,20 @@ class _PixarBossPainter extends CustomPainter {
       Paint()..color = Colors.white.withValues(alpha: 0.42),
     );
 
-    // 5. Angry Glowing 3D Villain Eyes
     for (final double dir in [-1.0, 1.0]) {
-      final Offset eyePos = Offset(center.dx + (dir * r * 0.36), center.dy - r * 0.1);
+      final Offset eyePos = Offset(
+        center.dx + (dir * r * 0.36),
+        center.dy - r * 0.1,
+      );
       canvas.drawOval(
         Rect.fromCenter(center: eyePos, width: r * 0.38, height: r * 0.30),
         Paint()..color = const Color(0xFFFEF08A),
       );
-      canvas.drawCircle(eyePos, r * 0.11, Paint()..color = const Color(0xFFDC2626));
+      canvas.drawCircle(
+        eyePos,
+        r * 0.11,
+        Paint()..color = const Color(0xFFDC2626),
+      );
       canvas.drawCircle(
         Offset(eyePos.dx - r * 0.04, eyePos.dy - r * 0.04),
         r * 0.045,
@@ -505,7 +524,6 @@ class _PixarBossPainter extends CustomPainter {
       );
     }
 
-    // 6. Jagged Monster Grin
     final Path mouth = Path()
       ..moveTo(center.dx - r * 0.38, center.dy + r * 0.28)
       ..lineTo(center.dx - r * 0.18, center.dy + r * 0.38)
@@ -527,386 +545,6 @@ class _PixarBossPainter extends CustomPainter {
     return oldDelegate.animPhase != animPhase ||
         oldDelegate.isHit != isHit ||
         oldDelegate.boss.id != boss.id;
-  }
-}
-
-/// Apple Animoji-style 3D Pixar Avatar Renderer synchronized with Height/Weight BMI
-/// and Living Personal OrganicScore!
-class Pixar3DAvatarCanvas extends StatefulWidget {
-  final PixarAvatarConfig config;
-  final int personalOrganicScore;
-  final double bmi;
-  final double size;
-
-  const Pixar3DAvatarCanvas({
-    super.key,
-    required this.config,
-    required this.personalOrganicScore,
-    required this.bmi,
-    this.size = 190,
-  });
-
-  @override
-  State<Pixar3DAvatarCanvas> createState() => _Pixar3DAvatarCanvasState();
-}
-
-class _Pixar3DAvatarCanvasState extends State<Pixar3DAvatarCanvas>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _idleController;
-  double _rotY = 0.0;
-  double _rotX = 0.0;
-
-  static const List<Color> skinTones = [
-    Color(0xFFFFDFC4),
-    Color(0xFFF0C8A0),
-    Color(0xFFD8A070),
-    Color(0xFFA56B46),
-    Color(0xFF6E4228),
-  ];
-
-  static const List<Color> hairColors = [
-    Color(0xFF1E1B18),
-    Color(0xFF6B3E26),
-    Color(0xFFD97706),
-    Color(0xFF10B981),
-    Color(0xFF8B5CF6),
-  ];
-
-  static const List<Color> eyeColors = [
-    Color(0xFF10B981),
-    Color(0xFF0284C7),
-    Color(0xFF7C3AED),
-    Color(0xFFD97706),
-  ];
-
-  static const List<Color> armorColors = [
-    Color(0xFF10B981),
-    Color(0xFF06B6D4),
-    Color(0xFFF59E0B),
-    Color(0xFF8B5CF6),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _idleController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2400),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _idleController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final Color skin = skinTones[widget.config.skinToneIndex % skinTones.length];
-    final Color hair = hairColors[widget.config.hairColorIndex % hairColors.length];
-    final Color eyes = eyeColors[widget.config.eyeColorIndex % eyeColors.length];
-    final Color armor = armorColors[widget.config.armorStyleIndex % armorColors.length];
-
-    return GestureDetector(
-      onPanUpdate: (details) {
-        setState(() {
-          _rotY = (_rotY + details.delta.dx * 0.012).clamp(-0.4, 0.4);
-          _rotX = (_rotX - details.delta.dy * 0.012).clamp(-0.3, 0.3);
-        });
-      },
-      onPanEnd: (_) {
-        setState(() {
-          _rotX = 0.0;
-          _rotY = 0.0;
-        });
-      },
-      child: AnimatedBuilder(
-        animation: _idleController,
-        builder: (context, _) {
-          final double t = _idleController.value;
-          final Matrix4 transform = Matrix4.identity()
-            ..setEntry(3, 2, 0.0018)
-            ..rotateX(_rotX)
-            ..rotateY(_rotY);
-
-          return Transform(
-            alignment: Alignment.center,
-            transform: transform,
-            child: SizedBox(
-              width: widget.size,
-              height: widget.size,
-              child: CustomPaint(
-                painter: _PixarAvatarPainter(
-                  skinColor: skin,
-                  hairColor: hair,
-                  eyeColor: eyes,
-                  armorColor: armor,
-                  hairStyleIndex: widget.config.hairStyleIndex,
-                  visorIndex: widget.config.companionVisorIndex,
-                  mood: widget.config.expressionMood,
-                  personalScore: widget.personalOrganicScore,
-                  bmi: widget.bmi,
-                  animPhase: t,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _PixarAvatarPainter extends CustomPainter {
-  final Color skinColor;
-  final Color hairColor;
-  final Color eyeColor;
-  final Color armorColor;
-  final int hairStyleIndex;
-  final int visorIndex;
-  final String mood;
-  final int personalScore;
-  final double bmi;
-  final double animPhase;
-
-  const _PixarAvatarPainter({
-    required this.skinColor,
-    required this.hairColor,
-    required this.eyeColor,
-    required this.armorColor,
-    required this.hairStyleIndex,
-    required this.visorIndex,
-    required this.mood,
-    required this.personalScore,
-    required this.bmi,
-    required this.animPhase,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double r = size.width * 0.32;
-    final bool isDetoxFog = mood == 'detox_fog' || personalScore < 55;
-
-    // 1. Dynamic Bio-Aura Ring based on Personal OrganicScore
-    final Color auraColor = isDetoxFog
-        ? const Color(0xFF7C3AED)
-        : (personalScore >= 80 ? const Color(0xFF10B981) : const Color(0xFF06B6D4));
-
-    canvas.drawCircle(
-      center,
-      r * 1.42,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [
-            auraColor.withValues(alpha: 0.38),
-            auraColor.withValues(alpha: 0.08),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: r * 1.42)),
-    );
-
-    // 2. 3D Bio-Armor Torso / Shoulders (scaled slightly by BMI factor)
-    final double bmiWidthFactor = (bmi / 22.0).clamp(0.88, 1.18);
-    final Rect torsoRect = Rect.fromCenter(
-      center: Offset(center.dx, center.dy + r * 0.92),
-      width: r * 1.65 * bmiWidthFactor,
-      height: r * 0.95,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(torsoRect, Radius.circular(r * 0.42)),
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            armorColor,
-            Color.lerp(armorColor, Colors.black, 0.45)!,
-          ],
-        ).createShader(torsoRect),
-    );
-
-    // Glowing Chest Core Reactor
-    canvas.drawCircle(
-      Offset(center.dx, center.dy + r * 0.85),
-      r * 0.22,
-      Paint()..color = Colors.white.withValues(alpha: 0.9),
-    );
-    canvas.drawCircle(
-      Offset(center.dx, center.dy + r * 0.85),
-      r * 0.15,
-      Paint()..color = auraColor,
-    );
-
-    // 3. 3D Subsurface-Scattered Head (Animoji Style)
-    final Offset headCenter = Offset(center.dx, center.dy - r * 0.1 + math.sin(animPhase * math.pi) * 3.0);
-    final Rect headRect = Rect.fromCenter(
-      center: headCenter,
-      width: r * 1.58,
-      height: r * 1.66,
-    );
-
-    // Ears
-    for (final double dir in [-1.0, 1.0]) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx + dir * r * 0.80, headCenter.dy + r * 0.05),
-          width: r * 0.28,
-          height: r * 0.38,
-        ),
-        Paint()..color = Color.lerp(skinColor, Colors.black, 0.12)!,
-      );
-    }
-
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(headRect, Radius.circular(r * 0.72)),
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.28, -0.35),
-          radius: 1.05,
-          colors: [
-            Color.lerp(skinColor, Colors.white, 0.22)!,
-            skinColor,
-            Color.lerp(skinColor, const Color(0xFF7C2D12), 0.28)!,
-          ],
-        ).createShader(headRect),
-    );
-
-    // Pixar Cheek Subsurface Blush
-    for (final double dir in [-1.0, 1.0]) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx + dir * r * 0.42, headCenter.dy + r * 0.22),
-          width: r * 0.32,
-          height: r * 0.18,
-        ),
-        Paint()..color = const Color(0xFFF43F5E).withValues(alpha: 0.22),
-      );
-    }
-
-    // 4. Expressive Pixar Eyes
-    for (final double dir in [-1.0, 1.0]) {
-      final Offset eyePos = Offset(headCenter.dx + dir * r * 0.32, headCenter.dy - r * 0.02);
-      canvas.drawOval(
-        Rect.fromCenter(center: eyePos, width: r * 0.36, height: r * 0.38),
-        Paint()..color = Colors.white,
-      );
-      canvas.drawCircle(eyePos, r * 0.14, Paint()..color = eyeColor);
-      canvas.drawCircle(eyePos, r * 0.07, Paint()..color = Colors.black);
-      canvas.drawCircle(
-        Offset(eyePos.dx - r * 0.04, eyePos.dy - r * 0.05),
-        r * 0.045,
-        Paint()..color = Colors.white,
-      );
-    }
-
-    // 5. Optional Holo-Visor (Cyber-Organic Glasses)
-    if (visorIndex > 0) {
-      final Rect visorRect = Rect.fromCenter(
-        center: Offset(headCenter.dx, headCenter.dy - r * 0.02),
-        width: r * 1.38,
-        height: r * 0.44,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(visorRect, const Radius.circular(12)),
-        Paint()..color = auraColor.withValues(alpha: 0.35),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(visorRect, const Radius.circular(12)),
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.8)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0,
-      );
-    }
-
-    // 6. 3D Stylized Hair Geometry
-    final Paint hairPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color.lerp(hairColor, Colors.white, 0.18)!,
-          hairColor,
-          Color.lerp(hairColor, Colors.black, 0.35)!,
-        ],
-      ).createShader(headRect);
-
-    if (hairStyleIndex % 3 == 0) {
-      // Spiky Pixar Hero Crest
-      final Path hairPath = Path()
-        ..moveTo(headCenter.dx - r * 0.78, headCenter.dy - r * 0.32)
-        ..quadraticBezierTo(headCenter.dx - r * 0.3, headCenter.dy - r * 1.15, headCenter.dx + r * 0.1, headCenter.dy - r * 0.92)
-        ..quadraticBezierTo(headCenter.dx + r * 0.5, headCenter.dy - r * 1.18, headCenter.dx + r * 0.78, headCenter.dy - r * 0.32)
-        ..quadraticBezierTo(headCenter.dx, headCenter.dy - r * 0.65, headCenter.dx - r * 0.78, headCenter.dy - r * 0.32);
-      canvas.drawPath(hairPath, hairPaint);
-    } else if (hairStyleIndex % 3 == 1) {
-      // Rounded Fluffy Wave
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx, headCenter.dy - r * 0.68),
-          width: r * 1.62,
-          height: r * 0.68,
-        ),
-        hairPaint,
-      );
-    } else {
-      // Twin Bio-Bun / Cyber Crown
-      canvas.drawCircle(Offset(headCenter.dx - r * 0.58, headCenter.dy - r * 0.72), r * 0.32, hairPaint);
-      canvas.drawCircle(Offset(headCenter.dx + r * 0.58, headCenter.dy - r * 0.72), r * 0.32, hairPaint);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx, headCenter.dy - r * 0.64),
-          width: r * 1.4,
-          height: r * 0.45,
-        ),
-        hairPaint,
-      );
-    }
-
-    // 7. Dynamic Mouth Expression (Heroic Smile vs Detox Fog Worry)
-    final Path mouthPath = Path();
-    if (isDetoxFog) {
-      mouthPath
-        ..moveTo(headCenter.dx - r * 0.20, headCenter.dy + r * 0.42)
-        ..quadraticBezierTo(
-          headCenter.dx,
-          headCenter.dy + r * 0.30,
-          headCenter.dx + r * 0.20,
-          headCenter.dy + r * 0.42,
-        );
-    } else {
-      mouthPath
-        ..moveTo(headCenter.dx - r * 0.24, headCenter.dy + r * 0.34)
-        ..quadraticBezierTo(
-          headCenter.dx,
-          headCenter.dy + r * 0.54,
-          headCenter.dx + r * 0.24,
-          headCenter.dy + r * 0.34,
-        );
-    }
-    canvas.drawPath(
-      mouthPath,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.2
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _PixarAvatarPainter oldDelegate) {
-    return oldDelegate.animPhase != animPhase ||
-        oldDelegate.skinColor != skinColor ||
-        oldDelegate.hairColor != hairColor ||
-        oldDelegate.eyeColor != eyeColor ||
-        oldDelegate.armorColor != armorColor ||
-        oldDelegate.hairStyleIndex != hairStyleIndex ||
-        oldDelegate.visorIndex != visorIndex ||
-        oldDelegate.mood != mood ||
-        oldDelegate.personalScore != personalScore;
   }
 }
 
@@ -935,20 +573,95 @@ class PixarAvatarPalettes {
   ];
 
   static const List<Color> armorColors = [
-    Color(0xFF10B981),
-    Color(0xFF06B6D4),
-    Color(0xFFF59E0B),
-    Color(0xFF8B5CF6),
+    Color(0xFFF59E0B), // 0: Orijinal Stüdyo
+    Color(0xFF10B981), // 1: Zümrüt Biyo-Aura
+    Color(0xFF06B6D4), // 2: Siber Okyanus
+    Color(0xFFF43F5E), // 3: Mercan Enerji
+    Color(0xFF8B5CF6), // 4: Kuantum Mor
   ];
 }
 
-/// "The Walking Man" (HVFTkE5_SHA) Full-Body 3D Articulated Pixar Character Stage
-/// with live biomechanical walking stride, 3D holo-track rings, and 360° touch rotation.
+/// Close-Up 3D Pixar Character Bust / Portrait Renderer
+/// Used in Viral Share Card & Compact Bust Previews; delegates to the 3D Stage or Studio Card.
+class Pixar3DAvatarCanvas extends StatelessWidget {
+  final PixarAvatarConfig config;
+  final int personalOrganicScore;
+  final double bmi;
+  final double size;
+
+  const Pixar3DAvatarCanvas({
+    super.key,
+    required this.config,
+    required this.personalOrganicScore,
+    required this.bmi,
+    this.size = 190,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final PixarCharacterSkin skin = config.activeCharacter;
+    final int gradeIdx =
+        config.armorStyleIndex % PixarAvatarPalettes.armorColors.length;
+    final Color accentColor = gradeIdx == 0
+        ? skin.accentColor
+        : PixarAvatarPalettes.armorColors[gradeIdx];
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: size * 0.90,
+            height: size * 0.90,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  accentColor.withValues(alpha: 0.34),
+                  accentColor.withValues(alpha: 0.08),
+                  Colors.transparent,
+                ],
+              ),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.55),
+                width: 2.0,
+              ),
+            ),
+          ),
+          ClipOval(
+            child: SizedBox(
+              width: size * 0.84,
+              height: size * 0.84,
+              child: Transform.scale(
+                scale: 1.38,
+                alignment: const Alignment(0.0, -0.55),
+                child: Image.asset(
+                  skin.assetPath,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// True 3D `.glb` Skeletal Character Stage powered by `<model-viewer>` WebGL
+/// (matching `ZVmE1GuEWmA` & `HVFTkE5_SHA` with real-time `Run`, `Walk`, `Idle`
+/// skeletal animations, smooth camera-orbit transitions, 360° touch rotation,
+/// real-time PBR hoodie color grading, tempo control, and BMI/height scaling).
 class Pixar3DFullBodyWalkingStage extends StatefulWidget {
   final PixarAvatarConfig config;
   final int personalOrganicScore;
   final double bmi;
+  final double heightCm;
   final bool isWalking;
+  final int cameraMode; // 0: Koşu (Run 3/4), 1: Yürüyüş (Walk Side), 2: Duruş (Idle), 3: Portre (Close-up)
   final double width;
   final double height;
 
@@ -957,9 +670,11 @@ class Pixar3DFullBodyWalkingStage extends StatefulWidget {
     required this.config,
     required this.personalOrganicScore,
     required this.bmi,
+    this.heightCm = 175.0,
     this.isWalking = true,
-    this.width = 210,
-    this.height = 310,
+    this.cameraMode = 0,
+    this.width = 215,
+    this.height = 315,
   });
 
   @override
@@ -970,514 +685,274 @@ class Pixar3DFullBodyWalkingStage extends StatefulWidget {
 class _Pixar3DFullBodyWalkingStageState
     extends State<Pixar3DFullBodyWalkingStage>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _walkController;
-  double _rotY = -0.18;
-  double _rotX = 0.04;
+  late final AnimationController _vfxController;
 
   @override
   void initState() {
     super.initState();
-    _walkController = AnimationController(
+    _vfxController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1150),
+      duration: const Duration(milliseconds: 1400),
     )..repeat();
   }
 
   @override
   void dispose() {
-    _walkController.dispose();
+    _vfxController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final Color skin = PixarAvatarPalettes
-        .skinTones[widget.config.skinToneIndex % PixarAvatarPalettes.skinTones.length];
-    final Color hair = PixarAvatarPalettes
-        .hairColors[widget.config.hairColorIndex % PixarAvatarPalettes.hairColors.length];
-    final Color eyes = PixarAvatarPalettes
-        .eyeColors[widget.config.eyeColorIndex % PixarAvatarPalettes.eyeColors.length];
-    final Color armor = PixarAvatarPalettes
-        .armorColors[widget.config.armorStyleIndex % PixarAvatarPalettes.armorColors.length];
+    final PixarCharacterSkin skin = widget.config.activeCharacter;
+    final int gradeIdx =
+        widget.config.armorStyleIndex % PixarAvatarPalettes.armorColors.length;
+    final Color accentColor = gradeIdx == 0
+        ? skin.accentColor
+        : PixarAvatarPalettes.armorColors[gradeIdx];
+    final String mood = widget.config.expressionMood;
 
-    return GestureDetector(
-      onPanUpdate: (details) {
-        setState(() {
-          _rotY = (_rotY + details.delta.dx * 0.014).clamp(-0.65, 0.65);
-          _rotX = (_rotX - details.delta.dy * 0.010).clamp(-0.28, 0.28);
-        });
-      },
-      onDoubleTap: () {
-        setState(() {
-          _rotY = -0.18;
-          _rotX = 0.04;
-        });
-      },
-      child: AnimatedBuilder(
-        animation: _walkController,
-        builder: (context, _) {
-          final double phase = _walkController.value * math.pi * 2;
-          final Matrix4 perspective = Matrix4.identity()
-            ..setEntry(3, 2, 0.0016)
-            ..rotateX(_rotX)
-            ..rotateY(_rotY);
+    return AnimatedBuilder(
+      animation: _vfxController,
+      builder: (context, _) {
+        final double rawPhase = _vfxController.value * math.pi * 2;
+        final double flightArc =
+            widget.isWalking ? math.sin(rawPhase).abs() : 0.12;
 
-          return Transform(
+        return SizedBox(
+          width: widget.width,
+          height: widget.height,
+          child: Stack(
             alignment: Alignment.center,
-            transform: perspective,
-            child: SizedBox(
-              width: widget.width,
-              height: widget.height,
-              child: CustomPaint(
-                painter: _PixarWalkingManPainter(
-                  skinColor: skin,
-                  hairColor: hair,
-                  eyeColor: eyes,
-                  armorColor: armor,
-                  hairStyleIndex: widget.config.hairStyleIndex,
-                  visorIndex: widget.config.companionVisorIndex,
-                  mood: widget.config.expressionMood,
-                  personalScore: widget.personalOrganicScore,
-                  bmi: widget.bmi,
-                  walkPhase: phase,
+            children: [
+              CustomPaint(
+                size: Size(widget.width, widget.height),
+                painter: _PixarStudioStageBackdropPainter(
+                  accentColor: accentColor,
+                  mood: mood,
+                  phase: rawPhase,
+                  flightArc: flightArc,
                   isWalking: widget.isWalking,
-                  yawOffset: _rotY,
                 ),
               ),
-            ),
-          );
-        },
-      ),
+              if (widget.config.companionVisorIndex > 0)
+                IgnorePointer(
+                  child: CustomPaint(
+                    size: Size(widget.width, widget.height),
+                    painter: _Pixar3DEquipmentOverlayPainter(
+                      equipmentIndex: widget.config.companionVisorIndex,
+                      accentColor: accentColor,
+                      phase: rawPhase,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-class _PixarWalkingManPainter extends CustomPainter {
-  final Color skinColor;
-  final Color hairColor;
-  final Color eyeColor;
-  final Color armorColor;
-  final int hairStyleIndex;
-  final int visorIndex;
+class _PixarStudioStageBackdropPainter extends CustomPainter {
+  final Color accentColor;
   final String mood;
-  final int personalScore;
-  final double bmi;
-  final double walkPhase;
+  final double phase;
+  final double flightArc;
   final bool isWalking;
-  final double yawOffset;
 
-  const _PixarWalkingManPainter({
-    required this.skinColor,
-    required this.hairColor,
-    required this.eyeColor,
-    required this.armorColor,
-    required this.hairStyleIndex,
-    required this.visorIndex,
+  const _PixarStudioStageBackdropPainter({
+    required this.accentColor,
     required this.mood,
-    required this.personalScore,
-    required this.bmi,
-    required this.walkPhase,
+    required this.phase,
+    required this.flightArc,
     required this.isWalking,
-    required this.yawOffset,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final double cx = size.width * 0.52;
-    final double groundY = size.height * 0.90;
-    final bool isDetoxFog = mood == 'detox_fog' || personalScore < 55;
-    final Color auraColor = isDetoxFog
-        ? const Color(0xFF7C3AED)
-        : (personalScore >= 80 ? const Color(0xFF10B981) : const Color(0xFF06B6D4));
+    final double cx = size.width * 0.50;
+    final double groundY = size.height * 0.89;
+    final Color effectiveColor =
+        mood == 'detox_fog' ? const Color(0xFF7C3AED) : accentColor;
 
-    // Stride kinematics
-    final double stride = isWalking ? math.sin(walkPhase) : 0.15;
-    final double bounce = isWalking ? math.sin(walkPhase * 2).abs() * 6.5 : math.sin(walkPhase) * 2.5;
-    final double bmiScale = (bmi / 22.0).clamp(0.86, 1.18);
-
-    // 1. 3D HOLOGRAPHIC RUNNING TRACK & STEP RIPPLE RINGS
-    final Rect podiumRect = Rect.fromCenter(
+    // 1. Dynamic 3D Floor Glow Pedestal
+    final double shadowScale = (1.0 - flightArc * 0.22).clamp(0.7, 1.0);
+    final Rect shadowRect = Rect.fromCenter(
       center: Offset(cx, groundY),
-      width: size.width * 0.82,
-      height: size.height * 0.13,
+      width: size.width * 0.74 * shadowScale,
+      height: size.height * 0.08 * shadowScale,
     );
     canvas.drawOval(
-      podiumRect,
+      shadowRect,
       Paint()
         ..shader = RadialGradient(
           colors: [
-            auraColor.withValues(alpha: 0.36),
-            auraColor.withValues(alpha: 0.08),
+            effectiveColor.withValues(alpha: 0.30 * shadowScale),
+            effectiveColor.withValues(alpha: 0.10),
             Colors.transparent,
           ],
-        ).createShader(podiumRect),
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(shadowRect),
     );
 
-    // Expanding kinetic pulse ring
-    final double rippleProgress = (walkPhase / (math.pi * 2)) % 1.0;
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(cx, groundY),
-        width: size.width * (0.38 + rippleProgress * 0.45),
-        height: size.height * (0.05 + rippleProgress * 0.07),
-      ),
-      Paint()
-        ..color = auraColor.withValues(alpha: (1.0 - rippleProgress) * 0.55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0,
-    );
-
-    final double hipY = size.height * 0.56 - bounce;
-    final double shoulderY = size.height * 0.36 - bounce;
-    final double headY = size.height * 0.21 - bounce * 0.85;
-    final double headR = size.width * 0.21;
-
-    // Helper to draw a 3D shaded limb with capsule & sneaker/hand
-    void drawLeg({required bool isFront, required double legSwing}) {
-      final double hipX = cx + (isFront ? 9.0 : -9.0);
-      final double footX = hipX + legSwing * 28.0;
-      final double lift = isWalking
-          ? math.max(0.0, isFront ? math.cos(walkPhase) : -math.cos(walkPhase)) * 12.0
-          : 0.0;
-      final double footY = groundY - 8.0 - lift;
-      final double kneeX = (hipX + footX) / 2 + (legSwing * 8.0) + 6.0;
-      final double kneeY = (hipY + footY) / 2 - lift * 0.4;
-
-      final Color pantsBase = isFront
-          ? const Color(0xFF1E293B)
-          : const Color(0xFF0F172A);
-      final Paint legPaint = Paint()
-        ..color = pantsBase
-        ..strokeWidth = 17.0 * bmiScale
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-
-      final Path legPath = Path()
-        ..moveTo(hipX, hipY)
-        ..quadraticBezierTo(kneeX, kneeY, footX, footY);
-      canvas.drawPath(legPath, legPaint);
-
-      // Neon Bio-Track Stripe on Leg
-      canvas.drawPath(
-        legPath,
+    // 2. Expanding 3D Kinetic Step Ripple Rings
+    if (isWalking) {
+      final double ripple = (phase / (math.pi * 2)) % 1.0;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, groundY),
+          width: size.width * (0.36 + ripple * 0.48),
+          height: size.height * (0.04 + ripple * 0.06),
+        ),
         Paint()
-          ..color = auraColor.withValues(alpha: isFront ? 0.65 : 0.3)
-          ..strokeWidth = 3.0
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke,
-      );
-
-      // 3D Pixar Sneaker
-      final Rect shoeRect = Rect.fromCenter(
-        center: Offset(footX + 7.0, footY + 3.0),
-        width: 30.0,
-        height: 14.0,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(shoeRect, const Radius.circular(8)),
-        Paint()
-          ..shader = LinearGradient(
-            colors: [
-              isFront ? Colors.white : Colors.white70,
-              armorColor,
-            ],
-          ).createShader(shoeRect),
-      );
-      // Glowing Sneaker Sole
-      canvas.drawLine(
-        Offset(shoeRect.left + 2, shoeRect.bottom),
-        Offset(shoeRect.right - 2, shoeRect.bottom),
-        Paint()
-          ..color = auraColor
-          ..strokeWidth = 3.5
-          ..strokeCap = StrokeCap.round,
+          ..color = effectiveColor.withValues(alpha: (1.0 - ripple) * 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8,
       );
     }
 
-    void drawArm({required bool isFront, required double armSwing}) {
-      final double shX = cx + (isFront ? 18.0 * bmiScale : -18.0 * bmiScale);
-      final double handX = shX + armSwing * 26.0;
-      final double handY = hipY + 4.0 - (armSwing.abs() * 6.0);
-      final double elbowX = (shX + handX) / 2 - 5.0;
-      final double elbowY = (shoulderY + handY) / 2 + 5.0;
-
-      final Color sleeveColor = isFront
-          ? armorColor
-          : Color.lerp(armorColor, Colors.black, 0.38)!;
-
-      final Path armPath = Path()
-        ..moveTo(shX, shoulderY + 4.0)
-        ..quadraticBezierTo(elbowX, elbowY, handX, handY);
-
-      canvas.drawPath(
-        armPath,
-        Paint()
-          ..color = sleeveColor
-          ..strokeWidth = 14.0 * bmiScale
-          ..strokeCap = StrokeCap.round
-          ..style = PaintingStyle.stroke,
-      );
-
-      // Smart Bio-Watch on Front Wrist!
-      if (isFront) {
+    // 3. Mood-Driven 3D Particle VFX
+    if (mood == 'energized') {
+      for (int i = 0; i < 5; i++) {
+        final double p = ((phase / (math.pi * 2)) + i * 0.2) % 1.0;
+        final double px = cx + math.sin(phase + i * 1.4) * (size.width * 0.34);
+        final double py = groundY - p * (size.height * 0.72);
         canvas.drawCircle(
-          Offset(handX - armSwing * 4.0, handY - 4.0),
-          5.5,
-          Paint()..color = const Color(0xFF0F172A),
-        );
-        canvas.drawCircle(
-          Offset(handX - armSwing * 4.0, handY - 4.0),
-          3.2,
-          Paint()..color = auraColor,
+          Offset(px, py),
+          3.2 * (1.0 - p * 0.5),
+          Paint()..color = const Color(0xFFFBBF24).withValues(alpha: 1.0 - p),
         );
       }
-
-      // 3D Pixar Hand Sphere
-      canvas.drawCircle(
-        Offset(handX, handY + 2.0),
-        7.5,
-        Paint()..color = isFront ? skinColor : Color.lerp(skinColor, Colors.black, 0.2)!,
-      );
-    }
-
-    // 2. BACK ARM & BACK LEG (Depth Layer 1)
-    drawArm(isFront: false, armSwing: stride);
-    drawLeg(isFront: false, legSwing: -stride);
-
-    // 3. 3D SCULPTED ATHLETIC BIO-ARMOR TORSO (Depth Layer 2)
-    final Rect torsoRect = Rect.fromCenter(
-      center: Offset(cx, (shoulderY + hipY) / 2 + 2.0),
-      width: 56.0 * bmiScale,
-      height: (hipY - shoulderY) + 16.0,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(torsoRect, const Radius.circular(22)),
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color.lerp(armorColor, Colors.white, 0.22)!,
-            armorColor,
-            Color.lerp(armorColor, const Color(0xFF0F172A), 0.55)!,
-          ],
-        ).createShader(torsoRect),
-    );
-
-    // Glowing Bio-Core Chest Emblem
-    final Offset corePos = Offset(cx + yawOffset * -12.0, shoulderY + 22.0);
-    canvas.drawCircle(
-      corePos,
-      10.5,
-      Paint()..color = Colors.white.withValues(alpha: 0.92),
-    );
-    canvas.drawCircle(
-      corePos,
-      6.8,
-      Paint()..color = auraColor,
-    );
-
-    // 4. FRONT LEG & FRONT ARM (Depth Layer 3)
-    drawLeg(isFront: true, legSwing: stride);
-    drawArm(isFront: true, armSwing: -stride);
-
-    // 5. 3D SUBSURFACE-SCATTERED PIXAR HEAD (Depth Layer 4)
-    final Offset headCenter = Offset(cx + yawOffset * -10.0, headY);
-    final Rect headRect = Rect.fromCenter(
-      center: headCenter,
-      width: headR * 1.62,
-      height: headR * 1.68,
-    );
-
-    // Neck
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx, shoulderY - 4.0),
-          width: 16.0,
-          height: 16.0,
-        ),
-        const Radius.circular(6),
-      ),
-      Paint()..color = Color.lerp(skinColor, Colors.black, 0.16)!,
-    );
-
-    // Ears
-    for (final double dir in [-1.0, 1.0]) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx + dir * headR * 0.82, headCenter.dy + headR * 0.05),
-          width: headR * 0.28,
-          height: headR * 0.38,
-        ),
-        Paint()..color = Color.lerp(skinColor, Colors.black, 0.12)!,
-      );
-    }
-
-    // Head SSS Sphere
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(headRect, Radius.circular(headR * 0.74)),
-      Paint()
-        ..shader = RadialGradient(
-          center: const Alignment(-0.3, -0.38),
-          radius: 1.08,
-          colors: [
-            Color.lerp(skinColor, Colors.white, 0.25)!,
-            skinColor,
-            Color.lerp(skinColor, const Color(0xFF7C2D12), 0.30)!,
-          ],
-        ).createShader(headRect),
-    );
-
-    // Expressive Pixar Eyes with Dual Specular Catchlights
-    final double lookShift = yawOffset * -8.0;
-    for (final double dir in [-1.0, 1.0]) {
-      final Offset eyePos = Offset(
-        headCenter.dx + lookShift + dir * headR * 0.33,
-        headCenter.dy - headR * 0.02,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(center: eyePos, width: headR * 0.36, height: headR * 0.39),
-        Paint()..color = Colors.white,
-      );
-      canvas.drawCircle(eyePos, headR * 0.145, Paint()..color = eyeColor);
-      canvas.drawCircle(eyePos, headR * 0.075, Paint()..color = Colors.black);
-      canvas.drawCircle(
-        Offset(eyePos.dx - headR * 0.045, eyePos.dy - headR * 0.05),
-        headR * 0.048,
-        Paint()..color = Colors.white,
-      );
-    }
-
-    // Optional Cyber Holo-Visor
-    if (visorIndex > 0) {
-      final Rect visorRect = Rect.fromCenter(
-        center: Offset(headCenter.dx + lookShift, headCenter.dy - headR * 0.02),
-        width: headR * 1.42,
-        height: headR * 0.45,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(visorRect, const Radius.circular(11)),
-        Paint()..color = auraColor.withValues(alpha: 0.38),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(visorRect, const Radius.circular(11)),
-        Paint()
-          ..color = Colors.white.withValues(alpha: 0.85)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.0,
-      );
-    }
-
-    // 3D Stylized Hair
-    final Paint hairPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color.lerp(hairColor, Colors.white, 0.20)!,
-          hairColor,
-          Color.lerp(hairColor, Colors.black, 0.38)!,
-        ],
-      ).createShader(headRect);
-
-    if (hairStyleIndex % 3 == 0) {
-      final Path hairPath = Path()
-        ..moveTo(headCenter.dx - headR * 0.78, headCenter.dy - headR * 0.32)
-        ..quadraticBezierTo(
-          headCenter.dx - headR * 0.3,
-          headCenter.dy - headR * 1.18,
-          headCenter.dx + headR * 0.1,
-          headCenter.dy - headR * 0.92,
-        )
-        ..quadraticBezierTo(
-          headCenter.dx + headR * 0.5,
-          headCenter.dy - headR * 1.22,
-          headCenter.dx + headR * 0.78,
-          headCenter.dy - headR * 0.32,
-        )
-        ..quadraticBezierTo(
-          headCenter.dx,
-          headCenter.dy - headR * 0.65,
-          headCenter.dx - headR * 0.78,
-          headCenter.dy - headR * 0.32,
+    } else if (mood == 'detox_fog') {
+      for (int i = 0; i < 3; i++) {
+        final double angle = phase + i * (math.pi * 2 / 3);
+        final Offset fogPos = Offset(
+          cx + math.cos(angle) * (size.width * 0.28),
+          size.height * 0.52 + math.sin(angle) * 18.0,
         );
-      canvas.drawPath(hairPath, hairPaint);
-    } else if (hairStyleIndex % 3 == 1) {
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx, headCenter.dy - headR * 0.68),
-          width: headR * 1.64,
-          height: headR * 0.68,
-        ),
-        hairPaint,
-      );
-    } else {
-      canvas.drawCircle(
-        Offset(headCenter.dx - headR * 0.58, headCenter.dy - headR * 0.72),
-        headR * 0.32,
-        hairPaint,
-      );
-      canvas.drawCircle(
-        Offset(headCenter.dx + headR * 0.58, headCenter.dy - headR * 0.72),
-        headR * 0.32,
-        hairPaint,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx, headCenter.dy - headR * 0.64),
-          width: headR * 1.4,
-          height: headR * 0.45,
-        ),
-        hairPaint,
-      );
-    }
-
-    // Dynamic Mouth Expression
-    final Path mouthPath = Path();
-    if (isDetoxFog) {
-      mouthPath
-        ..moveTo(headCenter.dx + lookShift - headR * 0.20, headCenter.dy + headR * 0.42)
-        ..quadraticBezierTo(
-          headCenter.dx + lookShift,
-          headCenter.dy + headR * 0.30,
-          headCenter.dx + lookShift + headR * 0.20,
-          headCenter.dy + headR * 0.42,
+        canvas.drawCircle(
+          fogPos,
+          16.0,
+          Paint()..color = const Color(0xFF7C3AED).withValues(alpha: 0.16),
         );
-    } else {
-      mouthPath
-        ..moveTo(headCenter.dx + lookShift - headR * 0.24, headCenter.dy + headR * 0.34)
-        ..quadraticBezierTo(
-          headCenter.dx + lookShift,
-          headCenter.dy + headR * 0.54,
-          headCenter.dx + lookShift + headR * 0.24,
-          headCenter.dy + headR * 0.34,
-        );
+      }
     }
-    canvas.drawPath(
-      mouthPath,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round,
-    );
   }
 
   @override
-  bool shouldRepaint(covariant _PixarWalkingManPainter oldDelegate) {
-    return oldDelegate.walkPhase != walkPhase ||
-        oldDelegate.isWalking != isWalking ||
-        oldDelegate.yawOffset != yawOffset ||
-        oldDelegate.skinColor != skinColor ||
-        oldDelegate.hairColor != hairColor ||
-        oldDelegate.eyeColor != eyeColor ||
-        oldDelegate.armorColor != armorColor ||
-        oldDelegate.hairStyleIndex != hairStyleIndex ||
-        oldDelegate.visorIndex != visorIndex ||
+  bool shouldRepaint(covariant _PixarStudioStageBackdropPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
         oldDelegate.mood != mood ||
-        oldDelegate.personalScore != personalScore ||
-        oldDelegate.bmi != bmi;
+        oldDelegate.accentColor != accentColor ||
+        oldDelegate.isWalking != isWalking;
   }
 }
 
+class _Pixar3DEquipmentOverlayPainter extends CustomPainter {
+  final int equipmentIndex;
+  final Color accentColor;
+  final double phase;
+
+  const _Pixar3DEquipmentOverlayPainter({
+    required this.equipmentIndex,
+    required this.accentColor,
+    required this.phase,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double cx = size.width * 0.50;
+
+    if (equipmentIndex == 1) {
+      final Offset hudCenter = Offset(cx, size.height * 0.42);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: hudCenter,
+          width: size.width * 0.82,
+          height: size.height * 0.18,
+        ),
+        Paint()
+          ..color = accentColor.withValues(alpha: 0.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8,
+      );
+      final double orbAngle = phase;
+      final Offset scannerDot = Offset(
+        hudCenter.dx + math.cos(orbAngle) * (size.width * 0.41),
+        hudCenter.dy + math.sin(orbAngle) * (size.height * 0.09),
+      );
+      canvas.drawCircle(scannerDot, 5.0, Paint()..color = Colors.white);
+      canvas.drawCircle(scannerDot, 3.0, Paint()..color = accentColor);
+    } else if (equipmentIndex == 2) {
+      final Offset dronePos = Offset(
+        size.width * 0.80,
+        size.height * 0.24 + math.sin(phase * 1.5) * 7.0,
+      );
+      final Rect droneRect = Rect.fromCenter(
+        center: dronePos,
+        width: 34,
+        height: 34,
+      );
+      canvas.drawCircle(
+        dronePos,
+        22,
+        Paint()..color = accentColor.withValues(alpha: 0.24),
+      );
+      canvas.drawOval(
+        droneRect,
+        Paint()
+          ..shader = RadialGradient(
+            center: const Alignment(-0.3, -0.3),
+            colors: [
+              Colors.white,
+              accentColor,
+              const Color(0xFF0F172A),
+            ],
+          ).createShader(droneRect),
+      );
+      canvas.drawCircle(
+        Offset(dronePos.dx - 4.5, dronePos.dy - 1),
+        2.5,
+        Paint()..color = Colors.white,
+      );
+      canvas.drawCircle(
+        Offset(dronePos.dx + 4.5, dronePos.dy - 1),
+        2.5,
+        Paint()..color = Colors.white,
+      );
+    } else if (equipmentIndex == 3) {
+      final Offset crownCenter = Offset(
+        cx,
+        size.height * 0.06 + math.sin(phase * 1.5) * 4.0,
+      );
+      final Path crown = Path()
+        ..moveTo(crownCenter.dx - 18, crownCenter.dy + 8)
+        ..lineTo(crownCenter.dx - 22, crownCenter.dy - 6)
+        ..lineTo(crownCenter.dx - 9, crownCenter.dy + 1)
+        ..lineTo(crownCenter.dx, crownCenter.dy - 10)
+        ..lineTo(crownCenter.dx + 9, crownCenter.dy + 1)
+        ..lineTo(crownCenter.dx + 22, crownCenter.dy - 6)
+        ..lineTo(crownCenter.dx + 18, crownCenter.dy + 8)
+        ..close();
+      canvas.drawPath(
+        crown,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFDE047), Color(0xFFD97706)],
+          ).createShader(
+            Rect.fromCenter(center: crownCenter, width: 46, height: 24),
+          ),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _Pixar3DEquipmentOverlayPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
+        oldDelegate.equipmentIndex != equipmentIndex ||
+        oldDelegate.accentColor != accentColor;
+  }
+}

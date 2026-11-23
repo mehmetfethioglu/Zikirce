@@ -9,7 +9,7 @@ import '../../crowdsource/presentation/crowdsource_dialog.dart';
 import '../../crowdsource/presentation/boycott_report_dialog.dart';
 import '../../family_profiles/domain/family_profile_engine.dart';
 import '../../network/domain/offline_fallback_manager.dart';
-import '../../network/domain/open_food_facts_service.dart';
+import '../../network/domain/turkish_market_resolver_service.dart';
 import '../../network/domain/edge_worker_sync_service.dart';
 import '../../ocr/domain/ingredient_parser.dart';
 import '../../scoring/domain/organic_score_calculator.dart';
@@ -21,7 +21,9 @@ import '../../taklit_tagsis/presentation/widgets/taklit_tagsis_detail_sheet.dart
 import '../../monetization/domain/subscription_service.dart';
 import '../domain/alternative_recommendation_engine.dart';
 import '../../bio_rpg/presentation/widgets/scan_encounter_decision_card.dart';
-import '../../bio_rpg/presentation/bio_rpg_hub_screen.dart';
+import '../../kiler/presentation/kilerce_hub_screen.dart';
+import '../../kiler/presentation/widgets/kilerce_product_add_card.dart';
+import 'widgets/market_nutrition_section.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 class ProductResultScreen extends StatefulWidget {
@@ -90,9 +92,20 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
     super.dispose();
   }
 
+  static double? _lookupNutriment(Map<String, double> map, List<String> keys) {
+    for (final String key in keys) {
+      final double? val = map[key];
+      if (val != null && val.isFinite && val >= 0) {
+        return val;
+      }
+    }
+    return null;
+  }
+
   Future<void> _analyzeProduct() async {
     setState(() => _isLoading = true);
 
+    _profileViolations = [];
     _activeProfile = await FamilyProfileEngine.getActiveProfile();
 
     final bool online = await OfflineFallbackManager.isOnline();
@@ -101,14 +114,62 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
       _snapshotResponse = await OfflineFallbackManager.getLocalSnapshot(widget.barcode!, isOnlineMode: online);
 
       if (_snapshotResponse == null && online) {
-        _snapshotResponse = await OpenFoodFactsService.fetchProductByBarcode(widget.barcode!);
+        _snapshotResponse = await TurkishMarketResolverService.resolveByBarcode(widget.barcode!);
       }
 
       if (_snapshotResponse != null) {
         _productName = _snapshotResponse!.productName;
         _brand = _snapshotResponse!.brand;
-        if (_snapshotResponse!.isDataIncomplete || _snapshotResponse!.organicScore < 0) {
+
+        final String resolvedIngredients = _snapshotResponse!.ingredientsText.isNotEmpty
+            ? _snapshotResponse!.ingredientsText
+            : _snapshotResponse!.aiSummary;
+        _ocrResult = await IngredientParser.parseIngredients(resolvedIngredients);
+        final List<String> snapshotRisks =
+            _ocrResult?.additives.map((a) => a.riskLevel).toList() ?? const <String>[];
+
+        final Map<String, double> nutriments = _snapshotResponse!.nutriments;
+        final double? sugarVal = _lookupNutriment(
+          nutriments,
+          const <String>['sugars_g', 'sugars_100g', 'sugar_g'],
+        );
+        final double? satFatVal = _lookupNutriment(
+          nutriments,
+          const <String>['saturated_fat_g', 'saturated-fat_100g', 'saturated_fat_100g'],
+        );
+        final double? saltVal = _lookupNutriment(
+          nutriments,
+          const <String>['salt_g', 'salt_100g'],
+        );
+        final double? sodiumVal = _lookupNutriment(
+              nutriments,
+              const <String>['sodium_g', 'sodium_100g'],
+            ) ??
+            (saltVal != null ? saltVal / 2.5 : null);
+        final double? fiberVal = _lookupNutriment(
+          nutriments,
+          const <String>['fiber_g', 'fiber_100g'],
+        );
+        final double? proteinVal = _lookupNutriment(
+          nutriments,
+          const <String>['protein_g', 'proteins_100g', 'protein_100g'],
+        );
+
+        if (_snapshotResponse!.isDataIncomplete ||
+            (_snapshotResponse!.organicScore < 0 && nutriments.isEmpty)) {
           _scoreResult = OrganicScoreResult.incomplete(reason: _snapshotResponse!.novaVerdict);
+        } else if (nutriments.isNotEmpty) {
+          _scoreResult = OrganicScoreCalculator.calculate(
+            riskLevels: snapshotRisks,
+            sugarGramsPer100g: sugarVal ?? 0.0,
+            satFatGramsPer100g: satFatVal ?? 0.0,
+            sodiumGramsPer100g: sodiumVal ?? 0.0,
+            fiberGramsPer100g: fiberVal ?? 0.0,
+            proteinGramsPer100g: proteinVal ?? 0.0,
+            novaGroup: _snapshotResponse!.novaGroup > 0
+                ? _snapshotResponse!.novaGroup
+                : (snapshotRisks.contains('TOXIC') || snapshotRisks.contains('HIGH') ? 4 : 3),
+          );
         } else {
           _scoreResult = OrganicScoreCalculator.fromDirectScore(
             _snapshotResponse!.organicScore,
@@ -116,7 +177,16 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
             verdict: _snapshotResponse!.novaVerdict,
           );
         }
-        _ocrResult = await IngredientParser.parseIngredients(_snapshotResponse!.aiSummary);
+
+        if (_activeProfile != null && !_snapshotResponse!.isDataIncomplete) {
+          _profileViolations = FamilyProfileEngine.evaluateViolations(
+            activeProfile: _activeProfile!,
+            ingredientsText: resolvedIngredients,
+            detectedRiskLevels: snapshotRisks,
+            sugarPer100g: sugarVal ?? 0.0,
+            sodiumPer100g: sodiumVal ?? 0.0,
+          );
+        }
       } else {
         _productName = 'Ürün (Barkod: ${widget.barcode})';
         _brand = 'Doğrulanmamış Marka';
@@ -139,15 +209,47 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
     if (widget.ingredientsOcrText != null) {
       _ocrResult = await IngredientParser.parseIngredients(widget.ingredientsOcrText!);
       _productName = 'İçindekiler OCR Analizi';
-      
+
       final List<String> risks = _ocrResult!.additives.map((a) => a.riskLevel).toList();
+      final Map<String, double> ocrNutriments =
+          _snapshotResponse?.nutriments ?? const <String, double>{};
+      final double ocrSugar = _lookupNutriment(
+            ocrNutriments,
+            const <String>['sugars_g', 'sugars_100g', 'sugar_g'],
+          ) ??
+          (widget.ingredientsOcrText!.toLowerCase().contains('glikoz') ? 22.0 : 5.0);
+      final double ocrSatFat = _lookupNutriment(
+            ocrNutriments,
+            const <String>['saturated_fat_g', 'saturated-fat_100g', 'saturated_fat_100g'],
+          ) ??
+          6.0;
+      final double? ocrSalt = _lookupNutriment(
+        ocrNutriments,
+        const <String>['salt_g', 'salt_100g'],
+      );
+      final double ocrSodium = _lookupNutriment(
+            ocrNutriments,
+            const <String>['sodium_g', 'sodium_100g'],
+          ) ??
+          (ocrSalt != null ? ocrSalt / 2.5 : 0.5);
+      final double ocrFiber = _lookupNutriment(
+            ocrNutriments,
+            const <String>['fiber_g', 'fiber_100g'],
+          ) ??
+          1.0;
+      final double ocrProtein = _lookupNutriment(
+            ocrNutriments,
+            const <String>['protein_g', 'proteins_100g', 'protein_100g'],
+          ) ??
+          2.0;
+
       _scoreResult = OrganicScoreCalculator.calculate(
         riskLevels: risks,
-        sugarGramsPer100g: widget.ingredientsOcrText!.toLowerCase().contains('glikoz') ? 22.0 : 5.0,
-        satFatGramsPer100g: 6.0,
-        sodiumGramsPer100g: 0.5,
-        fiberGramsPer100g: 1.0,
-        proteinGramsPer100g: 2.0,
+        sugarGramsPer100g: ocrSugar,
+        satFatGramsPer100g: ocrSatFat,
+        sodiumGramsPer100g: ocrSodium,
+        fiberGramsPer100g: ocrFiber,
+        proteinGramsPer100g: ocrProtein,
         novaGroup: risks.contains('TOXIC') || risks.contains('HIGH') ? 4 : 3,
       );
 
@@ -156,15 +258,20 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
           activeProfile: _activeProfile!,
           ingredientsText: widget.ingredientsOcrText!,
           detectedRiskLevels: risks,
-          sugarPer100g: 22.0,
-          sodiumPer100g: 0.5,
+          sugarPer100g: ocrSugar,
+          sodiumPer100g: ocrSodium,
         );
       }
     }
 
     if (_scoreResult != null && _activeProfile != null) {
       final List<String> risks = _ocrResult?.additives.map((a) => a.riskLevel).toList() ?? [];
-      final String rawText = widget.ingredientsOcrText ?? _snapshotResponse?.aiSummary ?? '';
+      final String rawText = widget.ingredientsOcrText ??
+          (_snapshotResponse != null
+              ? (_snapshotResponse!.ingredientsText.isNotEmpty
+                  ? _snapshotResponse!.ingredientsText
+                  : _snapshotResponse!.aiSummary)
+              : '');
       _personalMatch = OrganicScoreCalculator.evaluatePersonalMatch(
         scoreResult: _scoreResult!,
         sensitivity: _activeProfile!.sensitivity,
@@ -185,7 +292,12 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
       currentBrand: _brand,
       currentScore: _scoreResult?.overallScore ?? 50,
       currentBoycottStatus: _boycottInfo['status_flag'] ?? 'CLEAR',
-      rawIngredients: widget.ingredientsOcrText ?? _snapshotResponse?.aiSummary,
+      rawIngredients: widget.ingredientsOcrText ??
+          (_snapshotResponse != null
+              ? (_snapshotResponse!.ingredientsText.isNotEmpty
+                  ? _snapshotResponse!.ingredientsText
+                  : _snapshotResponse!.aiSummary)
+              : null),
     );
   }
 
@@ -911,15 +1023,45 @@ class _ProductResultScreenState extends State<ProductResultScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    KilerceProductAddCard(
+                      barcode: widget.barcode,
+                      productName: _productName,
+                      brand: _brand,
+                      healthScore: _scoreResult!.overallScore,
+                      netQuantity: _snapshotResponse?.netQuantity,
+                      marketChains: _snapshotResponse?.marketChains ?? const [],
+                    ),
+                    if (_snapshotResponse != null &&
+                        (_snapshotResponse!.nutriments.isNotEmpty ||
+                            _snapshotResponse!.ingredientsText.trim().isNotEmpty ||
+                            _snapshotResponse!.marketChains.isNotEmpty ||
+                            _snapshotResponse!.allergens.isNotEmpty ||
+                            (_snapshotResponse!.netQuantity?.trim().isNotEmpty ?? false) ||
+                            (_snapshotResponse!.legalProducer?.trim().isNotEmpty ?? false) ||
+                            (_snapshotResponse!.referencePriceTry != null &&
+                                _snapshotResponse!.referencePriceTry! > 0)))
+                      MarketNutritionSection(
+                        nutriments: _snapshotResponse!.nutriments,
+                        ingredientsText: _snapshotResponse!.ingredientsText,
+                        marketChains: _snapshotResponse!.marketChains,
+                        allergens: _snapshotResponse!.allergens,
+                        netQuantity: _snapshotResponse!.netQuantity,
+                        legalProducer: _snapshotResponse!.legalProducer,
+                        referencePriceTry: _snapshotResponse!.referencePriceTry,
+                      ),
                     ScanEncounterDecisionCard(
                       barcode: widget.barcode ?? 'MANUEL_OCR',
                       productName: _productName,
                       productScore: _scoreResult!.overallScore,
-                      ingredientsText: _snapshotResponse?.aiSummary ?? widget.ingredientsOcrText ?? '',
+                      ingredientsText: _snapshotResponse != null
+                          ? (_snapshotResponse!.ingredientsText.isNotEmpty
+                              ? _snapshotResponse!.ingredientsText
+                              : _snapshotResponse!.aiSummary)
+                          : (widget.ingredientsOcrText ?? ''),
                       violationTitles: _profileViolations.map((v) => v.title).toList(),
                       additiveNames: _ocrResult?.additives.map((a) => '${a.code} ${a.name}').toList() ?? const [],
                       onOpenArenaRequested: () {
-                        BioRpgHubController.switchToTab(1);
+                        KilerceHubController.switchToTab(1);
                         Navigator.of(context).popUntil((route) => route.isFirst);
                       },
                     ),

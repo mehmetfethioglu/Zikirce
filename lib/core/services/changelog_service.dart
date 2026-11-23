@@ -48,11 +48,155 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 11;
-  static const String currentVersionName = '2.0.0';
+  static const int currentVersionCode = 16;
+  static const String currentVersionName = '3.2.2';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 16,
+      versionName: '3.2.2',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🥗 Kilerce Marka Dönüşümü & iOS TestFlight Desteği',
+          titleEn: '🥗 Kilerce Rebrand & iOS TestFlight Readiness',
+          descTr: 'OrganicScore artık Kilerce! 100 tariflik 7 bölge Anadolu mutfağı, barkod/fiş OCR/barkodsuz pazar kiler yönetimi ve iOS TestFlight altyapısı ile yayında.',
+          descEn: 'OrganicScore is now Kilerce! Launches with a 100-recipe 7-region Turkish cuisine catalog, barcode/receipt OCR/unbarcoded pantry tracking, and iOS TestFlight support.',
+          icon: Icons.rocket_launch_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: '🛡️ Kapalı Test Reklam Uyumu & Helal/E-Kodu Denetimi',
+          titleEn: '🛡️ Closed Testing Ad Compliance & Clean-Label Guardrails',
+          descTr: 'Android ve iOS kapalı test süreçleri için platform bazlı resmi test reklam kimlikleri ve geliştirilmiş temiz içerik analizi entegre edildi.',
+          descEn: 'Integrated platform-aware official test ad unit IDs for Android Closed Testing and iOS TestFlight alongside enhanced clean-label checks.',
+          icon: Icons.verified_user_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 15,
+      versionName: '3.2.1',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🍽️ 100 Tariflik Genişletilmiş Türk Ev Mutfağı Kataloğu',
+          titleEn: '🍽️ Expanded 100-Recipe Turkish Home Cuisine Catalog',
+          descTr: 'Uşak tarhanası, çılbır, yaprak sarma, biber dolması, imam bayıldı, barbunya pilaki, etli bamya, tas kebabı, sulu köfte, hamsi buğulama, kısır, mercimek köftesi, aşure ve Hamsiköy sütlacıyla 100 tarife ulaşıldı.',
+          descEn: 'Expanded the catalog to 100 Turkish classics including tarhana soup, cilbir, stuffed grape leaves, imam bayildi, okra stew, sour meatball stew, anchovy steam, ashure, and baked rice pudding.',
+          icon: Icons.restaurant_menu_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: '🏅 Kilerce Amblemli Yalın Kartlar & Video Altyapı Hazırlığı',
+          titleEn: '🏅 Branded Kilerce Emblem Cards & Video URL Readiness',
+          descTr: 'Yanıltıcı paylaşımlı yemek fotoğrafları kaldırılarak kart başlıklarında özgün Kilerce amblemine geçildi; ileride eklenecek tarif videoları için videoUrl desteği tanımlandı.',
+          descEn: 'Replaced shared placeholder dish images with the signature Kilerce emblem across cards and added videoUrl schema support for upcoming step-by-step cooking videos.',
+          icon: Icons.verified_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 14,
+      versionName: '3.2.0',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: '✨ Yalın Tarif Keşfi, Tek Satır Akıllı Filtre & Hızlı Takvim Ekleme',
+          titleEn: '✨ Streamlined Recipe Cards, Single-Row Smart Filters & Quick Add',
+          descTr: 'Bölge, kategori ve öncelik filtreleri tek satırda yalnızca seçili öğeleri gösterecek şekilde sadeleştirildi; yemek kartlarına kritik özet ve tek dokunuşla "Takvime Ekle" butonu eklendi.',
+          descEn: 'Simplified multi-facet recipe filters into a clean single row showing only active selections, and refreshed recipe cards with key metrics plus a quick Add to Plan button.',
+          icon: Icons.tune_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🧺 Barkodsuz Pazar, Kasap & Ev Yapımı Toplu Kiler Girişi',
+          titleEn: '🧺 Unbarcoded Market, Butcher & Homemade Batch Pantry Intake',
+          descTr: 'Barkodsuz taze et, manav, balıkçı, aktar ve ev yapımı kışlık ürünleri 6 kanal ve doğal dil sepetiyle ("yarım kilo kıyma, 2 kg domates") saniyeler içinde kilere ekleyin.',
+          descEn: 'Add unbarcoded butcher, produce, fish, and homemade staples in seconds via 6 dedicated source channels and batch natural-text parsing.',
+          icon: Icons.storefront_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '👨‍🍳 Günlük Mutfak Asistanı, Öğün Yoklaması & İsraf Kurtarma',
+          titleEn: '👨‍🍳 Daily Kitchen Assistant, Meal Check-Ins & Waste Rescue',
+          descTr: 'Günü gelen tariflerde eksik habercisi, öğün saatinde "Pişirdim / Ertele" ve boş öğün tüketim yoklaması ile kiler stoklarınızı güncel tutun; bekleyen ürünleri israf önleyici tariflerle değerlendirin.',
+          descEn: 'Get proactive missing-ingredient alerts, planned/unplanned meal pantry check-ins, and targeted waste-rescue recipes for expiring or stagnant pantry items.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 13,
+      versionName: '3.1.0',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🗺️ Türkiye 7 Bölge Yöresel Yemek Kataloğu & Görselli Tarifler',
+          titleEn: '🗺️ 7-Region Turkish Cuisine Catalog & Visual Recipes',
+          descTr: 'Marmara\'dan Güneydoğu\'ya 7 bölgemize göre ayrılmış 84 temiz içerikli tarif; stüdyo yemek görselleri, yöre bilgisi, gramaj ve adım adım yapılışıyla eklendi.',
+          descEn: 'Explore 84 clean-label Turkish recipes categorized across all 7 geographical regions with dish imagery, origin cities, portion weights, and detailed steps.',
+          icon: Icons.restaurant_menu_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🍲 Kiler Uyumlu Yöresel Haftalık Menü & Porsiyon Ölçekleme',
+          titleEn: '🍲 Pantry-Synced Regional Meal Plan & Portion Scaling',
+          descTr: '7 Bölge Yöresel Sofra planlayıcı ile haftalık menünüzü kilerinizdeki malzemelerle kurun; porsiyon arttıkça kalori, gramaj, makro ve ölçüleri canlı ölçekleyin.',
+          descEn: 'Plan weekly menus with the 7-Region Anatolian Tour preset synced to your pantry while scaling calories, portion grams, macros, and ingredients live.',
+          icon: Icons.calendar_month_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: '✨ Yeni Modern Kilerce Amblemi (Menü, Yemek & Sağlık)',
+          titleEn: '✨ New Modern Kilerce Emblem (Menu, Meal & Health)',
+          descTr: 'Kilerce\'nin yemek planlama, Anadolu mutfağı ve temiz içerikli sağlıklı yaşam vizyonunu yansıtan yepyeni uygulama ikonu ve marka amblemi yayında.',
+          descEn: 'Updated Kilerce app icon and emblem highlighting menu planning, warm home-cooked meals, and natural health.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 12,
+      versionName: '3.0.0',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🥗 Kilerce: Barkod, Dolap & Tarif Dönüşümü',
+          titleEn: '🥗 Kilerce: Barcode, Pantry & Recipe Assistant',
+          descTr: 'Uygulamamız artık Kilerce! Barkod okutarak, Hızlı Mutfak Çipleriyle veya Market Fişi fotoğrafı (OCR) çekerek aldığınız ürünleri Buzdolabı, Kiler ve Dondurucunuza kaydedin.',
+          descEn: 'Welcome to Kilerce! Add groceries to your Fridge, Pantry, and Freezer via barcode scanning, Quick Kitchen Chips, or Receipt OCR.',
+          icon: Icons.kitchen_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '👨‍🍳 3 Katmanlı Akıllı Şef: Evdeki Malzemelerle Ne Pişirsem?',
+          titleEn: '👨‍🍳 3-Tier Smart Chef: Recipes from Your Pantry',
+          descTr: 'Dolabınızdaki malzemelerle %100 eşleşen yemekleri, tazeliği bitmek üzere olan ürünleri kurtaran tarifleri ve yemeğin toplam Sağlık Skorunu anında görün.',
+          descEn: 'Discover recipes matching 100% of your pantry items, prioritize expiring ingredients to prevent food waste, and view each meal\'s Health Score.',
+          icon: Icons.restaurant_menu_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '🛒 Akıllı Alışveriş Listesi & Tek Tıkla Kilere Aktarım',
+          titleEn: '🛒 Smart Shopping List & One-Tap Pantry Transfer',
+          descTr: 'Pişirdiğiniz yemeklerin malzemeleri stoktan düşer, biten veya tarif için eksik olan ürünler Alışveriş Listenize eklenir ve alındığında tek dokunuşla kilere geçer.',
+          descEn: 'Cooked recipes automatically update your stock, while finished or missing ingredients move to your Smart Shopping List and back to your pantry with one tap.',
+          icon: Icons.shopping_cart_checkout_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 11,
       versionName: '2.0.0',

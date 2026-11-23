@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/kilerce_logo_mark.dart';
 import '../../domain/taklit_tagsis_service.dart';
 
 class TaklitTagsisShareDialog extends StatefulWidget {
@@ -811,26 +812,14 @@ Gıdalarınızı tüketmeden önce kontrol edin!
               children: [
                 Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.asset(
-                        'assets/images/app_logo.png',
-                        width: 22,
-                        height: 22,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.primaryEmerald.withValues(alpha: 0.2),
-                          ),
-                          child: const Icon(Icons.eco_rounded, color: AppColors.primaryEmerald, size: 13),
-                        ),
-                      ),
+                    const KilerceLogoMark(
+                      size: 24,
+                      borderRadius: 6,
+                      showShadow: false,
                     ),
                     const SizedBox(width: 7),
                     const Text(
-                      'OrganicScore',
+                      'Kilerce',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12.5,

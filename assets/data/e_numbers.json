@@ -1,98 +1,247 @@
 [
   {
     "code": "E102",
-    "name": "Tartrazin (Tartrazine)",
+    "name": "Tartrazin",
     "risk_level": "HIGH",
-    "category": "Sentetik Renklendirici",
-    "description": "Sarı sentetik azo boyası. Çocuklarda hiperaktivite ve astım tetikleyici.",
-    "health_hazards": "Hiperaktivite, alerjik reaksiyonlar, ürtiker, astım krizleri"
+    "description": "[HELAL: Sentetik Kimyasal | SAĞLIK RİSKİ YÜKSEK] Sentetik sarı gıda boyası (azo boyar madde).",
+    "health_impact": "Çocuklarda hiperaktivite ve dikkat eksikliği, astım tetikleyici, alerjik reaksiyonlar. AB'de uyarı etiketi zorunludur."
   },
   {
     "code": "E110",
     "name": "Sunset Yellow FCF",
     "risk_level": "HIGH",
-    "category": "Sentetik Renklendirici",
-    "description": "Turuncu sentetik azo renklendirici.",
-    "health_hazards": "Çocuklarda dikkat eksikliği, alerji, mide bulantısı"
+    "description": "[HELAL: Sentetik Kimyasal | SAĞLIK RİSKİ YÜKSEK] Sentetik turuncu-sarı azo gıda boyası.",
+    "health_impact": "Çocuklarda dikkat eksikliği ve hiperaktivite (DEHB), ürtiker (kurdeşen) ve mide hassasiyeti. Norveç ve Finlandiya'da kısıtlanmıştır."
   },
   {
     "code": "E120",
-    "name": "Karmin (Cochineal/Carminic Acid)",
-    "risk_level": "MODERATE",
-    "category": "Doğal/Hayvansal Renklendirici",
-    "description": "Ezilmiş böceklerden elde edilen kırmızı renklendirici.",
-    "health_hazards": "Anafilaksi riski, vejetaryen/helal uygunsuzluğu"
+    "name": "Karmin (Koşinil / Karminik Asit)",
+    "risk_level": "HIGH",
+    "description": "[HARAM / KAÇINILMALI: Böcek Kaynaklı] Dişi Dactylopius coccus böceklerinin kurutulup ezilmesiyle elde edilen kırmızı boya.",
+    "health_impact": "Böcek kaynaklı olduğu için İslami fıkıh çoğunluğuna göre Helal kabul edilmez; ayrıca şiddetli alerji ve anafilaksi riski taşır."
   },
   {
-    "code": "E133",
-    "name": "Brilliant Blue FCF",
+    "code": "E129",
+    "name": "Allura Red AC",
     "risk_level": "HIGH",
-    "category": "Sentetik Renklendirici",
-    "description": "Mavi sentetik boya.",
-    "health_hazards": "Hücre düzeyinde toksisite, astım riski"
+    "description": "[HELAL: Sentetik Kimyasal | SAĞLIK RİSKİ YÜKSEK] Petrol türevli sentetik kırmızı azo boyası.",
+    "health_impact": "Bağırsak mikrobiyotasını bozabilir, çocuklarda hiperaktivite ve alerjik deri reaksiyonlarını tetikler."
+  },
+  {
+    "code": "E150D",
+    "name": "Sülfit Amonyak Karameli",
+    "risk_level": "MODERATE",
+    "description": "[HELAL: Bitkisel Şeker Kaynaklı] Kolalı içecekler ve soslarda kullanılan koyu kahverengi renklendirici.",
+    "health_impact": "Üretim sürecinde oluşan 4-MEI (4-metilimidazol) bileşiği yüksek tüketimde metabolik ve hücresel stres oluşturabilir."
   },
   {
     "code": "E171",
-    "name": "Titanium Dioxide (Titanyum Dioksit)",
+    "name": "Titanyum Dioksit",
     "risk_level": "TOXIC",
-    "category": "Renklendirici / Opaklaştırıcı",
-    "description": "Beyaz nano-partikül pigment. AB'de gıdalarda yasaklanmıştır.",
-    "health_hazards": "Genotoksisite, DNA hasarı, bağırsak iltihabı"
+    "description": "[KAÇINILMALI: Genotoksik Nanopartikül] Sakız, şekerleme ve beyaz soslarda kullanılan beyazlatıcı mineral pigment.",
+    "health_impact": "EFSA tarafından genotoksisite (DNA hasarı) şüphesiyle 2022'de AB'de gıda katkısı olarak tamamen YASAKLANDI."
+  },
+  {
+    "code": "E202",
+    "name": "Potasyum Sorbat",
+    "risk_level": "LOW",
+    "description": "[HELAL: Güvenli Koruyucu] Peynir, yoğurt, kuru meyve ve soslarda küf/maya önleyici koruyucu tuz.",
+    "health_impact": "Düşük riskli kabul edilir; çok hassas bünyelerde nadiren ağız çevresinde hafif tahriş yapabilir."
   },
   {
     "code": "E211",
-    "name": "Sodyum Benzoat (Sodium Benzoate)",
+    "name": "Sodyum Benzoat",
     "risk_level": "HIGH",
-    "category": "Koruyucu",
-    "description": "Asitli içecekler ve soslarda kullanılan sentetik koruyucu.",
-    "health_hazards": "C vitamini ile birleştiğinde kanserojen Benzen oluşturur"
+    "description": "[HELAL: Sentetik Koruyucu | SAĞLIK RİSKİ YÜKSEK] Asitli içeceklerde, turşularda ve hazır soslarda kullanılan koruyucu.",
+    "health_impact": "C Vitamini (Askorbik Asit / E300) ile birleştiğinde kanserojen 'Benzen' oluşturabilir; çocuklarda hiperaktiviteyi artırır."
+  },
+  {
+    "code": "E220",
+    "name": "Kükürt Dioksit (Sülfitler)",
+    "risk_level": "MODERATE",
+    "description": "[HELAL: Mineral Koruyucu] Kuru kayısı, kuru üzüm ve meyve sularında kararmayı önleyen koruyucu gaz.",
+    "health_impact": "Astım hastalarında ciddi bronkospazm (nefes darlığı) krizlerini tetikleyebilir ve B1 vitaminini (tiamin) parçalar."
   },
   {
     "code": "E250",
-    "name": "Sodyum Nitrit (Sodium Nitrite)",
+    "name": "Sodyum Nitrit",
     "risk_level": "TOXIC",
-    "category": "Koruyucu / Renk Sabitleyici",
-    "description": "İşlenmiş et ürünlerinde (sosis, salam) kullanılır.",
-    "health_hazards": "Kanserojen Nitrozamin oluşumu, mide-bağırsak kanseri riski"
+    "description": "[HELAL SERTİFİKASI ŞART | SAĞLIK RİSKİ ÇOK YÜKSEK] Sucuk, salam, sosis ve pastırmada renk sabitleyici ve botulizm önleyici.",
+    "health_impact": "Yüksek ısıda ve midede proteinlerle birleşerek 'Nitrozamin' adlı güçlü kanserojenlere dönüşür. DSÖ (WHO) Grup 1/2A risk listesinde."
+  },
+  {
+    "code": "E252",
+    "name": "Potasyum Nitrat",
+    "risk_level": "HIGH",
+    "description": "[SAĞLIK RİSKİ YÜKSEK] İşlenmiş şarküteri etlerinde ve bazı peynirlerde kullanılan kürleme tuzu.",
+    "health_impact": "Vücutta nitrite (E250) dönüşerek nitrozamin oluşumuna ve oksidatif strese yol açar."
+  },
+  {
+    "code": "E300",
+    "name": "Askorbik Asit (C Vitamini)",
+    "risk_level": "LOW",
+    "description": "[HELAL & TEMİZ] Doğal veya fermantasyon yoluyla üretilen antioksidan (C vitamini).",
+    "health_impact": "Vücut için faydalı ve güvenli antioksidandır; gıdalarda oksidasyonu ve nitritlerin kanserojen dönüşümünü azaltır."
   },
   {
     "code": "E320",
-    "name": "BHA (Butylated Hydroxyanisole)",
+    "name": "Bütillenmiş Hidroksianisol (BHA)",
     "risk_level": "TOXIC",
-    "category": "Antioksidan",
-    "description": "Yağlı gıdalarda acılaşmayı önleyen sentetik koruyucu.",
-    "health_hazards": "Hormon bozucu (Endokrin), olası insan kanserojeni"
+    "description": "[HELAL: Petrol Türevli Sentetik | SAĞLIK RİSKİ ÇOK YÜKSEK] Katı ve sıvı yağların, cipslerin acılaşmasını önleyen sentetik antioksidan.",
+    "health_impact": "Endokrin (hormon) bozucu etkileri ve muhtemel kanserojen (IARC Grup 2B) sınıflandırması nedeniyle kaçınılmalıdır."
+  },
+  {
+    "code": "E321",
+    "name": "Bütillenmiş Hidroksitoluen (BHT)",
+    "risk_level": "HIGH",
+    "description": "[HELAL: Sentetik Kimyasal | SAĞLIK RİSKİ YÜKSEK] Tahıl gevrekleri, sakız ve bitkisel yağlarda kullanılan sentetik antioksidan.",
+    "health_impact": "Karaciğer ve tiroid enzimleri üzerinde yük oluşturabilir; alerjik reaksiyon ve hormonal bozulma şüphesi taşır."
+  },
+  {
+    "code": "E322",
+    "name": "Lesitin (Ayçiçeği / Soya)",
+    "risk_level": "LOW",
+    "description": "[HELAL & GÜVENLİ: Bitkisel Kaynaklı] Çikolata ve unlu mamullerde kıvam sağlayan doğal fosfolipit emülgatör.",
+    "health_impact": "Ayçiçeği veya GDO'suz soya lesitini sağlık ve Helal açısından güvenlidir; kolin içeriğiyle hücre zarını destekler."
   },
   {
     "code": "E330",
-    "name": "Sitrik Asit (Citric Acid)",
+    "name": "Sitrik Asit (Limon Tuzu)",
     "risk_level": "LOW",
-    "category": "Asitlik Düzenleyici",
-    "description": "Limon tuzu / doğal meyve asidi veya mantar fermantasyonu.",
-    "health_hazards": "Aşırı tüketimde diş minesi hassasiyeti"
+    "description": "[HELAL & GÜVENLİ] Meyvelerde doğal bulunan, bitkisel melas fermantasyonuyla üretilen asitlik düzenleyici.",
+    "health_impact": "Güvenli ve doğal metabolizma ara ürünüdür; yalnızca aşırı asitli tüketimde diş minesini aşındırabilir."
+  },
+  {
+    "code": "E338",
+    "name": "Fosforik Asit",
+    "risk_level": "MODERATE",
+    "description": "[HELAL: Mineral Kaynaklı] Kolalı içeceklerde keskin asitlik veren inorganik asit.",
+    "health_impact": "Yüksek miktarda tüketildiğinde kalsiyum emilimini azaltarak kemik yoğunluğunu ve diş minesini zayıflatır."
+  },
+  {
+    "code": "E407",
+    "name": "Karragenan",
+    "risk_level": "MODERATE",
+    "description": "[HELAL: Deniz Yosunu Kaynaklı] Krema, sütlü tatlılar ve dondurmalarda kullanılan kırmızı deniz yosunu kıvam artırıcısı.",
+    "health_impact": "Hassas bağırsak sendromu (IBS) olan bireylerde bağırsak mukozasında şişkinlik ve mikro-inflamasyon tetikleyebilir."
+  },
+  {
+    "code": "E412",
+    "name": "Guar Gam",
+    "risk_level": "LOW",
+    "description": "[HELAL & DOĞAL] Guar fasulyesi tohumlarından elde edilen doğal bitkisel lif ve kıvam artırıcı.",
+    "health_impact": "Doğal çözünür liftir; sindirimi yavaşlatır ve kan şekeri dengesini destekler."
+  },
+  {
+    "code": "E415",
+    "name": "Ksantan Gam",
+    "risk_level": "LOW",
+    "description": "[HELAL & DOĞAL] Bitkisel şekerlerin doğal fermantasyonuyla elde edilen kıvam artırıcı polisakkarit.",
+    "health_impact": "Glutensiz ürünlerde doku sağlamak için güvenle kullanılır; düşük risklidir."
+  },
+  {
+    "code": "E422",
+    "name": "Gliserol (Gliserin)",
+    "risk_level": "LOW",
+    "description": "[ŞÜPHELİ: Kaynağı Sorulmalı] Yumuşak şekerleme, kek ve enerji barlarında nem tutucu olarak kullanılır.",
+    "health_impact": "Sağlık riski düşüktür ancak bitkisel yağdan mı yoksa hayvansal (domuz/kesim dışı sığır) yağdan mı üretildiği etikette doğrulanmalıdır."
+  },
+  {
+    "code": "E440",
+    "name": "Pektin",
+    "risk_level": "LOW",
+    "description": "[HELAL & DOĞAL] Elma ve narenciye kabuklarından elde edilen doğal meyve lifi ve jelleştirici.",
+    "health_impact": "Bağırsak dostu prebiyotik çözünür liftir; tamamen güvenli ve temiz içeriktir."
+  },
+  {
+    "code": "E441",
+    "name": "Jelatin (Yenilebilir Hayvansal Jelatin)",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ / HELAL SERTİFİKASI ŞART] Yumuşak şeker (jelibon), marshmallow, yoğurt ve pastalarda kullanılan hayvansal kolajen proteini.",
+    "health_impact": "Domuz derisi/kemiğinden veya İslami usullere göre kesilmemiş sığırdan üretilebilir. Açıkça 'Helal Sertifikalı Sığır Jelatini' yazmıyorsa kaçınılmalıdır."
+  },
+  {
+    "code": "E450",
+    "name": "Difosfatlar (Pirofosfatlar)",
+    "risk_level": "MODERATE",
+    "description": "[HELAL: Mineral Tuzlar] Kabartma tozları, işlenmiş peynirler ve şarküteri ürünlerinde su tutucu ve kabartıcı.",
+    "health_impact": "Aşırı inorganik fosfat alımı böbrek fonksiyonlarını zorlayabilir ve damar kireçlenmesi riskini artırabilir."
+  },
+  {
+    "code": "E471",
+    "name": "Yağ Asitlerinin Mono ve Digliseridleri",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ: Bitkisel veya Hayvansal Kaynaklı] Paketli kek, bisküvi, dondurma, margarin ve ekmeklerde en sık kullanılan emülgatör.",
+    "health_impact": "Bitkisel yağdan (soya/palm) veya hayvansal iç yağından (domuz/sığır) üretilebilir; 'Bitkisel E471' ibaresi aranmalıdır. Ayrıca bağırsak mukozasını inceltebilir."
+  },
+  {
+    "code": "E472E",
+    "name": "DATEM (Mono ve Digliseridlerin Esterleri)",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ: Yağ Kaynağı Sorulmalı] Endüstriyel ekmek ve unlu mamullerde hamur güçlendirici emülgatör.",
+    "health_impact": "E471 türevidir; üretiminde kullanılan yağ asitlerinin bitkisel kaynaklı olduğu doğrulanmalıdır."
+  },
+  {
+    "code": "E500",
+    "name": "Sodyum Karbonatlar (Karbonat)",
+    "risk_level": "LOW",
+    "description": "[HELAL & GÜVENLİ] Unlu mamullerde kullanılan doğal mineral kabartıcı (yemek sodası).",
+    "health_impact": "Sağlık ve Helal açısından tamamen güvenlidir."
+  },
+  {
+    "code": "E542",
+    "name": "Yenilebilir Kemik Fosfatı",
+    "risk_level": "HIGH",
+    "description": "[HARAM / ŞÜPHELİ: Hayvan Kemiği Kaynaklı] Hayvan kemiklerinin öğütülmesiyle elde edilen topaklanma önleyici.",
+    "health_impact": "Domuz veya helal kesim olmayan hayvan kemiklerinden üretildiği için Helal beslenmede kesinlikle kaçınılmalıdır."
   },
   {
     "code": "E621",
-    "name": "MSG (Mono Sodyum Glutamat)",
+    "name": "Monosodyum Glutamat (MSG / Çin Tuzu)",
     "risk_level": "HIGH",
-    "category": "Lezzet Arttırıcı",
-    "description": "Çin tuzu. Nörotoksik iştah uyarısı yapar.",
-    "health_hazards": "Bağımlılık, Çin Restoranı Sendromu, nöronal eksitotoksisite"
+    "description": "[ŞÜPHELİ FERMANTASYON | SAĞLIK RİSKİ YÜKSEK] Cips, hazır çorba, bulyon ve soslarda kullanılan aşırı lezzet artırıcı.",
+    "health_impact": "Nörotoksik (eksitotoksin) etki; beynin tokluk merkezini yanıltarak aşırı yeme bağımlılığı, baş ağrısı ve insülin direnci tetikler."
+  },
+  {
+    "code": "E631",
+    "name": "Disodyum İnosinat",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ: Et, Balık veya Tapioka Kaynaklı] Cips ve hazır noodle'larda MSG (E621) ile birlikte kullanılan aroma güçlendirici.",
+    "health_impact": "Et veya domuz dokularından üretilebildiği için Helal açısından şüphelidir; ayrıca pürin içerdiğinden gut hastaları kaçınmalıdır."
+  },
+  {
+    "code": "E904",
+    "name": "Şellak (Shellac)",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ: Lak Böceği Salgısı] Draje çikolata, şekerleme ve narenciye yüzeylerinde kullanılan parlak kaplama reçinesi.",
+    "health_impact": "Hindistan/Tayland'daki Kerria lacca böceğinin salgısından üretilir ve çözücü olarak etil alkol kullanılmış olabilir."
+  },
+  {
+    "code": "E920",
+    "name": "L-Sistein",
+    "risk_level": "MODERATE",
+    "description": "[ŞÜPHELİ / HARAM RİSKİ: Kıl, Tüy veya Sentetik] Endüstriyel un ve fırın ürünlerinde hamur yumuşatıcı amino asit.",
+    "health_impact": "İnsan saçı, domuz kılı veya ördek tüyünden üretilmişse Haram/Mekruh kabul edilir; yalnızca bitkisel/mikrobiyal fermantasyon kaynaklı olanı Helaldir."
+  },
+  {
+    "code": "E950",
+    "name": "Asesülfam Potasyum (Asesülfam K)",
+    "risk_level": "HIGH",
+    "description": "[HELAL: Sentetik Kimyasal | SAĞLIK RİSKİ YÜKSEK] Şekersiz içecek, sakız ve protein tozlarında kullanılan yapay tatlandırıcı.",
+    "health_impact": "Bağırsak florasını bozar, tatlı eşiğini yükselterek insülin yanıtını ve metabolik sendrom riskini olumsuz etkiler."
   },
   {
     "code": "E951",
-    "name": "Aspartam (Aspartame)",
-    "risk_level": "TOXIC",
-    "category": "Yapay Tatlandırıcı",
-    "description": "Diyet içeceklerde kullanılan kalorisiz sentetik tatlandırıcı.",
-    "health_hazards": "DSÖ uyarısı: Olası kanserojen (Group 2B), baş ağrısı, nörolojik etkiler"
+    "name": "Aspartam",
+    "risk_level": "HIGH",
+    "description": "[HELAL: Sentetik Peptit | SAĞLIK RİSKİ YÜKSEK] Diyet içecekler ve şekersiz ürünlerde kullanılan yapay tatlandırıcı.",
+    "health_impact": "DSÖ (IARC) tarafından 2023'te 'Muhtemel Kanserojen (Grup 2B)' olarak sınıflandırıldı. Fenilketonüri (PKU) hastaları için tehlikelidir."
   },
   {
     "code": "E955",
-    "name": "Sukraloz (Sucralose)",
+    "name": "Sukraloz",
     "risk_level": "MODERATE",
-    "category": "Yapay Tatlandırıcı",
-    "description": "Klorlanmış şeker türevi yapay tatlandırıcı.",
-    "health_hazards": "Bağırsak mikrobiyota bozulması, insülin direnci tetikleme"
+    "description": "[HELAL: Klorlanmış Şeker Türevi] Sıfır kalorili tatlandırıcı; şeker molekülüne klor atomları bağlanarak üretilir.",
+    "health_impact": "Yüksek ısıda pişirildiğinde zararlı kloropropanol bileşikleri oluşturabilir ve faydalı bağırsak bakterilerini azaltabilir."
   }
 ]

@@ -298,7 +298,112 @@ class MetabolicScanRecord {
   }
 }
 
+class PixarCharacterSkin {
+  final String id;
+  final String name;
+  final String roleTitle;
+  final String perkBadge;
+  final String assetPath;
+  final String model3dPath;
+  final int crystalCost;
+  final String storePriceLabel;
+  final Color accentColor;
+  final bool isDefaultUnlocked;
+
+  const PixarCharacterSkin({
+    required this.id,
+    required this.name,
+    required this.roleTitle,
+    required this.perkBadge,
+    required this.assetPath,
+    required this.model3dPath,
+    required this.crystalCost,
+    required this.storePriceLabel,
+    required this.accentColor,
+    this.isDefaultUnlocked = false,
+  });
+
+  static const List<PixarCharacterSkin> catalog = [
+    PixarCharacterSkin(
+      id: 'char_atlas',
+      name: 'Atlas',
+      roleTitle: 'Doğa Koşucusu',
+      perkBadge: 'Başlangıç Karakteri',
+      assetPath: 'assets/images/characters/char_atlas_runner.png',
+      model3dPath: 'assets/models/char_atlas.glb',
+      crystalCost: 0,
+      storePriceLabel: 'Ücretsiz',
+      accentColor: Color(0xFFF59E0B),
+      isDefaultUnlocked: true,
+    ),
+    PixarCharacterSkin(
+      id: 'char_nova',
+      name: 'Nova',
+      roleTitle: 'Zümrüt Sprinter',
+      perkBadge: '+%15 Adım Enerjisi',
+      assetPath: 'assets/images/characters/char_nova_sprinter.png',
+      model3dPath: 'assets/models/char_nova.glb',
+      crystalCost: 250,
+      storePriceLabel: '₺29,99',
+      accentColor: Color(0xFF10B981),
+    ),
+    PixarCharacterSkin(
+      id: 'char_kaan',
+      name: 'Kaan',
+      roleTitle: 'Biyo-Atlet',
+      perkBadge: '+%15 Barkod XP',
+      assetPath: 'assets/images/characters/char_kaan_guardian.png',
+      model3dPath: 'assets/models/char_kaan.glb',
+      crystalCost: 500,
+      storePriceLabel: '₺49,99',
+      accentColor: Color(0xFF22C55E),
+    ),
+    PixarCharacterSkin(
+      id: 'char_lina',
+      name: 'Lina',
+      roleTitle: 'Ritim & Zen Ustası',
+      perkBadge: '+%20 Detoks Hızı',
+      assetPath: 'assets/images/characters/char_lina_zen.png',
+      model3dPath: 'assets/models/char_lina.glb',
+      crystalCost: 750,
+      storePriceLabel: '₺69,99',
+      accentColor: Color(0xFFF43F5E),
+    ),
+    PixarCharacterSkin(
+      id: 'char_demir',
+      name: 'Dr. Demir',
+      roleTitle: 'Biyo-Alkemist',
+      perkBadge: '+%25 Katkı Kalkanı',
+      assetPath: 'assets/images/characters/char_demir_alchemist.png',
+      model3dPath: 'assets/models/char_demir.glb',
+      crystalCost: 1200,
+      storePriceLabel: '₺89,99',
+      accentColor: Color(0xFF06B6D4),
+    ),
+    PixarCharacterSkin(
+      id: 'char_zefir',
+      name: 'Zefir',
+      roleTitle: 'Kuantum Şampiyon',
+      perkBadge: '+%35 Efsanevi Aura',
+      assetPath: 'assets/images/characters/char_zefir_legend.png',
+      model3dPath: 'assets/models/char_zefir.glb',
+      crystalCost: 2000,
+      storePriceLabel: '₺129,99',
+      accentColor: Color(0xFF8B5CF6),
+    ),
+  ];
+
+  static PixarCharacterSkin byId(String id) {
+    return catalog.firstWhere(
+      (c) => c.id == id,
+      orElse: () => catalog.first,
+    );
+  }
+}
+
 class PixarAvatarConfig {
+  final String selectedCharacterId;
+  final List<String> unlockedCharacterIds;
   final int skinToneIndex;
   final int hairStyleIndex;
   final int hairColorIndex;
@@ -308,6 +413,8 @@ class PixarAvatarConfig {
   final String expressionMood; // 'heroic', 'energized', 'zen', 'detox_fog'
 
   const PixarAvatarConfig({
+    this.selectedCharacterId = 'char_atlas',
+    this.unlockedCharacterIds = const ['char_atlas'],
     this.skinToneIndex = 1,
     this.hairStyleIndex = 0,
     this.hairColorIndex = 0,
@@ -317,7 +424,15 @@ class PixarAvatarConfig {
     this.expressionMood = 'heroic',
   });
 
+  bool isCharacterUnlocked(String id) =>
+      id == 'char_atlas' || unlockedCharacterIds.contains(id);
+
+  PixarCharacterSkin get activeCharacter =>
+      PixarCharacterSkin.byId(selectedCharacterId);
+
   PixarAvatarConfig copyWith({
+    String? selectedCharacterId,
+    List<String>? unlockedCharacterIds,
     int? skinToneIndex,
     int? hairStyleIndex,
     int? hairColorIndex,
@@ -327,6 +442,8 @@ class PixarAvatarConfig {
     String? expressionMood,
   }) {
     return PixarAvatarConfig(
+      selectedCharacterId: selectedCharacterId ?? this.selectedCharacterId,
+      unlockedCharacterIds: unlockedCharacterIds ?? this.unlockedCharacterIds,
       skinToneIndex: skinToneIndex ?? this.skinToneIndex,
       hairStyleIndex: hairStyleIndex ?? this.hairStyleIndex,
       hairColorIndex: hairColorIndex ?? this.hairColorIndex,
@@ -338,6 +455,8 @@ class PixarAvatarConfig {
   }
 
   Map<String, dynamic> toJson() => {
+        'selectedCharacterId': selectedCharacterId,
+        'unlockedCharacterIds': unlockedCharacterIds,
         'skinToneIndex': skinToneIndex,
         'hairStyleIndex': hairStyleIndex,
         'hairColorIndex': hairColorIndex,
@@ -348,7 +467,18 @@ class PixarAvatarConfig {
       };
 
   factory PixarAvatarConfig.fromJson(Map<String, dynamic> json) {
+    final List<dynamic>? rawUnlocked =
+        json['unlockedCharacterIds'] as List<dynamic>?;
+    final List<String> unlocked = rawUnlocked != null
+        ? rawUnlocked.map((e) => e.toString()).toList()
+        : const ['char_atlas'];
+    if (!unlocked.contains('char_atlas')) {
+      unlocked.insert(0, 'char_atlas');
+    }
     return PixarAvatarConfig(
+      selectedCharacterId:
+          json['selectedCharacterId'] as String? ?? 'char_atlas',
+      unlockedCharacterIds: unlocked,
       skinToneIndex: json['skinToneIndex'] as int? ?? 1,
       hairStyleIndex: json['hairStyleIndex'] as int? ?? 0,
       hairColorIndex: json['hairColorIndex'] as int? ?? 0,

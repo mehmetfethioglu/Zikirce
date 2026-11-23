@@ -1,0 +1,1 @@
+Kilerce v3.2.2 (Kapalı Test Güncellemesi): OrganicScore artık Kilerce! Barkod, market fişi (OCR) ve barkodsuz pazar/kasap girişiyle dolabını yönet; 7 bölgeden 100 Türk ev yemeği tarifiyle elindeki malzemelerle ne pişireceğini anında keşfet. Helal/E-kodu temiz içerik analizi, akıllı alışveriş listesi ve yeni Kilerce amblemi eklendi.

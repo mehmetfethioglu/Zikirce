@@ -6,6 +6,7 @@ import 'package:organicscore/features/bio_rpg/domain/bio_rpg_models.dart';
 import 'package:organicscore/features/bio_rpg/domain/bio_rpg_service.dart';
 import 'package:organicscore/features/bio_rpg/domain/bio_rhythm_telemetry_service.dart';
 import 'package:organicscore/features/bio_rpg/presentation/widgets/pixar_3d_renderer.dart';
+import 'package:organicscore/features/scoring/domain/organic_score_calculator.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -159,6 +160,26 @@ void main() {
       expect(find.byType(Pixar3DBossStage), findsOneWidget);
       expect(find.byType(Pixar3DAvatarCanvas), findsOneWidget);
       expect(find.byType(Pixar3DFullBodyWalkingStage), findsOneWidget);
+    });
+
+    test('Halal & Clean Label Analyzer detects Haram (E120/Alcohol), Doubtful (E471/Gelatin), and Clean ingredients accurately', () {
+      final haramEval = OrganicScoreCalculator.evaluateHalalAndCleanStatus(
+        rawIngredients: 'Şeker, glikoz şurubu, renklendirici (E120 karmin), etil alkol',
+      );
+      expect(haramEval.status, equals(HalalStatusLevel.haramRisk));
+      expect(haramEval.haramFindings.length, greaterThanOrEqualTo(2));
+
+      final doubtfulEval = OrganicScoreCalculator.evaluateHalalAndCleanStatus(
+        rawIngredients: 'Buğday unu, bitkisel yağ, emülgatör (E471), yenilebilir jelatin',
+      );
+      expect(doubtfulEval.status, equals(HalalStatusLevel.doubtful));
+      expect(doubtfulEval.doubtfulFindings.length, greaterThanOrEqualTo(2));
+
+      final cleanEval = OrganicScoreCalculator.evaluateHalalAndCleanStatus(
+        rawIngredients: 'Tam yulaf ezmesi, hurma özü, çiğ fındık, zeytinyağı',
+      );
+      expect(cleanEval.status, equals(HalalStatusLevel.halalClean));
+      expect(cleanEval.cleanHighlights, isNotEmpty);
     });
   });
 }

@@ -1,0 +1,148 @@
+name: Kilerce iOS Build & TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ kilerce-ios ]
+    paths-ignore:
+      - 'android/**'
+      - 'docs/**'
+      - 'scripts/**'
+
+jobs:
+  register-bundle-id:
+    name: Register Bundle ID & Check App Store Connect App
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+
+    steps:
+      - name: Install PyJWT, Cryptography & Requests
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        run: pip install pyjwt cryptography requests
+
+      - name: Ensure Bundle ID (com.akarworks.kilerce) & Check App Record
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        run: |
+          python3 - << 'EOF'
+          import os, sys, time, jwt, requests
+
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+
+          now = int(time.time())
+          token = jwt.encode(
+              {"iss": issuer_id, "iat": now - 30, "exp": now + 900, "aud": "appstoreconnect-v1"},
+              private_key,
+              algorithm="ES256",
+              headers={"kid": key_id, "typ": "JWT"},
+          )
+          headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          bundle_id = "com.akarworks.kilerce"
+
+          r = requests.get(f"{BASE}/bundleIds?filter[identifier]={bundle_id}", headers=headers)
+          print("Bundle ID lookup status:", r.status_code)
+          if r.status_code != 200:
+              print("Lookup response:", r.text[:400])
+              sys.exit(1)
+
+          data = r.json().get("data", [])
+          if not data:
+              print(f"Registering Bundle ID '{bundle_id}' on Apple Developer Portal...")
+              cr = requests.post(
+                  f"{BASE}/bundleIds",
+                  headers=headers,
+                  json={
+                      "data": {
+                          "type": "bundleIds",
+                          "attributes": {
+                              "identifier": bundle_id,
+                              "name": "Kilerce",
+                              "platform": "IOS",
+                          },
+                      }
+                  },
+              )
+              print("Register response:", cr.status_code, cr.text[:400])
+              if cr.status_code not in (200, 201):
+                  sys.exit(1)
+          else:
+              print(f"Bundle ID '{bundle_id}' already registered (id={data[0]['id']}).")
+
+          app_r = requests.get(f"{BASE}/apps?filter[bundleId]={bundle_id}", headers=headers)
+          print("App lookup status:", app_r.status_code)
+          apps = app_r.json().get("data", []) if app_r.status_code == 200 else []
+          if apps:
+              print(f"APP_EXISTS=true app_id={apps[0]['id']} name={apps[0].get('attributes', {}).get('name')}")
+          else:
+              print("APP_EXISTS=false")
+          EOF
+
+  build-ios:
+    name: Build iOS (macOS Apple Silicon) & Upload TestFlight
+    needs: register-bundle-id
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+      BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      - name: 3. Configure Flutter & Xcode environment
+        run: |
+          xcodebuild -version
+          flutter config --no-enable-swift-package-manager
+          flutter doctor -v
+
+      - name: 4. Install dependencies and prepare Flutter iOS
+        run: |
+          flutter pub get
+          flutter build ios --config-only --no-codesign
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: 5. Deploy to TestFlight via Fastlane
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        env:
+          APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+          APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+          APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
+        run: |
+          cd ios
+          bundle install
+          bundle exec fastlane beta
+
+      - name: Print gym build log on failure
+        if: failure()
+        run: |
+          find ~/Library/Logs/gym -name "*.log" -exec cat {} + || true
+
+      - name: 6. Upload Signed IPA Artifact
+        if: always() && hashFiles('build/ios/ipa/Kilerce.ipa') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: kilerce-ios-signed-ipa
+          path: build/ios/ipa/Kilerce.ipa
+          retention-days: 14
