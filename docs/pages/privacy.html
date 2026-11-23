@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gizlilik Politikası — Hasibu (ihasibu)</title>
+  <meta name="description" content="Hasibu (ihasibu) uygulaması resmi Gizlilik Politikası, Google Drive drive.file kapsam açıklaması ve Google API Limited Use taahhüdü." />
+  <link rel="icon" type="image/png" href="assets/hasibu_icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="brand">
+        <img src="assets/hasibu_icon.png" alt="Hasibu (ihasibu) Logo" />
+        <div>
+          <h1 class="brand-title">Hasibu (ihasibu)</h1>
+          <p class="brand-sub">Kurumsal PDKS, Çok Şubeli Yüz Okutma &amp; Şifreli Bulut Senkronizasyonu</p>
+        </div>
+      </div>
+      <nav class="tab-nav" aria-label="Ana Menü">
+        <a class="tab-link" href="index.html">Ana Sayfa</a>
+        <a class="tab-link active" href="privacy.html">Gizlilik Politikası</a>
+        <a class="tab-link" href="support.html">Destek</a>
+      </nav>
+    </header>
+
+    <main>
+      <div class="hero">
+        <span class="pill">Yürürlük Tarihi: 22 Kasım 2026 • KVKK &amp; Google API Limited Use Uyumlu</span>
+        <h2>Hasibu (ihasibu) Gizlilik Politikası &amp; Kullanım Koşulları</h2>
+        <p>
+          Bu belge <strong>Akarworks / Akar Bilişim Teknolojileri</strong> tarafından geliştirilen <strong>Hasibu (ihasibu)</strong>
+          uygulamasının (Windows, Android ve Windows 10 x64 Şube Yüz Okutma Köprüsü) kişisel verileri ve Google API verilerini nasıl işlediğini açıklar.
+        </p>
+      </div>
+
+      <article class="card">
+        <h3>1. Veri Sorumlusu ve İletişim</h3>
+        <ul>
+          <li><strong>Uygulama:</strong> Hasibu (Google Cloud OAuth Uygulaması: <code>ihasibu</code>)</li>
+          <li><strong>Geliştirici / Veri Sorumlusu:</strong> Akarworks — Akar Bilişim Teknolojileri</li>
+          <li><strong>Destek &amp; Gizlilik İletişimi:</strong> <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a> / <a href="mailto:mehmetfethioglu@gmail.com">mehmetfethioglu@gmail.com</a></li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h3>2. Google OAuth 2.0 Kapsamları ve Amaçları</h3>
+        <p>Hasibu (ihasibu), yalnızca kullanıcının kendi isteğiyle bulut senkronizasyonu başlatması durumunda şu dar izinleri kullanır:</p>
+        <div class="scope-box">
+          <ul>
+            <li><code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>: Yetkilendirilen Google hesabının e-posta adresini uygulama içinde doğrulamak ve görüntülemek için kullanılır.</li>
+            <li><code>https://www.googleapis.com/auth/drive.file</code>: Kullanıcının kendi Google Drive hesabında yalnızca Hasibu tarafından oluşturulan <code>AES-256-GCM</code> şifreli yedek dosyalarını (<code>hasibu_sync*.enc</code>, <code>hasibu_branch_inbox_*.enc</code>) kaydetmek, güncellemek ve geri yüklemek için kullanılır. Hasibu kullanıcının Drive'ındaki diğer dosya ve klasörlere erişmez.</li>
+          </ul>
+        </div>
+        <h4>Google API Services User Data Policy — Limited Use Taahhüdü</h4>
+        <p>
+          Hasibu (ihasibu)'nun Google API'lerinden aldığı bilgilerin kullanımı ve başka herhangi bir uygulamaya aktarımı,
+          <strong>Limited Use (Sınırlı Kullanım)</strong> gereklilikleri dâhil olmak üzere
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>'ye
+          tam olarak tabidir. Google kullanıcı verileri reklam gösterimi, veri simsarlığı, üçüncü taraf pazarlama veya yapay zekâ model eğitimi için kesinlikle kullanılmaz ve satılmaz.
+        </p>
+      </article>
+
+      <article class="card">
+        <h3>3. Veri Güvenliği, Şifreleme ve Saklama</h3>
+        <ul>
+          <li><strong>Merkezi Sunucu Yok:</strong> İşletme verileri geliştiricinin harici bir veritabanında toplanmaz; yerel cihazda <strong>SQLCipher AES-256</strong> ile şifrelenerek tutulur.</li>
+          <li><strong>İstemci Tarafı Şifreleme:</strong> Google Drive'a gönderilen tüm dosyalar gönderim öncesinde kullanıcının cihazında <strong>AES-256-GCM</strong> algoritmasıyla şifrelenir.</li>
+          <li><strong>Anahtar Kasası:</strong> OAuth belirteçleri ve Çalışma Alanı Şifreleme Anahtarı (Workspace Key) Windows DPAPI veya Android Keystore içinde korunur.</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <h3>4. Veri Silme, Erişim İptali ve KVKK Hakları</h3>
+        <p>
+          6698 sayılı KVKK Madde 11 kapsamında kullanıcılar verilerinin silinmesini, düzeltilmesini ve işleme bilgisini talep edebilir.
+          Hasibu'nun Google hesabınıza erişimini istediğiniz zaman
+          <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">https://myaccount.google.com/permissions</a>
+          adresinden kaldırabilir ve Google Drive'daki <code>hasibu_*.enc</code> dosyalarını silebilirsiniz.
+          Destek için <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a> adresine yazabilirsiniz.
+        </p>
+      </article>
+
+      <article class="card" id="terms">
+        <h3>5. Kullanım Koşulları (Terms of Service)</h3>
+        <p>
+          Hasibu (ihasibu), yetkili işletmelerin kendi personel devam takibi ve şube yönetimi süreçleri için sunulmaktadır.
+          Uygulamayı kullanan işletme, personeline yönelik yasal aydınlatma ve açık rıza yükümlülüklerini kendi sorumluluğunda yerine getirir.
+        </p>
+      </article>
+
+      <article class="card">
+        <h3>6. English Privacy Policy</h3>
+        <p>
+          <strong>Hasibu (ihasibu)</strong> is an enterprise attendance (PDKS) and multi-branch sync client developed by Akar Bilişim Teknolojileri (Akarworks).
+          When you connect Google Drive, Hasibu requests only <code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>, and
+          <code>https://www.googleapis.com/auth/drive.file</code> to authenticate your account and read/write only the client-side AES-256-GCM encrypted
+          archive files created by Hasibu inside your own Google Drive. No data is sold, shared with advertisers, or used for AI training.
+          Hasibu's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements.
+          You can revoke access at any time via <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.
+          Contact: <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a>.
+        </p>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 Akarworks / Akar Bilişim Teknolojileri — Hasibu (ihasibu)</span>
+      <div class="footer-links">
+        <a href="index.html">Ana Sayfa</a>
+        <a href="privacy.html">Gizlilik Politikası</a>
+        <a href="support.html">Destek</a>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

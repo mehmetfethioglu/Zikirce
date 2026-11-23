@@ -459,16 +459,19 @@ class _MobileTopHeaderSection extends ConsumerWidget {
                       for (final b in state.branches)
                         DropdownMenuItem(value: b.id, child: Text(b.name)),
                     ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setDialogState(() {
-                        selectedBranch =
-                            state.branches.firstWhere((b) => b.id == v);
-                        qrCtrl.text = HasibuSecurityService.generateTotpCode(
-                          selectedBranch.qrSecret,
-                        );
-                      });
-                    },
+                    onChanged: state.isSingleBranchScoped
+                        ? null
+                        : (v) {
+                            if (v == null) return;
+                            setDialogState(() {
+                              selectedBranch =
+                                  state.branches.firstWhere((b) => b.id == v);
+                              qrCtrl.text =
+                                  HasibuSecurityService.generateTotpCode(
+                                selectedBranch.qrSecret,
+                              );
+                            });
+                          },
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -718,8 +721,14 @@ class _MobileFilterAndSearchSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pal = HasibuPalette.of(context);
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
-    final selectedBranchId =
-        ref.watch(pdksDashboardProvider.select((s) => s.selectedBranchId));
+    final isBranchScoped =
+        ref.watch(pdksDashboardProvider.select((s) => s.isBranchScoped));
+    final isSingleBranchScoped = ref.watch(
+      pdksDashboardProvider.select((s) => s.isSingleBranchScoped),
+    );
+    final selectedBranchId = ref.watch(
+      pdksDashboardProvider.select((s) => s.effectiveSelectedBranchId),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -731,31 +740,54 @@ class _MobileFilterAndSearchSection extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                ChoiceChip(
-                  visualDensity: VisualDensity.compact,
-                  label: const Text('Tümü', style: TextStyle(fontSize: 11.5)),
-                  selected: selectedBranchId == null,
-                  onSelected: (_) => ref
-                      .read(pdksDashboardProvider.notifier)
-                      .setBranchFilter(null),
-                ),
-                const SizedBox(width: 6),
-                for (final b in branches) ...[
+                if (isSingleBranchScoped)
                   ChoiceChip(
                     visualDensity: VisualDensity.compact,
-                    avatar: Icon(
-                      b.hasTerminal
-                          ? Icons.face_retouching_natural
-                          : Icons.storefront,
-                      size: 13,
+                    avatar: const Icon(Icons.lock_outline_rounded, size: 13),
+                    label: Text(
+                      branches
+                              .where((b) => b.id == selectedBranchId)
+                              .map((b) => b.name)
+                              .firstOrNull ??
+                          'Yetkili Şube #$selectedBranchId',
+                      style: const TextStyle(fontSize: 11.5),
                     ),
-                    label: Text(b.name, style: const TextStyle(fontSize: 11.5)),
-                    selected: selectedBranchId == b.id,
+                    selected: true,
+                    onSelected: null,
+                  )
+                else ...[
+                  ChoiceChip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: isBranchScoped
+                        ? const Icon(Icons.lock_outline_rounded, size: 13)
+                        : null,
+                    label: Text(
+                      isBranchScoped ? 'Yetkili (${branches.length})' : 'Tümü',
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
+                    selected: selectedBranchId == null,
                     onSelected: (_) => ref
                         .read(pdksDashboardProvider.notifier)
-                        .setBranchFilter(b.id),
+                        .setBranchFilter(null),
                   ),
                   const SizedBox(width: 6),
+                  for (final b in branches) ...[
+                    ChoiceChip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: Icon(
+                        b.hasTerminal
+                            ? Icons.face_retouching_natural
+                            : Icons.storefront,
+                        size: 13,
+                      ),
+                      label: Text(b.name, style: const TextStyle(fontSize: 11.5)),
+                      selected: selectedBranchId == b.id,
+                      onSelected: (_) => ref
+                          .read(pdksDashboardProvider.notifier)
+                          .setBranchFilter(b.id),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                 ],
               ],
             ),

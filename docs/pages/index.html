@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hasibu (ihasibu) — Resmi Ana Sayfa, Gizlilik Politikası ve Destek</title>
+  <meta name="description" content="Hasibu (ihasibu) kurumsal PDKS, çok şubeli yüz okutma köprüsü, Windows & Android senkronizasyonu resmi web sayfası, gizlilik politikası ve destek merkezi." />
+  <link rel="icon" type="image/png" href="assets/hasibu_icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <div class="brand">
+        <img src="assets/hasibu_icon.png" alt="Hasibu (ihasibu) Logo" />
+        <div>
+          <h1 class="brand-title">Hasibu (ihasibu)</h1>
+          <p class="brand-sub">Kurumsal PDKS, Çok Şubeli Yüz Okutma &amp; Şifreli Bulut Senkronizasyonu</p>
+        </div>
+      </div>
+      <nav class="tab-nav" aria-label="Ana Menü">
+        <a class="tab-link active" href="index.html" data-tab="home">Ana Sayfa</a>
+        <a class="tab-link" href="privacy.html" data-tab="privacy">Gizlilik Politikası</a>
+        <a class="tab-link" href="support.html" data-tab="support">Destek</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- SEKME 1: ANA SAYFA -->
+      <section id="home" class="tab-panel active" aria-labelledby="tab-home-heading">
+        <div class="hero">
+          <span class="pill">Akarworks / Akar Bilişim Teknolojileri • Resmi Uygulama Sayfası</span>
+          <h2 id="tab-home-heading">Hasibu (ihasibu) ile Çok Şubeli PDKS ve Güvenli Google Drive Eşitlemesi</h2>
+          <p>
+            <strong>Hasibu (ihasibu)</strong>, fabrikalar ve perakende şubeler için geliştirilmiş çok platformlu
+            (Windows ve Android) personel devam kontrol (PDKS), yüz okutma terminali köprüsü ve kurumsal yönetim uygulamasıdır.
+            Şube verileri cihaz üzerinde <strong>AES-256-GCM</strong> ile şifrelenerek yalnızca kullanıcının kendi Google Drive hesabında
+            uygulamanın oluşturduğu izole yedek dosyalarına yazılır.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="privacy.html">Gizlilik Politikasını İncele</a>
+            <a class="btn" href="support.html">Destek &amp; Kurulum Yardımı</a>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>Çok Şubeli Anlık Yüz Okutma Köprüsü</h3>
+            <p>
+              Şubelerdeki Windows 10 64-bit terminallerde çalışan arka plan köprüsü, yerel ağdaki Tenfei / ZKTeco cihazlarından
+              okutma olaylarını gerçek zamanlı yakalar ve her şube için ayrı şifreli gelen kutusu (<code>hasibu_branch_inbox_*.enc</code>)
+              dosyasına aktararak merkezle çakışmasız eşitleme sağlar.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Uçtan Uca İstemci Tarafı Şifreleme</h3>
+            <p>
+              Yerel veritabanı <strong>SQLCipher AES-256</strong>, bulut yedekleri ise kullanıcının belirlediği Workspace Key üzerinden
+              türetilen anahtarla <strong>AES-256-GCM</strong> ile şifrelenir. Windows ortamında OAuth belirteçleri ve şifreleme anahtarları
+              Windows <strong>DPAPI</strong> kasasında korunur.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Google Drive İzin Kapsamı Şeffaflığı</h3>
+            <p>
+              Hasibu (<code>ihasibu</code>), Google Drive hesabınızdaki diğer kişisel dosya ve klasörlere erişmez.
+              Yalnızca <code>drive.file</code> dar yetkisiyle uygulamanın kendisinin oluşturduğu şifreli <code>.enc</code> senkronizasyon
+              dosyalarını okur ve günceller.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Official English Summary</h3>
+            <p>
+              <strong>Hasibu (ihasibu)</strong> is an enterprise attendance (PDKS) and multi-branch terminal sync application
+              developed by Akar Bilişim Teknolojileri (Akarworks). All sync archives are encrypted client-side with AES-256-GCM
+              before being stored inside the user's own Google Drive via the restricted <code>drive.file</code> scope.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- SEKME 2: GİZLİLİK POLİTİKASI -->
+      <section id="privacy" class="tab-panel" aria-labelledby="tab-privacy-heading">
+        <div class="hero">
+          <span class="pill">Yürürlük Tarihi: 22 Kasım 2026 • KVKK &amp; Google API Limited Use Uyumlu</span>
+          <h2 id="tab-privacy-heading">Hasibu (ihasibu) Gizlilik Politikası &amp; Kullanım Koşulları</h2>
+          <p>
+            Bu sayfa <strong>Akarworks / Akar Bilişim Teknolojileri</strong> tarafından geliştirilen <strong>Hasibu (ihasibu)</strong>
+            uygulamasının (Windows, Android ve Şube Köprüsü) kişisel veri ve Google API kullanıcı verisi işleme esaslarını açıklar.
+          </p>
+          <div class="cta-row">
+            <a class="btn" href="privacy.html">Kalıcı Bağlantı (privacy.html)</a>
+          </div>
+        </div>
+
+        <article class="card">
+          <h3>1. Veri Sorumlusu ve Uygulama Kimliği</h3>
+          <ul>
+            <li><strong>Uygulama Adı:</strong> Hasibu (Google Cloud OAuth Projesi: <code>ihasibu</code>)</li>
+            <li><strong>Geliştirici / Veri Sorumlusu:</strong> Akarworks — Akar Bilişim Teknolojileri</li>
+            <li><strong>Resmi İletişim E-Postası:</strong> <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a> / <a href="mailto:mehmetfethioglu@gmail.com">mehmetfethioglu@gmail.com</a></li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>2. Google OAuth 2.0 Kapsamları ve Kullanım Amaçları</h3>
+          <p>Hasibu (ihasibu), yalnızca kullanıcının açık onayıyla aşağıdaki dar kapsamlı Google izinlerini talep eder:</p>
+          <div class="scope-box">
+            <ul>
+              <li><code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>: Uygulama içinde hangi Google hesabıyla oturum açıldığının doğrulanması ve senkronizasyon durumunun gösterilmesi.</li>
+              <li><code>https://www.googleapis.com/auth/drive.file</code>: Kullanıcının kendi Google Drive hesabında yalnızca Hasibu tarafından oluşturulan AES-256-GCM şifreli yedek ve şube kutusu dosyalarının (<code>hasibu_sync*.enc</code>, <code>hasibu_branch_inbox_*.enc</code>) oluşturulması, güncellenmesi ve okunması.</li>
+            </ul>
+          </div>
+          <h4>Google API Services User Data Policy — Sınırlı Kullanım (Limited Use) Taahhüdü</h4>
+          <p>
+            Hasibu (ihasibu) uygulamasının Google API'lerinden aldığı tüm bilgilerin kullanımı ve başka herhangi bir uygulamaya aktarımı,
+            <strong>Limited Use</strong> gereklilikleri dahil olmak üzere
+            <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Hizmetleri Kullanıcı Verisi Politikası</a>'na
+            tamamen uygundur. Google kullanıcı verileri reklam, profil çıkarma, yapay zekâ model eğitimi, satış veya üçüncü taraflarla ticari paylaşım amacıyla <strong>asla kullanılmaz</strong>.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>3. İşlenen İşletme Verileri ve İstemci Tarafı Güvenlik</h3>
+          <ul>
+            <li><strong>Yerel Saklama:</strong> Personel sicil, vardiya, devam hareketi ve şube kayıtları kullanıcının kendi cihazında SQLCipher (AES-256) yerel veritabanında tutulur; geliştiriciye ait merkezi bir sunucuya gönderilmez.</li>
+            <li><strong>Bulut Senkronizasyonu:</strong> Drive'a yüklenen tüm paketler yükleme öncesinde kullanıcının cihazında <strong>AES-256-GCM</strong> ile şifrelenir. Şifreleme anahtarı (Workspace Key) ve OAuth belirteçleri Windows DPAPI / Android Keystore güvenli deposunda saklanır.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h3>4. Veri Saklama, Erişimi İptal Etme ve Silme Hakkı (KVKK Md. 11)</h3>
+          <p>
+            Kullanıcılar 6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve geçerli uluslararası veri koruma ilkeleri kapsamında verilerine erişme,
+            düzeltme ve silme hakkına sahiptir. Google hesabınızın Hasibu erişimini dilediğiniz an
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Hesap İzinleri</a>
+            sayfasından iptal edebilir, Google Drive'daki <code>hasibu_*.enc</code> dosyalarını silebilir veya cihazdaki yerel uygulama verilerini kaldırabilirsiniz.
+            Yazılı destek için <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a> adresine ulaşabilirsiniz.
+          </p>
+        </article>
+
+        <article class="card" id="terms">
+          <h3>5. Kullanım Koşulları Özeti (Terms of Service)</h3>
+          <p>
+            Hasibu (ihasibu), yetkili işletme yöneticileri ve personeli tarafından yasal işyeri devam takibi (PDKS) amacıyla kullanılmak üzere sağlanır.
+            İşletmeler personel biyometrik/devam kayıtlarının işlenmesinde yürürlükteki iş ve veri koruma mevzuatı kapsamındaki aydınlatma yükümlülüklerinden sorumludur.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>6. Privacy Policy Summary (English)</h3>
+          <p>
+            <strong>Hasibu (ihasibu)</strong> operates solely under the user's local device and their personal/corporate Google Drive account.
+            We request <code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>, and <code>https://www.googleapis.com/auth/drive.file</code>
+            strictly to verify the signed-in account and store/sync client-side AES-256-GCM encrypted backup archives created by Hasibu.
+            We do not operate central tracking servers, sell user data, or serve ads. Hasibu's use and transfer of information received from Google APIs
+            adheres to the Google API Services User Data Policy, including the Limited Use requirements. Access may be revoked anytime at
+            <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.
+          </p>
+        </article>
+      </section>
+
+      <!-- SEKME 3: DESTEK -->
+      <section id="support" class="tab-panel" aria-labelledby="tab-support-heading">
+        <div class="hero">
+          <span class="pill">Resmi Teknik Destek &amp; Kurulum Rehberi</span>
+          <h2 id="tab-support-heading">Hasibu (ihasibu) Destek Merkezi</h2>
+          <p>
+            Kurulum, Windows 10 64-bit şube yüz okutma köprüsü, Google Drive senkronizasyonu veya veri silme talepleriniz için doğrudan destek ekibimize ulaşabilirsiniz.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="mailto:akarbilisimteknolojileri@gmail.com?subject=Hasibu%20Destek%20Talebi">E-Posta ile Destek Al</a>
+            <a class="btn" href="support.html">Kalıcı Bağlantı (support.html)</a>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>İletişim Kanalları</h3>
+            <ul>
+              <li><strong>Birincil Destek E-Postası:</strong> <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a></li>
+              <li><strong>Geliştirici İletişimi:</strong> <a href="mailto:mehmetfethioglu@gmail.com">mehmetfethioglu@gmail.com</a></li>
+              <li><strong>Yanıt Süresi:</strong> İş günlerinde 24 saat içinde</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Sık Sorulan Konular</h3>
+            <ul>
+              <li><strong>Şube Köprüsü Kurulumu:</strong> Merkez Hasibu → <em>Bulut Yedek Merkezi</em> → <em>Şube Köprüsü Ayar JSON Kopyala</em> adımından alınan yapılandırma <code>HasibuBranchBridge.exe --setup</code> ile içe aktarılır.</li>
+              <li><strong>Erişim İptali:</strong> Google Drive yetkisini dilediğiniz zaman Google Hesap İzinleri sayfasından kaldırabilirsiniz.</li>
+              <li><strong>Veri Silme Talebi:</strong> Yukarıdaki destek e-posta adresine konu satırına <code>Hasibu Veri Silme</code> yazarak talepte bulunabilirsiniz.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>© 2026 Akarworks / Akar Bilişim Teknolojileri — Hasibu (ihasibu)</span>
+      <div class="footer-links">
+        <a href="index.html">Ana Sayfa</a>
+        <a href="privacy.html">Gizlilik Politikası</a>
+        <a href="privacy.html#terms">Kullanım Koşulları</a>
+        <a href="support.html">Destek</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var tabs = document.querySelectorAll('.tab-link[data-tab]');
+      var panels = document.querySelectorAll('.tab-panel');
+      if (!tabs.length || !panels.length) return;
+
+      function activate(tabName, updateHash) {
+        var valid = tabName === 'privacy' || tabName === 'support' ? tabName : 'home';
+        panels.forEach(function (p) {
+          p.classList.toggle('active', p.id === valid);
+        });
+        tabs.forEach(function (t) {
+          t.classList.toggle('active', t.getAttribute('data-tab') === valid);
+        });
+        if (updateHash) {
+          history.replaceState(null, '', '#' + valid);
+        }
+      }
+
+      tabs.forEach(function (link) {
+        link.addEventListener('click', function (ev) {
+          var targetTab = link.getAttribute('data-tab');
+          if (!targetTab) return;
+          ev.preventDefault();
+          activate(targetTab, true);
+        });
+      });
+
+      var hash = (window.location.hash || '').replace('#', '').toLowerCase();
+      if (hash === 'privacy' || hash === 'support' || hash === 'home') {
+        activate(hash, false);
+      }
+      window.addEventListener('hashchange', function () {
+        var nextHash = (window.location.hash || '').replace('#', '').toLowerCase();
+        activate(nextHash || 'home', false);
+      });
+    })();
+  </script>
+</body>
+</html>

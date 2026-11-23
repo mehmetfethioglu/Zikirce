@@ -33,9 +33,9 @@ class _AttendanceAbsenceReportViewState
   void initState() {
     super.initState();
     _searchCtrl = TextEditingController();
-    final anchor =
-        DateTime.tryParse(ref.read(pdksDashboardProvider).selectedDate) ??
-            DateTime.now();
+    final initialState = ref.read(pdksDashboardProvider);
+    _branchId = initialState.effectiveBranchScopeId;
+    final anchor = DateTime.tryParse(initialState.selectedDate) ?? DateTime.now();
     final endDay = DateTime(anchor.year, anchor.month, anchor.day);
     _endDate = endDay;
     _startDate = endDay.subtract(const Duration(days: 6));
@@ -142,13 +142,25 @@ class _AttendanceAbsenceReportViewState
       return;
     }
 
+    final scopedBranchIds = state.effectiveBranchScopeIds;
+    final effectiveBranchId = scopedBranchIds.length == 1
+        ? scopedBranchIds.first
+        : (_branchId != null &&
+                (scopedBranchIds.isEmpty ||
+                    scopedBranchIds.contains(_branchId))
+            ? _branchId
+            : null);
+    final effectiveDepartmentId =
+        state.departments.any((d) => d.id == _departmentId)
+            ? _departmentId
+            : null;
     final csvContent = ref
         .read(pdksDashboardProvider.notifier)
         .generatePeriodAttendanceReportCsv(
           startDateKey: startKey,
           endDateKey: endKey,
-          branchId: _branchId,
-          departmentId: _departmentId,
+          branchId: effectiveBranchId,
+          departmentId: effectiveDepartmentId,
           searchQuery: _searchCtrl.text,
           onlyWithAbsences: _onlyWithAbsences,
           onlyWithLates: _onlyWithLates,
@@ -300,6 +312,20 @@ class _AttendanceAbsenceReportViewState
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
     final departments =
         ref.watch(pdksDashboardProvider.select((s) => s.departments));
+    final scopedBranchIds = ref.watch(
+      pdksDashboardProvider.select((s) => s.effectiveBranchScopeIds),
+    );
+    final isSingleScoped = scopedBranchIds.length == 1;
+    final isMultiScoped = scopedBranchIds.length > 1;
+    final effectiveBranchId = isSingleScoped
+        ? scopedBranchIds.first
+        : (_branchId != null &&
+                (scopedBranchIds.isEmpty ||
+                    scopedBranchIds.contains(_branchId))
+            ? _branchId
+            : null);
+    final effectiveDepartmentId =
+        departments.any((d) => d.id == _departmentId) ? _departmentId : null;
     final pal = HasibuPalette.of(context);
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
@@ -312,8 +338,8 @@ class _AttendanceAbsenceReportViewState
         ref.read(pdksDashboardProvider.notifier).buildAttendancePeriodReport(
               startDateKey: startKey,
               endDateKey: endKey,
-              branchId: _branchId,
-              departmentId: _departmentId,
+              branchId: effectiveBranchId,
+              departmentId: effectiveDepartmentId,
               searchQuery: _searchCtrl.text,
               onlyWithAbsences: _onlyWithAbsences,
               onlyWithLates: _onlyWithLates,
@@ -450,32 +476,80 @@ class _AttendanceAbsenceReportViewState
                               fillColor: pal.subtle,
                             ),
                           );
-                          final branchDropdown = DropdownButtonFormField<int?>(
-                            isExpanded: true,
-                            initialValue: _branchId,
-                            decoration: const InputDecoration(
-                              labelText: 'Şube',
-                            ),
-                            items: [
-                              const DropdownMenuItem<int?>(
-                                value: null,
-                                child: Text('Tüm Şubeler'),
-                              ),
-                              for (final b in branches)
-                                DropdownMenuItem<int?>(
-                                  value: b.id,
-                                  child: Text(
-                                    b.name,
-                                    overflow: TextOverflow.ellipsis,
+                          final branchDropdown = isSingleScoped
+                              ? DropdownButtonFormField<int?>(
+                                  key: ValueKey(
+                                    'report_branch_locked_${scopedBranchIds.first}',
                                   ),
-                                ),
-                            ],
-                            onChanged: (val) =>
-                                setState(() => _branchId = val),
-                          );
+                                  isExpanded: true,
+                                  initialValue: scopedBranchIds.first,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Şube',
+                                  ),
+                                  items: [
+                                    if (branches.any(
+                                      (b) => b.id == scopedBranchIds.first,
+                                    ))
+                                      for (final b in branches.where(
+                                        (b) => b.id == scopedBranchIds.first,
+                                      ))
+                                        DropdownMenuItem<int?>(
+                                          value: b.id,
+                                          child: Text(
+                                            b.name,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        )
+                                    else
+                                      DropdownMenuItem<int?>(
+                                        value: scopedBranchIds.first,
+                                        child: Text(
+                                          'Şube #${scopedBranchIds.first}',
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: null,
+                                )
+                              : DropdownButtonFormField<int?>(
+                                  key: ValueKey(
+                                    'report_branch_${scopedBranchIds.join("_")}_$effectiveBranchId',
+                                  ),
+                                  isExpanded: true,
+                                  initialValue: branches
+                                          .any((b) => b.id == effectiveBranchId)
+                                      ? effectiveBranchId
+                                      : null,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Şube',
+                                  ),
+                                  items: [
+                                    DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text(
+                                        isMultiScoped
+                                            ? 'Yetkili Şubelerim (${branches.length})'
+                                            : 'Tüm Şubeler',
+                                      ),
+                                    ),
+                                    for (final b in branches)
+                                      DropdownMenuItem<int?>(
+                                        value: b.id,
+                                        child: Text(
+                                          b.name,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                  onChanged: (val) =>
+                                      setState(() => _branchId = val),
+                                );
                           final deptDropdown = DropdownButtonFormField<int?>(
+                            key: ValueKey(
+                              'report_dept_${scopedBranchIds.join("_")}_$effectiveDepartmentId',
+                            ),
                             isExpanded: true,
-                            initialValue: _departmentId,
+                            initialValue: effectiveDepartmentId,
                             decoration: const InputDecoration(
                               labelText: 'Bölüm / Departman',
                             ),

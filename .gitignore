@@ -43,6 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/dist/
+tools/hasibu_branch_bridge/bin/
+tools/hasibu_branch_bridge/obj/
+tools/hasibu_branch_bridge.Tests/bin/
+tools/hasibu_branch_bridge.Tests/obj/
 
 # Local OAuth secrets / dart-defines / release signing (never commit)
 dart_defines.local.json

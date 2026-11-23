@@ -38,6 +38,14 @@ class GoogleTokenVerificationResult {
   });
 }
 
+enum CloudEncryptionKeyMode {
+  accountAuto('Otomatik (Aynı Google Hesabı)'),
+  customPassphrase('Özel Bulut Şifreleme Parolası');
+
+  final String label;
+  const CloudEncryptionKeyMode(this.label);
+}
+
 @immutable
 class BrowserGoogleSignInResult {
   final bool success;
@@ -46,6 +54,8 @@ class BrowserGoogleSignInResult {
   final String email;
   final String displayName;
   final String message;
+  final bool requiresUserLogin;
+  final String? suggestedUsername;
 
   const BrowserGoogleSignInResult({
     required this.success,
@@ -54,6 +64,8 @@ class BrowserGoogleSignInResult {
     this.email = '',
     this.displayName = '',
     required this.message,
+    this.requiresUserLogin = false,
+    this.suggestedUsername,
   });
 }
 
@@ -71,6 +83,7 @@ class DriveSyncStatus {
   final int syncedBytes;
   final String cloudProfileId;
   final String lastOperation;
+  final bool isDecryptionKeyMismatch;
 
   const DriveSyncStatus({
     this.stage = DriveSyncStage.idle,
@@ -85,6 +98,7 @@ class DriveSyncStatus {
     this.syncedBytes = 0,
     this.cloudProfileId = 'default',
     this.lastOperation = '',
+    this.isDecryptionKeyMismatch = false,
   });
 
   bool get isTrulySynced =>
@@ -104,6 +118,7 @@ class DriveSyncStatus {
     int? syncedBytes,
     String? cloudProfileId,
     String? lastOperation,
+    bool? isDecryptionKeyMismatch,
   }) {
     return DriveSyncStatus(
       stage: stage ?? this.stage,
@@ -119,6 +134,8 @@ class DriveSyncStatus {
       syncedBytes: syncedBytes ?? this.syncedBytes,
       cloudProfileId: cloudProfileId ?? this.cloudProfileId,
       lastOperation: lastOperation ?? this.lastOperation,
+      isDecryptionKeyMismatch:
+          isDecryptionKeyMismatch ?? this.isDecryptionKeyMismatch,
     );
   }
 }
@@ -140,6 +157,56 @@ class CloudBackupProfileInfo {
     this.modifiedTime,
     this.sizeBytes = 0,
     required this.source,
+  });
+}
+
+/// Tek bir şube yüz okutma köprüsü cihaz kutusunun (`hasibu_branch_inbox_*.enc`) durumu.
+@immutable
+class BranchInboxDeviceStatus {
+  final String deviceSlug;
+  final int branchId;
+  final String branchCode;
+  final String branchName;
+  final String deviceName;
+  final String fileName;
+  final String? remoteFileId;
+  final DateTime? modifiedTime;
+  final int logCount;
+  final int newlyInsertedCount;
+  final int syncedUsersCount;
+  final String source;
+
+  const BranchInboxDeviceStatus({
+    required this.deviceSlug,
+    required this.branchId,
+    this.branchCode = '',
+    this.branchName = '',
+    this.deviceName = '',
+    required this.fileName,
+    this.remoteFileId,
+    this.modifiedTime,
+    this.logCount = 0,
+    this.newlyInsertedCount = 0,
+    this.syncedUsersCount = 0,
+    this.source = 'Google Drive Bulut',
+  });
+}
+
+/// Tüm şube cihaz kutularının Google Drive'dan okunup birleştirilme özeti.
+@immutable
+class BranchInboxPullResult {
+  final List<BranchInboxDeviceStatus> devices;
+  final int totalLogsRead;
+  final int totalNewLogsInserted;
+  final int totalUsersSynced;
+  final List<String> warnings;
+
+  const BranchInboxPullResult({
+    this.devices = const <BranchInboxDeviceStatus>[],
+    this.totalLogsRead = 0,
+    this.totalNewLogsInserted = 0,
+    this.totalUsersSynced = 0,
+    this.warnings = const <String>[],
   });
 }
 
@@ -169,6 +236,7 @@ class GoogleDriveSyncService {
   static const String backupFileName = 'hasibu_sync.enc';
   static const String masterVaultFileName = 'hasibu_master_vault.enc';
   static const String portalQueueFileName = 'hasibu_portal_queue.enc';
+  static const String branchInboxPrefix = 'hasibu_branch_inbox_';
   static const String _legacyBackupFileName = 'Hasibu_CloudSync_v1.json';
 
   static const Map<String, String> _turkishCharFoldMap = <String, String>{
@@ -186,10 +254,12 @@ class GoogleDriveSyncService {
     'Ü': 'u',
   };
 
-  /// Aynı Gmail hesabı içinde farklı işletme / kullanıcı kasaları oluşturmak için
-  /// profil kimliğini güvenli dosya adı ekine (`slug`) dönüştürür.
-  static String normalizeCloudProfileId(String? raw) {
-    if (raw == null) return 'default';
+  static String _foldAndSanitizeSlug(
+    String? raw, {
+    required String fallback,
+    int maxLength = 32,
+  }) {
+    if (raw == null) return fallback;
     final buf = StringBuffer();
     for (final rune in raw.trim().runes) {
       final ch = String.fromCharCode(rune);
@@ -201,16 +271,61 @@ class GoogleDriveSyncService {
         .replaceAll(RegExp(r'[^a-z0-9_-]+'), '_')
         .replaceAll(RegExp(r'_+'), '_')
         .replaceAll(RegExp(r'^[_-]+|[_-]+$'), '');
-    if (slug.length > 32) {
-      slug = slug.substring(0, 32).replaceAll(RegExp(r'^[_-]+|[_-]+$'), '');
+    if (slug.length > maxLength) {
+      slug = slug.substring(0, maxLength).replaceAll(RegExp(r'^[_-]+|[_-]+$'), '');
     }
-    if (slug.isEmpty ||
-        slug == 'default' ||
-        slug == 'varsayilan' ||
-        slug == 'ana') {
+    return slug.isEmpty ? fallback : slug;
+  }
+
+  /// Aynı Gmail hesabı içinde farklı işletme / kullanıcı kasaları oluşturmak için
+  /// profil kimliğini güvenli dosya adı ekine (`slug`) dönüştürür.
+  static String normalizeCloudProfileId(String? raw) {
+    final slug = _foldAndSanitizeSlug(raw, fallback: 'default', maxLength: 32);
+    if (slug == 'default' || slug == 'varsayilan' || slug == 'ana') {
       return 'default';
     }
     return slug;
+  }
+
+  /// Şube/cihaz adını güvenli tek-alt-çizgili cihaz koduna (`slug`) dönüştürür (`__` ayırıcısını korur).
+  static String normalizeDeviceSlug(String? raw) =>
+      _foldAndSanitizeSlug(raw, fallback: 'device', maxLength: 40);
+
+  static String branchInboxFileNameForDevice({
+    required String deviceSlug,
+    String? profileId,
+  }) {
+    final cleanProfile = normalizeCloudProfileId(profileId);
+    final cleanSlug = normalizeDeviceSlug(deviceSlug);
+    return cleanProfile == 'default'
+        ? '$branchInboxPrefix$cleanSlug.enc'
+        : '$branchInboxPrefix${cleanProfile}__$cleanSlug.enc';
+  }
+
+  static String? parseBranchInboxDeviceSlug(
+    String fileName, {
+    String? profileId,
+  }) {
+    final clean = fileName.trim();
+    if (!clean.startsWith(branchInboxPrefix) || !clean.endsWith('.enc')) {
+      return null;
+    }
+    final body = clean.substring(branchInboxPrefix.length, clean.length - 4);
+    if (body.isEmpty) return null;
+    final expectedProfile = normalizeCloudProfileId(profileId);
+    final sepIdx = body.indexOf('__');
+    if (sepIdx >= 0) {
+      final fileProfile = normalizeCloudProfileId(body.substring(0, sepIdx));
+      final rawSlug = body.substring(sepIdx + 2);
+      if (fileProfile != expectedProfile || rawSlug.isEmpty) {
+        return null;
+      }
+      return normalizeDeviceSlug(rawSlug);
+    }
+    if (expectedProfile != 'default') {
+      return null;
+    }
+    return normalizeDeviceSlug(body);
   }
 
   static String backupFileNameForProfile(String? profileId) {
@@ -275,6 +390,7 @@ class GoogleDriveSyncService {
   static const String _kAccessToken = 'hasibu_gdrive_access_token';
   static const String _kRefreshToken = 'hasibu_gdrive_refresh_token';
   static const String _kWorkspaceKey = 'hasibu_workspace_sync_key_v1';
+  static const String _kWorkspaceKeyMode = 'hasibu_workspace_key_mode_v1';
   static const String _kOAuthClientId = 'hasibu_google_oauth_client_id';
   static const String _kOAuthClientSecret = 'hasibu_google_oauth_client_secret';
 
@@ -303,9 +419,19 @@ class GoogleDriveSyncService {
   String? _lastPayloadHash;
   DriveSyncStatus? _lastCachedStatus;
   String? _lastSyncWarning;
+  Future<String?> Function()? _mobileSilentRefreshCallback;
+  final Map<String, String> _processedBranchInboxSignatures =
+      <String, String>{};
+  final Map<String, BranchInboxDeviceStatus> _cachedBranchInboxStatuses =
+      <String, BranchInboxDeviceStatus>{};
 
   /// Yakalanan son senkronizasyon uyarı mesajı
   String? get lastSyncWarning => _lastSyncWarning;
+
+  /// Mobil platformda (`google_sign_in`) sessiz token yenileme geri çağrısını bağlar.
+  void setMobileTokenRefresher(Future<String?> Function()? cb) {
+    _mobileSilentRefreshCallback = cb;
+  }
 
   GoogleDriveSyncService({
     required this.db,
@@ -339,31 +465,99 @@ class GoogleDriveSyncService {
     }
   }
 
+  /// Aktif bulut yedek şifreleme modunu okur (varsayılan: Aynı Google Hesabıyla Otomatik).
+  Future<CloudEncryptionKeyMode> getCloudEncryptionKeyMode() async {
+    try {
+      final mode = (await _secureStorage.read(key: _kWorkspaceKeyMode) ?? '')
+          .trim();
+      if (mode == 'custom') {
+        return CloudEncryptionKeyMode.customPassphrase;
+      }
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+    return CloudEncryptionKeyMode.accountAuto;
+  }
+
   /// [SYNC-03] Şirket Çalışma Alanı Anahtarını (`Workspace Key`) yerel veritabanında değil,
-  /// `flutter_secure_storage` içinde saklar.
+  /// `flutter_secure_storage` içinde saklar ve özel anahtar modunu etkinleştirir.
   Future<void> saveWorkspaceKey(String workspaceKey) async {
     final trimmed = workspaceKey.trim();
     if (trimmed.isEmpty) return;
     await HasibuSecurityService.saveWorkspaceSyncKey(trimmed);
     try {
       await _secureStorage.write(key: _kWorkspaceKey, value: trimmed);
+      await _secureStorage.write(key: _kWorkspaceKeyMode, value: 'custom');
     } catch (e) {
       _lastSyncWarning = e.toString();
       debugPrint('GoogleDriveSyncService: saveWorkspaceKey uyarısı: $e');
     }
   }
 
-  Future<String> getWorkspaceKey() async {
+  /// Kısa ve akılda kalıcı bulut şifreleme parolasından 256-bit anahtar türetip kaydeder.
+  Future<void> saveCloudSyncPassphrase(String passphrase) async {
+    final trimmed = passphrase.trim();
+    if (trimmed.isEmpty) return;
+    final derived = HasibuSecurityService.derivePassphraseWorkspaceKey(trimmed);
+    await saveWorkspaceKey(derived);
+  }
+
+  /// Aynı Google hesabına bağlı tüm cihazların manuel anahtar kopyalamadan
+  /// otomatik anahtar türetme (`account_auto`) kullanmasını sağlar.
+  Future<void> useAutomaticAccountEncryption() async {
     try {
-      final stored = await _secureStorage.read(key: _kWorkspaceKey);
-      if (stored != null && stored.trim().isNotEmpty) {
-        return stored.trim();
-      }
+      await _secureStorage.write(
+        key: _kWorkspaceKeyMode,
+        value: 'account_auto',
+      );
     } catch (e) {
       _lastSyncWarning = e.toString();
-      debugPrint('GoogleDriveSyncService: getWorkspaceKey uyarısı: $e');
+      debugPrint(
+        'GoogleDriveSyncService: useAutomaticAccountEncryption uyarısı: $e',
+      );
     }
-    return HasibuSecurityService.getOrCreateWorkspaceSyncKey();
+  }
+
+  /// Aktif bulut şifreleme anahtarını ve zarf modunu (`account_auto` / `passphrase` / `workspace_key`) çözer.
+  Future<({String key, String envelopeKeyMode})> resolveActiveEncryptionKey({
+    String? profileId,
+    String? gmailOverride,
+  }) async {
+    String mode = '';
+    String storedRaw = '';
+    try {
+      mode = (await _secureStorage.read(key: _kWorkspaceKeyMode) ?? '').trim();
+      storedRaw = (await _secureStorage.read(key: _kWorkspaceKey) ?? '').trim();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+
+    final settings = db.getCompanySettings();
+    final effectiveProfile =
+        normalizeCloudProfileId(profileId ?? settings.cloudProfileId);
+    final effectiveGmail = (gmailOverride ?? settings.syncGmailAccount).trim();
+
+    if (mode == 'custom' && storedRaw.isNotEmpty) {
+      return (key: storedRaw, envelopeKeyMode: 'passphrase');
+    }
+    if (effectiveGmail.isNotEmpty && mode != 'custom') {
+      return (
+        key: HasibuSecurityService.deriveAccountWorkspaceKey(
+          googleEmail: effectiveGmail,
+          cloudProfileId: effectiveProfile,
+        ),
+        envelopeKeyMode: 'account_auto',
+      );
+    }
+    final fallback = storedRaw.isNotEmpty
+        ? storedRaw
+        : await HasibuSecurityService.getOrCreateWorkspaceSyncKey();
+    return (key: fallback, envelopeKeyMode: 'workspace_key');
+  }
+
+  Future<String> getWorkspaceKey({String? profileId}) async {
+    final resolved = await resolveActiveEncryptionKey(profileId: profileId);
+    return resolved.key;
   }
 
   Future<String?> getAccessToken() async {
@@ -674,12 +868,21 @@ class GoogleDriveSyncService {
     }
   }
 
-  /// Kayıtlı `refresh_token` ile süresi dolmuş OAuth 2.0 `access_token` değerini yeniler.
+  /// Kayıtlı `refresh_token` (veya mobilde sessiz oturum) ile süresi dolmuş OAuth 2.0 `access_token` değerini yeniler.
   Future<String?> refreshAccessToken() async {
     try {
       final refreshToken =
           (await _secureStorage.read(key: _kRefreshToken) ?? '').trim();
-      if (refreshToken.isEmpty) return null;
+      if (refreshToken.isEmpty) {
+        if (_mobileSilentRefreshCallback != null) {
+          final silentToken = (await _mobileSilentRefreshCallback!() ?? '').trim();
+          if (silentToken.isNotEmpty) {
+            await saveOAuthTokens(accessToken: silentToken);
+            return silentToken;
+          }
+        }
+        return null;
+      }
 
       final clientId = await getSavedOAuthClientId();
       if (clientId.isEmpty) return null;
@@ -1270,7 +1473,9 @@ class GoogleDriveSyncService {
       return _lastCachedStatus!;
     }
 
-    final workspaceKey = await getWorkspaceKey();
+    final keySpec = await resolveActiveEncryptionKey(
+      profileId: effectiveProfileId,
+    );
 
     // [SYNC-02] Yönetici (master_vault) ve Personel (portal_queue) paketlerini oluştur
     final masterSnapshot = db.exportCloudSnapshot(deviceName: deviceName);
@@ -1282,14 +1487,16 @@ class GoogleDriveSyncService {
     final encryptedMasterPayload =
         await HasibuSecurityService.encryptSyncJsonPayload(
       masterSnapshot,
-      workspaceKey: workspaceKey,
+      workspaceKey: keySpec.key,
       vaultRole: 'master_vault',
+      keyMode: keySpec.envelopeKeyMode,
     );
     final encryptedPortalPayload =
         await HasibuSecurityService.encryptSyncJsonPayload(
       portalSnapshot,
-      workspaceKey: workspaceKey,
+      workspaceKey: keySpec.key,
       vaultRole: 'portal_queue',
+      keyMode: keySpec.envelopeKeyMode,
     );
 
     final primaryEncryptedPayload = isEmployeePortalOnly
@@ -1472,11 +1679,6 @@ class GoogleDriveSyncService {
     final portalFileName = portalQueueFileNameForProfile(effectiveProfileId);
 
     try {
-      if (overrideWorkspaceKey != null &&
-          overrideWorkspaceKey.trim().isNotEmpty) {
-        await saveWorkspaceKey(overrideWorkspaceKey.trim());
-      }
-
       String? token;
       try {
         token = await getAccessToken();
@@ -1561,6 +1763,31 @@ class GoogleDriveSyncService {
       }
 
       if (rawPayload == null || rawPayload.isEmpty) {
+        if (mode == CloudRestoreMode.merge && !isEmployeePortalOnly) {
+          try {
+            final inboxRes = await pullAndMergeBranchInboxes(
+              profileId: effectiveProfileId,
+            );
+            if (inboxRes.devices.isNotEmpty) {
+              final status = DriveSyncStatus(
+                stage: DriveSyncStage.synced,
+                lastSyncTime: now,
+                lastDeviceName: inboxRes.devices.first.deviceName,
+                connectedGmail: gmail,
+                isCloudApiVerified:
+                    inboxRes.devices.any((d) => d.remoteFileId != null),
+                cloudProfileId: effectiveProfileId,
+                lastOperation: 'restore',
+                message:
+                    '${inboxRes.devices.length} şube cihaz kutusu birleştirildi (${inboxRes.totalNewLogsInserted} yeni hareket).',
+              );
+              _lastCachedStatus = status;
+              return (status: status, summary: null);
+            }
+          } catch (e) {
+            _lastSyncWarning = e.toString();
+          }
+        }
         final status = DriveSyncStatus(
           stage: cloudOnly ? DriveSyncStage.error : DriveSyncStage.idle,
           lastSyncTime: now,
@@ -1576,31 +1803,101 @@ class GoogleDriveSyncService {
         return (status: status, summary: null);
       }
 
-      final workspaceKey = await getWorkspaceKey();
-      final Map<String, dynamic> decoded;
-      try {
-        decoded = await HasibuSecurityService.decryptSyncJsonPayload(
-          rawPayload,
-          workspaceKey: workspaceKey,
+      final candidateKeys = <({String key, bool saveAsCustom})>[];
+      void addCandidateKey(String key, bool saveAsCustom) {
+        final k = key.trim();
+        if (k.isEmpty || candidateKeys.any((c) => c.key == k)) return;
+        candidateKeys.add((key: k, saveAsCustom: saveAsCustom));
+      }
+
+      final cleanOverride = (overrideWorkspaceKey ?? '').trim();
+      if (cleanOverride.isNotEmpty) {
+        addCandidateKey(cleanOverride, true);
+        addCandidateKey(
+          HasibuSecurityService.derivePassphraseWorkspaceKey(cleanOverride),
+          true,
         );
-      } on SecretBoxAuthenticationError {
+      } else {
+        final activeSpec = await resolveActiveEncryptionKey(
+          profileId: effectiveProfileId,
+        );
+        addCandidateKey(activeSpec.key, false);
+
+        final envelopeKeyMode =
+            HasibuSecurityService.readEnvelopeKeyMode(rawPayload);
+        if (envelopeKeyMode == 'account_auto' && gmail.isNotEmpty) {
+          addCandidateKey(
+            HasibuSecurityService.deriveAccountWorkspaceKey(
+              googleEmail: gmail,
+              cloudProfileId: effectiveProfileId,
+            ),
+            false,
+          );
+        }
+
+        final currentMode = await getCloudEncryptionKeyMode();
+        if (currentMode != CloudEncryptionKeyMode.customPassphrase) {
+          try {
+            final legacyStored =
+                (await _secureStorage.read(key: _kWorkspaceKey) ?? '').trim();
+            addCandidateKey(legacyStored, false);
+          } catch (e) {
+            _lastSyncWarning = e.toString();
+          }
+        }
+      }
+
+      Map<String, dynamic>? decoded;
+      for (final candidate in candidateKeys) {
+        try {
+          decoded = await HasibuSecurityService.decryptSyncJsonPayload(
+            rawPayload,
+            workspaceKey: candidate.key,
+          );
+          if (candidate.saveAsCustom) {
+            await saveWorkspaceKey(candidate.key);
+          }
+          break;
+        } on SecretBoxAuthenticationError {
+          continue;
+        }
+      }
+
+      if (decoded == null) {
         final status = DriveSyncStatus(
           stage: DriveSyncStage.error,
           lastSyncTime: now,
           connectedGmail: gmail,
+          isCloudApiVerified: fromCloudApi,
+          isDriveFolderMirrored: fromDriveFolder,
           cloudProfileId: effectiveProfileId,
           lastOperation: 'restore',
+          isDecryptionKeyMismatch: true,
           message:
-              'Bulut yedeği çözülemedi: Bu yedek başka bir cihazdaki farklı Çalışma Alanı Anahtarı (Workspace Key) ile şifrelenmiş. Diğer cihazdan aldığınız anahtarı "Şifreleme Anahtarı" alanına girip tekrar deneyin.',
+              'Bulut yedeği çözülemedi: Bu yedek farklı bir Bulut Şifreleme Parolası veya Çalışma Alanı Anahtarı (Workspace Key) ile şifrelenmiş. Ortak parolanızı veya diğer cihazdan aldığınız anahtarı girip tekrar deneyin.',
         );
         return (status: status, summary: null);
       }
 
       final summary = db.restoreCloudSnapshot(decoded, mode: mode);
+      int extraBranchNewLogs = 0;
+      if (mode == CloudRestoreMode.merge && !isEmployeePortalOnly) {
+        try {
+          final inboxRes = await pullAndMergeBranchInboxes(
+            profileId: effectiveProfileId,
+          );
+          extraBranchNewLogs = inboxRes.totalNewLogsInserted;
+        } catch (e) {
+          _lastSyncWarning = e.toString();
+        }
+      }
       final remoteDevice = summary.sourceDeviceName;
       final bytesLen = utf8.encode(rawPayload).length;
 
       final bool trulySynced = fromCloudApi || fromDriveFolder;
+      final branchSuffix = extraBranchNewLogs > 0
+          ? ' + $extraBranchNewLogs şube kutusu kaydı'
+          : '';
       final status = DriveSyncStatus(
         stage: trulySynced ? DriveSyncStage.synced : DriveSyncStage.offlineSaved,
         lastSyncTime: now,
@@ -1613,8 +1910,8 @@ class GoogleDriveSyncService {
         cloudProfileId: effectiveProfileId,
         lastOperation: 'restore',
         message: trulySynced
-            ? 'Buluttan yüklendi (${mode.label} • $remoteDevice • Profil: $effectiveProfileId): ${summary.toTurkishSummary()}'
-            : 'Yerel yedekten yüklendi (${mode.label} • $remoteDevice): ${summary.toTurkishSummary()}',
+            ? 'Buluttan yüklendi (${mode.label} • $remoteDevice • Profil: $effectiveProfileId): ${summary.toTurkishSummary()}$branchSuffix'
+            : 'Yerel yedekten yüklendi (${mode.label} • $remoteDevice): ${summary.toTurkishSummary()}$branchSuffix',
       );
       _lastCachedStatus = status;
       return (status: status, summary: summary);
@@ -1631,6 +1928,72 @@ class GoogleDriveSyncService {
     }
   }
 
+  /// Uygulama yeniden açıldığında kayıtlı Gmail, OAuth2 token / refresh token
+  /// veya Google Drive masaüstü klasörü bilgisinden bulut oturumunu geri yükler.
+  Future<DriveSyncStatus?> restorePersistedGoogleSession() async {
+    final settings = db.getCompanySettings();
+    final gmail = settings.syncGmailAccount.trim();
+    if (gmail.isEmpty) return null;
+
+    String? accessToken;
+    String refreshToken = '';
+    try {
+      accessToken = await getAccessToken();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+    try {
+      refreshToken =
+          (await _secureStorage.read(key: _kRefreshToken) ?? '').trim();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+
+    bool folderExists = false;
+    try {
+      final effectiveFolder = await _resolveEffectiveSyncFolder(
+        settings.syncFolderPath,
+      );
+      if (effectiveFolder.isNotEmpty) {
+        folderExists = Directory(effectiveFolder).existsSync();
+      }
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+
+    final hasAccessToken =
+        accessToken != null && accessToken.trim().startsWith('ya29.');
+    if (hasAccessToken || refreshToken.isNotEmpty) {
+      final status = DriveSyncStatus(
+        stage: DriveSyncStage.synced,
+        connectedGmail: gmail,
+        isCloudApiVerified: true,
+        isDriveFolderMirrored: folderExists,
+        cloudProfileId: settings.cloudProfileId,
+        lastOperation: 'session_restored',
+        message: 'Google Bulut oturumu açık ($gmail)',
+      );
+      _lastCachedStatus = status;
+      return status;
+    }
+
+    if (folderExists) {
+      final status = DriveSyncStatus(
+        stage: DriveSyncStage.synced,
+        connectedGmail: gmail,
+        isCloudApiVerified: false,
+        isDriveFolderMirrored: true,
+        cloudProfileId: settings.cloudProfileId,
+        lastOperation: 'session_restored',
+        message: 'Google Drive klasörü aktif ($gmail)',
+      );
+      _lastCachedStatus = status;
+      return status;
+    }
+
+    return null;
+  }
+
   /// Google Drive'dan (veya yerel paylaşılan `.enc` yedek dosyasından) en güncel paketi
   /// indirip `AES-256-GCM` şifresini çözer ve yerel SQLite ile birleştirir.
   Future<DriveSyncStatus> pullAndReconcile({
@@ -1641,6 +2004,346 @@ class GoogleDriveSyncService {
       isEmployeePortalOnly: isEmployeePortalOnly,
     );
     return result.status;
+  }
+
+  /// Tek bir şube cihazının yüz okutma kayıtlarını izole şube gelen kutusuna
+  /// (`hasibu_branch_inbox_<slug>.enc`, `vaultRole: 'branch_inbox'`) yükler.
+  Future<DriveSyncStatus> pushBranchInboxSnapshot({
+    required String deviceSlug,
+    required int branchId,
+    required String branchCode,
+    required String branchName,
+    required String deviceName,
+    required List<AttendanceLog> logs,
+    List<Map<String, dynamic>> deviceUsers = const <Map<String, dynamic>>[],
+    String? profileId,
+  }) async {
+    final now = DateTime.now();
+    final settings = db.getCompanySettings();
+    final gmail = settings.syncGmailAccount.trim();
+    final effectiveProfileId =
+        normalizeCloudProfileId(profileId ?? settings.cloudProfileId);
+    final cleanSlug = normalizeDeviceSlug(deviceSlug);
+    final fileName = branchInboxFileNameForDevice(
+      deviceSlug: cleanSlug,
+      profileId: effectiveProfileId,
+    );
+    final keySpec = await resolveActiveEncryptionKey(
+      profileId: effectiveProfileId,
+    );
+
+    final sanitizedLogs = logs
+        .map((l) => l.copyWith(integrityHash: '').toJson()..['integrityHash'] = '')
+        .toList(growable: false);
+    final payload = <String, dynamic>{
+      'schemaVersion': 1,
+      'vaultRole': 'branch_inbox',
+      'cloudProfileId': effectiveProfileId,
+      'deviceSlug': cleanSlug,
+      'branchId': branchId,
+      'branchCode': branchCode,
+      'branchName': branchName,
+      'deviceName': deviceName,
+      'exportedAt': now.toUtc().toIso8601String(),
+      'attendanceLogs': sanitizedLogs,
+      'deviceUsers': deviceUsers,
+    };
+
+    final encryptedPayload = await HasibuSecurityService.encryptSyncJsonPayload(
+      payload,
+      workspaceKey: keySpec.key,
+      vaultRole: 'branch_inbox',
+      keyMode: keySpec.envelopeKeyMode,
+    );
+    final payloadBytes = utf8.encode(encryptedPayload);
+    final hash = sha256.convert(payloadBytes).toString().substring(0, 12);
+
+    final effectiveFolder =
+        await _resolveEffectiveSyncFolder(settings.syncFolderPath);
+    final mirrorOutcome = await _writeLocalMirror(
+      encryptedPayload,
+      effectiveFolder,
+      primaryFileName: fileName,
+    );
+
+    String? token;
+    try {
+      token = await getAccessToken();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+    final cleanToken = (token ?? '').trim();
+    if (cleanToken.isNotEmpty && cleanToken.startsWith('ya29.')) {
+      try {
+        await _runWithTokenRefresh<void>(
+          cleanToken,
+          (activeToken) => _uploadEncryptedPayload(
+            activeToken,
+            targetRemoteName: fileName,
+            primaryEncryptedPayload: encryptedPayload,
+            payloadBytes: payloadBytes,
+            now: now,
+          ),
+        );
+        return DriveSyncStatus(
+          stage: DriveSyncStage.synced,
+          lastSyncTime: now,
+          lastDeviceName: deviceName,
+          lastHash: hash,
+          connectedGmail: gmail,
+          isCloudApiVerified: true,
+          isDriveFolderMirrored: mirrorOutcome.wroteDriveFolder,
+          syncedFilePath: mirrorOutcome.primaryPath,
+          syncedBytes: payloadBytes.length,
+          cloudProfileId: effectiveProfileId,
+          lastOperation: 'branch_inbox_push',
+          message:
+              'Şube kutusu ($fileName) Google Drive\'a yüklendi (${sanitizedLogs.length} kayıt).',
+        );
+      } catch (e) {
+        _lastSyncWarning = e.toString();
+      }
+    }
+
+    return DriveSyncStatus(
+      stage: mirrorOutcome.wroteDriveFolder
+          ? DriveSyncStage.synced
+          : DriveSyncStage.offlineSaved,
+      lastSyncTime: now,
+      lastDeviceName: deviceName,
+      lastHash: hash,
+      connectedGmail: gmail,
+      isCloudApiVerified: false,
+      isDriveFolderMirrored: mirrorOutcome.wroteDriveFolder,
+      syncedFilePath: mirrorOutcome.primaryPath,
+      syncedBytes: payloadBytes.length,
+      cloudProfileId: effectiveProfileId,
+      lastOperation: 'branch_inbox_push',
+      message: mirrorOutcome.wroteDriveFolder
+          ? 'Şube kutusu Drive klasörüne yazıldı ($fileName).'
+          : 'Şube kutusu yerel önbelleğe kaydedildi ($fileName).',
+    );
+  }
+
+  /// Google Drive hesabındaki ve yerel senkronizasyon klasöründeki tüm
+  /// şube gelen kutusu (`hasibu_branch_inbox_*.enc`) dosyalarını tarar,
+  /// yeni/güncel olanları indirip `AES-256-GCM` çözerek yerel SQLite ile birleştirir.
+  Future<BranchInboxPullResult> pullAndMergeBranchInboxes({
+    String? profileId,
+    bool force = false,
+  }) async {
+    final settings = db.getCompanySettings();
+    final effectiveProfileId =
+        normalizeCloudProfileId(profileId ?? settings.cloudProfileId);
+    final workspaceKey = await getWorkspaceKey();
+    final warnings = <String>[];
+    final candidates = <String, ({
+      String slug,
+      String? fileId,
+      DateTime? modifiedTime,
+      String signature,
+      File? localFile,
+      String source,
+    })>{};
+
+    String? token;
+    try {
+      token = await getAccessToken();
+    } catch (e) {
+      _lastSyncWarning = e.toString();
+    }
+    final cleanToken = (token ?? '').trim();
+    final bool hasOAuth =
+        cleanToken.isNotEmpty && cleanToken.startsWith('ya29.');
+
+    if (hasOAuth) {
+      try {
+        final files = await _runWithTokenRefresh<List<dynamic>>(
+          cleanToken,
+          (activeToken) async {
+            final resp = await _dio.get<Map<String, dynamic>>(
+              _driveFilesEndpoint,
+              queryParameters: {
+                'q': "name contains '$branchInboxPrefix' and trashed = false",
+                'spaces': 'drive',
+                'fields': 'files(id, name, modifiedTime, size)',
+                'orderBy': 'modifiedTime desc',
+                'pageSize': 100,
+              },
+              options: Options(
+                headers: {
+                  HttpHeaders.authorizationHeader: 'Bearer $activeToken',
+                },
+              ),
+            );
+            return resp.data?['files'] as List<dynamic>? ?? const <dynamic>[];
+          },
+        );
+        for (final raw in files) {
+          if (raw is! Map) continue;
+          final f = Map<String, dynamic>.from(raw);
+          final name = (f['name'] as String? ?? '').trim();
+          final slug = parseBranchInboxDeviceSlug(
+            name,
+            profileId: effectiveProfileId,
+          );
+          if (slug == null || candidates.containsKey(name)) continue;
+          final modIso = (f['modifiedTime'] as String? ?? '').trim();
+          final sizeStr = (f['size'] ?? '0').toString();
+          candidates[name] = (
+            slug: slug,
+            fileId: f['id'] as String?,
+            modifiedTime: DateTime.tryParse(modIso),
+            signature: '$modIso|$sizeStr',
+            localFile: null,
+            source: 'Google Drive Bulut',
+          );
+        }
+      } catch (e) {
+        _lastSyncWarning = e.toString();
+        warnings.add('Drive şube kutuları listelenemedi: $e');
+      }
+    }
+
+    final effectiveFolder =
+        await _resolveEffectiveSyncFolder(settings.syncFolderPath);
+    if (effectiveFolder.isNotEmpty) {
+      try {
+        final dir = Directory(effectiveFolder);
+        if (await dir.exists()) {
+          await for (final entity in dir.list(followLinks: false)) {
+            if (entity is! File) continue;
+            final name = p.basename(entity.path);
+            final slug = parseBranchInboxDeviceSlug(
+              name,
+              profileId: effectiveProfileId,
+            );
+            if (slug == null || candidates.containsKey(name)) continue;
+            final stat = await entity.stat();
+            candidates[name] = (
+              slug: slug,
+              fileId: null,
+              modifiedTime: stat.modified,
+              signature:
+                  '${stat.modified.toUtc().toIso8601String()}|${stat.size}',
+              localFile: entity,
+              source: 'Google Drive Klasörü',
+            );
+          }
+        }
+      } catch (e) {
+        _lastSyncWarning = e.toString();
+      }
+    }
+
+    final statuses = <BranchInboxDeviceStatus>[];
+    int totalLogsRead = 0;
+    int totalNewLogsInserted = 0;
+    int totalUsersSynced = 0;
+
+    for (final entry in candidates.entries) {
+      final fileName = entry.key;
+      final item = entry.value;
+      final cached = _cachedBranchInboxStatuses[fileName];
+      if (!force &&
+          item.signature.isNotEmpty &&
+          _processedBranchInboxSignatures[fileName] == item.signature &&
+          cached != null) {
+        statuses.add(
+          BranchInboxDeviceStatus(
+            deviceSlug: cached.deviceSlug,
+            branchId: cached.branchId,
+            branchCode: cached.branchCode,
+            branchName: cached.branchName,
+            deviceName: cached.deviceName,
+            fileName: cached.fileName,
+            remoteFileId: cached.remoteFileId,
+            modifiedTime: cached.modifiedTime,
+            logCount: cached.logCount,
+            newlyInsertedCount: 0,
+            syncedUsersCount: 0,
+            source: cached.source,
+          ),
+        );
+        continue;
+      }
+
+      try {
+        String? rawPayload;
+        if (item.fileId != null && hasOAuth) {
+          rawPayload = await _runWithTokenRefresh<String?>(
+            cleanToken,
+            (activeToken) async {
+              final resp = await _dio.get<String>(
+                '$_driveFilesEndpoint/${item.fileId}?alt=media',
+                options: Options(
+                  headers: {
+                    HttpHeaders.authorizationHeader: 'Bearer $activeToken',
+                  },
+                  responseType: ResponseType.plain,
+                ),
+              );
+              return resp.data;
+            },
+          );
+        } else if (item.localFile != null) {
+          rawPayload = await item.localFile!.readAsString();
+        }
+
+        if (rawPayload == null || rawPayload.trim().isEmpty) continue;
+
+        final decoded = await HasibuSecurityService.decryptSyncJsonPayload(
+          rawPayload,
+          workspaceKey: workspaceKey,
+          expectedVaultRole: 'branch_inbox',
+        );
+        final merged = db.mergeBranchInboxSnapshot(decoded);
+
+        final branchId = (decoded['branchId'] as num?)?.toInt() ?? 1;
+        final branchCode = (decoded['branchCode'] as String? ?? '').trim();
+        final branchName = (decoded['branchName'] as String? ?? '').trim();
+        final deviceName = (decoded['deviceName'] as String? ?? '').trim();
+        final exportedAt = DateTime.tryParse(
+          (decoded['exportedAt'] as String? ?? '').trim(),
+        );
+
+        final status = BranchInboxDeviceStatus(
+          deviceSlug: (decoded['deviceSlug'] as String? ?? item.slug).trim(),
+          branchId: branchId,
+          branchCode: branchCode,
+          branchName: branchName,
+          deviceName: deviceName,
+          fileName: fileName,
+          remoteFileId: item.fileId,
+          modifiedTime: item.modifiedTime ?? exportedAt,
+          logCount: merged.totalLogs,
+          newlyInsertedCount: merged.newLogs,
+          syncedUsersCount: merged.syncedUsers,
+          source: item.source,
+        );
+        statuses.add(status);
+        _processedBranchInboxSignatures[fileName] = item.signature;
+        _cachedBranchInboxStatuses[fileName] = status;
+
+        totalLogsRead += merged.totalLogs;
+        totalNewLogsInserted += merged.newLogs;
+        totalUsersSynced += merged.syncedUsers;
+      } on SecretBoxAuthenticationError {
+        warnings.add(
+          '$fileName çözülemedi: Çalışma Alanı Anahtarı (Workspace Key) uyumsuz.',
+        );
+      } catch (e) {
+        warnings.add('$fileName okuma/birleştirme hatası: $e');
+      }
+    }
+
+    return BranchInboxPullResult(
+      devices: statuses,
+      totalLogsRead: totalLogsRead,
+      totalNewLogsInserted: totalNewLogsInserted,
+      totalUsersSynced: totalUsersSynced,
+      warnings: warnings,
+    );
   }
 
   /// Bağlı Google Drive hesabında ve yerel/Drive klasörlerinde bulunan yedek profillerini listeler.

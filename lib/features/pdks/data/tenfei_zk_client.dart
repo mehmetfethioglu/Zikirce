@@ -85,6 +85,34 @@ class TenfeiZkClient {
 
   bool get isConnected => _isConnected;
 
+  bool get isSocketAlive => _isConnected && _socket != null;
+
+  /// Açık Tenfei TCP oturumunun hâlâ yanıt verip vermediğini kontrol eder.
+  Future<bool> sendKeepAlive() async {
+    if (!isSocketAlive) return false;
+    try {
+      await _sendCommand(cmdEnableDevice).timeout(const Duration(seconds: 4));
+      return true;
+    } catch (e) {
+      _lastProtocolWarning = e.toString();
+      _isConnected = false;
+      return false;
+    }
+  }
+
+  static String buildDeterministicLogId(
+    int branchId,
+    String cardNo,
+    DateTime timestamp,
+  ) {
+    final y = timestamp.year.toString();
+    final m = timestamp.month.toString().padLeft(2, '0');
+    final d = timestamp.day.toString().padLeft(2, '0');
+    final hh = timestamp.hour.toString().padLeft(2, '0');
+    final mm = timestamp.minute.toString().padLeft(2, '0');
+    return '${branchId}_${cardNo}_$y$m${d}_$hh$mm';
+  }
+
   /// Cihazdan anlık yüz/parmak izi okutma (EF_ATTLOG) olaylarını yayınlar.
   Stream<AttendanceLog> get realtimeAttendanceStream =>
       _realtimeLogController.stream;
@@ -436,7 +464,7 @@ class TenfeiZkClient {
       final isCheckIn = inOutState == 0 || inOutState == 4 || inOutState == 2;
       final verifyMethod = _mapVerifyMethod(verifyCode);
       return AttendanceLog(
-        id: '${branchId}_${cardNo}_${timestamp.millisecondsSinceEpoch}',
+        id: buildDeterministicLogId(branchId, cardNo, timestamp),
         cardNo: cardNo,
         branchId: branchId,
         deviceNo: machineNo,
@@ -684,7 +712,7 @@ class TenfeiZkClient {
       final verifyMethod = _mapVerifyMethod(verifyType);
       logs.add(
         AttendanceLog(
-          id: '${branchId}_${cardNo}_${timestamp.year}${timestamp.month.toString().padLeft(2, '0')}${timestamp.day.toString().padLeft(2, '0')}_${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}',
+          id: buildDeterministicLogId(branchId, cardNo, timestamp),
           cardNo: cardNo,
           branchId: branchId,
           deviceNo: deviceNo,

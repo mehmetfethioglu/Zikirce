@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import '../../../../core/security/hasibu_security_service.dart';
 import '../../../../core/security/license_guard_service.dart';
 import '../../../../core/services/google_auth_adapter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
+import '../../../../core/services/login_preferences_service.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../data/workplace_seed_data.dart';
 import '../../domain/pdks_models.dart';
@@ -28,6 +30,10 @@ final googleAuthAdapterProvider = Provider<GoogleAuthAdapter>((ref) {
   final sync = ref.watch(googleDriveSyncServiceProvider);
   return createPlatformGoogleAuthAdapter(sync);
 });
+
+final loginPreferencesServiceProvider = Provider<LoginPreferencesService>(
+  (ref) => const LoginPreferencesService(),
+);
 
 @immutable
 class PdksDashboardState {
@@ -62,6 +68,7 @@ class PdksDashboardState {
   final String? lastMockGpsAlert;
   final List<AppUserAccount> appUsers;
   final List<CloudBackupProfileInfo> availableCloudBackups;
+  final List<BranchInboxDeviceStatus> branchInboxStatuses;
   final bool isCloudBusy;
   final CloudRestoreSummary? lastRestoreSummary;
 
@@ -97,6 +104,7 @@ class PdksDashboardState {
     this.lastMockGpsAlert,
     this.appUsers = const <AppUserAccount>[],
     this.availableCloudBackups = const <CloudBackupProfileInfo>[],
+    this.branchInboxStatuses = const <BranchInboxDeviceStatus>[],
     this.isCloudBusy = false,
     this.lastRestoreSummary,
   });
@@ -104,6 +112,39 @@ class PdksDashboardState {
   /// [LIC-05] Sistem Salt-Okunur (Read-Only) Abonelik Sonu veya Saat Manipülasyonu Kilidinde mi?
   bool get isCommercialWriteLocked =>
       isReadOnlySubscriptionLocked || isClockTampered;
+
+  List<int> get effectiveBranchScopeIds => authSession.isAuthenticated
+      ? authSession.effectiveScopedBranchIds
+      : const <int>[];
+
+  int? get effectiveBranchScopeId => effectiveBranchScopeIds.length == 1
+      ? effectiveBranchScopeIds.first
+      : null;
+
+  bool get isBranchScoped => effectiveBranchScopeIds.isNotEmpty;
+
+  bool get isSingleBranchScoped => effectiveBranchScopeIds.length == 1;
+
+  bool canAccessBranch(int branchId) =>
+      !isBranchScoped || effectiveBranchScopeIds.contains(branchId);
+
+  int? get effectiveSelectedBranchId {
+    final scoped = effectiveBranchScopeIds;
+    if (scoped.length == 1) return scoped.first;
+    if (scoped.length > 1) {
+      return (selectedBranchId != null && scoped.contains(selectedBranchId))
+          ? selectedBranchId
+          : null;
+    }
+    return selectedBranchId;
+  }
+
+  /// Kalıcı Google Bulut / Drive oturumu aktif mi?
+  bool get isGoogleCloudConnected =>
+      syncStatus.connectedGmail.trim().isNotEmpty &&
+      (syncStatus.isTrulySynced ||
+          syncStatus.isCloudApiVerified ||
+          syncStatus.isDriveFolderMirrored);
 
   List<PersonnelDocument> documentsForEmployee(int employeeId) =>
       allPersonnelDocuments
@@ -153,10 +194,19 @@ class PdksDashboardState {
   }
 
   List<EmployeeDailyStatus> get allFilteredByBranch {
-    if (selectedBranchId == null) return dailyStatuses;
-    return dailyStatuses
-        .where((s) => s.branch.id == selectedBranchId)
-        .toList(growable: false);
+    final scoped = effectiveBranchScopeIds;
+    final branchFilter = effectiveSelectedBranchId;
+    if (branchFilter != null) {
+      return dailyStatuses
+          .where((s) => s.branch.id == branchFilter)
+          .toList(growable: false);
+    }
+    if (scoped.isNotEmpty) {
+      return dailyStatuses
+          .where((s) => scoped.contains(s.branch.id))
+          .toList(growable: false);
+    }
+    return dailyStatuses;
   }
 
   List<EmployeeDailyStatus> get filteredByBranch => allFilteredByBranch
@@ -273,6 +323,7 @@ class PdksDashboardState {
     String? Function()? lastMockGpsAlert,
     List<AppUserAccount>? appUsers,
     List<CloudBackupProfileInfo>? availableCloudBackups,
+    List<BranchInboxDeviceStatus>? branchInboxStatuses,
     bool? isCloudBusy,
     CloudRestoreSummary? Function()? lastRestoreSummary,
   }) {
@@ -321,6 +372,7 @@ class PdksDashboardState {
       appUsers: appUsers ?? this.appUsers,
       availableCloudBackups:
           availableCloudBackups ?? this.availableCloudBackups,
+      branchInboxStatuses: branchInboxStatuses ?? this.branchInboxStatuses,
       isCloudBusy: isCloudBusy ?? this.isCloudBusy,
       lastRestoreSummary: lastRestoreSummary != null
           ? lastRestoreSummary()
@@ -362,6 +414,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   final GoogleAuthAdapter _googleAuthAdapter;
   Timer? _autoPollTimer;
   Timer? _autoCloudBackupTimer;
+  Timer? _branchInboxPullTimer;
+  Timer? _realtimeUploadDebounce;
+  bool _isPullingBranchInboxes = false;
   final Map<int, TenfeiZkClient> _activeClients = <int, TenfeiZkClient>{};
   final List<StreamSubscription<AttendanceLog>> _realtimeSubs =
       <StreamSubscription<AttendanceLog>>[];
@@ -381,8 +436,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           ),
         ) {
     refreshDashboard();
+    if (_googleAuthAdapter.isNativePlatform) {
+      _syncService.setMobileTokenRefresher(
+        () => _googleAuthAdapter.refreshAccessTokenSilently(),
+      );
+    }
+    unawaited(restorePersistedGoogleSession());
     _configureAutoPollTimer();
     _configureAutoCloudBackupTimer();
+    _configureBranchInboxPullTimer();
     if (!kDebugMode &&
         (state.dailyStatuses.isEmpty ||
             state.dailyStatuses.every(
@@ -415,6 +477,58 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     return dateKey;
   }
 
+  List<int> get _scopedBranchIds => state.effectiveBranchScopeIds;
+
+  bool get _isBranchScoped => _scopedBranchIds.isNotEmpty;
+
+  bool _isBranchAllowed(int branchId) =>
+      !_isBranchScoped || _scopedBranchIds.contains(branchId);
+
+  bool _isEmployeeInScope(int employeeId) {
+    if (!_isBranchScoped) return true;
+    final scopedSet = _scopedBranchIds.toSet();
+    for (final emp in _db.getEmployees()) {
+      if (emp.id == employeeId) {
+        return scopedSet.contains(emp.branchId);
+      }
+    }
+    return false;
+  }
+
+  bool _isCardInScope(String cardNo) {
+    if (!_isBranchScoped) return true;
+    final scopedSet = _scopedBranchIds.toSet();
+    final clean = cardNo.trim();
+    final padded = clean.padLeft(5, '0');
+    for (final emp in _db.getEmployees()) {
+      if (emp.cardNo == clean || emp.cardNo == padded) {
+        return scopedSet.contains(emp.branchId);
+      }
+    }
+    return false;
+  }
+
+  static bool _isAuditLogInScope(
+    AuditLogEntry entry, {
+    required Set<int> scopedBranchIds,
+    required Set<String> scopedCardNos,
+    required Set<String> scopedRequestIds,
+  }) {
+    if (scopedCardNos.contains(entry.targetRecordId)) return true;
+    for (final branchId in scopedBranchIds) {
+      if (entry.targetRecordId.startsWith('branch_${branchId}_')) {
+        return true;
+      }
+    }
+    if (scopedRequestIds.contains(entry.targetRecordId)) return true;
+    if (entry.actionType == 'MISSING_CHECKOUT_COMPLETED' &&
+        scopedCardNos.contains(entry.targetRecordId.split('_').first)) {
+      return true;
+    }
+    if (scopedCardNos.contains(entry.actorEmployeeId)) return true;
+    return false;
+  }
+
   /// Yönetici / Yetkili Kullanıcı Girişi doğrular.
   bool loginAsAdmin({required String username, required String password}) {
     final u = username.trim().toLowerCase();
@@ -435,7 +549,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           allowedModules: HasibuModule.activePhaseModules,
         ),
         activeModule: HasibuModule.pdksHr,
+        selectedBranchId: () => null,
+        selectedStateFilter: () => null,
+        selectedAnomalyFilter: PdksAnomalyFilter.all,
+        searchQuery: '',
+        terminalStatusMessage: 'PDKS Terminali hazır',
+        lastTerminalReachable: () => null,
+        mockGpsAnomalyCount: 0,
+        lastMockGpsAlert: () => null,
+        lastRestoreSummary: () => null,
       );
+      refreshDashboard();
       return true;
     }
 
@@ -452,6 +576,18 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         return false;
       }
       if (HasibuSecurityService.verifyPassword(p, appUser.passwordHash)) {
+        final scopedBranchIds = appUser.effectiveAllowedBranchIds;
+        if (appUser.role == AppUserRole.branchSupervisor &&
+            scopedBranchIds.isEmpty) {
+          state = state.copyWith(
+            authSession: state.authSession.copyWith(
+              isAuthenticated: false,
+              errorMessage: () =>
+                  'Bu Şube Sorumlusu hesabına şube atanmamış. Lütfen yöneticiden "Ayarlar > Yetkili Kullanıcılar" üzerinden sorumlu şubeleri seçmesini isteyin.',
+            ),
+          );
+          return false;
+        }
         final modules = HasibuModule.filterActive(appUser.allowedModules);
         final hasAdminLikeModule = modules.any(
           (m) => m != HasibuModule.employeePortal,
@@ -465,13 +601,23 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
             role: appUser.role.baseRole,
             allowedModules: modules,
             appUserId: appUser.id,
-            scopedBranchId: appUser.allowedBranchId,
+            scopedBranchId:
+                scopedBranchIds.isNotEmpty ? scopedBranchIds.first : null,
+            scopedBranchIds: scopedBranchIds,
           ),
           activeModule: modules.first,
-          selectedBranchId: appUser.allowedBranchId != null
-              ? () => appUser.allowedBranchId
-              : null,
+          selectedBranchId: () =>
+              scopedBranchIds.length == 1 ? scopedBranchIds.first : null,
+          selectedStateFilter: () => null,
+          selectedAnomalyFilter: PdksAnomalyFilter.all,
+          searchQuery: '',
+          terminalStatusMessage: 'PDKS Terminali hazır',
+          lastTerminalReachable: () => null,
+          mockGpsAnomalyCount: 0,
+          lastMockGpsAlert: () => null,
+          lastRestoreSummary: () => null,
         );
+        refreshDashboard();
         return true;
       }
     }
@@ -489,13 +635,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   bool loginAsEmployee({required String cardNo, required String pin}) {
     final normalizedCard = cardNo.trim().padLeft(5, '0');
     final fallbackPin = state.companySettings.defaultEmployeePin;
+    final allEmployees = _db.getEmployees();
 
-    final matchIndex = state.dailyStatuses.indexWhere(
-      (s) => s.employee.cardNo == normalizedCard,
+    final matchIndex = allEmployees.indexWhere(
+      (e) => e.cardNo == normalizedCard,
     );
 
     if (matchIndex >= 0) {
-      final emp = state.dailyStatuses[matchIndex].employee;
+      final emp = allEmployees[matchIndex];
       if (emp.isSeparatedNow) {
         final exitDisplay = formatDisplayDate(
           emp.normalizedExitDate!,
@@ -535,7 +682,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           ),
           activeSelfServiceCardNo: emp.cardNo,
           activeModule: modules.first,
+          selectedBranchId: () => null,
         );
+        refreshDashboard();
         return true;
       }
     }
@@ -556,7 +705,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     state = state.copyWith(
       authSession: const AuthSession(isAuthenticated: false),
       activeModule: HasibuModule.pdksHr,
+      selectedBranchId: () => null,
+      selectedStateFilter: () => null,
+      selectedAnomalyFilter: PdksAnomalyFilter.all,
+      searchQuery: '',
+      terminalStatusMessage: 'PDKS Terminali hazır',
+      lastTerminalReachable: () => null,
+      mockGpsAnomalyCount: 0,
+      lastMockGpsAlert: () => null,
+      lastRestoreSummary: () => null,
     );
+    refreshDashboard();
   }
 
   /// Üst modül seçme satırından aktif modülü değiştirir (faz & yetki kontrolü ile).
@@ -615,8 +774,33 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       logsByCard.putIfAbsent(log.cardNo, () => <AttendanceLog>[]).add(log);
     }
 
+    final scopedBranchIds = state.effectiveBranchScopeIds;
+    final scopedBranchIdSet = scopedBranchIds.toSet();
+    final visibleBranches = scopedBranchIdSet.isNotEmpty
+        ? branches
+            .where((b) => scopedBranchIdSet.contains(b.id))
+            .toList(growable: false)
+        : branches;
+    final visibleEmployees = scopedBranchIdSet.isNotEmpty
+        ? employees
+            .where((e) => scopedBranchIdSet.contains(e.branchId))
+            .toList(growable: false)
+        : employees;
+    final scopedEmployeeIds = {for (final e in visibleEmployees) e.id};
+    final scopedCardNos = {for (final e in visibleEmployees) e.cardNo};
+    final scopedDeptIds = {for (final e in visibleEmployees) e.departmentId};
+    final visibleDepartments = scopedBranchIdSet.isNotEmpty
+        ? departments
+            .where(
+              (d) =>
+                  scopedBranchIdSet.contains(d.branchId) ||
+                  scopedDeptIds.contains(d.id),
+            )
+            .toList(growable: false)
+        : departments;
+
     final statuses = <EmployeeDailyStatus>[];
-    for (final emp in employees) {
+    for (final emp in visibleEmployees) {
       final branch = branchMap[emp.branchId] ??
           (branches.isNotEmpty
               ? branches.first
@@ -657,9 +841,102 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       );
     }
 
+    final List<LeaveRecord> visibleLeaves;
+    final List<PersonnelDocument> visibleDocs;
+    final List<HrRequest> visibleRequests;
+    final List<AttendanceLog> visibleTamperedLogs;
+    final List<AuditLogEntry> visibleAuditLogs;
+    final List<BranchInboxDeviceStatus> visibleInboxStatuses;
+    final List<AppUserAccount> visibleAppUsers;
+    String? nextSelfServiceCardNo;
+
+    if (scopedBranchIdSet.isNotEmpty) {
+      visibleLeaves = allLeaves
+          .where((l) => scopedEmployeeIds.contains(l.employeeId))
+          .toList(growable: false);
+      visibleDocs = allDocs
+          .where((d) => scopedEmployeeIds.contains(d.employeeId))
+          .toList(growable: false);
+      visibleRequests = allRequests
+          .where(
+            (r) =>
+                scopedEmployeeIds.contains(r.employeeId) ||
+                scopedCardNos.contains(r.employeeCardNo),
+          )
+          .toList(growable: false);
+      final scopedRequestIds = {for (final r in visibleRequests) r.id};
+      visibleTamperedLogs = tamperedLogs
+          .where(
+            (l) =>
+                scopedBranchIdSet.contains(l.branchId) ||
+                scopedCardNos.contains(l.cardNo),
+          )
+          .toList(growable: false);
+      visibleAuditLogs = auditLogs
+          .where(
+            (a) => _isAuditLogInScope(
+              a,
+              scopedBranchIds: scopedBranchIdSet,
+              scopedCardNos: scopedCardNos,
+              scopedRequestIds: scopedRequestIds,
+            ),
+          )
+          .toList(growable: false);
+      visibleInboxStatuses = state.branchInboxStatuses
+          .where((d) => scopedBranchIdSet.contains(d.branchId))
+          .toList(growable: false);
+      visibleAppUsers = appUsers
+          .where(
+            (u) =>
+                u.id == state.authSession.appUserId ||
+                (u.effectiveAllowedBranchIds.isNotEmpty &&
+                    u.effectiveAllowedBranchIds.every(
+                      scopedBranchIdSet.contains,
+                    )),
+          )
+          .toList(growable: false);
+
+      if (scopedCardNos.contains(state.activeSelfServiceCardNo)) {
+        nextSelfServiceCardNo = state.activeSelfServiceCardNo;
+      } else {
+        final activeVisible = visibleEmployees
+            .where((e) => !e.isSeparatedNow)
+            .toList(growable: false);
+        if (activeVisible.isNotEmpty) {
+          nextSelfServiceCardNo = activeVisible.first.cardNo;
+        } else if (visibleEmployees.isNotEmpty) {
+          nextSelfServiceCardNo = visibleEmployees.first.cardNo;
+        } else {
+          nextSelfServiceCardNo = '';
+        }
+      }
+    } else {
+      visibleLeaves = allLeaves;
+      visibleDocs = allDocs;
+      visibleRequests = allRequests;
+      visibleTamperedLogs = tamperedLogs;
+      visibleAuditLogs = auditLogs;
+      visibleInboxStatuses = state.branchInboxStatuses;
+      visibleAppUsers = appUsers;
+    }
+
+    final int? Function()? nextSelectedBranchId;
+    if (scopedBranchIds.length == 1) {
+      nextSelectedBranchId = () => scopedBranchIds.first;
+    } else if (scopedBranchIds.length > 1 &&
+        state.selectedBranchId != null &&
+        !scopedBranchIdSet.contains(state.selectedBranchId)) {
+      nextSelectedBranchId = () => null;
+    } else {
+      nextSelectedBranchId = null;
+    }
+
     final currentSync = state.syncStatus;
+    final trimmedSyncGmail = companySettings.syncGmailAccount.trim();
     final DriveSyncStatus updatedSyncStatus = currentSync.copyWith(
-      connectedGmail: companySettings.syncGmailAccount.trim(),
+      connectedGmail: trimmedSyncGmail.isNotEmpty
+          ? trimmedSyncGmail
+          : currentSync.connectedGmail,
       cloudProfileId: companySettings.cloudProfileId,
     );
 
@@ -667,20 +944,23 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       companySettings: companySettings,
       autoPollEnabled: companySettings.autoPollEnabled,
       autoPollMinutes: companySettings.autoPollMinutes,
-      branches: branches,
+      selectedBranchId: nextSelectedBranchId,
+      branches: visibleBranches,
       shifts: shifts,
-      departments: departments,
+      departments: visibleDepartments,
       dailyStatuses: statuses,
-      allLeaveRecords: allLeaves,
-      allPersonnelDocuments: allDocs,
-      allHrRequests: allRequests,
-      appUsers: appUsers,
+      allLeaveRecords: visibleLeaves,
+      allPersonnelDocuments: visibleDocs,
+      allHrRequests: visibleRequests,
+      appUsers: visibleAppUsers,
+      branchInboxStatuses: visibleInboxStatuses,
+      activeSelfServiceCardNo: nextSelfServiceCardNo,
       syncStatus: updatedSyncStatus,
       isReadOnlySubscriptionLocked: isSubscriptionLocked,
       isClockTampered: isClockTampered,
       licenseStatusMessage: licenseMessage,
-      tamperedAttendanceLogs: tamperedLogs,
-      auditLogs: auditLogs,
+      tamperedAttendanceLogs: visibleTamperedLogs,
+      auditLogs: visibleAuditLogs,
     );
   }
 
@@ -868,6 +1148,19 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   void setBranchFilter(int? branchId) {
+    final scoped = _scopedBranchIds;
+    if (scoped.length == 1) {
+      final onlyId = scoped.first;
+      if (state.selectedBranchId != onlyId) {
+        state = state.copyWith(selectedBranchId: () => onlyId);
+      }
+      return;
+    }
+    if (scoped.length > 1) {
+      if (branchId != null && !scoped.contains(branchId)) return;
+      state = state.copyWith(selectedBranchId: () => branchId);
+      return;
+    }
     state = state.copyWith(selectedBranchId: () => branchId);
   }
 
@@ -884,6 +1177,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   void setSelfServiceEmployee(String cardNo) {
+    if (_isBranchScoped &&
+        !state.dailyStatuses.any((s) => s.employee.cardNo == cardNo)) {
+      return;
+    }
     state = state.copyWith(activeSelfServiceCardNo: cardNo);
   }
 
@@ -933,6 +1230,167 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       ),
       (_) => unawaited(runAutomaticCloudBackup()),
     );
+  }
+
+  void _configureBranchInboxPullTimer() {
+    _branchInboxPullTimer?.cancel();
+    _branchInboxPullTimer = null;
+    if (state.isCommercialWriteLocked) return;
+
+    _branchInboxPullTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) {
+        if (!mounted || state.isCommercialWriteLocked || state.isCloudBusy) {
+          return;
+        }
+        unawaited(pullBranchInboxesNow(force: false));
+      },
+    );
+  }
+
+  /// Google Drive'daki tüm şube cihaz gelen kutularını (`hasibu_branch_inbox_*.enc`)
+  /// okuyup mevcut veritabanına kayıpsız birleştirir.
+  Future<BranchInboxPullResult> pullBranchInboxesNow({
+    bool force = true,
+  }) async {
+    if (!mounted || state.isCommercialWriteLocked || _isPullingBranchInboxes) {
+      return const BranchInboxPullResult();
+    }
+    _isPullingBranchInboxes = true;
+    try {
+      final res = await _syncService.pullAndMergeBranchInboxes(force: force);
+      if (!mounted) return res;
+      if (res.totalNewLogsInserted > 0 || res.totalUsersSynced > 0) {
+        refreshDashboard();
+      }
+      final scopedSet = _scopedBranchIds.toSet();
+      final visibleDevices = scopedSet.isNotEmpty
+          ? res.devices
+              .where((d) => scopedSet.contains(d.branchId))
+              .toList(growable: false)
+          : res.devices;
+      if (visibleDevices.isNotEmpty || force) {
+        state = state.copyWith(branchInboxStatuses: visibleDevices);
+      }
+      if (scopedSet.isNotEmpty) {
+        return BranchInboxPullResult(
+          devices: visibleDevices,
+          totalLogsRead: visibleDevices.fold<int>(
+            0,
+            (sum, d) => sum + d.logCount,
+          ),
+          totalNewLogsInserted: visibleDevices.fold<int>(
+            0,
+            (sum, d) => sum + d.newlyInsertedCount,
+          ),
+          totalUsersSynced: visibleDevices.fold<int>(
+            0,
+            (sum, d) => sum + d.syncedUsersCount,
+          ),
+          warnings: res.warnings,
+        );
+      }
+      return res;
+    } catch (e) {
+      debugPrint('Şube kutuları çekim uyarısı: $e');
+      return BranchInboxPullResult(warnings: <String>[e.toString()]);
+    } finally {
+      _isPullingBranchInboxes = false;
+    }
+  }
+
+  /// Şubedeki Windows 10 x64 `HasibuBranchBridge.exe` ajanına yapıştırılacak veya
+  /// `--import-config` ile aktarılacak şube yapılandırma JSON metnini üretir (OAuth sırrı içermez).
+  Future<String> buildBranchBridgeConfigJson(Branch branch) async {
+    if (!_isBranchAllowed(branch.id)) {
+      throw StateError(
+        'Yetki kapsamı dışındaki şube için köprü yapılandırması üretilemez.',
+      );
+    }
+    final workspaceKey = await _syncService.getWorkspaceKey();
+    final effectiveCommKey = branch.terminalCommKey <= 0
+        ? HasibuSecurityService.defaultTenfeiCommKey
+        : branch.terminalCommKey;
+    final payload = <String, dynamic>{
+      'deviceSlug': GoogleDriveSyncService.normalizeDeviceSlug(
+        '${branch.code}_d35',
+      ),
+      'deviceName': '${branch.name} Akıllı Terazi Köprüsü',
+      'cloudProfileId': state.companySettings.cloudProfileId,
+      'branchId': branch.id,
+      'branchCode': branch.code,
+      'branchName': branch.name,
+      'terminalIp': (branch.terminalIp ?? '').trim(),
+      'terminalPort': branch.terminalPort,
+      'machineNo': branch.machineNo,
+      'commKey': effectiveCommKey,
+      'debounceSeconds': 3,
+      'catchUpPollMinutes': 3,
+      'keepAliveSeconds': 30,
+      'workspaceKey': workspaceKey,
+    };
+    return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  /// Yerel ağdaki aktif Tenfei D35 terminalleri için canlı push olay (`CMD_REG_EVENT`)
+  /// dinleyicilerini başlatır; yeni okuma geldiğinde 3 sn gecikmeli otomatik yedek tetikler.
+  Future<void> startRealtimeMonitoring() async {
+    await stopRealtimeMonitoring();
+    if (!mounted || state.isCommercialWriteLocked) return;
+
+    final targetBranches = state.branches.where(
+      (b) => b.hasTerminal && (b.terminalIp?.isNotEmpty ?? false),
+    );
+    for (final branch in targetBranches) {
+      final client = TenfeiZkClient.forBranch(branch);
+      try {
+        await client.connect();
+        await client.enableRealtimeEvents();
+        if (!mounted) {
+          await client.dispose();
+          return;
+        }
+        _activeClients[branch.id] = client;
+        final sub = client.realtimeAttendanceStream.listen(
+          (log) {
+            if (!mounted || state.isCommercialWriteLocked) return;
+            final inserted = _db.upsertAttendanceLog(log);
+            _db.ensureEmployeesForUnregisteredLogCards();
+            if (inserted) {
+              refreshDashboard();
+              _realtimeUploadDebounce?.cancel();
+              _realtimeUploadDebounce = Timer(
+                const Duration(seconds: 3),
+                () => unawaited(
+                  _pushAutoBackupOnChange('Hasibu Canlı Tenfei Dinleyici'),
+                ),
+              );
+            }
+          },
+          onError: (Object err) {
+            debugPrint('Tenfei canlı akış hatası (${branch.name}): $err');
+          },
+        );
+        _realtimeSubs.add(sub);
+      } catch (e) {
+        debugPrint('Tenfei canlı dinleme başlatılamadı (${branch.name}): $e');
+        await client.dispose();
+      }
+    }
+  }
+
+  /// Açık canlı terminal dinleyicilerini ve soketlerini kapatır.
+  Future<void> stopRealtimeMonitoring() async {
+    _realtimeUploadDebounce?.cancel();
+    _realtimeUploadDebounce = null;
+    for (final sub in _realtimeSubs) {
+      await sub.cancel();
+    }
+    _realtimeSubs.clear();
+    for (final client in _activeClients.values) {
+      await client.dispose();
+    }
+    _activeClients.clear();
   }
 
   /// Zamanlayıcı tarafından tetiklenen periyodik otomatik bulut yedeklemesi.
@@ -1011,6 +1469,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           'Tenfei D35 terminallerine (TCP 4370) bağlanılıyor...',
     );
 
+    if (onlyBranchId != null && !_isBranchAllowed(onlyBranchId)) {
+      state = state.copyWith(
+        isPollingTerminal: false,
+        terminalStatusMessage:
+            'Yetki kapsamınız dışındaki şube terminalinden veri çekilemez.',
+      );
+      return null;
+    }
     final targetBranches = state.branches.where((b) {
       if (onlyBranchId != null) return b.id == onlyBranchId;
       return b.hasTerminal && (b.terminalIp?.isNotEmpty ?? false);
@@ -1170,8 +1636,12 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
 
     refreshDashboard();
-    final logsForSelectedDate =
-        _db.getAttendanceLogsForDate(state.selectedDate).length;
+    final logsForSelectedDate = _isBranchScoped
+        ? state.dailyStatuses.fold<int>(
+            0,
+            (sum, s) => sum + s.allLogsOfDay.length,
+          )
+        : _db.getAttendanceLogsForDate(state.selectedDate).length;
     await _pushAutoBackupOnChange(
       'Hasibu Masaüstü (Tenfei D35 Köprüsü)',
       force: false,
@@ -1233,6 +1703,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   Future<TenfeiConnectionDiagnostics> testBranchTerminalConnection(
     Branch branch,
   ) async {
+    if (!_isBranchAllowed(branch.id)) {
+      return const TenfeiConnectionDiagnostics(
+        isReachable: false,
+        latencyMs: 0,
+        message: 'Yetki kapsamınız dışındaki şube terminaline erişilemez.',
+      );
+    }
     final ip = (branch.terminalIp ?? '').trim();
     if (ip.isEmpty) {
       return const TenfeiConnectionDiagnostics(
@@ -1257,12 +1734,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Şube veya Cihaz ekler / günceller.
   Future<void> saveBranch(Branch branch) async {
+    if (!_isBranchAllowed(branch.id)) return;
     _db.upsertBranch(branch);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Şube/Cihaz Yönetimi');
   }
 
   Future<void> deleteBranch(int branchId) async {
+    if (_isBranchScoped) return;
     _db.deleteBranch(branchId);
     if (state.selectedBranchId == branchId) {
       state = state.copyWith(selectedBranchId: () => null);
@@ -1286,6 +1765,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Departman / Üretim Bölümü ekler veya günceller.
   Future<void> saveDepartment(Department dept) async {
+    if (!_isBranchAllowed(dept.branchId)) return;
     _db.upsertDepartment(dept);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Bölüm Yönetimi');
@@ -1294,11 +1774,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   /// Personel ekler veya mevcut personelin bilgilerini günceller.
   Future<void> saveEmployee(Employee employee) async {
     Employee? previous;
-    for (final s in state.dailyStatuses) {
-      if (s.employee.id == employee.id) {
-        previous = s.employee;
+    for (final emp in _db.getEmployees()) {
+      if (emp.id == employee.id) {
+        previous = emp;
         break;
       }
+    }
+    if (!_isBranchAllowed(employee.branchId) ||
+        (previous != null && !_isBranchAllowed(previous.branchId))) {
+      return;
     }
     _db.upsertEmployee(employee);
     if (previous == null ||
@@ -1323,6 +1807,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   Future<void> deleteEmployee(int employeeId) async {
+    if (!_isEmployeeInScope(employeeId)) return;
     _db.deleteEmployee(employeeId);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Personel Yönetimi');
@@ -1338,6 +1823,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     AttendanceSource source = AttendanceSource.manual,
     VerifyMethod verifyMethod = VerifyMethod.face,
   }) async {
+    if (!_isBranchAllowed(employee.branchId)) return;
     final dParts = dateKey.split('-');
     final tParts = timeHhMm.split(':');
     final dt = DateTime(
@@ -1368,6 +1854,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   Future<void> deleteAttendanceLog(String logId) async {
+    if (_isBranchScoped) {
+      final existing = _db.getAttendanceLogById(logId);
+      if (existing == null ||
+          (!_isBranchAllowed(existing.branchId) &&
+              !_isCardInScope(existing.cardNo))) {
+        return;
+      }
+    }
     _db.deleteAttendanceLog(logId);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Hareket Düzeltme');
@@ -1381,8 +1875,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     String? checkOutTime,
     bool replaceExistingForDay = true,
   }) async {
+    final scopedEmployees = _isBranchScoped
+        ? employees
+            .where((e) => _isBranchAllowed(e.branchId))
+            .toList(growable: false)
+        : employees;
+    if (scopedEmployees.isEmpty) return 0;
     final affected = _db.applyBulkManualAttendance(
-      employees: employees,
+      employees: scopedEmployees,
       dateKey: dateKey,
       checkInTime: checkInTime,
       checkOutTime: checkOutTime,
@@ -1537,7 +2037,96 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     _db.saveCompanySettings(updated);
     refreshDashboard();
 
+    final pullRes = await _syncService.restoreFromCloud(
+      mode: CloudRestoreMode.merge,
+      isEmployeePortalOnly: false,
+    );
+    refreshDashboard();
+
+    if (pullRes.status.stage == DriveSyncStage.error) {
+      if (mounted) {
+        state = state.copyWith(syncStatus: pullRes.status);
+      }
+      if (authenticateAppSession) {
+        if (mounted) {
+          state = state.copyWith(
+            authSession: state.authSession.copyWith(
+              isAuthenticated: false,
+              errorMessage: () => null,
+            ),
+          );
+        }
+        return BrowserGoogleSignInResult(
+          success: true,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          email: resolvedGmail,
+          displayName: result.displayName,
+          requiresUserLogin: true,
+          message: pullRes.status.message,
+        );
+      }
+      return BrowserGoogleSignInResult(
+        success: true,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        email: resolvedGmail,
+        displayName: result.displayName,
+        message: pullRes.status.message,
+      );
+    }
+
+    DriveSyncStatus finalSyncStatus = pullRes.status;
+    if (pullRes.summary == null) {
+      finalSyncStatus = await _syncService.pushToCloud(
+        deviceName: 'Hasibu İlk Bulut Eşitleme',
+        force: true,
+        operationLabel: 'sync',
+      );
+    }
+    if (finalSyncStatus.connectedGmail.trim().isEmpty &&
+        resolvedGmail.isNotEmpty) {
+      finalSyncStatus = finalSyncStatus.copyWith(connectedGmail: resolvedGmail);
+    }
+    if (mounted) {
+      state = state.copyWith(syncStatus: finalSyncStatus);
+    }
+
     if (authenticateAppSession) {
+      final activeAppUsers =
+          state.appUsers.where((u) => u.isActive).toList(growable: false);
+      if (activeAppUsers.isNotEmpty) {
+        AppUserAccount? matched;
+        final targetEmail = resolvedGmail.trim().toLowerCase();
+        if (targetEmail.isNotEmpty) {
+          for (final u in activeAppUsers) {
+            if ((u.linkedGmail ?? '').trim().toLowerCase() == targetEmail) {
+              matched = u;
+              break;
+            }
+          }
+        }
+        if (mounted) {
+          state = state.copyWith(
+            authSession: state.authSession.copyWith(
+              isAuthenticated: false,
+              errorMessage: () => null,
+            ),
+          );
+        }
+        return BrowserGoogleSignInResult(
+          success: true,
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          email: resolvedGmail,
+          displayName: result.displayName,
+          requiresUserLogin: true,
+          suggestedUsername: matched?.username,
+          message:
+              'Google bulut oturumu açık ($resolvedGmail). Devam etmek için kullanıcı adınız ve parolanızla giriş yapın.',
+        );
+      }
+
       HasibuSecurityService.setFlagSecureEnabled(true);
       final disp = result.displayName.trim().isNotEmpty
           ? '${result.displayName.trim()} ($resolvedGmail)'
@@ -1551,10 +2140,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           allowedModules: HasibuModule.activePhaseModules,
         ),
         activeModule: HasibuModule.pdksHr,
+        selectedBranchId: () => null,
       );
+      refreshDashboard();
     }
 
-    await syncWithGoogleDriveNow();
     return result;
   }
 
@@ -1605,6 +2195,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     bool isMockedGps = false,
     DateTime? verificationNow,
   }) async {
+    if (!_isBranchAllowed(branch.id) || !_isBranchAllowed(employee.branchId)) {
+      return 'Yetki kapsamınız dışındaki şube veya personel için yoklama kaydı oluşturulamaz.';
+    }
     // [HW-06] Sahte GPS (position.isMocked) Kontrolü
     if (isMockedGps) {
       final alertMsg =
@@ -1700,6 +2293,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required String note,
     String? customDateKey,
   }) async {
+    if (!_isEmployeeInScope(employeeId)) return;
     final targetDate = customDateKey ?? state.selectedDate;
     final record = LeaveRecord(
       id: 'leave_${employeeId}_$targetDate',
@@ -1721,6 +2315,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required LeaveType leaveType,
     required String note,
   }) async {
+    if (!_isEmployeeInScope(employeeId)) return 0;
     final DateTime normalizedStart =
         DateTime(startDate.year, startDate.month, startDate.day);
     final DateTime normalizedEnd =
@@ -1750,6 +2345,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   Future<void> deleteLeaveRecord(String leaveId) async {
+    if (_isBranchScoped) {
+      LeaveRecord? target;
+      for (final rec in _db.getAllLeaveRecords()) {
+        if (rec.id == leaveId) {
+          target = rec;
+          break;
+        }
+      }
+      if (target == null || !_isEmployeeInScope(target.employeeId)) return;
+    }
     _db.deleteLeaveRecord(leaveId);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu İK İzin/Rapor Yönetimi');
@@ -1757,6 +2362,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Personelin tüm tarihlerdeki giriş-çıkış, geç kalma ve izin/rapor geçmişini kronolojik olarak döndürür.
   List<EmployeeHistoryDayEntry> getEmployeeHistory(Employee emp) {
+    if (!_isBranchAllowed(emp.branchId)) {
+      return const <EmployeeHistoryDayEntry>[];
+    }
     final logs = _db.getAttendanceLogsForEmployee(emp.cardNo);
     final leaves = _db.getLeaveRecordsForEmployee(emp.id);
     final shift = state.shifts.firstWhere(
@@ -1817,6 +2425,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Tek tıkla eksik çıkış (Tek Okuma) anomalisini personelin vardiya bitiş saatine göre tamamlar.
   Future<void> quickCompleteMissingCheckOut(EmployeeDailyStatus item) async {
+    if (!_isBranchAllowed(item.employee.branchId)) return;
     final actor = state.authSession.username.isEmpty
         ? 'admin'
         : state.authSession.username;
@@ -1897,6 +2506,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Personel Portalı veya İK üzerinden yeni talep (İzin, Fazla Mesai, Eksik Hareket, Avans) oluşturur.
   Future<void> submitHrRequest(HrRequest request) async {
+    if (_isBranchScoped &&
+        !_isEmployeeInScope(request.employeeId) &&
+        !_isCardInScope(request.employeeCardNo)) {
+      return;
+    }
     _db.upsertHrRequest(request);
     refreshDashboard();
     await _pushAutoBackupOnChange(
@@ -1913,6 +2527,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required bool approve,
     String? reviewerNote,
   }) async {
+    if (_isBranchScoped &&
+        !_isEmployeeInScope(request.employeeId) &&
+        !_isCardInScope(request.employeeCardNo)) {
+      return 'Yetki kapsamınız dışındaki şubeye ait talep işlenemez.';
+    }
     // [LIC-05] Salt-Okunur (Read-Only) Abonelik Sonu / Saat Manipülasyonu Kilidi
     if (state.isCommercialWriteLocked) {
       return 'KİLİTLİ (Salt-Okunur Mod): ${state.licenseStatusMessage} — Yeni İK talebi onaylama devre dışı bırakıldı.';
@@ -1990,7 +2609,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// 4857 sayılı İş Kanunu Md. 53 uyarınca kıdem yılına göre eksik tanımlanmış yıllık izin haklarını otomatik günceller.
   Future<int> syncStatutoryLeaveEntitlements() async {
-    final employees = _db.getEmployees();
+    final employees = _db
+        .getEmployees()
+        .where((e) => _isBranchAllowed(e.branchId))
+        .toList(growable: false);
     final actor = state.authSession.username.isEmpty
         ? 'admin'
         : state.authSession.username;
@@ -2118,11 +2740,19 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       dayKeys.add((date: cursor, key: formatDateKey(cursor)));
     }
 
+    final int? effectiveFilterBranchId =
+        (branchId != null && _isBranchAllowed(branchId))
+            ? branchId
+            : (_scopedBranchIds.length == 1 ? _scopedBranchIds.first : null);
     final q = searchQuery.trim().toUpperCase();
     final results = <EmployeeAttendancePeriodSummary>[];
 
     for (final emp in employees) {
-      if (branchId != null && emp.branchId != branchId) continue;
+      if (!_isBranchAllowed(emp.branchId)) continue;
+      if (effectiveFilterBranchId != null &&
+          emp.branchId != effectiveFilterBranchId) {
+        continue;
+      }
       if (departmentId != null && emp.departmentId != departmentId) continue;
 
       final branch = branchMap[emp.branchId] ??
@@ -2309,6 +2939,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Personelin özlük dosyasına resmi evrak dijital kopyası ekler veya günceller.
   Future<void> savePersonnelDocument(PersonnelDocument doc) async {
+    if (!_isEmployeeInScope(doc.employeeId)) return;
     _db.upsertPersonnelDocument(doc);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Özlük Dosyası Yönetimi');
@@ -2316,6 +2947,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Personelin özlük dosyasından dijital evrak kaydını siler.
   Future<void> deletePersonnelDocument(String docId) async {
+    if (_isBranchScoped) {
+      PersonnelDocument? target;
+      for (final doc in _db.getAllPersonnelDocuments()) {
+        if (doc.id == docId) {
+          target = doc;
+          break;
+        }
+      }
+      if (target == null || !_isEmployeeInScope(target.employeeId)) return;
+    }
     _db.deletePersonnelDocument(docId);
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Özlük Dosyası Yönetimi');
@@ -2381,9 +3022,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       ),
     );
     try {
-      await _syncService.pullAndReconcile(
+      final pullStatus = await _syncService.pullAndReconcile(
         isEmployeePortalOnly: isEmployeePortal,
       );
+      if (pullStatus.stage == DriveSyncStage.error) {
+        refreshDashboard();
+        if (mounted) {
+          state = state.copyWith(syncStatus: pullStatus);
+        }
+        return;
+      }
       final pushStatus = await _syncService.pushToCloud(
         deviceName: 'Hasibu Cihaz Senkronizasyonu',
         force: true,
@@ -2532,10 +3180,27 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     _configureAutoCloudBackupTimer();
   }
 
+  /// Uygulama yeniden açıldığında kalıcı Google Bulut oturumunu geri yükler.
+  Future<void> restorePersistedGoogleSession() async {
+    final restored = await _syncService.restorePersistedGoogleSession();
+    if (mounted && restored != null) {
+      state = state.copyWith(syncStatus: restored);
+    }
+  }
+
   Future<String> getCloudWorkspaceKey() => _syncService.getWorkspaceKey();
 
   Future<void> updateCloudWorkspaceKey(String key) =>
       _syncService.saveWorkspaceKey(key);
+
+  Future<CloudEncryptionKeyMode> getCloudEncryptionKeyMode() =>
+      _syncService.getCloudEncryptionKeyMode();
+
+  Future<void> setCloudEncryptionPassphrase(String passphrase) =>
+      _syncService.saveCloudSyncPassphrase(passphrase);
+
+  Future<void> useAutomaticCloudEncryption() =>
+      _syncService.useAutomaticAccountEncryption();
 
   /// Aynı şirket (ve aynı Gmail bulut yedeği) altında yeni yetkili kullanıcı ekler veya günceller.
   Future<String?> saveAppUser({
@@ -2546,9 +3211,21 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required AppUserRole role,
     required List<HasibuModule> allowedModules,
     int? allowedBranchId,
+    List<int>? allowedBranchIds,
     String? linkedGmail,
     bool isActive = true,
   }) async {
+    if (_isBranchScoped) {
+      return 'Şube kapsamlı kullanıcı yetkili hesap yönetimi yapamaz.';
+    }
+    final normalizedBranchIds = AppUserAccount.normalizeBranchIds(
+      allowedBranchIds,
+      legacyBranchId: allowedBranchId,
+    );
+    if (role == AppUserRole.branchSupervisor && normalizedBranchIds.isEmpty) {
+      return 'Şube Sorumlusu için en az bir yetkili şube seçilmelidir.';
+    }
+
     final cleanUsername = username.trim().toLowerCase();
     if (cleanUsername.isEmpty) {
       return 'Kullanıcı adı boş bırakılamaz.';
@@ -2565,7 +3242,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     AppUserAccount? existingUser;
     if (existingId != null && existingId.trim().isNotEmpty) {
-      for (final u in state.appUsers) {
+      for (final u in _db.getAppUsers()) {
         if (u.id == existingId) {
           existingUser = u;
           break;
@@ -2590,7 +3267,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       passwordHash: passwordHash,
       role: role,
       allowedModules: allowedModules.isEmpty ? role.defaultModules : allowedModules,
-      allowedBranchId: allowedBranchId,
+      allowedBranchId:
+          normalizedBranchIds.isNotEmpty ? normalizedBranchIds.first : null,
+      allowedBranchIds: normalizedBranchIds,
       linkedGmail: linkedGmail?.trim().isEmpty == true
           ? null
           : linkedGmail?.trim(),
@@ -2612,7 +3291,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           ? 'NEW'
           : 'role=${existingUser.role.name}, active=${existingUser.isActive}',
       newValue:
-          'role=${account.role.name}, active=${account.isActive}, branch=${account.allowedBranchId ?? "ALL"}',
+          'role=${account.role.name}, active=${account.isActive}, branch=${normalizedBranchIds.isEmpty ? "ALL" : normalizedBranchIds.join(",")}',
     );
 
     refreshDashboard();
@@ -2637,7 +3316,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   Future<void> toggleAppUserActive(String userId, bool isActive) async {
-    for (final u in state.appUsers) {
+    for (final u in _db.getAppUsers()) {
       if (u.id == userId) {
         final updated = u.copyWith(isActive: isActive);
         _db.upsertAppUser(updated);
@@ -2665,8 +3344,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final result = await LicenseGuardService.verifyLicenseToken(
       newLicenseToken,
       expectedHwId: state.companySettings.hardwareFingerprint,
-      currentEmployeeCount: state.dailyStatuses.length,
-      currentBranchCount: state.branches.length,
+      currentEmployeeCount: _db.getEmployees().length,
+      currentBranchCount: _db.getBranches().length,
     );
     final updated = state.companySettings.copyWith(
       licenseToken: newLicenseToken.trim(),
@@ -2719,12 +3398,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   void dispose() {
     _autoPollTimer?.cancel();
     _autoCloudBackupTimer?.cancel();
+    _branchInboxPullTimer?.cancel();
+    _realtimeUploadDebounce?.cancel();
     for (final sub in _realtimeSubs) {
       sub.cancel();
     }
+    _realtimeSubs.clear();
     for (final client in _activeClients.values) {
       client.dispose();
     }
+    _activeClients.clear();
     super.dispose();
   }
 }

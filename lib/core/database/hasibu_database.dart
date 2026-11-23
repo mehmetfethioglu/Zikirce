@@ -242,6 +242,7 @@ class HasibuDatabase {
         role TEXT NOT NULL DEFAULT 'hrManager',
         allowed_modules TEXT NOT NULL DEFAULT 'pdksHr,employeePortal',
         allowed_branch_id INTEGER,
+        allowed_branch_ids TEXT NOT NULL DEFAULT '',
         linked_gmail TEXT,
         is_active INTEGER NOT NULL DEFAULT 1,
         theme_mode TEXT NOT NULL DEFAULT 'light',
@@ -277,6 +278,7 @@ class HasibuDatabase {
       "ALTER TABLE employees ADD COLUMN allowed_modules TEXT NOT NULL DEFAULT 'employeePortal'",
       "ALTER TABLE employees ADD COLUMN photo_path TEXT",
       "ALTER TABLE employees ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'light'",
+      "ALTER TABLE app_users ADD COLUMN allowed_branch_ids TEXT NOT NULL DEFAULT ''",
     ]) {
       try {
         _db.execute(colSql);
@@ -1373,6 +1375,18 @@ class HasibuDatabase {
     return existing.isEmpty;
   }
 
+  AttendanceLog? getAttendanceLogById(String logId) {
+    final stmt = _db.prepare(
+      'SELECT * FROM attendance_logs WHERE id = ? LIMIT 1',
+    );
+    try {
+      final rows = stmt.select([logId]);
+      return rows.isEmpty ? null : _mapAttendanceLogRow(rows.first);
+    } finally {
+      stmt.dispose();
+    }
+  }
+
   void deleteAttendanceLog(String logId) {
     final stmt = _db.prepare('DELETE FROM attendance_logs WHERE id = ?');
     stmt.execute([logId]);
@@ -1708,6 +1722,11 @@ class HasibuDatabase {
   AppUserAccount _mapAppUserRow(Row r) {
     final role = AppUserRole.fromName(r['role'] as String?);
     final rawModules = r['allowed_modules'] as String?;
+    final legacyBranchId = (r['allowed_branch_id'] as num?)?.toInt();
+    final branchIds = AppUserAccount.parseBranchIdsCsv(
+      r['allowed_branch_ids'] as String?,
+      legacyBranchId: legacyBranchId,
+    );
     return AppUserAccount(
       id: r['id'] as String,
       username: (r['username'] as String? ?? '').trim().toLowerCase(),
@@ -1717,7 +1736,8 @@ class HasibuDatabase {
       allowedModules: rawModules == null || rawModules.trim().isEmpty
           ? role.defaultModules
           : HasibuModule.parseCsv(rawModules),
-      allowedBranchId: (r['allowed_branch_id'] as num?)?.toInt(),
+      allowedBranchId: branchIds.isNotEmpty ? branchIds.first : null,
+      allowedBranchIds: branchIds,
       linkedGmail: r['linked_gmail'] as String?,
       isActive: ((r['is_active'] as int?) ?? 1) == 1,
       themeMode: HasibuThemeMode.fromName(r['theme_mode'] as String?),
@@ -1756,11 +1776,12 @@ class HasibuDatabase {
     final cleanModules = user.allowedModules.isEmpty
         ? user.role.defaultModules
         : user.allowedModules;
+    final branchIds = user.effectiveAllowedBranchIds;
 
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO app_users
-      (id, username, display_name, password_hash, role, allowed_modules, allowed_branch_id, linked_gmail, is_active, theme_mode, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, username, display_name, password_hash, role, allowed_modules, allowed_branch_id, allowed_branch_ids, linked_gmail, is_active, theme_mode, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       user.id.trim(),
@@ -1769,7 +1790,8 @@ class HasibuDatabase {
       hashedPwd,
       user.role.name,
       HasibuModule.toCsv(cleanModules),
-      user.allowedBranchId,
+      branchIds.isNotEmpty ? branchIds.first : null,
+      AppUserAccount.toBranchIdsCsv(branchIds),
       user.linkedGmail?.trim().isEmpty == true ? null : user.linkedGmail?.trim(),
       user.isActive ? 1 : 0,
       user.themeMode.name,
@@ -2212,6 +2234,82 @@ class HasibuDatabase {
   int reconcileCloudSnapshot(Map<String, dynamic> snapshot) {
     return restoreCloudSnapshot(snapshot, mode: CloudRestoreMode.merge)
         .totalAppliedRecords;
+  }
+
+  /// Tek bir şube/cihaz gelen kutusu (`hasibu_branch_inbox_<slug>.enc`) paketini
+  /// mevcut şirket ayarları, kullanıcılar veya diğer şubeleri ezmeden atomik olarak birleştirir.
+  ({int newLogs, int totalLogs, int syncedUsers}) mergeBranchInboxSnapshot(
+    Map<String, dynamic> payload,
+  ) {
+    final int branchId = (payload['branchId'] as num?)?.toInt() ?? 1;
+    final rawLogs = payload['attendanceLogs'] as List<dynamic>? ?? const [];
+    final rawUsers = payload['deviceUsers'] as List<dynamic>? ?? const [];
+
+    int totalLogs = 0;
+    int newLogs = 0;
+
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      for (final item in rawLogs) {
+        if (item is! Map) continue;
+        final rawMap = Map<String, dynamic>.from(item);
+        if ((rawMap['branchId'] == null) ||
+            (rawMap['branchId'] is num &&
+                (rawMap['branchId'] as num).toInt() <= 0)) {
+          rawMap['branchId'] = branchId;
+        }
+        var log = AttendanceLog.fromJson(rawMap);
+        if (log.integrityHash.trim().isNotEmpty && !log.isIntegrityValid) {
+          // Paket AES-256-GCM Workspace Key doğrulamasından geçtiği için
+          // farklı cihazdaki yerel HMAC anahtarıyla çakışan imzayı yerel anahtarla yenile.
+          log = log.copyWith(integrityHash: '');
+        }
+        totalLogs++;
+        if (upsertAttendanceLog(log)) {
+          newLogs++;
+        }
+      }
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+
+    int syncedUsers = 0;
+    if (rawUsers.isNotEmpty) {
+      final todayKey = DateTime.now().toIso8601String().substring(0, 10);
+      final mappedUsers = <Employee>[];
+      for (final item in rawUsers) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final rawCard = (map['cardNo'] ?? '').toString().trim();
+        final rawName = (map['fullName'] ?? '').toString().trim();
+        if (rawCard.isEmpty || rawName.isEmpty) continue;
+        final cardNo = rawCard.padLeft(5, '0');
+        mappedUsers.add(
+          Employee(
+            id: 0,
+            cardNo: cardNo,
+            fullName: rawName,
+            title: 'YÜZ TANIMA CİHAZI',
+            departmentId: branchId == 1 ? 31 : branchId,
+            branchId: branchId,
+            shiftId: branchId == 1 ? 1 : 3,
+            hireDate: todayKey,
+          ),
+        );
+      }
+      if (mappedUsers.isNotEmpty) {
+        syncedUsers += syncEmployeesFromDeviceOrBridge(mappedUsers);
+      }
+    }
+    syncedUsers += ensureEmployeesForUnregisteredLogCards();
+
+    return (
+      newLogs: newLogs,
+      totalLogs: totalLogs,
+      syncedUsers: syncedUsers,
+    );
   }
 
   void dispose() {

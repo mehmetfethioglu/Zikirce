@@ -101,7 +101,7 @@ platform :ios do
       build_app(
         workspace: "Runner.xcworkspace",
         scheme: "Runner",
-        clean: false,
+        clean: true,
         export_method: "app-store",
         output_directory: "../build/ios/ipa",
         output_name: "Hasibu.ipa",
@@ -126,11 +126,10 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Hasibu v1.0.11 (Build 12) TestFlight Surumu:
-      • Buluta Yedekle, Buluttan Yukle (birlestir/tam geri yukle) ve Otomatik Bulut Yedekleme.
-      • Ayni Gmail/Google Drive hesabinda coklu kullanici ve izole kasa profili destegi.
-      • Uygulama ici Surum Notlari (Yenilikler) ekrani.
-      • Resmi Hasibu uygulama ikonu (iOS AppIcon ve Android Adaptive Icon).
+      Hasibu v1.0.13 (Build 14) TestFlight Surumu:
+      - Coklu sube kapsami secimi ve kati sube sorumlusu izolasyonu.
+      - Kalici Google bulut oturumu, coklu kullanici girisi ve sifir-adimli sifreleme.
+      - iOS 27 SDK / Xcode 27 uyumlu derleme (ITMS-90725).
     CHANGELOG
 
     upload_to_testflight(

@@ -820,6 +820,15 @@ Future<void> showTerminalDiagnosticsDialog(
   Branch? initialBranch,
 }) async {
   final initState = ref.read(pdksDashboardProvider);
+  if (initState.branches.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yetkili şube bulunamadı.')),
+      );
+    }
+    return;
+  }
+  final isSingleBranchScoped = initState.isSingleBranchScoped;
   Branch selectedBranch = initialBranch ??
       initState.branches.firstWhere(
         (b) => b.hasTerminal,
@@ -932,8 +941,13 @@ Future<void> showTerminalDiagnosticsDialog(
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<int>(
+                    key: ValueKey(
+                      'diag_branch_${selectedBranch.id}_$isSingleBranchScoped',
+                    ),
                     isExpanded: true,
-                    initialValue: selectedBranch.id,
+                    initialValue: branches.any((b) => b.id == selectedBranch.id)
+                        ? selectedBranch.id
+                        : (branches.isNotEmpty ? branches.first.id : null),
                     decoration: const InputDecoration(
                       labelText: 'Kontrol Edilecek Şube / Terminal',
                       prefixIcon: Icon(Icons.router_outlined),
@@ -950,17 +964,20 @@ Future<void> showTerminalDiagnosticsDialog(
                           ),
                         ),
                     ],
-                    onChanged: (val) {
-                      if (val == null) return;
-                      final found = branches.firstWhere((b) => b.id == val);
-                      setDialogState(() {
-                        selectedBranch = found;
-                        ipCtrl.text = found.terminalIp ?? '';
-                        portCtrl.text = found.terminalPort.toString();
-                        lastDiag = null;
-                        pullFeedback = null;
-                      });
-                    },
+                    onChanged: isSingleBranchScoped
+                        ? null
+                        : (val) {
+                            if (val == null) return;
+                            final found =
+                                branches.firstWhere((b) => b.id == val);
+                            setDialogState(() {
+                              selectedBranch = found;
+                              ipCtrl.text = found.terminalIp ?? '';
+                              portCtrl.text = found.terminalPort.toString();
+                              lastDiag = null;
+                              pullFeedback = null;
+                            });
+                          },
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -1389,6 +1406,10 @@ Future<void> showEmployeeHistoryAndDossierDialog(
   Employee employee, {
   int initialTabIndex = 0,
 }) async {
+  final initState = ref.read(pdksDashboardProvider);
+  if (!initState.canAccessBranch(employee.branchId)) {
+    return;
+  }
   int activeTab = initialTabIndex.clamp(0, 1);
   PersonnelDocumentCategory selectedCategory =
       PersonnelDocumentCategory.kimlikFotokopisi;
@@ -1406,10 +1427,22 @@ Future<void> showEmployeeHistoryAndDossierDialog(
         final state = ref.watch(pdksDashboardProvider);
         final notifier = ref.read(pdksDashboardProvider.notifier);
 
-        final currentStatus = state.dailyStatuses.firstWhere(
-          (s) => s.employee.id == employee.id,
-          orElse: () => state.dailyStatuses.first,
-        );
+        final matchedStatuses = state.dailyStatuses
+            .where((s) => s.employee.id == employee.id)
+            .toList(growable: false);
+        if (matchedStatuses.isEmpty) {
+          return AlertDialog(
+            title: Text(employee.fullName),
+            content: const Text('Personel kaydı yetkili kapsamda bulunamadı.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Kapat'),
+              ),
+            ],
+          );
+        }
+        final currentStatus = matchedStatuses.first;
         final emp = currentStatus.employee;
         final historyEntries = notifier.getEmployeeHistory(emp);
         final empDocs = state.documentsForEmployee(emp.id);
@@ -2247,12 +2280,19 @@ Future<void> showCreateHrRequestDialog(
   HrRequestType? initialRequestType,
 }) async {
   final state = ref.read(pdksDashboardProvider);
+  if (!state.canAccessBranch(employee.branchId)) {
+    return;
+  }
   final activeStatuses = state.dailyStatuses
       .where((s) => !s.employee.isSeparatedNow || s.employee.id == employee.id)
       .toList(growable: false);
   final selectableStatuses =
       activeStatuses.isNotEmpty ? activeStatuses : state.dailyStatuses;
-  Employee selectedEmp = employee;
+  if (selectableStatuses.isEmpty) return;
+  Employee selectedEmp =
+      selectableStatuses.any((s) => s.employee.id == employee.id)
+          ? employee
+          : selectableStatuses.first.employee;
   HrRequestType selectedType =
       initialRequestType ?? HrRequestType.annualLeave;
   LeaveType selectedLeaveType = LeaveType.yillikIzin;
@@ -2601,6 +2641,8 @@ class _CompanyAndBranchesSettingsViewState
     final syncStatus =
         ref.watch(pdksDashboardProvider.select((s) => s.syncStatus));
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
+    final isBranchScoped =
+        ref.watch(pdksDashboardProvider.select((s) => s.isBranchScoped));
     final pal = HasibuPalette.of(context);
 
     return SingleChildScrollView(
@@ -3052,8 +3094,10 @@ class _CompanyAndBranchesSettingsViewState
               ],
             ),
           ),
-        const SizedBox(height: 12),
-        const AppUsersManagementCard(),
+        if (!isBranchScoped) ...[
+          const SizedBox(height: 12),
+          const AppUsersManagementCard(),
+        ],
         const SizedBox(height: 12),
         const HasibuReleaseNotesQuickCard(),
         ],
@@ -3578,9 +3622,15 @@ class _AttendanceCorrectionSettingsViewState
   Widget build(BuildContext context) {
     final state = ref.watch(pdksDashboardProvider);
     final pal = HasibuPalette.of(context);
+    final int? effectiveBranchFilter = state.isSingleBranchScoped
+        ? state.effectiveBranchScopeIds.first
+        : (_branchFilterId != null && state.canAccessBranch(_branchFilterId!)
+            ? _branchFilterId
+            : null);
     final q = _filterCtrl.text.trim().toUpperCase();
     final filtered = state.dailyStatuses.where((s) {
-      if (_branchFilterId != null && s.branch.id != _branchFilterId) {
+      if (effectiveBranchFilter != null &&
+          s.branch.id != effectiveBranchFilter) {
         return false;
       }
       if (_onlyAbsentFilter && s.state != DailyAttendanceState.absent) {
@@ -3740,31 +3790,76 @@ class _AttendanceCorrectionSettingsViewState
                   ),
                   SizedBox(
                     width: 220,
-                    child: DropdownButtonFormField<int?>(
-                      isExpanded: true,
-                      initialValue: _branchFilterId,
-                      decoration: const InputDecoration(
-                        labelText: 'Şube Filtresi',
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(
-                          value: null,
-                          child: Text(
-                            'Tüm Şubeler',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        for (final b in state.branches)
-                          DropdownMenuItem<int?>(
-                            value: b.id,
-                            child: Text(
-                              b.name,
-                              overflow: TextOverflow.ellipsis,
+                    child: state.isSingleBranchScoped
+                        ? DropdownButtonFormField<int?>(
+                            key: ValueKey(
+                              'corr_branch_locked_$effectiveBranchFilter',
                             ),
+                            isExpanded: true,
+                            initialValue: effectiveBranchFilter,
+                            decoration: const InputDecoration(
+                              labelText: 'Şube Filtresi',
+                            ),
+                            items: [
+                              if (state.branches.any(
+                                (b) => b.id == effectiveBranchFilter,
+                              ))
+                                for (final b in state.branches.where(
+                                  (b) => b.id == effectiveBranchFilter,
+                                ))
+                                  DropdownMenuItem<int?>(
+                                    value: b.id,
+                                    child: Text(
+                                      b.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  )
+                              else
+                                DropdownMenuItem<int?>(
+                                  value: effectiveBranchFilter,
+                                  child: Text(
+                                    'Şube #$effectiveBranchFilter',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: null,
+                          )
+                        : DropdownButtonFormField<int?>(
+                            key: ValueKey(
+                              'corr_branch_${state.effectiveBranchScopeIds.join("_")}_$effectiveBranchFilter',
+                            ),
+                            isExpanded: true,
+                            initialValue: state.branches.any(
+                              (b) => b.id == effectiveBranchFilter,
+                            )
+                                ? effectiveBranchFilter
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Şube Filtresi',
+                            ),
+                            items: [
+                              DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text(
+                                  state.isBranchScoped
+                                      ? 'Yetkili Şubelerim (${state.branches.length})'
+                                      : 'Tüm Şubeler',
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              for (final b in state.branches)
+                                DropdownMenuItem<int?>(
+                                  value: b.id,
+                                  child: Text(
+                                    b.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _branchFilterId = v),
                           ),
-                      ],
-                      onChanged: (v) => setState(() => _branchFilterId = v),
-                    ),
                   ),
                   FilterChip(
                     selected: _onlyAbsentFilter,
@@ -4202,8 +4297,10 @@ class _LeavesAndReportsSettingsViewState
         : state.dailyStatuses.map((e) => e.employee).toList(growable: false);
     final empMap = {for (final e in employees) e.id: e};
 
-    if ((_selectedEmployeeId == null || !empMap.containsKey(_selectedEmployeeId)) &&
-        employees.isNotEmpty) {
+    if (employees.isEmpty) {
+      _selectedEmployeeId = null;
+    } else if (_selectedEmployeeId == null ||
+        !empMap.containsKey(_selectedEmployeeId)) {
       _selectedEmployeeId = employees.first.id;
     }
     final selectedEmp =
@@ -4275,24 +4372,33 @@ class _LeavesAndReportsSettingsViewState
                 children: [
                   SizedBox(
                     width: 300,
-                    child: DropdownButtonFormField<int>(
-                      isExpanded: true,
-                      initialValue: _selectedEmployeeId,
-                      decoration: const InputDecoration(
-                        labelText: 'Personel Seçin',
-                      ),
-                      items: [
-                        for (final e in employees)
-                          DropdownMenuItem(
-                            value: e.id,
-                            child: Text(
-                              '${e.fullName} (#${e.cardNo})',
-                              overflow: TextOverflow.ellipsis,
+                    child: employees.isEmpty
+                        ? const InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Personel Seçin',
                             ),
+                            child: Text('Yetkili şubede personel bulunamadı'),
+                          )
+                        : DropdownButtonFormField<int>(
+                            key: ValueKey('leave_emp_$_selectedEmployeeId'),
+                            isExpanded: true,
+                            initialValue: _selectedEmployeeId,
+                            decoration: const InputDecoration(
+                              labelText: 'Personel Seçin',
+                            ),
+                            items: [
+                              for (final e in employees)
+                                DropdownMenuItem(
+                                  value: e.id,
+                                  child: Text(
+                                    '${e.fullName} (#${e.cardNo})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => _selectedEmployeeId = v),
                           ),
-                      ],
-                      onChanged: (v) => setState(() => _selectedEmployeeId = v),
-                    ),
                   ),
                   SizedBox(
                     width: 200,
@@ -4655,9 +4761,10 @@ class _EmployeesManagementSettingsViewState
 
   Future<void> _showAddDepartmentDialog(BuildContext context) async {
     final state = ref.read(pdksDashboardProvider);
+    if (state.branches.isEmpty) return;
     final nameCtrl = TextEditingController();
     int selectedBranchId =
-        state.branches.isNotEmpty ? state.branches.first.id : 1;
+        state.effectiveBranchScopeId ?? state.branches.first.id;
 
     await showDialog<void>(
       context: context,
@@ -4675,8 +4782,12 @@ class _EmployeesManagementSettingsViewState
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
+                key: ValueKey('add_dept_branch_$selectedBranchId'),
                 isExpanded: true,
-                initialValue: selectedBranchId,
+                initialValue:
+                    state.branches.any((b) => b.id == selectedBranchId)
+                        ? selectedBranchId
+                        : state.branches.first.id,
                 decoration: const InputDecoration(
                   labelText: 'Bağlı Şube',
                 ),
@@ -4687,9 +4798,13 @@ class _EmployeesManagementSettingsViewState
                       child: Text(b.name, overflow: TextOverflow.ellipsis),
                     ),
                 ],
-                onChanged: (v) {
-                  if (v != null) setDialogState(() => selectedBranchId = v);
-                },
+                onChanged: state.isSingleBranchScoped
+                    ? null
+                    : (v) {
+                        if (v != null) {
+                          setDialogState(() => selectedBranchId = v);
+                        }
+                      },
               ),
             ],
           ),
@@ -4954,7 +5069,8 @@ class _EmployeeEditDialogState extends ConsumerState<_EmployeeEditDialog> {
       text: (existing?.kpiScore ?? 95.0).toStringAsFixed(0),
     );
 
-    _branchId = existing?.branchId ??
+    _branchId = state.effectiveBranchScopeId ??
+        existing?.branchId ??
         (state.branches.isNotEmpty ? state.branches.first.id : 1);
     _deptId = existing?.departmentId ??
         (state.departments.isNotEmpty ? state.departments.first.id : 1);
@@ -5262,49 +5378,80 @@ class _EmployeeEditDialogState extends ConsumerState<_EmployeeEditDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<int>(
-                      isExpanded: true,
-                      initialValue: _branchId,
-                      decoration: const InputDecoration(
-                        labelText: 'Şube / Merkez',
-                      ),
-                      items: [
-                        for (final b in state.branches)
-                          DropdownMenuItem(
-                            value: b.id,
-                            child: Text(
-                              b.name,
-                              overflow: TextOverflow.ellipsis,
+                    child: state.branches.isEmpty
+                        ? const InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Şube / Merkez',
                             ),
+                            child: Text('Şube bulunamadı'),
+                          )
+                        : DropdownButtonFormField<int>(
+                            key: ValueKey(
+                              'emp_branch_${state.effectiveBranchScopeId}_$_branchId',
+                            ),
+                            isExpanded: true,
+                            initialValue: state.branches.any(
+                              (b) =>
+                                  b.id ==
+                                  (state.effectiveBranchScopeId ?? _branchId),
+                            )
+                                ? (state.effectiveBranchScopeId ?? _branchId)
+                                : state.branches.first.id,
+                            decoration: const InputDecoration(
+                              labelText: 'Şube / Merkez',
+                            ),
+                            items: [
+                              for (final b in state.branches)
+                                DropdownMenuItem(
+                                  value: b.id,
+                                  child: Text(
+                                    b.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: state.isSingleBranchScoped
+                                ? null
+                                : (v) {
+                                    if (v != null) {
+                                      setState(() => _branchId = v);
+                                    }
+                                  },
                           ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _branchId = v);
-                      },
-                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DropdownButtonFormField<int>(
-                      isExpanded: true,
-                      initialValue: _deptId,
-                      decoration: const InputDecoration(
-                        labelText: 'Bölüm / Departman',
-                      ),
-                      items: [
-                        for (final d in state.departments)
-                          DropdownMenuItem(
-                            value: d.id,
-                            child: Text(
-                              d.name,
-                              overflow: TextOverflow.ellipsis,
+                    child: state.departments.isEmpty
+                        ? const InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Bölüm / Departman',
                             ),
+                            child: Text('Bölüm bulunamadı'),
+                          )
+                        : DropdownButtonFormField<int>(
+                            key: ValueKey('emp_dept_$_deptId'),
+                            isExpanded: true,
+                            initialValue:
+                                state.departments.any((d) => d.id == _deptId)
+                                    ? _deptId
+                                    : state.departments.first.id,
+                            decoration: const InputDecoration(
+                              labelText: 'Bölüm / Departman',
+                            ),
+                            items: [
+                              for (final d in state.departments)
+                                DropdownMenuItem(
+                                  value: d.id,
+                                  child: Text(
+                                    d.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setState(() => _deptId = v);
+                            },
                           ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) setState(() => _deptId = v);
-                      },
-                    ),
                   ),
                 ],
               ),
@@ -5641,8 +5788,12 @@ class _EmployeeEditDialogState extends ConsumerState<_EmployeeEditDialog> {
               cardNo: _cardCtrl.text.trim().padLeft(5, '0'),
               fullName: _nameCtrl.text.trim().toUpperCase(),
               title: _titleCtrl.text.trim().toUpperCase(),
-              departmentId: _deptId,
-              branchId: _branchId,
+              departmentId: state.departments.any((d) => d.id == _deptId)
+                  ? _deptId
+                  : (state.departments.isNotEmpty
+                      ? state.departments.first.id
+                      : _deptId),
+              branchId: state.effectiveBranchScopeId ?? _branchId,
               shiftId: _shiftId,
               hireDate: PdksDashboardNotifier.formatDateKey(parsedHire),
               exitDate: parsedExit != null

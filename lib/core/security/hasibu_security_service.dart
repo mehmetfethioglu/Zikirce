@@ -470,11 +470,57 @@ class HasibuSecurityService {
   // [SYNC-01] & [SYNC-02] Google Drive AES-256-GCM Paket Şifreleme & Çözme
   // ---------------------------------------------------------------------------
 
+  /// Aynı Google hesabında çalışan cihazların sıfır adımla otomatik şifreli yedek
+  /// açabilmesi için deterministik 256-bit (64 hex) hesap anahtarı türetir.
+  static String deriveAccountWorkspaceKey({
+    required String googleEmail,
+    String cloudProfileId = 'default',
+  }) {
+    final cleanEmail = googleEmail.trim().toLowerCase();
+    final cleanProfile = cloudProfileId.trim().isEmpty
+        ? 'default'
+        : cloudProfileId.trim().toLowerCase();
+    final derived = _pbkdf2HmacSha256(
+      passwordBytes: utf8.encode('$cleanEmail|$cleanProfile'),
+      saltBytes: utf8.encode('hasibu-cloud-account-vault-v1:$cleanProfile'),
+      iterations: 10000,
+      derivedKeyLength: 32,
+    );
+    return derived.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  /// Kullanıcının belirlediği kısa ve hatırlanabilir bulut şifreleme parolasından
+  /// 256-bit (64 hex) kriptografik çalışma alanı anahtarı türetir.
+  static String derivePassphraseWorkspaceKey(String passphrase) {
+    final derived = _pbkdf2HmacSha256(
+      passwordBytes: utf8.encode(passphrase.trim()),
+      saltBytes: utf8.encode('hasibu-cloud-passphrase-vault-v1'),
+      iterations: 10000,
+      derivedKeyLength: 32,
+    );
+    return derived.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  /// Şifreli zarf JSON'unun `keyMode` alanını güvenli şekilde okur.
+  static String? readEnvelopeKeyMode(String rawContent) {
+    try {
+      final decoded = jsonDecode(rawContent);
+      if (decoded is Map) {
+        final mode = (decoded['keyMode'] as String?)?.trim();
+        return (mode != null && mode.isNotEmpty) ? mode : null;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
   /// Açık JSON senkronizasyon verisini `AES-256-GCM` ile şifreleyip zarf üretir.
   static Future<String> encryptSyncJsonPayload(
     Map<String, dynamic> payload, {
     String? workspaceKey,
     String vaultRole = 'master_vault',
+    String? keyMode,
   }) async {
     final effectiveKey = workspaceKey?.trim().isNotEmpty == true
         ? workspaceKey!.trim()
@@ -499,6 +545,8 @@ class HasibuSecurityService {
     final envelope = <String, dynamic>{
       'format': 'hasibu_aes256_gcm_v1',
       'vaultRole': vaultRole,
+      if (keyMode != null && keyMode.trim().isNotEmpty)
+        'keyMode': keyMode.trim(),
       'encryptedAt': DateTime.now().toUtc().toIso8601String(),
       'iv': base64Encode(nonce),
       'tag': base64Encode(secretBox.mac.bytes),

@@ -264,17 +264,55 @@ class AppUsersManagementCard extends ConsumerWidget {
                                   ),
                                 ),
                               ),
+                            if (user.role == AppUserRole.branchSupervisor &&
+                                !user.hasBranchRestriction)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEF4444)
+                                      .withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                child: const Text(
+                                  'Şube Atanmadı!',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Modüller: ${user.allowedModules.map((m) => m.title).join(', ')} • '
-                          'Şube: ${user.allowedBranchId == null ? "Tüm Şubeler" : (branchNameById[user.allowedBranchId] ?? "#${user.allowedBranchId}")}'
-                          '${user.linkedGmail?.isNotEmpty == true ? " • ${user.linkedGmail}" : ""}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: pal.textSecondary,
-                          ),
+                        Builder(
+                          builder: (_) {
+                            final userBranchIds =
+                                user.effectiveAllowedBranchIds;
+                            final String branchSummary;
+                            if (userBranchIds.isEmpty) {
+                              branchSummary =
+                                  user.role == AppUserRole.branchSupervisor
+                                      ? 'Atanmadı (Düzenleyin)'
+                                      : 'Tüm Şubeler';
+                            } else {
+                              branchSummary = userBranchIds
+                                  .map((id) => branchNameById[id] ?? '#$id')
+                                  .join(', ');
+                            }
+                            return Text(
+                              'Modüller: ${user.allowedModules.map((m) => m.title).join(', ')} • '
+                              'Şube: $branchSummary'
+                              '${user.linkedGmail?.isNotEmpty == true ? " • ${user.linkedGmail}" : ""}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: pal.textSecondary,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -371,7 +409,7 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
   late final TextEditingController _gmailCtrl;
   late AppUserRole _selectedRole;
   late Set<HasibuModule> _selectedModules;
-  int? _selectedBranchId;
+  late Set<int> _selectedBranchIds;
   late bool _isActive;
   bool _isSaving = false;
   String? _errorText;
@@ -388,7 +426,9 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
     _selectedModules = Set<HasibuModule>.from(
       e?.allowedModules ?? _selectedRole.defaultModules,
     );
-    _selectedBranchId = e?.allowedBranchId;
+    _selectedBranchIds = Set<int>.from(
+      e?.effectiveAllowedBranchIds ?? const <int>[],
+    );
     _isActive = e?.isActive ?? true;
   }
 
@@ -401,11 +441,31 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
     super.dispose();
   }
 
+  int? _defaultBranchIdForSupervisor(List<Branch> branches) {
+    for (final b in branches) {
+      if (b.id != 1) return b.id;
+    }
+    return branches.isNotEmpty ? branches.first.id : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final branches =
         ref.watch(pdksDashboardProvider.select((s) => s.branches));
     final isNew = widget.existing == null;
+    final isBranchSupervisor =
+        _selectedRole == AppUserRole.branchSupervisor;
+    final validBranchIds = branches.map((b) => b.id).toSet();
+    final effectiveSelectedIds =
+        _selectedBranchIds.where(validBranchIds.contains).toSet();
+    if (isBranchSupervisor && effectiveSelectedIds.isEmpty) {
+      final fallbackId = _defaultBranchIdForSupervisor(branches);
+      if (fallbackId != null) {
+        effectiveSelectedIds.add(fallbackId);
+      }
+    }
+    final nonMerkezBranches =
+        branches.where((b) => b.id != 1).toList(growable: false);
 
     return AlertDialog(
       title: Text(
@@ -473,6 +533,11 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
                     _selectedModules = Set<HasibuModule>.from(
                       role.defaultModules,
                     );
+                    if (role == AppUserRole.branchSupervisor &&
+                        _selectedBranchIds.isEmpty) {
+                      final def = _defaultBranchIdForSupervisor(branches);
+                      if (def != null) _selectedBranchIds.add(def);
+                    }
                   });
                 },
               ),
@@ -503,26 +568,126 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
                 ],
               ),
               const SizedBox(height: 10),
-              DropdownButtonFormField<int?>(
-                key: const ValueKey('app_user_branch_dropdown'),
-                initialValue: _selectedBranchId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Şube Kapsamı',
-                  prefixIcon: Icon(Icons.storefront_outlined),
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Şube Kapsamı',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF0284C7).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            effectiveSelectedIds.isEmpty
+                                ? 'Tüm Şubeler'
+                                : '${effectiveSelectedIds.length} Şube Seçili',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0284C7),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (nonMerkezBranches.length > 1)
+                      TextButton(
+                        key: const ValueKey(
+                          'app_user_branch_select_non_merkez',
+                        ),
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _selectedBranchIds
+                              ..clear()
+                              ..addAll(nonMerkezBranches.map((b) => b.id));
+                          });
+                        },
+                        child: const Text(
+                          'Merkez Hariç Tümü',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                      ),
+                  ],
                 ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Tüm Şubeler'),
-                  ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  if (!isBranchSupervisor)
+                    FilterChip(
+                      key: const ValueKey('app_user_branch_chip_all'),
+                      label: const Text('Tüm Şubeler'),
+                      selected: effectiveSelectedIds.isEmpty,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _selectedBranchIds.clear());
+                        }
+                      },
+                    ),
                   for (final b in branches)
-                    DropdownMenuItem<int?>(
-                      value: b.id,
-                      child: Text(b.name),
+                    FilterChip(
+                      key: ValueKey('app_user_branch_chip_${b.id}'),
+                      avatar: Icon(
+                        b.hasTerminal
+                            ? Icons.face_retouching_natural
+                            : Icons.storefront,
+                        size: 14,
+                      ),
+                      label: Text(b.name),
+                      selected: effectiveSelectedIds.contains(b.id),
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedBranchIds
+                            ..clear()
+                            ..addAll(effectiveSelectedIds);
+                          if (selected) {
+                            _selectedBranchIds.add(b.id);
+                          } else if (!isBranchSupervisor ||
+                              _selectedBranchIds.length > 1) {
+                            _selectedBranchIds.remove(b.id);
+                          }
+                        });
+                      },
                     ),
                 ],
-                onChanged: (val) => setState(() => _selectedBranchId = val),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isBranchSupervisor
+                    ? 'Şube Sorumlusu yalnızca seçili şubelerin verilerini görür (birden fazla şube seçebilirsiniz).'
+                    : (effectiveSelectedIds.isEmpty
+                        ? 'Tüm şubelerin ve merkezin verilerine erişir.'
+                        : 'Yalnızca seçili ${effectiveSelectedIds.length} şubenin verilerine erişir.'),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -574,6 +739,7 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
                   final orderedModules = HasibuModule.activePhaseModules
                       .where((m) => _selectedModules.contains(m))
                       .toList(growable: false);
+                  final sortedBranchIds = effectiveSelectedIds.toList()..sort();
                   final err = await ref
                       .read(pdksDashboardProvider.notifier)
                       .saveAppUser(
@@ -583,7 +749,7 @@ class _AppUserEditDialogState extends ConsumerState<_AppUserEditDialog> {
                         plainPassword: _passwordCtrl.text,
                         role: _selectedRole,
                         allowedModules: orderedModules,
-                        allowedBranchId: _selectedBranchId,
+                        allowedBranchIds: sortedBranchIds,
                         linkedGmail: _gmailCtrl.text,
                         isActive: _isActive,
                       );

@@ -18,6 +18,9 @@ abstract interface class GoogleAuthAdapter {
     Duration timeout = const Duration(seconds: 120),
   });
 
+  /// Kullanıcı etkileşimi olmadan kayıtlı Google erişim belirtecini sessizce yeniler.
+  Future<String?> refreshAccessTokenSilently();
+
   /// Mevcut Google oturumunu yerel SDK önbelleğinden kapatır.
   Future<void> signOut();
 }
@@ -45,6 +48,10 @@ class DesktopLoopbackGoogleAuthAdapter implements GoogleAuthAdapter {
       timeout: timeout,
     );
   }
+
+  @override
+  Future<String?> refreshAccessTokenSilently() =>
+      _syncService.refreshAccessToken();
 
   @override
   Future<void> signOut() async {}
@@ -144,6 +151,25 @@ class NativeMobileGoogleAuthAdapter implements GoogleAuthAdapter {
         success: false,
         message: 'Google ile giriş tamamlanamadı: $e',
       );
+    }
+  }
+
+  @override
+  Future<String?> refreshAccessTokenSilently() async {
+    try {
+      await _ensureInitialized();
+      final pending = GoogleSignIn.instance.attemptLightweightAuthentication();
+      final account = pending == null ? null : await pending;
+      if (account == null) return null;
+      final auth =
+          await account.authorizationClient.authorizationForScopes(_driveScopes);
+      final token = auth?.accessToken.trim() ?? '';
+      return token.isEmpty ? null : token;
+    } catch (e) {
+      debugPrint(
+        'NativeMobileGoogleAuthAdapter: refreshAccessTokenSilently uyarısı: $e',
+      );
+      return null;
     }
   }
 

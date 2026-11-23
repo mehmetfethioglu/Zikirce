@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
@@ -372,9 +373,9 @@ Future<CloudRestoreSummary?> showCloudRestoreDialog(
                     decoration: const InputDecoration(
                       isDense: true,
                       labelText:
-                          'Farklı Cihaz Şifreleme Anahtarı (İsteğe Bağlı)',
+                          'Bulut Şifreleme Parolası veya Cihaz Anahtarı (İsteğe Bağlı)',
                       hintText:
-                          'Yedek başka cihazda alındıysa Workspace Key girin',
+                          'Özel parola belirlediyseniz parolanızı girin; Otomatik modda boş bırakın',
                       prefixIcon: Icon(Icons.key_rounded, size: 18),
                     ),
                   ),
@@ -476,6 +477,18 @@ Future<void> showCloudBackupCenterDialog(
     text: initState.companySettings.cloudProfileLabel,
   );
   final workspaceKeyCtrl = TextEditingController();
+  final passphraseCtrl = TextEditingController();
+
+  bool isConnecting = false;
+  bool isScanningProfiles = false;
+  bool isPullingInboxes = false;
+  int? selectedBridgeBranchId;
+  bool obscureWorkspaceKey = true;
+  bool obscurePassphrase = true;
+  CloudEncryptionKeyMode encryptionMode = CloudEncryptionKeyMode.accountAuto;
+  String? statusFeedback;
+  bool isFeedbackSuccess = false;
+  StateSetter? activeSetDialogState;
 
   final syncSvc = ref.read(googleDriveSyncServiceProvider);
   final isNativeGoogleAuth = ref.read(googleAuthAdapterProvider).isNativePlatform;
@@ -500,18 +513,21 @@ Future<void> showCloudBackupCenterDialog(
   }).catchError((e) {
     debugPrint('CloudBackupCenterDialog: getWorkspaceKey hata: $e');
   });
-
-  bool isConnecting = false;
-  bool isScanningProfiles = false;
-  bool obscureWorkspaceKey = true;
-  String? statusFeedback;
-  bool isFeedbackSuccess = false;
+  syncSvc.getCloudEncryptionKeyMode().then((mode) {
+    encryptionMode = mode;
+    if (context.mounted) {
+      activeSetDialogState?.call(() {});
+    }
+  }).catchError((e) {
+    debugPrint('CloudBackupCenterDialog: getCloudEncryptionKeyMode hata: $e');
+  });
 
   await showDialog<void>(
     context: context,
     builder: (dialogCtx) => Consumer(
       builder: (consumerCtx, dialogRef, _) => StatefulBuilder(
         builder: (ctx, setDialogState) {
+          activeSetDialogState = setDialogState;
           final pal = _CloudDialogPalette.of(ctx);
           final liveState = dialogRef.watch(pdksDashboardProvider);
           final syncStatus = liveState.syncStatus;
@@ -1187,110 +1203,450 @@ Future<void> showCloudBackupCenterDialog(
                     ),
                     const SizedBox(height: 10),
 
-                    // 5. CİHAZLAR ARASI ŞİFRELEME ANAHTARI (WORKSPACE KEY)
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      title: Text(
-                        'Cihazlar Arası Şifreleme Anahtarı (Workspace Key)',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: pal.textPrimary,
-                        ),
+                    _BranchInboxSyncSection(
+                      pal: pal,
+                      branches: liveState.branches,
+                      inboxStatuses: liveState.branchInboxStatuses,
+                      selectedBranchId: selectedBridgeBranchId,
+                      isBusy: isBusy,
+                      isPulling: isPullingInboxes,
+                      onBranchChanged: (val) =>
+                          setDialogState(() => selectedBridgeBranchId = val),
+                      onPullInboxes: () async {
+                        setDialogState(() => isPullingInboxes = true);
+                        try {
+                          final res = await dialogRef
+                              .read(pdksDashboardProvider.notifier)
+                              .pullBranchInboxesNow(force: true);
+                          if (!dialogCtx.mounted) return;
+                          setDialogState(() {
+                            isFeedbackSuccess = res.warnings.isEmpty;
+                            if (res.devices.isEmpty && res.warnings.isEmpty) {
+                              statusFeedback =
+                                  'Google Drive\'da henüz şube cihaz kutusu (hasibu_branch_inbox_*.enc) bulunamadı.';
+                            } else if (res.warnings.isNotEmpty) {
+                              statusFeedback =
+                                  '⚠️ ${res.devices.length} şube kutusu (${res.totalNewLogsInserted} yeni kayıt) • Uyarı: ${res.warnings.join(' | ')}';
+                            } else {
+                              statusFeedback =
+                                  '✓ ${res.devices.length} şube cihaz kutusu eşlendi (${res.totalNewLogsInserted} yeni hareket, ${res.totalLogsRead} toplam kayıt).';
+                            }
+                          });
+                        } finally {
+                          if (dialogCtx.mounted) {
+                            setDialogState(() => isPullingInboxes = false);
+                          }
+                        }
+                      },
+                      onCopyConfigJson: (branch) async {
+                        final jsonText = await dialogRef
+                            .read(pdksDashboardProvider.notifier)
+                            .buildBranchBridgeConfigJson(branch);
+                        await Clipboard.setData(ClipboardData(text: jsonText));
+                        if (!dialogCtx.mounted) return;
+                        setDialogState(() {
+                          isFeedbackSuccess = true;
+                          statusFeedback =
+                              '✓ ${branch.name} şube köprüsü ayar JSON\'u panoya kopyalandı. Şube terazisinde config.json olarak kaydedebilir veya --import-config ile aktarabilirsiniz.';
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 10),
+
+                    // 5. CİHAZLAR ARASI YEDEK ŞİFRELEME & KOLAY EŞLEŞTİRME
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: pal.subtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: pal.border),
                       ),
-                      subtitle: Text(
-                        'Farklı cihazlarda aynı şifreli Drive yedeğini açmak için bu anahtarı eşleştirin.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: pal.textSecondary,
-                        ),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              TextField(
-                                controller: workspaceKeyCtrl,
-                                obscureText: obscureWorkspaceKey,
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  labelText: 'Aktif Çalışma Alanı Anahtarı',
-                                  prefixIcon:
-                                      const Icon(Icons.vpn_key_rounded, size: 18),
-                                  suffixIcon: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        tooltip: obscureWorkspaceKey
-                                            ? 'Anahtarı Göster'
-                                            : 'Anahtarı Gizle',
-                                        icon: Icon(
-                                          obscureWorkspaceKey
-                                              ? Icons.visibility_outlined
-                                              : Icons.visibility_off_outlined,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cihazlar Arası Yedek Şifreleme & Kolay Eşleştirme',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: pal.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Otomatik modda aynı Google hesabındaki telefon ve bilgisayarınız anahtar kopyalamadan yedekleri açar.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: pal.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            RadioGroup<CloudEncryptionKeyMode>(
+                              groupValue: encryptionMode,
+                              onChanged: (mode) async {
+                                if (mode == null || isBusy) return;
+                                final notifier = dialogRef
+                                    .read(pdksDashboardProvider.notifier);
+                                if (mode == CloudEncryptionKeyMode.accountAuto) {
+                                  await notifier.useAutomaticCloudEncryption();
+                                  final resolvedKey =
+                                      await notifier.getCloudWorkspaceKey();
+                                  if (!dialogCtx.mounted) return;
+                                  setDialogState(() {
+                                    encryptionMode = mode;
+                                    workspaceKeyCtrl.text = resolvedKey;
+                                    isFeedbackSuccess = true;
+                                    statusFeedback =
+                                        '✓ Otomatik Google Hesabı şifrelemesi seçildi. Mevcut cihazlarda aktif etmek için bir kez "Buluta Yedekle" butonuna basın.';
+                                  });
+                                } else {
+                                  setDialogState(() => encryptionMode = mode);
+                                }
+                              },
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  RadioListTile<CloudEncryptionKeyMode>(
+                                    key: const ValueKey(
+                                      'encryption_mode_account_auto',
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !isBusy,
+                                    value: CloudEncryptionKeyMode.accountAuto,
+                                    title: Text(
+                                      'Otomatik (Aynı Google Hesabı — Önerilen)',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: pal.textPrimary,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'Ek şifre veya anahtar taşımadan aynı Gmail hesabındaki cihazları eşleştirir.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: pal.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                  RadioListTile<CloudEncryptionKeyMode>(
+                                    key: const ValueKey(
+                                      'encryption_mode_custom',
+                                    ),
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    enabled: !isBusy,
+                                    value:
+                                        CloudEncryptionKeyMode.customPassphrase,
+                                    title: Text(
+                                      'Özel Bulut Şifreleme Parolası (Ekstra Güvenlik)',
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: pal.textPrimary,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'Tüm cihazlarda aynı kısa parolayı girerek uçtan uca şifreleme kullanın.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: pal.textSecondary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (encryptionMode ==
+                                CloudEncryptionKeyMode.customPassphrase) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 280,
+                                    child: TextField(
+                                      key: const ValueKey(
+                                        'cloud_sync_passphrase_field',
+                                      ),
+                                      controller: passphraseCtrl,
+                                      obscureText: obscurePassphrase,
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        labelText: 'Ortak Bulut Parolası',
+                                        hintText: 'Örn. Sirket2026!',
+                                        prefixIcon: const Icon(
+                                          Icons.password_rounded,
                                           size: 18,
                                         ),
-                                        onPressed: () => setDialogState(
-                                          () => obscureWorkspaceKey =
-                                              !obscureWorkspaceKey,
+                                        suffixIcon: IconButton(
+                                          icon: Icon(
+                                            obscurePassphrase
+                                                ? Icons.visibility_outlined
+                                                : Icons.visibility_off_outlined,
+                                            size: 18,
+                                          ),
+                                          onPressed: () => setDialogState(
+                                            () => obscurePassphrase =
+                                                !obscurePassphrase,
+                                          ),
                                         ),
                                       ),
-                                      IconButton(
-                                        tooltip: 'Anahtarı Kopyala',
-                                        icon: const Icon(
-                                          Icons.copy_rounded,
-                                          size: 17,
-                                        ),
-                                        onPressed: () async {
-                                          await Clipboard.setData(
-                                            ClipboardData(
-                                              text:
-                                                  workspaceKeyCtrl.text.trim(),
-                                            ),
-                                          );
-                                          if (dialogCtx.mounted) {
+                                    ),
+                                  ),
+                                  FilledButton.tonalIcon(
+                                    key: const ValueKey(
+                                      'btn_save_cloud_passphrase',
+                                    ),
+                                    onPressed: isBusy
+                                        ? null
+                                        : () async {
+                                            final cleanPass =
+                                                passphraseCtrl.text.trim();
+                                            if (cleanPass.isEmpty) return;
+                                            final notifier = dialogRef.read(
+                                              pdksDashboardProvider.notifier,
+                                            );
+                                            await notifier
+                                                .setCloudEncryptionPassphrase(
+                                              cleanPass,
+                                            );
+                                            final derived = await notifier
+                                                .getCloudWorkspaceKey();
+                                            if (!dialogCtx.mounted) return;
                                             setDialogState(() {
+                                              workspaceKeyCtrl.text = derived;
                                               isFeedbackSuccess = true;
                                               statusFeedback =
-                                                  '✓ Şifreleme anahtarı panoya kopyalandı.';
+                                                  '✓ Ortak Bulut Şifreleme Parolası kaydedildi. Buluta yeni parola ile yazmak için "Buluta Yedekle" butonuna basın.';
                                             });
-                                          }
-                                        },
+                                          },
+                                    icon: const Icon(
+                                      Icons.lock_reset_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Parolayı Kaydet'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  key: const ValueKey('btn_show_pairing_qr'),
+                                  onPressed: () async {
+                                    var activeKey =
+                                        workspaceKeyCtrl.text.trim();
+                                    if (activeKey.isEmpty) {
+                                      activeKey = await dialogRef
+                                          .read(pdksDashboardProvider.notifier)
+                                          .getCloudWorkspaceKey();
+                                      workspaceKeyCtrl.text = activeKey;
+                                    }
+                                    if (!dialogCtx.mounted ||
+                                        activeKey.isEmpty) {
+                                      return;
+                                    }
+                                    await showDialog<void>(
+                                      context: dialogCtx,
+                                      builder: (qrCtx) => AlertDialog(
+                                        title: const Text(
+                                          'Cihaz Eşleştirme QR Kodu',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                        content: SizedBox(
+                                          width: 240,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Container(
+                                                width: 220,
+                                                height: 220,
+                                                padding: const EdgeInsets.all(10),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
+                                                ),
+                                                child: CustomPaint(
+                                                  size: const Size.square(200),
+                                                  painter: QrPainter(
+                                                    data: activeKey,
+                                                    version: QrVersions.auto,
+                                                    gapless: true,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              const Text(
+                                                'Eski veya özel anahtarlı yedekleri açmak için diğer cihazda anahtarı kopyalayıp yapıştırabilirsiniz.',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(fontSize: 11.5),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton.icon(
+                                            onPressed: () async {
+                                              await Clipboard.setData(
+                                                ClipboardData(text: activeKey),
+                                              );
+                                            },
+                                            icon: const Icon(
+                                              Icons.copy_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text('Anahtarı Kopyala'),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () =>
+                                                Navigator.of(qrCtx).pop(),
+                                            child: const Text('Kapat'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.qr_code_2_rounded,
+                                    size: 17,
+                                  ),
+                                  label: const Text('Cihaz Eşleştirme QR Kodu'),
+                                ),
+                              ],
+                            ),
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: Text(
+                                'Gelişmiş: Ham Çalışma Alanı Anahtarı (Workspace Key)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: pal.textPrimary,
+                                ),
+                              ),
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      TextField(
+                                        controller: workspaceKeyCtrl,
+                                        obscureText: obscureWorkspaceKey,
+                                        decoration: InputDecoration(
+                                          isDense: true,
+                                          labelText:
+                                              'Aktif Çalışma Alanı Anahtarı',
+                                          prefixIcon: const Icon(
+                                            Icons.vpn_key_rounded,
+                                            size: 18,
+                                          ),
+                                          suffixIcon: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                tooltip: obscureWorkspaceKey
+                                                    ? 'Anahtarı Göster'
+                                                    : 'Anahtarı Gizle',
+                                                icon: Icon(
+                                                  obscureWorkspaceKey
+                                                      ? Icons.visibility_outlined
+                                                      : Icons
+                                                          .visibility_off_outlined,
+                                                  size: 18,
+                                                ),
+                                                onPressed: () => setDialogState(
+                                                  () => obscureWorkspaceKey =
+                                                      !obscureWorkspaceKey,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Anahtarı Kopyala',
+                                                icon: const Icon(
+                                                  Icons.copy_rounded,
+                                                  size: 17,
+                                                ),
+                                                onPressed: () async {
+                                                  await Clipboard.setData(
+                                                    ClipboardData(
+                                                      text: workspaceKeyCtrl
+                                                          .text
+                                                          .trim(),
+                                                    ),
+                                                  );
+                                                  if (dialogCtx.mounted) {
+                                                    setDialogState(() {
+                                                      isFeedbackSuccess = true;
+                                                      statusFeedback =
+                                                          '✓ Şifreleme anahtarı panoya kopyalandı.';
+                                                    });
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: FilledButton.tonalIcon(
+                                          key: const ValueKey(
+                                            'btn_save_workspace_key',
+                                          ),
+                                          onPressed: () async {
+                                            final cleanKey =
+                                                workspaceKeyCtrl.text.trim();
+                                            if (cleanKey.isEmpty) return;
+                                            await dialogRef
+                                                .read(
+                                                  pdksDashboardProvider
+                                                      .notifier,
+                                                )
+                                                .updateCloudWorkspaceKey(
+                                                  cleanKey,
+                                                );
+                                            if (dialogCtx.mounted) {
+                                              setDialogState(() {
+                                                encryptionMode =
+                                                    CloudEncryptionKeyMode
+                                                        .customPassphrase;
+                                                isFeedbackSuccess = true;
+                                                statusFeedback =
+                                                    '✓ Çalışma Alanı Şifreleme Anahtarı güncellendi.';
+                                              });
+                                            }
+                                          },
+                                          icon: const Icon(
+                                            Icons.key_rounded,
+                                            size: 16,
+                                          ),
+                                          label: const Text('Anahtarı Güncelle'),
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: FilledButton.tonalIcon(
-                                  key: const ValueKey('btn_save_workspace_key'),
-                                  onPressed: () async {
-                                    final cleanKey =
-                                        workspaceKeyCtrl.text.trim();
-                                    if (cleanKey.isEmpty) return;
-                                    await dialogRef
-                                        .read(pdksDashboardProvider.notifier)
-                                        .updateCloudWorkspaceKey(cleanKey);
-                                    if (dialogCtx.mounted) {
-                                      setDialogState(() {
-                                        isFeedbackSuccess = true;
-                                        statusFeedback =
-                                            '✓ Çalışma Alanı Şifreleme Anahtarı güncellendi.';
-                                      });
-                                    }
-                                  },
-                                  icon: const Icon(Icons.key_rounded, size: 16),
-                                  label: const Text('Anahtarı Güncelle'),
-                                ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 8),
 
@@ -1583,4 +1939,177 @@ Future<void> showCloudBackupCenterDialog(
   profileIdCtrl.dispose();
   profileLabelCtrl.dispose();
   workspaceKeyCtrl.dispose();
+  passphraseCtrl.dispose();
+}
+
+class _BranchInboxSyncSection extends StatelessWidget {
+  final _CloudDialogPalette pal;
+  final List<Branch> branches;
+  final List<BranchInboxDeviceStatus> inboxStatuses;
+  final int? selectedBranchId;
+  final bool isBusy;
+  final bool isPulling;
+  final ValueChanged<int?> onBranchChanged;
+  final Future<void> Function() onPullInboxes;
+  final Future<void> Function(Branch branch) onCopyConfigJson;
+
+  const _BranchInboxSyncSection({
+    required this.pal,
+    required this.branches,
+    required this.inboxStatuses,
+    required this.selectedBranchId,
+    required this.isBusy,
+    required this.isPulling,
+    required this.onBranchChanged,
+    required this.onPullInboxes,
+    required this.onCopyConfigJson,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Branch? selectedBranch;
+    if (branches.isNotEmpty) {
+      selectedBranch = branches.firstWhere(
+        (b) => b.id == selectedBranchId,
+        orElse: () => branches.first,
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: pal.subtle,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Şube Yüz Okutma Köprüleri (Otomatik Cihaz Kutuları)',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              color: pal.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Her şube akıllı terazisi kendi şifreli cihaz kutusuna (hasibu_branch_inbox_*.enc) yazar; merkez verileri çakışmasız otomatik birleştirir.',
+            style: TextStyle(fontSize: 11, color: pal.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          if (inboxStatuses.isEmpty)
+            Text(
+              'Henüz şube cihaz kutusu senkronize edilmedi (her 60 sn\'de bir otomatik taranır).',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontStyle: FontStyle.italic,
+                color: pal.textSecondary,
+              ),
+            )
+          else
+            for (final item in inboxStatuses)
+              Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: pal.card,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: pal.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.hub_rounded,
+                      size: 16,
+                      color: Color(0xFF10B981),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item.branchName.isNotEmpty ? item.branchName : item.deviceSlug} • ${item.fileName}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: pal.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            '${item.logCount} hareket • ${item.source} • ${_formatDateTimeShort(item.modifiedTime)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: pal.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              FilledButton.tonalIcon(
+                key: const ValueKey('btn_pull_branch_inboxes'),
+                onPressed: (isBusy || isPulling) ? null : onPullInboxes,
+                icon: isPulling
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync_rounded, size: 17),
+                label: const Text('Şube Kutularını Şimdi Çek'),
+              ),
+              if (branches.isNotEmpty && selectedBranch != null) ...[
+                SizedBox(
+                  width: 210,
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey<int>(selectedBranch.id),
+                    initialValue: selectedBranch.id,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Kurulacak Şube',
+                    ),
+                    items: [
+                      for (final b in branches)
+                        DropdownMenuItem<int>(
+                          value: b.id,
+                          child: Text(
+                            b.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: onBranchChanged,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  key: const ValueKey('btn_copy_branch_bridge_config'),
+                  onPressed: isBusy
+                      ? null
+                      : () => onCopyConfigJson(selectedBranch!),
+                  icon: const Icon(Icons.copy_all_rounded, size: 17),
+                  label: const Text('Şube Köprüsü Ayar JSON Kopyala'),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

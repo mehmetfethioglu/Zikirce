@@ -127,6 +127,7 @@ class AppUserAccount {
   final AppUserRole role;
   final List<HasibuModule> allowedModules;
   final int? allowedBranchId;
+  final List<int> allowedBranchIds;
   final String? linkedGmail;
   final bool isActive;
   final HasibuThemeMode themeMode;
@@ -143,11 +144,54 @@ class AppUserAccount {
       HasibuModule.employeePortal,
     ],
     this.allowedBranchId,
+    this.allowedBranchIds = const <int>[],
     this.linkedGmail,
     this.isActive = true,
     this.themeMode = HasibuThemeMode.light,
     required this.createdAtIso,
   });
+
+  static List<int> normalizeBranchIds(
+    Iterable<int>? branchIds, {
+    int? legacyBranchId,
+  }) {
+    final unique = <int>{};
+    if (branchIds != null) {
+      for (final id in branchIds) {
+        if (id > 0) unique.add(id);
+      }
+    }
+    if (unique.isEmpty && legacyBranchId != null && legacyBranchId > 0) {
+      unique.add(legacyBranchId);
+    }
+    if (unique.isEmpty) return const <int>[];
+    final sorted = unique.toList()..sort();
+    return List<int>.unmodifiable(sorted);
+  }
+
+  static List<int> parseBranchIdsCsv(
+    String? raw, {
+    int? legacyBranchId,
+  }) {
+    final parsed = <int>[];
+    if (raw != null && raw.trim().isNotEmpty) {
+      for (final part in raw.split(',')) {
+        final id = int.tryParse(part.trim());
+        if (id != null && id > 0) parsed.add(id);
+      }
+    }
+    return normalizeBranchIds(parsed, legacyBranchId: legacyBranchId);
+  }
+
+  static String toBranchIdsCsv(Iterable<int> branchIds) =>
+      normalizeBranchIds(branchIds).join(',');
+
+  List<int> get effectiveAllowedBranchIds => normalizeBranchIds(
+        allowedBranchIds,
+        legacyBranchId: allowedBranchId,
+      );
+
+  bool get hasBranchRestriction => effectiveAllowedBranchIds.isNotEmpty;
 
   AppUserAccount copyWith({
     String? id,
@@ -157,11 +201,28 @@ class AppUserAccount {
     AppUserRole? role,
     List<HasibuModule>? allowedModules,
     int? Function()? allowedBranchId,
+    List<int>? allowedBranchIds,
     String? Function()? linkedGmail,
     bool? isActive,
     HasibuThemeMode? themeMode,
     String? createdAtIso,
   }) {
+    final int? nextBranchId;
+    final List<int> nextBranchIds;
+    if (allowedBranchIds != null) {
+      nextBranchIds = normalizeBranchIds(allowedBranchIds);
+      nextBranchId = nextBranchIds.isNotEmpty ? nextBranchIds.first : null;
+    } else if (allowedBranchId != null) {
+      final legacyNext = allowedBranchId();
+      nextBranchId = legacyNext;
+      nextBranchIds = legacyNext != null && legacyNext > 0
+          ? List<int>.unmodifiable(<int>[legacyNext])
+          : const <int>[];
+    } else {
+      nextBranchId = this.allowedBranchId;
+      nextBranchIds = this.allowedBranchIds;
+    }
+
     return AppUserAccount(
       id: id ?? this.id,
       username: username ?? this.username,
@@ -169,8 +230,8 @@ class AppUserAccount {
       passwordHash: passwordHash ?? this.passwordHash,
       role: role ?? this.role,
       allowedModules: allowedModules ?? this.allowedModules,
-      allowedBranchId:
-          allowedBranchId != null ? allowedBranchId() : this.allowedBranchId,
+      allowedBranchId: nextBranchId,
+      allowedBranchIds: nextBranchIds,
       linkedGmail: linkedGmail != null ? linkedGmail() : this.linkedGmail,
       isActive: isActive ?? this.isActive,
       themeMode: themeMode ?? this.themeMode,
@@ -178,23 +239,56 @@ class AppUserAccount {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'username': username,
-        'displayName': displayName,
-        'passwordHash': passwordHash,
-        'role': role.name,
-        'allowedModules': HasibuModule.toCsv(allowedModules),
-        'allowedBranchId': allowedBranchId,
-        'linkedGmail': linkedGmail,
-        'isActive': isActive,
-        'themeMode': themeMode.name,
-        'createdAtIso': createdAtIso,
-      };
+  Map<String, dynamic> toJson() {
+    final effectiveIds = effectiveAllowedBranchIds;
+    return {
+      'id': id,
+      'username': username,
+      'displayName': displayName,
+      'passwordHash': passwordHash,
+      'role': role.name,
+      'allowedModules': HasibuModule.toCsv(allowedModules),
+      'allowedBranchId': effectiveIds.isNotEmpty ? effectiveIds.first : null,
+      'allowedBranchIds': effectiveIds,
+      'linkedGmail': linkedGmail,
+      'isActive': isActive,
+      'themeMode': themeMode.name,
+      'createdAtIso': createdAtIso,
+    };
+  }
 
   factory AppUserAccount.fromJson(Map<String, dynamic> json) {
     final role = AppUserRole.fromName(json['role'] as String?);
     final rawModules = json['allowedModules'] as String?;
+    final legacyBranchId = (json['allowedBranchId'] as num?)?.toInt();
+    final rawBranchIds = json['allowedBranchIds'];
+    final List<int> parsedBranchIds;
+    if (rawBranchIds is Iterable) {
+      final ints = <int>[];
+      for (final item in rawBranchIds) {
+        if (item is num) {
+          ints.add(item.toInt());
+        } else if (item is String) {
+          final parsed = int.tryParse(item.trim());
+          if (parsed != null) ints.add(parsed);
+        }
+      }
+      parsedBranchIds = normalizeBranchIds(
+        ints,
+        legacyBranchId: legacyBranchId,
+      );
+    } else if (rawBranchIds is String) {
+      parsedBranchIds = parseBranchIdsCsv(
+        rawBranchIds,
+        legacyBranchId: legacyBranchId,
+      );
+    } else {
+      parsedBranchIds = normalizeBranchIds(
+        null,
+        legacyBranchId: legacyBranchId,
+      );
+    }
+
     return AppUserAccount(
       id: json['id'] as String? ?? '',
       username: (json['username'] as String? ?? '').trim().toLowerCase(),
@@ -204,7 +298,9 @@ class AppUserAccount {
       allowedModules: rawModules == null || rawModules.trim().isEmpty
           ? role.defaultModules
           : HasibuModule.parseCsv(rawModules),
-      allowedBranchId: (json['allowedBranchId'] as num?)?.toInt(),
+      allowedBranchId:
+          parsedBranchIds.isNotEmpty ? parsedBranchIds.first : null,
+      allowedBranchIds: parsedBranchIds,
       linkedGmail: json['linkedGmail'] as String?,
       isActive: json['isActive'] as bool? ?? true,
       themeMode: HasibuThemeMode.fromName(json['themeMode'] as String?),
@@ -282,6 +378,7 @@ class AuthSession {
   final String? errorMessage;
   final String? appUserId;
   final int? scopedBranchId;
+  final List<int> scopedBranchIds;
 
   const AuthSession({
     this.isAuthenticated = false,
@@ -293,7 +390,22 @@ class AuthSession {
     this.errorMessage,
     this.appUserId,
     this.scopedBranchId,
+    this.scopedBranchIds = const <int>[],
   });
+
+  List<int> get effectiveScopedBranchIds => AppUserAccount.normalizeBranchIds(
+        scopedBranchIds,
+        legacyBranchId: scopedBranchId,
+      );
+
+  bool get isBranchScoped =>
+      isAuthenticated && effectiveScopedBranchIds.isNotEmpty;
+
+  bool get isSingleBranchScoped =>
+      isAuthenticated && effectiveScopedBranchIds.length == 1;
+
+  bool canAccessBranch(int branchId) =>
+      !isBranchScoped || effectiveScopedBranchIds.contains(branchId);
 
   bool canAccess(HasibuModule module) =>
       module.isEnabledInCurrentPhase && allowedModules.contains(module);
@@ -308,7 +420,24 @@ class AuthSession {
     String? Function()? errorMessage,
     String? Function()? appUserId,
     int? Function()? scopedBranchId,
+    List<int>? scopedBranchIds,
   }) {
+    final int? nextBranchId;
+    final List<int> nextBranchIds;
+    if (scopedBranchIds != null) {
+      nextBranchIds = AppUserAccount.normalizeBranchIds(scopedBranchIds);
+      nextBranchId = nextBranchIds.isNotEmpty ? nextBranchIds.first : null;
+    } else if (scopedBranchId != null) {
+      final legacyNext = scopedBranchId();
+      nextBranchId = legacyNext;
+      nextBranchIds = legacyNext != null && legacyNext > 0
+          ? List<int>.unmodifiable(<int>[legacyNext])
+          : const <int>[];
+    } else {
+      nextBranchId = this.scopedBranchId;
+      nextBranchIds = this.scopedBranchIds;
+    }
+
     return AuthSession(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
       username: username ?? this.username,
@@ -318,8 +447,8 @@ class AuthSession {
       allowedModules: allowedModules ?? this.allowedModules,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
       appUserId: appUserId != null ? appUserId() : this.appUserId,
-      scopedBranchId:
-          scopedBranchId != null ? scopedBranchId() : this.scopedBranchId,
+      scopedBranchId: nextBranchId,
+      scopedBranchIds: nextBranchIds,
     );
   }
 }

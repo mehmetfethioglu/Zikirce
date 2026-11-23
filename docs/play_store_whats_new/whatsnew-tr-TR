@@ -1,5 +1,5 @@
-v1.0.11 Yenilikleri:
-• Buluta Yedekle, Buluttan Yükle (birleştirme/tam geri yükleme) ve Otomatik Bulut Yedekleme
-• Aynı Gmail/Google Drive hesabında çoklu kullanıcı ve izole kasa profili desteği
-• Uygulama içi Sürüm Notları ekranı
-• Resmi Hasibu uygulama ikonu ve uyarlanabilir (Adaptive) ikon desteği
+v1.0.13 Yenilikleri:
+• Çoklu Şube Kapsamı: Kullanıcı yönetiminde birden fazla şube seçimi ve "Merkez Hariç Tümü" kısayolu
+• Katı Şube İzolasyonu: Şube sorumluları yalnızca yetkili şubelerinin verilerini ve raporlarını görür
+• Kalıcı Google Bulut Oturumu & Çoklu Kullanıcı Girişi
+• Sıfır-adımlı otomatik Google hesabı şifreleme, kısa bulut parolası ve ezme koruması

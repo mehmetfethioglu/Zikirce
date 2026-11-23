@@ -11,8 +11,8 @@ on:
 
 jobs:
   build-ios:
-    name: Build iOS (macOS Apple Silicon)
-    runs-on: macos-latest
+    name: Build iOS (Xcode 27 / iOS 27 SDK - Apple Silicon)
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
@@ -30,11 +30,22 @@ jobs:
         with:
           channel: 'stable'
           cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-key: "flutter-xcode27-:os:-:channel:-:version:-:arch:-:hash:"
 
       - name: 3. Configure Flutter & Xcode environment
         run: |
+          XCODE27_APP=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$XCODE27_APP" ]; then
+            sudo xcode-select -s "$XCODE27_APP/Contents/Developer"
+          fi
           xcodebuild -version
+          IOS_SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "Detected iOS SDK version: $IOS_SDK_VERSION"
+          IOS_SDK_MAJOR="${IOS_SDK_VERSION%%.*}"
+          if [ -z "$IOS_SDK_MAJOR" ] || [ "$IOS_SDK_MAJOR" -lt 27 ]; then
+            echo "ERROR: iOS SDK 27+ (Xcode 27+) is required to satisfy ITMS-90725; found $IOS_SDK_VERSION" >&2
+            exit 1
+          fi
           flutter doctor -v
 
       - name: 4. Install dependencies and prepare Flutter iOS

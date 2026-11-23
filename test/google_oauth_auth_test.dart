@@ -66,6 +66,9 @@ class _FakeGoogleAuthAdapter implements GoogleAuthAdapter {
   }
 
   @override
+  Future<String?> refreshAccessTokenSilently() async => null;
+
+  @override
   Future<void> signOut() async {
     signOutCalled = true;
   }

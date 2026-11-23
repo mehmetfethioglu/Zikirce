@@ -86,12 +86,23 @@ class _EmployeeSelfServicePortalViewState
         .setSelfServiceEmployee(directory[nextIdx].employee.cardNo);
   }
 
+  int? _resolveBranchFilterId(List<int> scopedBranchIds) {
+    if (scopedBranchIds.length == 1) return scopedBranchIds.first;
+    if (_branchFilterId != null &&
+        (scopedBranchIds.isEmpty ||
+            scopedBranchIds.contains(_branchFilterId))) {
+      return _branchFilterId;
+    }
+    return null;
+  }
+
   Future<void> _openMobileDirectoryPicker(
     BuildContext context,
     List<EmployeeDailyStatus> allStatuses,
     List<Branch> branches,
-    String currentCardNo,
-  ) async {
+    String currentCardNo, {
+    required List<int> scopedBranchIds,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -101,10 +112,12 @@ class _EmployeeSelfServicePortalViewState
       ),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (ctx, setSheetState) {
+          final effectiveBranchFilterId =
+              _resolveBranchFilterId(scopedBranchIds);
           final filtered = _filterDirectory(
             allStatuses,
             employmentFilter: _employmentFilter,
-            branchFilterId: _branchFilterId,
+            branchFilterId: effectiveBranchFilterId,
             query: _searchCtrl.text,
           );
           return SizedBox(
@@ -117,7 +130,10 @@ class _EmployeeSelfServicePortalViewState
                 branches: branches,
                 selectedCardNo: currentCardNo,
                 employmentFilter: _employmentFilter,
-                branchFilterId: _branchFilterId,
+                branchFilterId: effectiveBranchFilterId,
+                allBranchesLabel: scopedBranchIds.isNotEmpty
+                    ? 'Yetkili Şubelerim'
+                    : 'Tüm Şubeler',
                 searchController: _searchCtrl,
                 onSearchChanged: () {
                   setState(() {});
@@ -128,6 +144,12 @@ class _EmployeeSelfServicePortalViewState
                   setSheetState(() {});
                 },
                 onBranchChanged: (bId) {
+                  if (scopedBranchIds.length == 1) return;
+                  if (bId != null &&
+                      scopedBranchIds.isNotEmpty &&
+                      !scopedBranchIds.contains(bId)) {
+                    return;
+                  }
                   setState(() => _branchFilterId = bId);
                   setSheetState(() {});
                 },
@@ -165,6 +187,9 @@ class _EmployeeSelfServicePortalViewState
     );
     final allRequests =
         ref.watch(pdksDashboardProvider.select((s) => s.allHrRequests));
+    final scopedBranchIds = ref.watch(
+      pdksDashboardProvider.select((s) => s.effectiveBranchScopeIds),
+    );
 
     if (statuses.isEmpty) {
       return const Center(child: Text('Personel verisi bulunamadı.'));
@@ -189,10 +214,11 @@ class _EmployeeSelfServicePortalViewState
         ref.read(pdksDashboardProvider.notifier).getEmployeeHistory(emp);
 
     final isAdminPreview = authRole == UserRole.admin;
+    final effectiveBranchFilterId = _resolveBranchFilterId(scopedBranchIds);
     final directory = _filterDirectory(
       statuses,
       employmentFilter: _employmentFilter,
-      branchFilterId: _branchFilterId,
+      branchFilterId: effectiveBranchFilterId,
       query: _searchCtrl.text,
     );
 
@@ -227,6 +253,7 @@ class _EmployeeSelfServicePortalViewState
             statuses,
             branches,
             emp.cardNo,
+            scopedBranchIds: scopedBranchIds,
           ),
         );
 
@@ -255,13 +282,23 @@ class _EmployeeSelfServicePortalViewState
                   branches: branches,
                   selectedCardNo: emp.cardNo,
                   employmentFilter: _employmentFilter,
-                  branchFilterId: _branchFilterId,
+                  branchFilterId: effectiveBranchFilterId,
+                  allBranchesLabel: scopedBranchIds.isNotEmpty
+                      ? 'Yetkili Şubelerim'
+                      : 'Tüm Şubeler',
                   searchController: _searchCtrl,
                   onSearchChanged: () => setState(() {}),
                   onEmploymentFilterChanged: (f) =>
                       setState(() => _employmentFilter = f),
-                  onBranchChanged: (bId) =>
-                      setState(() => _branchFilterId = bId),
+                  onBranchChanged: (bId) {
+                    if (scopedBranchIds.length == 1) return;
+                    if (bId != null &&
+                        scopedBranchIds.isNotEmpty &&
+                        !scopedBranchIds.contains(bId)) {
+                      return;
+                    }
+                    setState(() => _branchFilterId = bId);
+                  },
                   onSelectEmployee: (cardNo) => ref
                       .read(pdksDashboardProvider.notifier)
                       .setSelfServiceEmployee(cardNo),
@@ -298,6 +335,7 @@ class _PortalEmployeeDirectoryPanel extends StatelessWidget {
   final String selectedCardNo;
   final _PortalEmploymentFilter employmentFilter;
   final int? branchFilterId;
+  final String allBranchesLabel;
   final TextEditingController searchController;
   final VoidCallback onSearchChanged;
   final ValueChanged<_PortalEmploymentFilter> onEmploymentFilterChanged;
@@ -312,6 +350,7 @@ class _PortalEmployeeDirectoryPanel extends StatelessWidget {
     required this.selectedCardNo,
     required this.employmentFilter,
     required this.branchFilterId,
+    this.allBranchesLabel = 'Tüm Şubeler',
     required this.searchController,
     required this.onSearchChanged,
     required this.onEmploymentFilterChanged,
@@ -452,8 +491,13 @@ class _PortalEmployeeDirectoryPanel extends StatelessWidget {
                 if (branches.length > 1) ...[
                   const SizedBox(height: 8),
                   DropdownButtonFormField<int?>(
+                    key: ValueKey(
+                      'portal_dir_branch_${allBranchesLabel}_$branchFilterId',
+                    ),
                     isExpanded: true,
-                    initialValue: branchFilterId,
+                    initialValue: branches.any((b) => b.id == branchFilterId)
+                        ? branchFilterId
+                        : null,
                     decoration: const InputDecoration(
                       isDense: true,
                       labelText: 'Şube Filtresi',
@@ -463,9 +507,9 @@ class _PortalEmployeeDirectoryPanel extends StatelessWidget {
                       ),
                     ),
                     items: [
-                      const DropdownMenuItem<int?>(
+                      DropdownMenuItem<int?>(
                         value: null,
-                        child: Text('Tüm Şubeler'),
+                        child: Text(allBranchesLabel),
                       ),
                       for (final b in branches)
                         DropdownMenuItem<int?>(

@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uygulamanın güncel sürüm sabitleri (`pubspec.yaml` ile eşgüdümlü).
-const String hasibuAppVersion = '1.0.11';
-const int hasibuAppBuildNumber = 12;
-const String hasibuFullVersionLabel = 'v1.0.11 (Build 12)';
+const String hasibuAppVersion = '1.0.13';
+const int hasibuAppBuildNumber = 14;
+const String hasibuFullVersionLabel = 'v1.0.13 (Build 14)';
 
 /// Tekil sürüm notu kaydı.
 @immutable
@@ -30,6 +30,32 @@ class HasibuReleaseNoteEntry {
 
 /// Kronolojik olarak güncelden eskiye Hasibu sürüm notları listesi.
 const List<HasibuReleaseNoteEntry> hasibuReleaseNotesRegistry = [
+  HasibuReleaseNoteEntry(
+    version: '1.0.13',
+    buildNumber: 14,
+    releaseDate: '23.11.2026',
+    title: 'Çoklu Şube Kapsamı & Katı Şube Sorumlusu İzolasyonu',
+    categoryTag: 'Güvenlik & Yetki',
+    highlights: [
+      'Çoklu Şube Kapsamı Seçimi: Kullanıcı yönetiminde birden fazla şube seçimi ve "Merkez Hariç Tümü" kısayolu eklendi.',
+      'Katı Şube Sorumlusu İzolasyonu: Şube sorumlularının Merkez ve yetkisiz şube verilerini görüntülemesi ve değiştirmesi tamamen engellendi.',
+      'Yetkili Şubeler Arası Geçiş: AppBar rozeti, canlı PDKS filtreleri, devam/devamsızlık raporları, CSV dışa aktarım, personel portalı ve QR/GPS ekranları çoklu şube yetkisine uyarlandı.',
+      'iOS 27 SDK / Xcode 27 Uyumluluğu: App Store Connect ITMS-90725 uyumluluğu ve iOS 15+ minimum dağıtım hedefi güncellendi.',
+    ],
+  ),
+  HasibuReleaseNoteEntry(
+    version: '1.0.12',
+    buildNumber: 13,
+    releaseDate: '23.11.2026',
+    title: 'Kalıcı Google Oturumu, Çoklu Kullanıcı Girişi & Sıfır-Adımlı Bulut Şifreleme',
+    categoryTag: 'Güncelleme',
+    highlights: [
+      'Kalıcı Google Bulut Oturumu & Çoklu Kullanıcı Girişi: Google hesabıyla bir kez bağlandıktan sonra bulut oturumu açık kalır; uygulama açılışında kullanıcı adı/parola girişi ve kullanıcı adını hatırla özelliği sunulur.',
+      'Otomatik Google Hesabı Şifrelemesi & Kısa Parola: Aynı Google hesabındaki cihazlar uzun Workspace Key kopyalamadan yedekleri otomatik açar; ek olarak kısa ortak bulut parolası ve QR eşleştirme eklendi.',
+      'Bulut Yedeği Ezme Koruması: Çözülemeyen veya anahtarı uyuşmayan uzak yedeklerin üzerine yerel veritabanının yanlışlıkla yazılması engellendi.',
+      'Şube Köprüsü Uyarısız Başlangıç: Windows Görev Zamanlayıcı entegrasyonu ve Mark-of-the-Web (Zone.Identifier) temizliğiyle oturum açılışında güvenlik uyarısı engellendi.',
+    ],
+  ),
   HasibuReleaseNoteEntry(
     version: '1.0.11',
     buildNumber: 12,

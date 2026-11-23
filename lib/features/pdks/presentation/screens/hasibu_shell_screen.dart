@@ -321,7 +321,23 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen>
     final pendingHrCount = ref.watch(
       pdksDashboardProvider.select((s) => s.pendingHrRequestsCount),
     );
+    final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
     final pal = HasibuPalette.of(context);
+    String? scopedBranchLabel;
+    if (authSession.isBranchScoped) {
+      final scopedIds = authSession.effectiveScopedBranchIds;
+      final matchedNames = branches
+          .where((b) => scopedIds.contains(b.id))
+          .map((b) => b.name)
+          .toList(growable: false);
+      if (matchedNames.isEmpty) {
+        scopedBranchLabel = 'Şube #${scopedIds.join(",")}';
+      } else if (matchedNames.length <= 2) {
+        scopedBranchLabel = matchedNames.join(', ');
+      } else {
+        scopedBranchLabel = '${matchedNames.length} Yetkili Şube';
+      }
+    }
 
     final destinations = _buildDestinations(
       allowedModules: allowedModules,
@@ -426,7 +442,9 @@ class _HasibuShellScreenState extends ConsumerState<HasibuShellScreen>
                     border: Border.all(color: pal.border),
                   ),
                   child: Text(
-                    '${selectedDest.label} • ${authSession.displayName}',
+                    scopedBranchLabel != null
+                        ? '${selectedDest.label} • ${authSession.displayName} • $scopedBranchLabel'
+                        : '${selectedDest.label} • ${authSession.displayName}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1371,8 +1389,77 @@ class _BranchSelectorChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
-    final selectedBranchId =
-        ref.watch(pdksDashboardProvider.select((s) => s.selectedBranchId));
+    final isBranchScoped =
+        ref.watch(pdksDashboardProvider.select((s) => s.isBranchScoped));
+    final isSingleBranchScoped = ref.watch(
+      pdksDashboardProvider.select((s) => s.isSingleBranchScoped),
+    );
+    final selectedBranchId = ref.watch(
+      pdksDashboardProvider.select((s) => s.effectiveSelectedBranchId),
+    );
+
+    if (isSingleBranchScoped) {
+      final scopedMatch = branches.where((b) => b.id == selectedBranchId);
+      final label = scopedMatch.isNotEmpty
+          ? scopedMatch.first.name
+          : 'Yetkili Şube #$selectedBranchId';
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ChoiceChip(
+              key: const ValueKey('locked_branch_scope_chip'),
+              visualDensity: VisualDensity.compact,
+              avatar: const Icon(Icons.lock_outline_rounded, size: 14),
+              label: Text(label, style: const TextStyle(fontSize: 11.5)),
+              selected: true,
+              onSelected: null,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isBranchScoped) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            ChoiceChip(
+              key: const ValueKey('scoped_all_my_branches_chip'),
+              visualDensity: VisualDensity.compact,
+              avatar: const Icon(Icons.lock_outline_rounded, size: 14),
+              label: Text(
+                'Yetkili Şubelerim (${branches.length})',
+                style: const TextStyle(fontSize: 11.5),
+              ),
+              selected: selectedBranchId == null,
+              onSelected: (_) => ref
+                  .read(pdksDashboardProvider.notifier)
+                  .setBranchFilter(null),
+            ),
+            const SizedBox(width: 6),
+            for (final b in branches) ...[
+              ChoiceChip(
+                visualDensity: VisualDensity.compact,
+                avatar: Icon(
+                  b.hasTerminal
+                      ? Icons.face_retouching_natural
+                      : Icons.storefront,
+                  size: 14,
+                ),
+                label: Text(b.name, style: const TextStyle(fontSize: 11.5)),
+                selected: selectedBranchId == b.id,
+                onSelected: (_) => ref
+                    .read(pdksDashboardProvider.notifier)
+                    .setBranchFilter(b.id),
+              ),
+              const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      );
+    }
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -2265,8 +2352,15 @@ class _BranchQrGpsCheckInViewState
   Widget build(BuildContext context) {
     final state = ref.watch(pdksDashboardProvider);
     final pal = HasibuPalette.of(context);
+    if (state.branches.isEmpty) {
+      return const Center(
+        child: Text('Yetkili şube kaydı bulunamadı.'),
+      );
+    }
+    final effectiveBranchId =
+        state.effectiveBranchScopeId ?? _selectedBranchId;
     final branch = state.branches.firstWhere(
-      (b) => b.id == _selectedBranchId,
+      (b) => b.id == effectiveBranchId,
       orElse: () => state.branches.first,
     );
     final branchStaff = state.dailyStatuses
@@ -2316,13 +2410,21 @@ class _BranchQrGpsCheckInViewState
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final b in state.branches)
+                  if (state.isSingleBranchScoped)
                     ChoiceChip(
-                      label: Text(b.name),
-                      selected: _selectedBranchId == b.id,
-                      onSelected: (_) =>
-                          setState(() => _selectedBranchId = b.id),
-                    ),
+                      avatar: const Icon(Icons.lock_outline_rounded, size: 14),
+                      label: Text(branch.name),
+                      selected: true,
+                      onSelected: null,
+                    )
+                  else
+                    for (final b in state.branches)
+                      ChoiceChip(
+                        label: Text(b.name),
+                        selected: branch.id == b.id,
+                        onSelected: (_) =>
+                            setState(() => _selectedBranchId = b.id),
+                      ),
                 ],
               ),
               const SizedBox(height: 16),
