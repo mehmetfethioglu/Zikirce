@@ -157,6 +157,7 @@ class _VoiceControlSheetState extends ConsumerState<VoiceControlSheet> {
                         .read(cueDeckProvider.notifier)
                         .stopVoiceCommandSession();
                   } else {
+                    _voiceInputController.clear();
                     ref
                         .read(cueDeckProvider.notifier)
                         .startVoiceCommandSession();
@@ -275,6 +276,7 @@ class _VoiceControlSheetState extends ConsumerState<VoiceControlSheet> {
                                   .sendKeyboardText(
                                     lastTranscript,
                                     submitEnter: true,
+                                    clearExisting: true,
                                   );
                             },
                             icon: const Icon(

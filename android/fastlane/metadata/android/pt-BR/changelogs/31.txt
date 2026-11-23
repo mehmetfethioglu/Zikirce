@@ -1,0 +1,4 @@
+v2.3.0:
+• Controle completo Arçelik/Beko/Grundig: Adicionado suporte ArWebsocket criptografado (porta 8080) para volume, canais, direção, menu, teclado e diagnóstico inteligente.
+• Busca por voz automática: Ao terminar de falar, a pesquisa é enviada e iniciada automaticamente na TV sem precisar apertar Enter.
+• Nova busca limpa com um toque: Tocar no microfone novamente apaga a busca anterior no CueDeck e na TV.

@@ -111,6 +111,7 @@ class YoutubeDialBeamService {
       final dialPorts = <int>{
         device.port,
         56789,
+        56790,
         56791,
         8008,
         8060,

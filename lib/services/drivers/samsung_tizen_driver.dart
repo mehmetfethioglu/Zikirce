@@ -131,6 +131,27 @@ class SamsungTizenDriver implements TvRemoteDriver {
     });
   }
 
+  /// Builds a Samsung Tizen `SendInputEnd` frame to commit an active IME text stream.
+  static String buildImeInputEndPayload() {
+    return jsonEncode(<String, Object?>{
+      'method': 'ms.remote.control',
+      'params': <String, Object?>{'TypeOfRemote': 'SendInputEnd'},
+    });
+  }
+
+  /// Builds a Samsung Tizen `SendRemoteKey` frame for an explicit raw key string (e.g. `KEY_BACKSPACE`).
+  static String buildRawKeyPayload(String samsungKey) {
+    return jsonEncode(<String, Object?>{
+      'method': 'ms.remote.control',
+      'params': <String, Object?>{
+        'Cmd': 'Click',
+        'DataOfCmd': samsungKey,
+        'Option': 'false',
+        'TypeOfRemote': 'SendRemoteKey',
+      },
+    });
+  }
+
   /// Extracts a paired authorization token from a Samsung `ms.channel.connect` JSON message.
   static String? extractConnectToken(String rawMessage) {
     try {
@@ -348,26 +369,91 @@ class SamsungTizenDriver implements TvRemoteDriver {
     return false;
   }
 
+  /// Clears the active Samsung Tizen IME input field by sending an empty `SendInputString`
+  /// without sending `KEY_RETURN` (so the search box stays open).
+  Future<bool> clearInputField(TvDevice device) async {
+    final cleanIp = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
+    return _sendWsPayloadWithRetry(
+      cleanIp,
+      buildImeTextPayload(''),
+      preferredPort: device.port,
+      errorContext: 'Samsung IME temizleme hatası',
+    );
+  }
+
   @override
   Future<bool> sendText(
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     final cleanIp = device.ip.trim();
-    if (text.isEmpty) return false;
-    return _sendWsPayloadWithRetry(
+    if (text.isEmpty || !TvNetworkValidators.isValidIp(cleanIp)) return false;
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+
+    if (clearExisting) {
+      await _sendWsPayloadWithRetry(
+        cleanIp,
+        buildImeTextPayload(''),
+        preferredPort: device.port,
+        errorContext: 'Samsung IME ön temizleme hatası',
+      );
+      if (!isTestEnv) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
+    final textSent = await _sendWsPayloadWithRetry(
       cleanIp,
       buildImeTextPayload(text),
-      secondPayload: submitEnter ? buildControlPayload(TvKeyCommand.ok) : null,
       preferredPort: device.port,
       errorContext: 'Samsung metin gönderim hatası',
     );
+    if (!textSent) return false;
+
+    if (!isTestEnv) {
+      await Future<void>.delayed(const Duration(milliseconds: 160));
+    }
+    await _sendWsPayloadWithRetry(
+      cleanIp,
+      buildImeInputEndPayload(),
+      preferredPort: device.port,
+      errorContext: 'Samsung SendInputEnd hatası',
+    );
+
+    if (submitEnter) {
+      if (!isTestEnv) {
+        await Future<void>.delayed(const Duration(milliseconds: 160));
+      }
+      await _sendWsPayloadWithRetry(
+        cleanIp,
+        buildControlPayload(TvKeyCommand.ok),
+        preferredPort: device.port,
+        errorContext: 'Samsung KEY_ENTER onay hatası',
+      );
+    }
+    return true;
   }
 
   @override
   Future<bool> sendBackspace(TvDevice device, {int count = 1}) async {
-    return sendKey(device, TvKeyCommand.back);
+    final cleanIp = device.ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
+    final safeCount = count.clamp(1, 20);
+    final payload = buildRawKeyPayload('KEY_BACKSPACE');
+    var anyOk = false;
+    for (var i = 0; i < safeCount; i++) {
+      final ok = await _sendWsPayloadWithRetry(
+        cleanIp,
+        payload,
+        preferredPort: device.port,
+        errorContext: 'Samsung KEY_BACKSPACE hatası',
+      );
+      if (ok) anyOk = true;
+    }
+    return anyOk;
   }
 
   @override
@@ -422,6 +508,40 @@ class SamsungTizenDriver implements TvRemoteDriver {
         return true;
       } catch (e) {
         _diag('Samsung WS deep-link hatası: $e');
+      }
+    }
+
+    // For YouTube text search queries on Tizen, attempt DIAL /ws/apps/YouTube with vq=
+    if (platform == StreamingPlatform.youtube &&
+        deepLinkUrl.trim().isEmpty &&
+        fallbackSearchQuery.trim().isNotEmpty) {
+      final dialClient = HttpClient()
+        ..connectionTimeout = const Duration(milliseconds: 520);
+      try {
+        final req = await dialClient
+            .postUrl(Uri.parse('http://$cleanIp:8001/ws/apps/YouTube'))
+            .timeout(const Duration(milliseconds: 520));
+        req.headers.set(
+          HttpHeaders.contentTypeHeader,
+          'text/plain; charset=utf-8',
+        );
+        req.headers.set(HttpHeaders.connectionHeader, 'close');
+        final bodyBytes = utf8.encode(
+          'vq=${Uri.encodeQueryComponent(fallbackSearchQuery.trim())}',
+        );
+        req.contentLength = bodyBytes.length;
+        req.add(bodyBytes);
+        final resp = await req.close().timeout(
+          const Duration(milliseconds: 520),
+        );
+        await resp.drain<void>();
+        if (resp.statusCode >= 200 && resp.statusCode < 400) {
+          return true;
+        }
+      } catch (e) {
+        _diag('Samsung DIAL YouTube arama hatası: $e');
+      } finally {
+        dialClient.close(force: true);
       }
     }
 

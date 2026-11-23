@@ -40,11 +40,38 @@ class CueReleaseNotesCatalog {
   CueReleaseNotesCatalog._();
 
   /// Active application version (`pubspec.yaml`).
-  static const String currentVersion = '2.2.0+30';
-  static const String currentShortVersion = 'v2.2.0';
+  static const String currentVersion = '2.3.0+31';
+  static const String currentShortVersion = 'v2.3.0';
 
   /// Ordered list of release note entries (newest first).
   static const List<CueReleaseVersionEntry> versions = <CueReleaseVersionEntry>[
+    CueReleaseVersionEntry(
+      version: '2.3.0+31',
+      versionLabel: 'v2.3.0 (Build 31)',
+      releaseDate: '23 Kasım 2026',
+      headline:
+          'Tam Arçelik/Beko/Grundig Kumanda (ArWebsocket 8080), Otomatik Sesli Arama & Tek Dokunuşla Temizlenen Yeni Arama',
+      highlights: <CueReleaseNoteItem>[
+        CueReleaseNoteItem(
+          badge: 'ARÇELİK 8080',
+          title: 'Tam Arçelik / Beko / Grundig Smart TV Kumandası',
+          description:
+              'Şifreli WSS (port 8080) ArWebsocket protokolü ve 56789 → 8080 otomatik geçişi ile YouTube yanında tüm yön, ses, kanal, menü ve canlı klavye tuşları aktif hale getirildi.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'OTOMATİK SES',
+          title: 'Söz Bitince Otomatik Başlayan Sesli Arama',
+          description:
+              'Mikrofona aramak istediğiniz içeriği söyleyip durduğunuzda konuşma sonu hızlıca algılanır ve TV arama kutusuna yazılıp manuel onay gerekmeden otomatik aratılır.',
+        ),
+        CueReleaseNoteItem(
+          badge: 'YENİ ARAMA',
+          title: 'Mikrofona Tekrar Dokununca Otomatik Temizleme',
+          description:
+              'Bir sesli arama yaptıktan sonra mikrofon butonuna yeniden dokunduğunuzda önceki arama kutusu hem telefonda hem TV\'de temizlenerek yeni arama anında başlatılır.',
+        ),
+      ],
+    ),
     CueReleaseVersionEntry(
       version: '2.2.0+30',
       versionLabel: 'v2.2.0 (Build 30)',

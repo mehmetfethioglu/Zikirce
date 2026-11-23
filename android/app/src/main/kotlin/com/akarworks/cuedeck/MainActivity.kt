@@ -134,6 +134,14 @@ class MainActivity : FlutterActivity() {
                                 "TV için sesli komut veya arama söyleyin..."
                             )
                             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                            putExtra(
+                                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                                1200L
+                            )
+                            putExtra(
+                                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                                1000L
+                            )
                         }
                         pendingVoiceResult = result
                         startActivityForResult(intent, speechRequestCode)

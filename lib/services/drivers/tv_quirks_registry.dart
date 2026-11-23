@@ -127,6 +127,14 @@ class TvQuirksRegistry {
       brandKeywords: <String>['vestel', 'regal', 'toshiba', 'jvc', 'telefunken'],
     ),
     TvQuirkProfile(
+      id: 'arcelik_wss_8080',
+      label: 'Arçelik / Beko / Grundig WSS (8080)',
+      subtitle: 'ArWebsocket şifreli kumanda + canlı klavye & DIAL',
+      protocol: TvConnectionProtocol.arcelikGrundig8085,
+      port: 8080,
+      brandKeywords: <String>['arcelik', 'arçelik', 'beko', 'grundig', 'altus'],
+    ),
+    TvQuirkProfile(
       id: 'arcelik_8085',
       label: 'Arçelik / Beko / Grundig (8085)',
       subtitle: 'Smart Inter@ctive RC paketi + UPnP medya kontrolü',
@@ -319,18 +327,26 @@ class TvQuirksRegistry {
   /// Returns candidate profiles ordered so regional OEM siblings & brand matches
   /// appear first, excluding [device]'s exact current `(protocol, port)` unless none match.
   List<TvQuirkProfile> suggestedAlternativeProfiles(TvDevice device) {
-    final hay = '${device.name} ${device.boardInfo}'.toLowerCase();
+    final nameLower = device.name.toLowerCase();
+    final rawBoardLower = device.boardInfo.toLowerCase();
+    final boardLower =
+        rawBoardLower == 'android tv / google tv' ? '' : rawBoardLower;
 
     int scoreProfile(TvQuirkProfile profile) {
       var score = 0;
       for (final kw in profile.brandKeywords) {
-        if (hay.contains(kw)) score += 10;
+        if (nameLower.contains(kw)) {
+          score += 20;
+        } else if (boardLower.contains(kw)) {
+          score += 6;
+        }
       }
       if (profile.protocol == device.protocol && profile.port != device.port) {
         score += 15;
       }
       if (device.protocol == TvConnectionProtocol.vestelSmart56789 &&
-          (profile.protocol == TvConnectionProtocol.upnpDlnaControl ||
+          (profile.protocol == TvConnectionProtocol.arcelikGrundig8085 ||
+              profile.protocol == TvConnectionProtocol.upnpDlnaControl ||
               profile.protocol == TvConnectionProtocol.remotePort6466)) {
         score += 4;
       }

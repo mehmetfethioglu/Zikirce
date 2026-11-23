@@ -146,17 +146,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      CueDeck v2.2.0 (Build 30) Yenilikleri:
-      • Sadeleştirilmiş Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumanda üzerindeki yeni Plan tuşuna taşındı.
-      • Kaydırılabilir Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları YouTube ve Netflix altına eklendi.
-      • YouTube Paylaş → Plana Ekle: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.
-      • Yeni İkonlar & Alt Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad.
+      CueDeck v2.3.0 (Build 31) Yenilikleri:
+      • Tam Arçelik TV Kontrolü: Arçelik/Beko/Grundig Smart TV'ler için şifreli ArWebsocket (port 8080) desteği ile tüm ses, kanal, yön, menü ve klavye kontrolleri aktif.
+      • Otomatik Sesli Arama: Mikrofona söyleyip bitirdiğinizde TV'de arama otomatik başlar; manuel onay gerekmez.
+      • Tek Dokunuşla Yeni Arama: Mikrofona tekrar dokunduğunuzda önceki arama kutusu otomatik silinir ve yeni sesli arama hemen başlatılır.
 
-      What's New in CueDeck v2.2.0 (Build 30):
-      • Simplified Settings: Moved Watch Planner out of Settings into a dedicated Plan button on the remote.
-      • Swipeable Plan Cards: Modern, minimal watch plan cards sorted nearest-to-farthest right below YouTube & Netflix.
-      • Share from YouTube: Share any YouTube video or playlist directly into your CueDeck watch plan in one tap.
-      • Refined Icons & Touchpad: Modern microphone & cursor arrow icons plus a smoother high-precision bottom touchpad.
+      What's New in CueDeck v2.3.0 (Build 31):
+      • Full Arçelik/Beko/Grundig Control: Added encrypted ArWebsocket (port 8080) support for volume, channels, D-pad, menu, keyboard input, and smart diagnostics.
+      • Hands-Free Auto-Search: Voice commands automatically submit and search on your TV as soon as you finish speaking—no manual Enter required.
+      • Instant Clean Re-Search: Tapping the mic again clears the previous search text in CueDeck and on your TV before starting your new voice search.
     CHANGELOG
 
     begin

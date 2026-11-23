@@ -175,9 +175,13 @@ class RokuEcpDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     final cleanIp = device.ip.trim();
     if (text.isEmpty || !TvNetworkValidators.isValidIp(cleanIp)) return false;
+    if (clearExisting) {
+      await sendBackspace(device, count: 20);
+    }
     var anyOk = false;
     for (final rune in text.runes) {
       final ch = String.fromCharCode(rune);
@@ -189,6 +193,9 @@ class RokuEcpDriver implements TvRemoteDriver {
       if (ok) anyOk = true;
     }
     if (submitEnter) {
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
       await sendEnter(device);
     }
     return anyOk;
@@ -405,6 +412,7 @@ class SonyBraviaIrccDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async =>
       false;
 

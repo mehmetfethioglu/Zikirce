@@ -578,16 +578,23 @@ class LgWebOsDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     if (text.isEmpty) return false;
     final cleanIp = device.ip.trim();
     final res = await _sendSsapRequest(
       cleanIp,
       'ssap://com.webos.service.ime/insertText',
-      payload: <String, Object?>{'text': text, 'replace': 0},
+      payload: <String, Object?>{
+        'text': text,
+        'replace': clearExisting ? 1 : 0,
+      },
       preferredPort: device.port,
     );
     if (submitEnter) {
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
       await sendEnter(device);
     }
     return res != null;

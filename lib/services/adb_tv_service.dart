@@ -1824,9 +1824,23 @@ class AdbTvService {
         if (mdnsMac.isNotEmpty) {
           _discoveredMacByIp.putIfAbsent(senderIp, () => mdnsMac);
         }
+        final records = TvDiscoveryHelpers.describeDnsRecords(dg.data)
+            .join(' ')
+            .toLowerCase();
         final hint = TvDiscoveryHelpers.extractReadableMdnsLabel(dg.data);
-        discoveredByMdns[senderIp] =
-            hint.isNotEmpty ? hint : 'Android TV ($senderIp)';
+        var label = hint.isNotEmpty ? hint : 'Android TV ($senderIp)';
+        if (records.contains('_arceliktvremote')) {
+          final lowerHint = hint.toLowerCase();
+          if (!lowerHint.contains('arcelik') &&
+              !lowerHint.contains('arçelik') &&
+              !lowerHint.contains('beko') &&
+              !lowerHint.contains('grundig')) {
+            label = hint.isNotEmpty
+                ? '$hint (Arçelik TV)'
+                : 'Arçelik Smart TV ($senderIp)';
+          }
+        }
+        discoveredByMdns[senderIp] = label;
       });
 
       const services = <String>[
@@ -1893,19 +1907,35 @@ class AdbTvService {
     Duration timeout = const Duration(milliseconds: 300),
   }) async {
     const ports = <int>[
-      8002, 8001, 3001, 3000, 56789, 8085, 1926, 1925, 36669, 8060,
+      8002, 8001, 3001, 3000, 8080, 7681, 56789, 8085, 1926, 1925, 36669, 8060,
     ];
     final checks = await Future.wait<bool>(
       ports.map((p) => pingTv(ip, port: p, timeout: timeout)),
     );
     for (var i = 0; i < ports.length; i++) {
       if (!checks[i]) continue;
-      if (ports[i] == 8060) {
-        if (await _isGenuineRoku8060(ip)) return 8060;
-        if (await pingTv(ip, port: 8080, timeout: timeout)) return 8080;
+      final port = ports[i];
+      if (port == 8080 || port == 7681) {
+        if (await _driverRegistry.arcelikDriver.probeArWebsocket(
+          ip,
+          port: port,
+        )) {
+          return port;
+        }
         continue;
       }
-      return ports[i];
+      if (port == 8060) {
+        if (await _isGenuineRoku8060(ip)) return 8060;
+        if (await pingTv(ip, port: 8080, timeout: timeout) &&
+            await _driverRegistry.arcelikDriver.probeArWebsocket(
+              ip,
+              port: 8080,
+            )) {
+          return 8080;
+        }
+        continue;
+      }
+      return port;
     }
     return 0;
   }
@@ -2068,6 +2098,10 @@ class AdbTvService {
           smartBoardInfo = smartPaired
               ? 'LG webOS • Yetkili Oturum (Port $effectiveSmartPort)'
               : 'LG webOS • İlk Tuşta TV Onayı Gerekir (Port $effectiveSmartPort)';
+        } else if (proto == TvConnectionProtocol.arcelikGrundig8085 &&
+            (effectiveSmartPort == 8080 || effectiveSmartPort == 7681)) {
+          smartBoardInfo =
+              'Arçelik / Beko / Grundig Smart TV • ArWebsocket (Port $effectiveSmartPort)';
         }
         return TvDevice(
           name: metaName.isNotEmpty
@@ -2142,12 +2176,19 @@ class AdbTvService {
             pingTv(candidateIp, port: 8085, timeout: const Duration(milliseconds: 260)),
             pingTv(candidateIp, port: 56789, timeout: const Duration(milliseconds: 260)),
             pingTv(candidateIp, port: 8008, timeout: const Duration(milliseconds: 260)),
+            pingTv(candidateIp, port: 8080, timeout: const Duration(milliseconds: 260)),
           ]);
           var openSmartPort = 0;
           if (portChecks[2]) {
             openSmartPort = 8002;
           } else if (portChecks[3]) {
             openSmartPort = 3001;
+          } else if (portChecks[8] &&
+              await _driverRegistry.arcelikDriver.probeArWebsocket(
+                candidateIp,
+                port: 8080,
+              )) {
+            openSmartPort = 8080;
           } else if (portChecks[6]) {
             openSmartPort = 56789;
           } else if (portChecks[5]) {
@@ -2268,7 +2309,7 @@ class AdbTvService {
     final ip = device.ip.trim();
     if (!isValidIp(ip)) return false;
 
-    const candidatePorts = <int>[56789, 8085, 6466, 5555];
+    const candidatePorts = <int>[56789, 8080, 8085, 6466, 5555];
     final checks = await Future.wait<bool>(
       candidatePorts.map(
         (p) => pingTv(ip, port: p, timeout: const Duration(milliseconds: 220)),
@@ -2298,6 +2339,22 @@ class AdbTvService {
       if (arcelik != null &&
           await arcelik.sendKey(
             device.copyWith(
+              port: 8080,
+              protocol: TvConnectionProtocol.arcelikGrundig8085,
+            ),
+            command,
+          )) {
+        return true;
+      }
+    }
+
+    if (checks[2]) {
+      final arcelik = _driverRegistry.driverFor(
+        TvConnectionProtocol.arcelikGrundig8085,
+      );
+      if (arcelik != null &&
+          await arcelik.sendKey(
+            device.copyWith(
               port: 8085,
               protocol: TvConnectionProtocol.arcelikGrundig8085,
             ),
@@ -2307,7 +2364,7 @@ class AdbTvService {
       }
     }
 
-    if (checks[2] && _pinPairedIps.contains(ip)) {
+    if (checks[3] && _pinPairedIps.contains(ip)) {
       if (await _sendRemote6466KeyFrame(
         device.copyWith(
           port: 6466,
@@ -2319,7 +2376,7 @@ class AdbTvService {
       }
     }
 
-    if (checks[3]) {
+    if (checks[4]) {
       if (await _executeShellCommand(
         device.copyWith(port: 5555, protocol: TvConnectionProtocol.adbPort5555),
         buildFastKeyShellCommand(command),
@@ -2364,6 +2421,21 @@ class AdbTvService {
       timeout: const Duration(milliseconds: 450),
       warmupRetry: true,
     );
+
+    final canUpgradeArcelik =
+        device.protocol == TvConnectionProtocol.vestelSmart56789 ||
+        (device.protocol == TvConnectionProtocol.arcelikGrundig8085 &&
+            device.port != 8080);
+    if (canUpgradeArcelik &&
+        await _driverRegistry.arcelikDriver.probeArWebsocket(ip, port: 8080)) {
+      return device.copyWith(
+        port: 8080,
+        protocol: TvConnectionProtocol.arcelikGrundig8085,
+        isPaired: true,
+        isOnline: true,
+        boardInfo: 'Arçelik / Beko / Grundig Smart TV • ArWebsocket (Port 8080)',
+      );
+    }
 
     if (currentReachable && !isGenericDialOrUpnp) {
       if (device.protocol == TvConnectionProtocol.adbPort5555 &&
@@ -2580,10 +2652,13 @@ class AdbTvService {
 
     if (device.protocol == TvConnectionProtocol.remotePort6466 ||
         device.port == 6466) {
+      final trimmedSearch = fallbackSearchQuery.trim();
       final targetAppLink = normalizedUrl.isNotEmpty
           ? normalizedUrl
           : (platform == StreamingPlatform.youtube
-                ? 'https://www.youtube.com'
+                ? (trimmedSearch.isNotEmpty
+                      ? 'https://www.youtube.com/results?search_query=${Uri.encodeQueryComponent(trimmedSearch)}'
+                      : 'https://www.youtube.com')
                 : (platform == StreamingPlatform.netflix
                       ? 'https://www.netflix.com/title'
                       : ''));
@@ -2664,15 +2739,98 @@ class AdbTvService {
     );
   }
 
+  /// Safely clears existing text in the TV's active search box without sending
+  /// `BACK` / `RETURN` (so the search UI remains open for the next voice search).
+  Future<bool> clearActiveSearchField(
+    TvDevice device, {
+    int previousLength = 20,
+  }) async {
+    final ip = device.ip.trim();
+    if (device.isIrBlaster || !isValidIp(ip)) return false;
+
+    switch (device.protocol) {
+      case TvConnectionProtocol.samsungTizen8001:
+        return _driverRegistry.samsungDriver.clearInputField(device);
+      case TvConnectionProtocol.lgWebOs3000:
+        return _driverRegistry.lgDriver.sendBackspace(
+          device,
+          count: previousLength.clamp(8, 32),
+        );
+      case TvConnectionProtocol.rokuEcp8060:
+        return _driverRegistry.rokuDriver.sendBackspace(
+          device,
+          count: previousLength.clamp(8, 32),
+        );
+      case TvConnectionProtocol.arcelikGrundig8085:
+        return _driverRegistry.arcelikDriver.clearArWebsocketText(
+          ip,
+          count: previousLength.clamp(8, 28),
+          preferredPort: device.port,
+        );
+      case TvConnectionProtocol.adbPort5555:
+        final delCount = (previousLength + 6).clamp(12, 36);
+        final codes = List<String>.filled(delCount, '67').join(' ');
+        return _executeShellCommand(
+          device,
+          'input keyevent 123 && input keyevent $codes',
+        );
+      case TvConnectionProtocol.remotePort6466:
+        final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+        if (!isTestEnv &&
+            await pingTv(
+              ip,
+              port: 5555,
+              timeout: const Duration(milliseconds: 220),
+            )) {
+          final delCount = (previousLength + 6).clamp(12, 36);
+          final codes = List<String>.filled(delCount, '67').join(' ');
+          final adbOk = await _executeShellCommand(
+            device.copyWith(
+              port: 5555,
+              protocol: TvConnectionProtocol.adbPort5555,
+            ),
+            'input keyevent 123 && input keyevent $codes',
+          );
+          if (adbOk) return true;
+        }
+        if (!isTestEnv || (_remote6466Socket != null && _remote6466Ip == ip)) {
+          final delCount = previousLength.clamp(1, 12);
+          var anyOk = false;
+          for (var i = 0; i < delCount; i++) {
+            if (await _sendRemote6466KeyFrame(device, 67)) {
+              anyOk = true;
+            } else {
+              break;
+            }
+          }
+          return anyOk;
+        }
+        return false;
+      default:
+        return false;
+    }
+  }
+
   Future<bool> sendSearchText(
     TvDevice device,
     String rawText, {
     bool submitEnter = false,
+    bool clearExisting = false,
+    int previousTextLength = 0,
   }) async {
     final smartDriver = _driverRegistry.driverFor(device.protocol);
     if (smartDriver != null &&
         smartDriver.capabilities.contains(TvCapability.liveKeyboard)) {
-      return smartDriver.sendText(device, rawText, submitEnter: submitEnter);
+      return smartDriver.sendText(
+        device,
+        rawText,
+        submitEnter: submitEnter,
+        clearExisting: clearExisting,
+      );
+    }
+
+    if (device.protocol.isNonAndroidSmartTv) {
+      return false;
     }
 
     if (rawText == ' ') {
@@ -2680,9 +2838,30 @@ class AdbTvService {
     }
     final sanitized = normalizeForTvInputText(rawText.trim());
     if (sanitized.isEmpty) return false;
+
+    if (device.protocol == TvConnectionProtocol.remotePort6466 ||
+        device.port == 6466) {
+      final hasAdb = !Platform.environment.containsKey('FLUTTER_TEST') &&
+          await pingTv(
+            device.ip.trim(),
+            port: 5555,
+            timeout: const Duration(milliseconds: 220),
+          );
+      if (!hasAdb) return false;
+      device = device.copyWith(
+        port: 5555,
+        protocol: TvConnectionProtocol.adbPort5555,
+      );
+    }
+
+    final delCount =
+        (previousTextLength > 0 ? previousTextLength + 6 : 24).clamp(12, 36);
+    final clearPrefix = clearExisting
+        ? 'input keyevent 123 && input keyevent ${List<String>.filled(delCount, '67').join(' ')} && sleep 0.12 && '
+        : '';
     final cmd = submitEnter
-        ? 'input text "$sanitized" && input keyevent 66'
-        : 'input text "$sanitized"';
+        ? '${clearPrefix}input text "$sanitized" && sleep 0.25 && input keyevent 66'
+        : '${clearPrefix}input text "$sanitized"';
     return _executeShellCommand(device, cmd);
   }
 
@@ -3067,8 +3246,10 @@ class AdbTvService {
   /// (No external Gemini/AI intent parser per user preference.)
   Future<String> executeVoiceCommand(
     TvDevice device,
-    String rawSpokenText,
-  ) async {
+    String rawSpokenText, {
+    bool clearExisting = false,
+    int previousTextLength = 0,
+  }) async {
     final cleanRaw = rawSpokenText.trim();
     if (cleanRaw.isEmpty) return 'Sesli komut algılanamadı';
 
@@ -3200,17 +3381,27 @@ class AdbTvService {
     }
 
     final spokenInput = cleanRaw
-        .replaceAll(RegExp(r'\s+(ara|yaz)$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+(ara|yaz|bul)$', caseSensitive: false), '')
         .trim();
     final targetText = spokenInput.isNotEmpty ? spokenInput : cleanRaw;
     final typedOk = await sendSearchText(
       device,
       targetText,
       submitEnter: true,
+      clearExisting: clearExisting,
+      previousTextLength: previousTextLength,
     );
-    return typedOk
-        ? '🎙️ TV ekranına yazıldı: "$targetText"'
-        : '⚡ TV ekranına metin gönderildi: "$targetText"';
+    if (typedOk) {
+      return '🎙️ TV\'de otomatik aratıldı: "$targetText"';
+    }
+    final dialOk = await launchPlatformOrDeepLink(
+      device,
+      platform: StreamingPlatform.youtube,
+      fallbackSearchQuery: targetText,
+    );
+    return dialOk
+        ? '🎙️ YouTube\'da otomatik aratıldı: "$targetText"'
+        : '⚡ TV arama sinyali gönderildi: "$targetText"';
   }
 
   Future<String?> _executeShellCommandWithOutput(

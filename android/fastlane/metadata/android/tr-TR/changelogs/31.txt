@@ -1,0 +1,4 @@
+v2.3.0:
+• Tam Arçelik TV Kontrolü: Arçelik/Beko/Grundig Smart TV'ler için şifreli ArWebsocket (port 8080) bağlanma, ses, kanal, yön, menü, klavye ve akıllı tanılama desteği eklendi.
+• Otomatik Sesli Arama: Mikrofona söyleyip bitirdiğinizde TV'de arama otomatik başlar; manuel Enter'a basmaya gerek kalmaz.
+• Tek Dokunuşla Yeni Arama: Arama yaptıktan sonra mikrofona tekrar dokunduğunuzda önceki arama kutusu temizlenir ve yeni arama başlar.

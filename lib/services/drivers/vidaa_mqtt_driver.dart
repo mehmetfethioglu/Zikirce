@@ -769,6 +769,7 @@ class VidaaSmartDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     if (text.isEmpty) return false;
     final ok = await _publishMqtt(
@@ -778,6 +779,9 @@ class VidaaSmartDriver implements TvRemoteDriver {
       payload: text,
     );
     if (ok && submitEnter) {
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
       await sendEnter(device);
     }
     return ok;

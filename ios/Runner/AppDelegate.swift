@@ -381,9 +381,9 @@ import UserNotifications
               self.finishVoiceSession(with: text)
               return
             }
-            // Reset 1.35s post-speech silence endpoint timer
+            // Reset 1.15s post-speech silence endpoint timer
             self.voiceSilenceTimer?.invalidate()
-            self.voiceSilenceTimer = Timer.scheduledTimer(withTimeInterval: 1.35, repeats: false) { [weak self] _ in
+            self.voiceSilenceTimer = Timer.scheduledTimer(withTimeInterval: 1.15, repeats: false) { [weak self] _ in
               guard let self = self else { return }
               let finalText = self.latestVoiceTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
               self.finishVoiceSession(with: finalText.isEmpty ? nil : finalText)
@@ -672,7 +672,7 @@ import UserNotifications
     var open6466 = Set<String>()
     var open8008 = Set<String>()
     var openSmartTv = Set<String>()
-    let smartTvPorts: [UInt16] = [8085, 56789, 7681, 8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669]
+    let smartTvPorts: [UInt16] = [8085, 56789, 8080, 7681, 8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669]
     var permissionDeniedCount = 0
     var lastPermissionErrno: Int32 = 0
     var anyLanTrafficAllowed = false
@@ -794,7 +794,7 @@ import UserNotifications
             break
           } else if rSmart.errCode == ECONNREFUSED && !hostIsAlive {
             hostIsAlive = true
-            for extraPort: UInt16 in [8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669, 7681] {
+            for extraPort: UInt16 in [8002, 8001, 3001, 3000, 1926, 1925, 8060, 36669, 7681, 8080] {
               let rExtra = probePortWithFallback(ip: ip, port: extraPort, en0Index: en0Index, timeoutMs: 180)
               if rExtra.open {
                 lock.lock()

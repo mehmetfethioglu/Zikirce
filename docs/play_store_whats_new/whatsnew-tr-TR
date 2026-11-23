@@ -1,5 +1,4 @@
-v2.2.0:
-• Sade Ayarlar: İzleme Planı Ayarlar'dan çıkarılarak kumandadaki yeni Plan tuşuna taşındı.
-• Modern Plan Kartları: Yakından uzağa sıralı, sağa-sola kaydırılabilen sade plan kartları kumanda altına eklendi.
-• YouTube Paylaş → Planla: YouTube videolarını Paylaş menüsünden tek dokunuşla CueDeck planına ekleyin.
-• Yeni İkonlar & Hassas Touchpad: Modern mikrofon ve mouse oku ikonları; alt bölgeye taşınan yüksek hassasiyetli yeni touchpad.
+v2.3.0:
+• Tam Arçelik TV Kontrolü: Arçelik/Beko/Grundig Smart TV'ler için şifreli ArWebsocket (port 8080) bağlanma, ses, kanal, yön, menü, klavye ve akıllı tanılama desteği eklendi.
+• Otomatik Sesli Arama: Mikrofona söyleyip bitirdiğinizde TV'de arama otomatik başlar; manuel Enter'a basmaya gerek kalmaz.
+• Tek Dokunuşla Yeni Arama: Arama yaptıktan sonra mikrofona tekrar dokunduğunuzda önceki arama kutusu temizlenir ve yeni arama başlar.

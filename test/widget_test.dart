@@ -45,7 +45,15 @@ class _FakeCueNotificationService extends CueNotificationService {
 }
 
 class _FakeAdbTvService extends AdbTvService {
-  _FakeAdbTvService();
+  _FakeAdbTvService({List<String>? micTranscriptQueue})
+      : _micQueue = List<String>.of(
+          micTranscriptQueue ?? const <String>[],
+        );
+
+  final List<String> _micQueue;
+  final List<int> clearSearchCalls = <int>[];
+  final List<(String text, bool clearExisting, int previousLength)>
+      voiceExecCalls = <(String, bool, int)>[];
 
   @override
   Future<bool> pingTv(
@@ -171,10 +179,21 @@ class _FakeAdbTvService extends AdbTvService {
   }
 
   @override
+  Future<bool> clearActiveSearchField(
+    TvDevice device, {
+    int previousLength = 20,
+  }) async {
+    clearSearchCalls.add(previousLength);
+    return true;
+  }
+
+  @override
   Future<bool> sendSearchText(
     TvDevice device,
     String rawText, {
     bool submitEnter = false,
+    bool clearExisting = false,
+    int previousTextLength = 0,
   }) async {
     typedTexts.add(rawText);
     if (submitEnter) enterKeyCount++;
@@ -207,15 +226,23 @@ class _FakeAdbTvService extends AdbTvService {
       true;
 
   @override
-  Future<String?> listenPhoneMicrophone({String locale = 'tr-TR'}) async =>
-      'YouTube\'da Haberler';
+  Future<String?> listenPhoneMicrophone({String locale = 'tr-TR'}) async {
+    if (_micQueue.isNotEmpty) {
+      return _micQueue.removeAt(0);
+    }
+    return 'YouTube\'da Haberler';
+  }
 
   @override
   Future<String> executeVoiceCommand(
     TvDevice device,
-    String transcript,
-  ) async =>
-      '🎙️ Sesli komut çalıştırıldı: "$transcript"';
+    String transcript, {
+    bool clearExisting = false,
+    int previousTextLength = 0,
+  }) async {
+    voiceExecCalls.add((transcript, clearExisting, previousTextLength));
+    return '🎙️ TV\'de otomatik aratıldı: "$transcript"';
+  }
 }
 
 void main() {
@@ -1115,6 +1142,53 @@ void main() {
       expect(uhidHex.startsWith(r'\x0b\x00\x00\x00'), isTrue);
       // 332 bytes * 4 chars (\xHH) == 1328 chars
       expect(uhidHex.length, 332 * 4);
+    },
+  );
+
+  testWidgets(
+    'VoiceControlSheet auto-submits Search #1, then tapping mic clears box and auto-submits Search #2',
+    (WidgetTester tester) async {
+      final fakeService = _FakeAdbTvService(
+        micTranscriptQueue: <String>['Duman konseri', 'Tarkan'],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            adbTvServiceProvider.overrideWithValue(fakeService),
+          ],
+          child: const CueDeckApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open Voice Sheet -> Search #1 runs automatically
+      await tester.tap(find.byKey(const Key('remote_voice_button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.voiceExecCalls.length, 1);
+      expect(fakeService.voiceExecCalls.first.$1, 'Duman konseri');
+      expect(fakeService.clearSearchCalls, isEmpty);
+      expect(
+        find.textContaining('Son Algılanan: "Duman konseri"'),
+        findsOneWidget,
+      );
+
+      // Type something into custom voice input field too to verify clearing
+      await tester.enterText(find.byType(TextField).last, 'eski metin');
+      await tester.pump();
+
+      // Tap mic button again -> clears previous search on TV + clears input controller + runs Search #2
+      await tester.tap(find.byKey(const Key('voice_sheet_mic_button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeService.clearSearchCalls, <int>['Duman konseri'.length]);
+      expect(fakeService.voiceExecCalls.length, 2);
+      expect(fakeService.voiceExecCalls[1].$1, 'Tarkan');
+      expect(
+        find.textContaining('Son Algılanan: "Tarkan"'),
+        findsOneWidget,
+      );
+      expect(find.text('eski metin'), findsNothing);
     },
   );
 }

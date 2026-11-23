@@ -1,0 +1,4 @@
+v2.3.0:
+• Volle Arçelik/Beko/Grundig-Steuerung: Verschlüsseltes ArWebsocket (Port 8080) für Lautstärke, Kanäle, Navigation, Menü, Tastatureingabe und smarte Diagnose hinzugefügt.
+• Automatische Sprachsuche: Nach dem Sprechen wird die Suche direkt am TV gestartet – kein manuelles Enter nötig.
+• Saubere Neusuche per Tipp: Ein erneuter Tipp auf das Mikrofon löscht das vorherige Suchfeld in CueDeck und auf dem TV.

@@ -108,8 +108,10 @@ class _HealingTestAdbTvService extends _TestAdbTvService {
   @override
   Future<String> executeVoiceCommand(
     TvDevice device,
-    String rawSpokenText,
-  ) async =>
+    String rawSpokenText, {
+    bool clearExisting = false,
+    int previousTextLength = 0,
+  }) async =>
       '⚡ Sesli komut sinyali gönderildi: "$rawSpokenText"';
 
   @override
@@ -1378,6 +1380,114 @@ void main() {
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
+
+  test(
+    'AdbTvService.executeVoiceCommand auto-submits search on live-keyboard TVs and auto-falls back to YouTube DIAL search on SmartCenter TVs',
+    () async {
+      final prevOverrides = HttpOverrides.current;
+      HttpOverrides.global = null;
+      addTearDown(() => HttpOverrides.global = prevOverrides);
+
+      // 1. Live-keyboard ArWebsocket TV auto-submits with clearExisting & Enter
+      final arcelikFrames = <Map<String, dynamic>>[];
+      final arcelikServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => arcelikServer.close(force: true));
+      final aSub = arcelikServer.listen((HttpRequest req) async {
+        final ws = await WebSocketTransformer.upgrade(
+          req,
+          protocolSelector: (List<String> protos) =>
+              protos.contains('ArWebsocket') ? 'ArWebsocket' : protos.first,
+        );
+        ws.listen((dynamic raw) {
+          if (raw is String) {
+            arcelikFrames.add(jsonDecode(raw) as Map<String, dynamic>);
+          }
+        });
+      });
+      addTearDown(aSub.cancel);
+
+      final service = AdbTvService();
+      addTearDown(service.dispose);
+
+      final arcelikTv = TvDevice(
+        name: 'Arçelik Smart TV',
+        ip: '127.0.0.1',
+        port: arcelikServer.port,
+        protocol: TvConnectionProtocol.arcelikGrundig8085,
+        isOnline: true,
+        isPaired: true,
+      );
+      final arcelikMsg = await service.executeVoiceCommand(
+        arcelikTv,
+        'Duman ara',
+        clearExisting: true,
+        previousTextLength: 5,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      expect(arcelikMsg, '🎙️ TV\'de otomatik aratıldı: "Duman"');
+      final keys = arcelikFrames
+          .where((f) => f['command'] == 'on-keyboard-input')
+          .map((f) => (f['arguments'] as Map)['key'] as String)
+          .toList();
+      expect(keys.take(20), everyElement('\b'));
+      expect(keys.skip(20).toList(), <String>['D', 'u', 'm', 'a', 'n']);
+      expect(arcelikFrames.last['command'], 'on-rc-input');
+      expect((arcelikFrames.last['arguments'] as Map)['key'], 'RC_OK');
+
+      // 2. SmartCenter Regal TV without live keyboard auto-falls back to YouTube DIAL search
+      final dialBodies = <String>[];
+      final dialServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => dialServer.close(force: true));
+      final dSub = dialServer.listen((HttpRequest req) async {
+        final body = await utf8.decoder.bind(req).join();
+        if (req.uri.path == '/apps/YouTube') {
+          dialBodies.add(body);
+          req.response.statusCode = HttpStatus.created;
+        } else {
+          req.response.statusCode = HttpStatus.notFound;
+        }
+        await req.response.close();
+      });
+      addTearDown(dSub.cancel);
+
+      final regalTv = TvDevice(
+        name: 'Regal Smart TV',
+        ip: '127.0.0.1',
+        port: dialServer.port,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+        isOnline: true,
+        isPaired: true,
+      );
+      final regalMsg = await service.executeVoiceCommand(
+        regalTv,
+        'Kuzey Güney bul',
+      );
+      expect(regalMsg, '🎙️ YouTube\'da otomatik aratıldı: "Kuzey Güney"');
+      expect(dialBodies, contains('vq=Kuzey+G%C3%BCney'));
+    },
+  );
+
+  test(
+    'TvQuirksRegistry includes arcelik_wss_8080 and ranks it for Arçelik TVs',
+    () {
+      final registry = TvQuirksRegistry();
+      final wssProfile = registry.activeProfiles.firstWhere(
+        (p) => p.id == 'arcelik_wss_8080',
+      );
+      expect(wssProfile.port, 8080);
+      expect(wssProfile.protocol, TvConnectionProtocol.arcelikGrundig8085);
+
+      const legacyArcelik = TvDevice(
+        name: 'Arçelik 43 Smart TV',
+        ip: '192.168.1.106',
+        port: 56789,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+      );
+      final suggestions = registry.suggestedAlternativeProfiles(legacyArcelik);
+      expect(suggestions.first.id, 'arcelik_wss_8080');
     },
   );
 }

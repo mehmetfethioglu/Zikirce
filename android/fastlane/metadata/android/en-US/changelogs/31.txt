@@ -1,0 +1,4 @@
+v2.3.0:
+• Full Arçelik/Beko/Grundig Control: Added encrypted ArWebsocket (port 8080) support for volume, channels, D-pad, menu, keyboard input, and smart diagnostics.
+• Hands-Free Auto-Search: Voice commands automatically submit and search on your TV as soon as you finish speaking—no manual Enter required.
+• Instant Clean Re-Search: Tapping the mic again clears the previous search text in CueDeck and on your TV before starting your new voice search.

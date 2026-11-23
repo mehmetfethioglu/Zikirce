@@ -35,7 +35,12 @@ abstract interface class TvRemoteDriver {
   Future<bool> movePointer(TvDevice device, double dx, double dy);
   Future<bool> clickPointer(TvDevice device, {bool rightClick = false});
   Future<bool> scrollWheel(TvDevice device, int wheelClicks);
-  Future<bool> sendText(TvDevice device, String text, {bool submitEnter = false});
+  Future<bool> sendText(
+    TvDevice device,
+    String text, {
+    bool submitEnter = false,
+    bool clearExisting = false,
+  });
   Future<bool> sendBackspace(TvDevice device, {int count = 1});
   Future<bool> sendEnter(TvDevice device);
   Future<bool> launchContent(

@@ -660,6 +660,7 @@ class PhilipsJointSpaceDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     final ip = device.ip.trim();
     if (text.isEmpty || !TvNetworkValidators.isValidIp(ip)) return false;
@@ -677,6 +678,9 @@ class PhilipsJointSpaceDriver implements TvRemoteDriver {
       if (ok) anyOk = true;
     }
     if (submitEnter) {
+      if (!Platform.environment.containsKey('FLUTTER_TEST')) {
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      }
       await sendEnter(device);
     }
     return anyOk;

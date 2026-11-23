@@ -92,6 +92,8 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   bool _isSendingMouseMove = false;
   bool _isSendingWheelScroll = false;
   bool _healingConnection = false;
+  String _lastVoiceSearchText = '';
+  bool _clearedSearchOnMicTap = false;
 
   @override
   CueDeckState build() {
@@ -1876,6 +1878,9 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   Future<void> sendRemoteKey(TvKeyCommand command) async {
     if (!ref.mounted) return;
+    if (command == TvKeyCommand.home || command == TvKeyCommand.back) {
+      _lastVoiceSearchText = '';
+    }
     _highlightResetTimer?.cancel();
     final initialDevice = state.selectedDevice;
     state = state.copyWith(
@@ -1951,16 +1956,34 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
   Future<bool> startVoiceCommandSession() async {
     if (state.isListeningVoice) return false;
+    final service = ref.read(adbTvServiceProvider);
+    final hadPreviousSearch = _lastVoiceSearchText.isNotEmpty;
+    final prevLen = _lastVoiceSearchText.length;
+    final selectedDevice = state.selectedDevice;
+
+    _lastVoiceSearchText = '';
+    _clearedSearchOnMicTap = false;
+
     state = state.copyWith(
       isListeningVoice: true,
       voicePermissionDenied: false,
+      lastVoiceTranscript: '',
       lastCommandStatus: '🎙️ Telefon mikrofonu dinleniyor... Lütfen konuşun',
     );
 
-    final service = ref.read(adbTvServiceProvider);
+    if (hadPreviousSearch && !selectedDevice.isIrBlaster) {
+      final cleared = await service
+          .clearActiveSearchField(selectedDevice, previousLength: prevLen)
+          .timeout(const Duration(milliseconds: 450), onTimeout: () => false);
+      _clearedSearchOnMicTap = cleared;
+      if (!ref.mounted || !state.isListeningVoice) return false;
+    }
+
     final transcript = await service.listenPhoneMicrophone();
+    if (!ref.mounted) return false;
 
     if (transcript == null || transcript.trim().isEmpty) {
+      _clearedSearchOnMicTap = false;
       final permDenied = service.voicePermissionDenied;
       state = state.copyWith(
         isListeningVoice: false,
@@ -1972,12 +1995,17 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
       return false;
     }
 
+    final shouldClearBeforeSubmit = hadPreviousSearch && !_clearedSearchOnMicTap;
+    _clearedSearchOnMicTap = false;
     state = state.copyWith(
       isListeningVoice: false,
       voicePermissionDenied: false,
       lastVoiceTranscript: transcript,
     );
-    await runVoiceTranscript(transcript);
+    await runVoiceTranscript(
+      transcript,
+      clearExistingSearch: shouldClearBeforeSubmit,
+    );
     return true;
   }
 
@@ -1987,6 +2015,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   }
 
   Future<void> cancelVoiceCommandSession() async {
+    _clearedSearchOnMicTap = false;
     if (!state.isListeningVoice) return;
     await ref.read(adbTvServiceProvider).cancelPhoneMicrophone();
     if (state.isListeningVoice) {
@@ -1997,9 +2026,15 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     }
   }
 
-  Future<void> runVoiceTranscript(String transcript) async {
+  Future<void> runVoiceTranscript(
+    String transcript, {
+    bool clearExistingSearch = false,
+  }) async {
     final cleaned = transcript.trim();
     if (cleaned.isEmpty || !ref.mounted) return;
+
+    final shouldClear = clearExistingSearch || _lastVoiceSearchText.isNotEmpty;
+    final prevLen = _lastVoiceSearchText.length;
 
     state = state.copyWith(
       lastVoiceTranscript: cleaned,
@@ -2008,8 +2043,21 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
 
     final service = ref.read(adbTvServiceProvider);
     final device = state.selectedDevice;
-    final statusMsg = await service.executeVoiceCommand(device, cleaned);
+    final statusMsg = await service.executeVoiceCommand(
+      device,
+      cleaned,
+      clearExisting: shouldClear,
+      previousTextLength: prevLen,
+    );
     if (!ref.mounted) return;
+
+    if (statusMsg.contains('aratıldı') ||
+        statusMsg.contains('yazıldı') ||
+        statusMsg.contains('arama sinyali')) {
+      _lastVoiceSearchText = cleaned;
+    } else {
+      _lastVoiceSearchText = '';
+    }
 
     if (device.isIrBlaster) {
       state = state.copyWith(lastCommandStatus: statusMsg);
@@ -2039,6 +2087,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
     String? deepLinkUrl,
   }) async {
     if (!ref.mounted) return;
+    _lastVoiceSearchText = '';
     state = state.copyWith(
       lastCommandStatus: '${platform.label} TV ekranında açılıyor...',
     );
@@ -2098,6 +2147,7 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
   Future<void> sendKeyboardText(
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async {
     if (text.isEmpty) return;
     if (text != ' ' && text.trim().isEmpty) return;
@@ -2105,7 +2155,12 @@ class CueDeckNotifier extends Notifier<CueDeckState> {
           state.selectedDevice,
           text,
           submitEnter: submitEnter,
+          clearExisting: clearExisting,
+          previousTextLength: _lastVoiceSearchText.length,
         );
+    if (clearExisting || submitEnter) {
+      _lastVoiceSearchText = submitEnter ? text.trim() : '';
+    }
     final display = text == ' ' ? 'Boşluk' : text.trim();
     state = state.copyWith(
       lastCommandStatus: ok

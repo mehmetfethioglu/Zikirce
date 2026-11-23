@@ -35,6 +35,10 @@ class TvDriverRegistry {
     final sony = SonyBraviaIrccDriver(vault: vault, logger: logger);
     final ir = IrBlasterDriver(logger: logger);
 
+    arcelikDriver = arcelik;
+    samsungDriver = samsung;
+    lgDriver = lg;
+    rokuDriver = roku;
     irBlasterDriver = ir;
     philipsDriver = philips;
     vidaaDriver = vidaa;
@@ -53,6 +57,10 @@ class TvDriverRegistry {
   }
 
   late final Map<TvConnectionProtocol, TvRemoteDriver> _drivers;
+  late final ArcelikGrundigDriver arcelikDriver;
+  late final SamsungTizenDriver samsungDriver;
+  late final LgWebOsDriver lgDriver;
+  late final RokuEcpDriver rokuDriver;
   late final IrBlasterDriver irBlasterDriver;
   late final PhilipsJointSpaceDriver philipsDriver;
   late final VidaaSmartDriver vidaaDriver;

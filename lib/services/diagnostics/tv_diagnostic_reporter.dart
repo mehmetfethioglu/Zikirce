@@ -162,6 +162,11 @@ class TvDiagnosticReporter {
         b.writeln(':$p yavaş TCP denemesi -> ${await _slowRawProbe(ip, p)}');
       }
     }
+    if (openPorts.contains(8080)) {
+      b.writeln(
+        ':8080 ArWebsocket WSS -> ${await _wssArWebsocketProbe(ip, 8080)}',
+      );
+    }
     if (openPorts.contains(7681)) {
       b.writeln(':7681 WebSocket varyantları:');
       b.writeln(await _webSocketVariants(ip, 7681));
@@ -657,6 +662,7 @@ class TvDiagnosticReporter {
       '/control',
     ];
     const protocols = <String?>[
+      'ArWebsocket',
       null,
       'arceliktvremote',
       'tvremote',
@@ -691,6 +697,33 @@ class TvDiagnosticReporter {
       b.writeln('  $answer  <=  $shown');
     });
     return b.toString().trimRight();
+  }
+
+  Future<String> _wssArWebsocketProbe(String ip, int port) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 900)
+      ..userAgent = 'okhttp/3.12.1'
+      ..badCertificateCallback = (X509Certificate cert, String host, _) =>
+          TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
+    try {
+      final ws = await WebSocket.connect(
+        'wss://$ip:$port/',
+        protocols: const <String>['ArWebsocket'],
+        headers: <String, Object>{
+          'Origin': 'https://$ip:$port',
+        },
+        customClient: client,
+      ).timeout(const Duration(milliseconds: 1200));
+      final proto = ws.protocol ?? 'ArWebsocket';
+      await ws.close().catchError((Object e) {
+        return null;
+      });
+      client.close();
+      return '101 Switching Protocols ($proto)';
+    } catch (e) {
+      client.close(force: true);
+      return 'HATA: ${e.runtimeType}';
+    }
   }
 
   Future<String> _wsHandshake(

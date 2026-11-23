@@ -1,5 +1,4 @@
-v2.2.0:
-• Simplified Settings: Moved Watch Planner out of Settings into a dedicated Plan button on the remote.
-• Swipeable Plan Cards: Modern, minimal watch plan cards sorted nearest-to-farthest right below YouTube & Netflix.
-• Share from YouTube: Share any YouTube video/playlist directly into your CueDeck watch plan in one tap.
-• Refined Icons & Touchpad: Modern mic & cursor arrow icons plus a smoother high-precision bottom touchpad.
+v2.3.0:
+• Full Arçelik/Beko/Grundig Control: Added encrypted ArWebsocket (port 8080) support for volume, channels, D-pad, menu, keyboard input, and smart diagnostics.
+• Hands-Free Auto-Search: Voice commands automatically submit and search on your TV as soon as you finish speaking—no manual Enter required.
+• Instant Clean Re-Search: Tapping the mic again clears the previous search text in CueDeck and on your TV before starting your new voice search.

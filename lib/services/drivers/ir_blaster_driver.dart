@@ -407,6 +407,7 @@ class IrBlasterDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async =>
       false;
 

@@ -86,13 +86,20 @@ void main() {
 
       expect(await driver.sendKey(paired, TvKeyCommand.channelUp), isTrue);
       expect(await driver.sendText(paired, 'test', submitEnter: true), isTrue);
-      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(await driver.sendBackspace(paired, count: 2), isTrue);
+      expect(await driver.clearInputField(paired), isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
 
-      expect(receivedFrames.length, greaterThanOrEqualTo(3));
+      expect(receivedFrames.length, greaterThanOrEqualTo(7));
       expect(receivedFrames[0]['params']['DataOfCmd'], 'KEY_CHUP');
       expect(receivedFrames[1]['params']['TypeOfRemote'], 'SendInputString');
       expect(receivedFrames[1]['params']['Cmd'], 'dGVzdA==');
-      expect(receivedFrames[2]['params']['DataOfCmd'], 'KEY_ENTER');
+      expect(receivedFrames[2]['params']['TypeOfRemote'], 'SendInputEnd');
+      expect(receivedFrames[3]['params']['DataOfCmd'], 'KEY_ENTER');
+      expect(receivedFrames[4]['params']['DataOfCmd'], 'KEY_BACKSPACE');
+      expect(receivedFrames[5]['params']['DataOfCmd'], 'KEY_BACKSPACE');
+      expect(receivedFrames[6]['params']['TypeOfRemote'], 'SendInputString');
+      expect(receivedFrames[6]['params']['Cmd'], '');
     });
 
     test('LG webOS Virtual TV persists client-key and uses PointerInputSocket for keys & mouse', () async {
@@ -717,6 +724,222 @@ void main() {
       final dialProbes = parsed['dialProbes'] as Map<String, dynamic>;
       expect(dialProbes['port_${server.port}_YouTube'], 'HTTP 200');
       expect(dialProbes['port_${server.port}_Netflix'], 'HTTP 404');
+    });
+
+    test('ArcelikGrundigDriver ArWebsocket Virtual TV handles probe, RC keys, live keyboard, and clearExisting', () async {
+      final receivedFrames = <Map<String, dynamic>>[];
+      final seenHeaders = <String, String>{};
+      final wsServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => wsServer.close(force: true));
+
+      final wsSub = wsServer.listen((HttpRequest req) async {
+        final protoHeader = req.headers.value('sec-websocket-protocol') ?? '';
+        if (!WebSocketTransformer.isUpgradeRequest(req) ||
+            !protoHeader.split(',').map((e) => e.trim()).contains('ArWebsocket')) {
+          req.response.statusCode = HttpStatus.badRequest;
+          await req.response.close();
+          return;
+        }
+        seenHeaders['origin'] = req.headers.value('origin') ?? '';
+        seenHeaders['user-agent'] = req.headers.value('user-agent') ?? '';
+        final ws = await WebSocketTransformer.upgrade(
+          req,
+          protocolSelector: (List<String> protos) =>
+              protos.contains('ArWebsocket') ? 'ArWebsocket' : protos.first,
+        );
+        ws.listen((dynamic raw) {
+          if (raw is String) {
+            final decoded = jsonDecode(raw);
+            if (decoded is Map<String, dynamic>) {
+              receivedFrames.add(decoded);
+            }
+          }
+        });
+      });
+      addTearDown(wsSub.cancel);
+
+      final plainHttpServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => plainHttpServer.close(force: true));
+      final pSub = plainHttpServer.listen((HttpRequest req) async {
+        req.response.statusCode = HttpStatus.notFound;
+        await req.response.close();
+      });
+      addTearDown(pSub.cancel);
+
+      final upnpDriver = UpnpDlnaDriver(ssdpLocationUrls: <String, String>{});
+      addTearDown(upnpDriver.dispose);
+
+      final arcelikDriver = ArcelikGrundigDriver(
+        openLanSocket: (ip, port, {required Duration timeout}) =>
+            Socket.connect(ip, port, timeout: timeout),
+        upnpFallback: upnpDriver,
+        dialAppUrls: <String, String>{},
+      );
+      addTearDown(arcelikDriver.dispose);
+
+      expect(
+        await arcelikDriver.probeArWebsocket('127.0.0.1', port: wsServer.port),
+        isTrue,
+      );
+      expect(
+        await arcelikDriver.probeArWebsocket(
+          '127.0.0.1',
+          port: plainHttpServer.port,
+          timeout: const Duration(milliseconds: 220),
+        ),
+        isFalse,
+      );
+
+      final tv = TvDevice(
+        name: 'Virtual Arçelik 4K',
+        ip: '127.0.0.1',
+        port: wsServer.port,
+        protocol: TvConnectionProtocol.arcelikGrundig8085,
+      );
+      final paired = await arcelikDriver.pair(tv);
+      expect(paired.isOnline, isTrue);
+      expect(paired.isPaired, isTrue);
+      expect(paired.boardInfo, contains('ArWebsocket'));
+
+      expect(await arcelikDriver.sendKey(paired, TvKeyCommand.volUp), isTrue);
+      expect(await arcelikDriver.sendKey(paired, TvKeyCommand.ok), isTrue);
+      expect(await arcelikDriver.sendKey(paired, TvKeyCommand.home), isTrue);
+      expect(await arcelikDriver.sendKey(paired, TvKeyCommand.inputs), isTrue);
+      expect(await arcelikDriver.sendKey(paired, TvKeyCommand.channelUp), isTrue);
+
+      receivedFrames.clear();
+      expect(
+        await arcelikDriver.sendText(
+          paired,
+          'ab',
+          submitEnter: true,
+          clearExisting: true,
+        ),
+        isTrue,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(seenHeaders['origin'], contains('127.0.0.1:${wsServer.port}'));
+      expect(seenHeaders['user-agent'], 'okhttp/3.12.1');
+      final keyboardArgs = receivedFrames
+          .where((f) => f['command'] == 'on-keyboard-input')
+          .map((f) => (f['arguments'] as Map)['key'] as String)
+          .toList();
+      expect(keyboardArgs.take(20), everyElement('\b'));
+      expect(keyboardArgs.skip(20).toList(), <String>['a', 'b']);
+      expect(receivedFrames.last['command'], 'on-rc-input');
+      expect((receivedFrames.last['arguments'] as Map)['key'], 'RC_OK');
+    });
+
+    test('VestelSmartCenterDriver falls back to ArWebsocket when SmartCenter 56789 returns 404', () async {
+      final wsFrames = <Map<String, dynamic>>[];
+      final wsServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => wsServer.close(force: true));
+      final wsSub = wsServer.listen((HttpRequest req) async {
+        final ws = await WebSocketTransformer.upgrade(
+          req,
+          protocolSelector: (List<String> protos) =>
+              protos.contains('ArWebsocket') ? 'ArWebsocket' : protos.first,
+        );
+        ws.listen((dynamic raw) {
+          if (raw is String) {
+            wsFrames.add(jsonDecode(raw) as Map<String, dynamic>);
+          }
+        });
+      });
+      addTearDown(wsSub.cancel);
+
+      var smartCenterStatus = HttpStatus.notFound;
+      final dial404Server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => dial404Server.close(force: true));
+      final dSub = dial404Server.listen((HttpRequest req) async {
+        req.response.statusCode = smartCenterStatus;
+        await req.response.close();
+      });
+      addTearDown(dSub.cancel);
+
+      final upnpDriver = UpnpDlnaDriver(ssdpLocationUrls: <String, String>{});
+      addTearDown(upnpDriver.dispose);
+      final arcelikDriver = ArcelikGrundigDriver(
+        openLanSocket: (ip, port, {required Duration timeout}) =>
+            Socket.connect(ip, port, timeout: timeout),
+        upnpFallback: upnpDriver,
+        dialAppUrls: <String, String>{},
+      );
+      addTearDown(arcelikDriver.dispose);
+      final vestelDriver = VestelSmartCenterDriver(
+        arcelikDelegate: arcelikDriver,
+        arcelikFallbackPort: wsServer.port,
+      );
+      addTearDown(vestelDriver.dispose);
+
+      final misclassifiedArcelik = TvDevice(
+        name: 'Arçelik DIAL',
+        ip: '127.0.0.1',
+        port: dial404Server.port,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+      );
+
+      expect(
+        await vestelDriver.sendKey(misclassifiedArcelik, TvKeyCommand.volUp),
+        isTrue,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(wsFrames.length, 1);
+      expect((wsFrames.first['arguments'] as Map)['key'], 'RC_VOLUME_UP');
+
+      smartCenterStatus = HttpStatus.ok;
+      final regalServer = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => regalServer.close(force: true));
+      final regalHits = <String>[];
+      final rSub = regalServer.listen((HttpRequest req) async {
+        regalHits.add('${req.method} ${req.uri.path}');
+        req.response.statusCode = HttpStatus.ok;
+        await req.response.close();
+      });
+      addTearDown(rSub.cancel);
+
+      final regalTv = TvDevice(
+        name: 'Regal Smart TV',
+        ip: '127.0.0.1',
+        port: regalServer.port,
+        protocol: TvConnectionProtocol.vestelSmart56789,
+      );
+      final vestelRegal = VestelSmartCenterDriver(
+        arcelikDelegate: arcelikDriver,
+        arcelikFallbackPort: wsServer.port,
+      );
+      addTearDown(vestelRegal.dispose);
+      expect(await vestelRegal.sendKey(regalTv, TvKeyCommand.mute), isTrue);
+      expect(regalHits, contains('POST /apps/SmartCenter'));
+    });
+
+    test('ArcelikGrundigDriver.sendRawHttpGetOverTcp returns false when TCP server returns zero bytes', () async {
+      final silentServer = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(silentServer.close);
+      final sSub = silentServer.listen((Socket client) {
+        client.destroy();
+      });
+      addTearDown(sSub.cancel);
+
+      final upnpDriver = UpnpDlnaDriver(ssdpLocationUrls: <String, String>{});
+      addTearDown(upnpDriver.dispose);
+      final arcelikDriver = ArcelikGrundigDriver(
+        openLanSocket: (ip, port, {required Duration timeout}) =>
+            Socket.connect(ip, port, timeout: timeout),
+        upnpFallback: upnpDriver,
+        dialAppUrls: <String, String>{},
+      );
+      addTearDown(arcelikDriver.dispose);
+
+      expect(
+        await arcelikDriver.sendRawHttpGetOverTcp(
+          '127.0.0.1',
+          silentServer.port,
+          '/sendrcpackage?keyid=-2490&keysymbol=13',
+        ),
+        isFalse,
+      );
     });
   });
 }

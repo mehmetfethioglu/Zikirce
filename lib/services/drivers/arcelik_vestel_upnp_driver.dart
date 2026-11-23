@@ -226,6 +226,7 @@ class UpnpDlnaDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async =>
       false;
 
@@ -248,7 +249,9 @@ class UpnpDlnaDriver implements TvRemoteDriver {
   void dispose() {}
 }
 
-/// Arçelik / Beko / Grundig Smart Inter@ctive (`Port 8085`, `Port 8080`,
+enum _ArcelikTransport { arWebsocket, http8085, vestel56789, ws7681 }
+
+/// Arçelik / Beko / Grundig Smart Inter@ctive (`Port 8085`, `Port 8080` `ArWebsocket`,
 /// `_arceliktvremote` `Port 7681` WebSocket, and `Port 56789` SmartCenter fallback)
 /// plus UPnP fallback for closed chassis TVs.
 class ArcelikGrundigDriver implements TvRemoteDriver {
@@ -259,6 +262,8 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     TvDiagLogger? logger,
   })  : _log = logger;
 
+  static const Duration _wsIdleTimeout = Duration(minutes: 10);
+
   final LanSocketFactory _openLanSocket;
   final UpnpDlnaDriver _upnpFallback;
   final Map<String, String> _dialAppUrls;
@@ -268,12 +273,23 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
   String? _ws7681Ip;
   Timer? _idleTimer;
 
+  WebSocket? _arWs;
+  HttpClient? _arWsClient;
+  StreamSubscription<dynamic>? _arWsSub;
+  String? _arWsIp;
+  int? _arWsPort;
+  int _arWsCommandId = 1;
+  Timer? _arWsIdleTimer;
+  final Map<String, _ArcelikTransport> _transportByIp =
+      <String, _ArcelikTransport>{};
+
   @override
   TvConnectionProtocol get protocol => TvConnectionProtocol.arcelikGrundig8085;
 
   @override
   Set<TvCapability> get capabilities => const <TvCapability>{
         TvCapability.keyNavigation,
+        TvCapability.liveKeyboard,
         TvCapability.youtubePlaylistBeam,
         TvCapability.wakeOnLan,
       };
@@ -321,6 +337,90 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       case TvKeyCommand.search:
         return 'keyid=-2547&keysymbol=-4078';
     }
+  }
+
+  /// Maps [TvKeyCommand] to Arçelik/Beko/Grundig `ArWebsocket` `on-rc-input` key names.
+  static String arcelikArWebsocketKeyForCommand(TvKeyCommand command) {
+    switch (command) {
+      case TvKeyCommand.up:
+        return 'RC_NAV_UP';
+      case TvKeyCommand.down:
+        return 'RC_NAV_DOWN';
+      case TvKeyCommand.left:
+        return 'RC_NAV_LEFT';
+      case TvKeyCommand.right:
+        return 'RC_NAV_RIGHT';
+      case TvKeyCommand.ok:
+        return 'RC_OK';
+      case TvKeyCommand.back:
+        return 'RC_BACK';
+      case TvKeyCommand.home:
+        return 'RC_INTERNET';
+      case TvKeyCommand.menu:
+        return 'RC_MENU';
+      case TvKeyCommand.inputs:
+        return 'RC_SOURCE';
+      case TvKeyCommand.volUp:
+        return 'RC_VOLUME_UP';
+      case TvKeyCommand.volDown:
+        return 'RC_VOLUME_DOWN';
+      case TvKeyCommand.mute:
+        return 'RC_MUTE';
+      case TvKeyCommand.power:
+        return 'RC_POWER';
+      case TvKeyCommand.playPause:
+        return 'RC_PLAYER_PLAY';
+      case TvKeyCommand.rewind:
+        return 'RC_PLAYER_FR';
+      case TvKeyCommand.fastForward:
+        return 'RC_PLAYER_FF';
+      case TvKeyCommand.channelUp:
+        return 'RC_CHANNEL_UP';
+      case TvKeyCommand.channelDown:
+        return 'RC_CHANNEL_DOWN';
+      case TvKeyCommand.voiceAssist:
+      case TvKeyCommand.search:
+        return 'RC_INTERNET';
+    }
+  }
+
+  /// Builds a JSON command frame for the Arçelik/Beko/Grundig `ArWebsocket` protocol.
+  static String buildArWebsocketCommandPayload({
+    required int commandId,
+    required String command,
+    Map<String, Object?> arguments = const <String, Object?>{},
+  }) {
+    return jsonEncode(<String, Object?>{
+      'commandId': commandId,
+      'command': command,
+      'arguments': arguments,
+    });
+  }
+
+  /// Builds an `on-rc-input` JSON command frame for [command].
+  static String buildArWebsocketRcKeyPayload(
+    TvKeyCommand command, {
+    int commandId = 1,
+  }) {
+    return buildArWebsocketCommandPayload(
+      commandId: commandId,
+      command: 'on-rc-input',
+      arguments: <String, Object?>{
+        'key': arcelikArWebsocketKeyForCommand(command),
+      },
+    );
+  }
+
+  /// Builds an `on-keyboard-input` JSON command frame for a single key/character.
+  static String buildArWebsocketKeyboardPayload(
+    String key, {
+    int commandId = 1,
+  }) {
+    return buildArWebsocketCommandPayload(
+      commandId: commandId,
+      command: 'on-keyboard-input',
+      arguments: <String, Object?>{'key': key},
+    );
   }
 
   /// Official Vestel / Regal / Toshiba / JVC SmartCenter integer keycodes.
@@ -417,7 +517,7 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
 
       if (rx.isEmpty) {
         _log?.call('HTTP $ip:$port$pathAndQuery -> bağlandı, yanıt yok');
-        return true;
+        return false;
       }
       final head = utf8
           .decode(rx.take(64).toList(), allowMalformed: true)
@@ -499,6 +599,254 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     return false;
   }
 
+  void _scheduleArWsIdle() {
+    _arWsIdleTimer?.cancel();
+    _arWsIdleTimer = Timer(_wsIdleTimeout, _closeArWsSocket);
+  }
+
+  void _closeArWsSocket() {
+    _arWsIdleTimer?.cancel();
+    _arWsIdleTimer = null;
+    _arWsSub?.cancel();
+    _arWsSub = null;
+    final ws = _arWs;
+    final client = _arWsClient;
+    _arWs = null;
+    _arWsClient = null;
+    _arWsIp = null;
+    _arWsPort = null;
+    if (ws != null) {
+      unawaited(ws.close().catchError((Object e) {
+        _log?.call('ArWebsocket close err: $e');
+        return null;
+      }));
+    }
+    client?.close(force: true);
+  }
+
+  int _arWsPortForDevice(TvDevice device) {
+    if (device.port == 7681 ||
+        (device.port > 0 &&
+            device.port != 8085 &&
+            device.port != 8080 &&
+            device.port != 56789)) {
+      return device.port;
+    }
+    return 8080;
+  }
+
+  List<(int port, bool useTls)> _arWsCandidates(int? preferredPort) {
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+    if (preferredPort != null &&
+        preferredPort > 0 &&
+        preferredPort != 8080 &&
+        preferredPort != 8085 &&
+        preferredPort != 7681 &&
+        preferredPort != 56789) {
+      return isTestEnv
+          ? <(int, bool)>[(preferredPort, false), (preferredPort, true)]
+          : <(int, bool)>[(preferredPort, true), (preferredPort, false)];
+    }
+    if (preferredPort == 7681) {
+      return const <(int, bool)>[
+        (7681, true),
+        (7681, false),
+        (8080, true),
+        (8080, false),
+      ];
+    }
+    return const <(int, bool)>[
+      (8080, true),
+      (8080, false),
+      (7681, true),
+      (7681, false),
+    ];
+  }
+
+  Future<({WebSocket ws, HttpClient client})?> _connectArWebsocket(
+    String ip,
+    int port, {
+    required bool useTls,
+    required Duration timeout,
+  }) async {
+    final client = HttpClient()
+      ..connectionTimeout = timeout
+      ..userAgent = 'okhttp/3.12.1'
+      ..badCertificateCallback = (X509Certificate cert, String host, _) =>
+          TvNetworkValidators.isPrivateLanIp(host) && cert.der.isNotEmpty;
+    try {
+      final scheme = useTls ? 'wss' : 'ws';
+      final originScheme = useTls ? 'https' : 'http';
+      final ws = await WebSocket.connect(
+        '$scheme://$ip:$port/',
+        protocols: const <String>['ArWebsocket'],
+        headers: <String, Object>{
+          'Origin': '$originScheme://$ip:$port',
+        },
+        customClient: client,
+      ).timeout(timeout + const Duration(milliseconds: 300));
+      return (ws: ws, client: client);
+    } catch (e) {
+      client.close(force: true);
+      _log?.call('ArWebsocket ($ip:$port tls=$useTls) hata: $e');
+      return null;
+    }
+  }
+
+  Future<bool> _ensureArWebsocketConnected(
+    String ip, {
+    int? preferredPort,
+    Duration connectTimeout = const Duration(milliseconds: 1400),
+  }) async {
+    final cleanIp = ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
+    if (_arWs != null &&
+        _arWsIp == cleanIp &&
+        _arWs!.readyState == WebSocket.open &&
+        (preferredPort == null || _arWsPort == preferredPort)) {
+      _scheduleArWsIdle();
+      return true;
+    }
+
+    _closeArWsSocket();
+    for (final (port, useTls) in _arWsCandidates(preferredPort)) {
+      final conn = await _connectArWebsocket(
+        cleanIp,
+        port,
+        useTls: useTls,
+        timeout: connectTimeout,
+      );
+      if (conn == null) continue;
+      final ws = conn.ws;
+      ws.pingInterval = const Duration(seconds: 20);
+      _arWs = ws;
+      _arWsClient = conn.client;
+      _arWsIp = cleanIp;
+      _arWsPort = port;
+      _arWsSub = ws.listen(
+        (_) {},
+        onError: (Object e) {
+          _log?.call('ArWebsocket stream err ($cleanIp:$port): $e');
+          _closeArWsSocket();
+        },
+        onDone: _closeArWsSocket,
+        cancelOnError: false,
+      );
+      _scheduleArWsIdle();
+      _log?.call('ArWebsocket bağlandı: $cleanIp:$port (tls=$useTls)');
+      return true;
+    }
+    return false;
+  }
+
+  /// Probes whether [ip]:[port] accepts an `ArWebsocket` upgrade without leaving open sockets.
+  Future<bool> probeArWebsocket(
+    String ip, {
+    int port = 8080,
+    Duration timeout = const Duration(milliseconds: 650),
+  }) async {
+    final cleanIp = ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp) || port <= 0) return false;
+    for (final useTls in const <bool>[true, false]) {
+      final conn = await _connectArWebsocket(
+        cleanIp,
+        port,
+        useTls: useTls,
+        timeout: timeout,
+      );
+      if (conn == null) continue;
+      try {
+        await conn.ws.close().catchError((Object e) {
+          _log?.call('ArWebsocket probe close err: $e');
+          return null;
+        });
+      } finally {
+        conn.client.close();
+      }
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _sendArWebsocketCommand(
+    String ip,
+    String command,
+    Map<String, Object?> arguments, {
+    int? preferredPort,
+  }) async {
+    final cleanIp = ip.trim();
+    if (!TvNetworkValidators.isValidIp(cleanIp)) return false;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final connected = await _ensureArWebsocketConnected(
+        cleanIp,
+        preferredPort: preferredPort,
+      );
+      if (!connected || _arWs == null || _arWs!.readyState != WebSocket.open) {
+        _closeArWsSocket();
+        continue;
+      }
+      try {
+        final payload = buildArWebsocketCommandPayload(
+          commandId: _arWsCommandId++,
+          command: command,
+          arguments: arguments,
+        );
+        _arWs!.add(payload);
+        _scheduleArWsIdle();
+        return true;
+      } catch (e) {
+        _log?.call('ArWebsocket send ($command) hatası: $e');
+        _closeArWsSocket();
+      }
+    }
+    return false;
+  }
+
+  Future<bool> sendArcelikArWebsocketKey(
+    String ip,
+    TvKeyCommand command, {
+    int? preferredPort,
+  }) {
+    return _sendArWebsocketCommand(
+      ip,
+      'on-rc-input',
+      <String, Object?>{'key': arcelikArWebsocketKeyForCommand(command)},
+      preferredPort: preferredPort,
+    );
+  }
+
+  /// Sends keyboard backspace (`\b`) events over `ArWebsocket` to clear active search input
+  /// without ever sending `RC_BACK`.
+  Future<bool> clearArWebsocketText(
+    String ip, {
+    int count = 16,
+    int? preferredPort,
+  }) async {
+    final cleanIp = ip.trim();
+    if (!await _ensureArWebsocketConnected(
+      cleanIp,
+      preferredPort: preferredPort,
+    )) {
+      return false;
+    }
+    final safeCount = count.clamp(1, 28);
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+    var anyOk = false;
+    for (var i = 0; i < safeCount; i++) {
+      final ok = await _sendArWebsocketCommand(
+        cleanIp,
+        'on-keyboard-input',
+        const <String, Object?>{'key': '\b'},
+        preferredPort: preferredPort,
+      );
+      if (ok) anyOk = true;
+      if (!isTestEnv) {
+        await Future<void>.delayed(const Duration(milliseconds: 15));
+      }
+    }
+    return anyOk;
+  }
+
   void _close7681Socket() {
     _idleTimer?.cancel();
     _idleTimer = null;
@@ -524,7 +872,7 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       try {
         _ws7681!.add(jsonEncode(<String, Object?>{'command': query}));
         _idleTimer?.cancel();
-        _idleTimer = Timer(const Duration(minutes: 10), _close7681Socket);
+        _idleTimer = Timer(_wsIdleTimeout, _close7681Socket);
         return true;
       } catch (e) {
         _log?.call('Arçelik 7681 WS send hatası: $e');
@@ -533,6 +881,7 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     }
 
     for (final proto in const <List<String>>[
+      <String>['ArWebsocket'],
       <String>['arceliktvremote'],
       <String>['tvremote'],
       <String>['lws-minimal'],
@@ -548,7 +897,7 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
         _ws7681Ip = ip;
         ws.add(jsonEncode(<String, Object?>{'command': query}));
         _idleTimer?.cancel();
-        _idleTimer = Timer(const Duration(minutes: 10), _close7681Socket);
+        _idleTimer = Timer(_wsIdleTimeout, _close7681Socket);
         return true;
       } catch (e) {
         _log?.call('Arçelik 7681 handshake ($proto): $e');
@@ -557,8 +906,54 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     return false;
   }
 
+  Future<bool> _sendViaTransport(
+    _ArcelikTransport transport,
+    TvDevice device,
+    String ip,
+    TvKeyCommand command,
+  ) async {
+    switch (transport) {
+      case _ArcelikTransport.arWebsocket:
+        return sendArcelikArWebsocketKey(
+          ip,
+          command,
+          preferredPort: _arWsPortForDevice(device),
+        );
+      case _ArcelikTransport.http8085:
+        final query = arcelikGrundigQueryForCommand(command);
+        final targetPort = (device.port > 0 &&
+                device.port != 8080 &&
+                device.port != 7681 &&
+                device.port != 56789)
+            ? device.port
+            : 8085;
+        return sendRawHttpGetOverTcp(ip, targetPort, '/sendrcpackage?$query');
+      case _ArcelikTransport.vestel56789:
+        return sendVestelSmartCenterKey(
+          ip,
+          command,
+          preferredPort: device.port,
+        );
+      case _ArcelikTransport.ws7681:
+        return _tryArcelik7681WebSocket(ip, command);
+    }
+  }
+
   @override
   Future<TvDevice> pair(TvDevice device, {String? pinCode}) async {
+    final ip = device.ip.trim();
+    if (TvNetworkValidators.isValidIp(ip)) {
+      final probePort = _arWsPortForDevice(device);
+      if (await probeArWebsocket(ip, port: probePort)) {
+        return device.copyWith(
+          port: probePort,
+          protocol: TvConnectionProtocol.arcelikGrundig8085,
+          isPaired: true,
+          isOnline: true,
+          boardInfo: 'Arçelik / Beko / Grundig Smart TV • ArWebsocket',
+        );
+      }
+    }
     return device.copyWith(
       protocol: TvConnectionProtocol.arcelikGrundig8085,
       isPaired: true,
@@ -577,29 +972,41 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       return false;
     }
 
-    final query = arcelikGrundigQueryForCommand(command);
-    if (device.port > 0 && device.port != 8085 && device.port != 8080) {
-      if (await sendRawHttpGetOverTcp(ip, device.port, '/sendrcpackage?$query')) {
+    final cached = _transportByIp[ip];
+    if (cached != null) {
+      if (await _sendViaTransport(cached, device, ip, command)) {
+        return true;
+      }
+      _transportByIp.remove(ip);
+    }
+
+    final hasCustomPort = device.port > 0 &&
+        device.port != 8085 &&
+        device.port != 8080 &&
+        device.port != 7681 &&
+        device.port != 56789;
+
+    final order = <_ArcelikTransport>[
+      if (hasCustomPort) _ArcelikTransport.http8085,
+      _ArcelikTransport.arWebsocket,
+      if (!hasCustomPort) _ArcelikTransport.http8085,
+      _ArcelikTransport.vestel56789,
+      _ArcelikTransport.ws7681,
+    ];
+
+    for (final transport in order) {
+      if (await _sendViaTransport(transport, device, ip, command)) {
+        _transportByIp[ip] = transport;
         return true;
       }
     }
-    if (await sendRawHttpGetOverTcp(ip, 8085, '/sendrcpackage?$query')) {
+    if (await _upnpFallback.sendKey(device, command)) {
       return true;
     }
-    if (await sendVestelSmartCenterKey(
-      ip,
-      command,
-      preferredPort: device.port,
-    )) {
-      return true;
+    if (command == TvKeyCommand.power && device.hasValidMac) {
+      return wakeOnLan(device);
     }
-    if (await sendRawHttpGetOverTcp(ip, 8080, '/sendrcpackage?$query')) {
-      return true;
-    }
-    if (await _tryArcelik7681WebSocket(ip, command)) {
-      return true;
-    }
-    return _upnpFallback.sendKey(device, command);
+    return false;
   }
 
   @override
@@ -625,12 +1032,57 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
-  }) async =>
-      false;
+    bool clearExisting = false,
+  }) async {
+    final ip = device.ip.trim();
+    if (text.isEmpty || !TvNetworkValidators.isValidIp(ip)) return false;
+    final preferred = _arWsPortForDevice(device);
+    if (!await _ensureArWebsocketConnected(ip, preferredPort: preferred)) {
+      return false;
+    }
+    if (clearExisting) {
+      await clearArWebsocketText(ip, count: 20, preferredPort: preferred);
+    }
+    final isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+    var anyOk = false;
+    for (final rune in text.runes) {
+      final ch = String.fromCharCode(rune);
+      final ok = await _sendArWebsocketCommand(
+        ip,
+        'on-keyboard-input',
+        <String, Object?>{'key': ch},
+        preferredPort: preferred,
+      );
+      if (ok) anyOk = true;
+      if (!isTestEnv) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
+    }
+    if (anyOk && submitEnter) {
+      if (!isTestEnv) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+      await sendArcelikArWebsocketKey(
+        ip,
+        TvKeyCommand.ok,
+        preferredPort: preferred,
+      );
+    }
+    return anyOk;
+  }
 
   @override
-  Future<bool> sendBackspace(TvDevice device, {int count = 1}) =>
-      sendKey(device, TvKeyCommand.back);
+  Future<bool> sendBackspace(TvDevice device, {int count = 1}) async {
+    final ip = device.ip.trim();
+    if (await clearArWebsocketText(
+      ip,
+      count: count,
+      preferredPort: _arWsPortForDevice(device),
+    )) {
+      return true;
+    }
+    return sendKey(device, TvKeyCommand.back);
+  }
 
   @override
   Future<bool> sendEnter(TvDevice device) => sendKey(device, TvKeyCommand.ok);
@@ -645,14 +1097,23 @@ class ArcelikGrundigDriver implements TvRemoteDriver {
       false;
 
   @override
-  void dispose() => _close7681Socket();
+  void dispose() {
+    _close7681Socket();
+    _closeArWsSocket();
+    _transportByIp.clear();
+  }
 }
 
 /// Vestel / Regal / Toshiba / Arçelik SmartCenter (`Port 56789`) driver.
 class VestelSmartCenterDriver implements TvRemoteDriver {
-  VestelSmartCenterDriver({required this._arcelikDelegate});
+  VestelSmartCenterDriver({
+    required this._arcelikDelegate,
+    this.arcelikFallbackPort = 8080,
+  });
 
   final ArcelikGrundigDriver _arcelikDelegate;
+  final int arcelikFallbackPort;
+  final Set<String> _arcelikFallbackIps = <String>{};
 
   @override
   TvConnectionProtocol get protocol => TvConnectionProtocol.vestelSmart56789;
@@ -684,11 +1145,29 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
       }
       return false;
     }
+    if (_arcelikFallbackIps.contains(ip)) {
+      if (await _arcelikDelegate.sendArcelikArWebsocketKey(
+        ip,
+        command,
+        preferredPort: arcelikFallbackPort,
+      )) {
+        return true;
+      }
+      _arcelikFallbackIps.remove(ip);
+    }
     if (await _arcelikDelegate.sendVestelSmartCenterKey(
       ip,
       command,
       preferredPort: device.port,
     )) {
+      return true;
+    }
+    if (await _arcelikDelegate.sendArcelikArWebsocketKey(
+      ip,
+      command,
+      preferredPort: arcelikFallbackPort,
+    )) {
+      _arcelikFallbackIps.add(ip);
       return true;
     }
     final query = ArcelikGrundigDriver.arcelikGrundigQueryForCommand(command);
@@ -728,6 +1207,7 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
     TvDevice device,
     String text, {
     bool submitEnter = false,
+    bool clearExisting = false,
   }) async =>
       false;
 
@@ -748,5 +1228,7 @@ class VestelSmartCenterDriver implements TvRemoteDriver {
       false;
 
   @override
-  void dispose() {}
+  void dispose() {
+    _arcelikFallbackIps.clear();
+  }
 }
