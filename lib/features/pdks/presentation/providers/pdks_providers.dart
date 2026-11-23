@@ -11,6 +11,7 @@ import '../../../../core/security/license_guard_service.dart';
 import '../../../../core/services/google_auth_adapter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../../../core/services/login_preferences_service.dart';
+import '../../../../core/services/password_recovery_service.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../data/workplace_seed_data.dart';
 import '../../domain/pdks_models.dart';
@@ -34,6 +35,35 @@ final googleAuthAdapterProvider = Provider<GoogleAuthAdapter>((ref) {
 final loginPreferencesServiceProvider = Provider<LoginPreferencesService>(
   (ref) => const LoginPreferencesService(),
 );
+
+final passwordRecoveryEmailGatewayProvider =
+    Provider<PasswordRecoveryEmailGateway>(
+  (ref) => GmailApiPasswordRecoveryGateway(),
+);
+
+final passwordRecoveryServiceProvider = Provider<PasswordRecoveryService>((ref) {
+  final gateway = ref.watch(passwordRecoveryEmailGatewayProvider);
+  return PasswordRecoveryService(emailGateway: gateway);
+});
+
+enum AdminLoginOutcome {
+  authenticated,
+  requiresInitialPasswordUpdate,
+  failed,
+}
+
+@immutable
+class UnifiedLoginResult {
+  final AdminLoginOutcome outcome;
+  final UserRole? resolvedRole;
+  final String resolvedUsername;
+
+  const UnifiedLoginResult({
+    required this.outcome,
+    this.resolvedRole,
+    this.resolvedUsername = '',
+  });
+}
 
 @immutable
 class PdksDashboardState {
@@ -412,6 +442,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   final HasibuDatabase _db;
   final GoogleDriveSyncService _syncService;
   final GoogleAuthAdapter _googleAuthAdapter;
+  final PasswordRecoveryService _passwordRecoveryService;
   Timer? _autoPollTimer;
   Timer? _autoCloudBackupTimer;
   Timer? _branchInboxPullTimer;
@@ -425,11 +456,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required HasibuDatabase db,
     required GoogleDriveSyncService syncService,
     GoogleAuthAdapter? googleAuthAdapter,
+    PasswordRecoveryService? passwordRecoveryService,
     String? initialSelectedDate,
   })  : _db = db,
         _syncService = syncService,
         _googleAuthAdapter =
             googleAuthAdapter ?? createPlatformGoogleAuthAdapter(syncService),
+        _passwordRecoveryService = passwordRecoveryService ??
+            PasswordRecoveryService(
+              emailGateway: GmailApiPasswordRecoveryGateway(),
+            ),
         super(
           PdksDashboardState(
             selectedDate: initialSelectedDate ?? todayDateKey(),
@@ -527,6 +563,584 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
     if (scopedCardNos.contains(entry.actorEmployeeId)) return true;
     return false;
+  }
+
+  /// Yönetici girişini değerlendirir; ilk kurulumdaki varsayılan yönetici parolası
+  /// henüz güncellenmemişse oturumu açmadan parola güncelleme adımını zorunlu tutar.
+  AdminLoginOutcome attemptAdminLogin({
+    required String username,
+    required String password,
+  }) {
+    final u = username.trim().toLowerCase();
+    final p = password.trim();
+    final expectedUser = state.companySettings.adminUsername.trim().toLowerCase();
+    final expectedPass = state.companySettings.adminPassword;
+
+    if (u == expectedUser &&
+        HasibuSecurityService.verifyPassword(p, expectedPass) &&
+        state.companySettings.requiresInitialAdminPasswordChange) {
+      state = state.copyWith(
+        authSession: state.authSession.copyWith(
+          isAuthenticated: false,
+          errorMessage: () => null,
+        ),
+      );
+      return AdminLoginOutcome.requiresInitialPasswordUpdate;
+    }
+
+    final ok = loginAsAdmin(username: username, password: password);
+    return ok ? AdminLoginOutcome.authenticated : AdminLoginOutcome.failed;
+  }
+
+  /// İlk kurulumdaki varsayılan yönetici parolasını güvenli PBKDF2 hash ile günceller,
+  /// ilk kurulum bilgisini kapatır ve yönetici oturumunu açar.
+  Future<String?> completeInitialAdminPasswordUpdateAndLogin({
+    required String username,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final u = username.trim().toLowerCase();
+    final current = currentPassword.trim();
+    final next = newPassword.trim();
+    final expectedUser = state.companySettings.adminUsername.trim().toLowerCase();
+    final expectedPass = state.companySettings.adminPassword;
+
+    if (u != expectedUser ||
+        !HasibuSecurityService.verifyPassword(current, expectedPass)) {
+      return 'Mevcut yönetici kullanıcı adı veya geçici parola doğrulanamadı.';
+    }
+    if (next.length < 6) {
+      return 'Yeni yönetici parolası en az 6 karakter olmalıdır.';
+    }
+    if (next == CompanySettings.defaultAdminPassword) {
+      return 'Güvenliğiniz için varsayılan geçici parola (123) kullanılamaz.';
+    }
+    if (next.toLowerCase() == expectedUser) {
+      return 'Yeni parola yönetici kullanıcı adı ile aynı olamaz.';
+    }
+
+    final hashed = HasibuSecurityService.hashPassword(next);
+    final updated = state.companySettings.copyWith(
+      adminPassword: hashed,
+      adminPasswordUpdated: true,
+    );
+    _db.saveCompanySettings(updated);
+    _db.appendAuditLog(
+      actorEmployeeId: expectedUser,
+      actionType: 'ADMIN_INITIAL_PASSWORD_UPDATED',
+      targetRecordId: expectedUser,
+      oldValue: 'default_setup',
+      newValue: 'updated_pbkdf2',
+    );
+    refreshDashboard();
+
+    final ok = loginAsAdmin(username: username, password: next);
+    if (!ok) {
+      return 'Parola güncellendi ancak oturum başlatılamadı.';
+    }
+
+    if (state.isGoogleCloudConnected ||
+        state.companySettings.syncFolderPath.trim().isNotEmpty) {
+      unawaited(
+        _pushAutoBackupOnChange('İlk Kurulum Yönetici Parola Güncellemesi'),
+      );
+    }
+    return null;
+  }
+
+  /// Şifremi Unuttum akışı için kullanıcı adını/kart numarasını ve kayıtlı şirket Gmail'ini arar.
+  /// `role` belirtilmezse önce Ana Yönetici, ardından Yetkili Kullanıcı ve Personel kartlarında otomatik arar.
+  PasswordRecoveryAccountLookup lookupRecoverableAccount({
+    required String identifier,
+    UserRole? role,
+  }) {
+    final companyGmail = state.companySettings.syncGmailAccount.trim();
+    final maskedGmail = PasswordRecoveryService.maskEmail(companyGmail);
+    final hasGmail = companyGmail.isNotEmpty && companyGmail.contains('@');
+    final rawIdentifier = identifier.trim();
+    final cleanUser = rawIdentifier.toLowerCase();
+
+    if (rawIdentifier.isEmpty) {
+      return PasswordRecoveryAccountLookup(
+        found: false,
+        errorMessage: role == UserRole.employee
+            ? 'Lütfen personel kart / sicil numaranızı girin.'
+            : 'Lütfen kullanıcı adınızı veya personel kart numaranızı girin.',
+      );
+    }
+
+    if (role == null || role == UserRole.admin) {
+      final adminUser = state.companySettings.adminUsername.trim().toLowerCase();
+      if (cleanUser == adminUser) {
+        return PasswordRecoveryAccountLookup(
+          found: true,
+          hasCompanyGmail: hasGmail,
+          normalizedUsername: cleanUser,
+          displayName: state.companySettings.adminUsername,
+          kind: RecoverableAccountKind.rootAdmin,
+          resolvedRole: UserRole.admin,
+          companyGmail: companyGmail,
+          maskedCompanyGmail: maskedGmail,
+          errorMessage: hasGmail
+              ? null
+              : 'Şirket Gmail hesabı henüz bağlı değil. Lütfen sağ üstteki bulut simgesinden veya Ayarlar bölümünden şirketin Gmail hesabını bağlayın.',
+        );
+      }
+
+      final appUser = _db.findAppUserByUsername(cleanUser);
+      if (appUser != null) {
+        if (!appUser.isActive) {
+          return PasswordRecoveryAccountLookup(
+            found: false,
+            errorMessage:
+                'Kullanıcı hesabınız ($cleanUser) pasif durumda olduğu için parola sıfırlanamaz.',
+          );
+        }
+        return PasswordRecoveryAccountLookup(
+          found: true,
+          hasCompanyGmail: hasGmail,
+          normalizedUsername: appUser.username,
+          displayName: appUser.displayName,
+          kind: RecoverableAccountKind.appUser,
+          resolvedRole: appUser.role.baseRole,
+          companyGmail: companyGmail,
+          maskedCompanyGmail: maskedGmail,
+          errorMessage: hasGmail
+              ? null
+              : 'Şirket Gmail hesabı henüz bağlı değil. Lütfen sağ üstteki bulut simgesinden veya Ayarlar bölümünden şirketin Gmail hesabını bağlayın.',
+        );
+      }
+
+      if (role == UserRole.admin) {
+        return const PasswordRecoveryAccountLookup(
+          found: false,
+          errorMessage: 'Bu kullanıcı adına ait kayıtlı bir hesap bulunamadı.',
+        );
+      }
+    }
+
+    final isNumericCard = RegExp(r'^\d+$').hasMatch(rawIdentifier);
+    final paddedCard = isNumericCard ? rawIdentifier.padLeft(5, '0') : rawIdentifier;
+    Employee? matchedEmp;
+    for (final e in _db.getEmployees()) {
+      if (e.cardNo.toLowerCase() == cleanUser || e.cardNo == paddedCard) {
+        matchedEmp = e;
+        break;
+      }
+    }
+    if (matchedEmp == null) {
+      return PasswordRecoveryAccountLookup(
+        found: false,
+        errorMessage: role == UserRole.employee
+            ? 'Personel Kart No (#$paddedCard) bulunamadı.'
+            : 'Bu kullanıcı adı veya kart numarasına ait kayıtlı bir hesap bulunamadı.',
+      );
+    }
+    if (matchedEmp.isSeparatedNow) {
+      return PasswordRecoveryAccountLookup(
+        found: false,
+        errorMessage:
+            'Personel #${matchedEmp.cardNo} için işten ayrılış kaydı bulunduğu için parola sıfırlanamaz.',
+      );
+    }
+    return PasswordRecoveryAccountLookup(
+      found: true,
+      hasCompanyGmail: hasGmail,
+      normalizedUsername: matchedEmp.cardNo,
+      displayName: matchedEmp.fullName,
+      kind: RecoverableAccountKind.employee,
+      resolvedRole: UserRole.employee,
+      companyGmail: companyGmail,
+      maskedCompanyGmail: maskedGmail,
+      errorMessage: hasGmail
+          ? null
+          : 'Şirket Gmail hesabı henüz bağlı değil. Parola sıfırlama için yöneticinizden şirket Gmail hesabını bağlamasını isteyin.',
+    );
+  }
+
+  /// Kullanıcı adı doğrulandıktan sonra şirketin kayıtlı Gmail hesabına 6 haneli tek kullanımlık
+  /// doğrulama kodu gönderir; Gmail API kapalı veya yetki eksikse Google OAuth sahiplik doğrulaması önerir.
+  Future<PasswordRecoverySendOutcome> sendPasswordResetCodeToCompanyGmail({
+    required String identifier,
+    UserRole? role,
+    bool allowIncrementalConsent = true,
+  }) async {
+    final lookup = lookupRecoverableAccount(identifier: identifier, role: role);
+    if (!lookup.found || !lookup.hasCompanyGmail) {
+      return PasswordRecoverySendOutcome(
+        success: false,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message: lookup.errorMessage ?? 'Hesap veya şirket Gmail adresi bulunamadı.',
+      );
+    }
+    final effectiveRole = role ?? lookup.resolvedRole ?? UserRole.admin;
+
+    final challenge = _passwordRecoveryService.createChallenge(
+      username: lookup.normalizedUsername,
+      role: effectiveRole,
+      targetEmail: lookup.companyGmail,
+    );
+    if (!challenge.ok) {
+      return PasswordRecoverySendOutcome(
+        success: false,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message: challenge.message,
+      );
+    }
+
+    String? accessToken;
+    try {
+      accessToken = await _syncService.getAccessToken();
+      if (accessToken == null || accessToken.trim().isEmpty) {
+        accessToken = await _syncService.refreshAccessToken();
+      }
+    } catch (e) {
+      debugPrint('PdksProviders: şifre kurtarma token okuma uyarısı: $e');
+    }
+
+    PasswordResetEmailResult? emailResult;
+    if (accessToken != null && accessToken.trim().isNotEmpty) {
+      emailResult = await _passwordRecoveryService.sendChallengeEmail(
+        accessToken: accessToken.trim(),
+        recipientEmail: lookup.companyGmail,
+        companyName: state.companySettings.displayCompanyNameForLogin,
+        targetUsername: lookup.normalizedUsername,
+        verificationCode: challenge.code,
+      );
+
+      if (emailResult.errorCode == PasswordResetEmailErrorCode.unauthorized) {
+        try {
+          final refreshed = await _syncService.refreshAccessToken();
+          if (refreshed != null && refreshed.trim().isNotEmpty) {
+            emailResult = await _passwordRecoveryService.sendChallengeEmail(
+              accessToken: refreshed.trim(),
+              recipientEmail: lookup.companyGmail,
+              companyName: state.companySettings.displayCompanyNameForLogin,
+              targetUsername: lookup.normalizedUsername,
+              verificationCode: challenge.code,
+            );
+          }
+        } catch (e) {
+          debugPrint('PdksProviders: şifre kurtarma token yenileme uyarısı: $e');
+        }
+      }
+    }
+
+    final needsIncrementalConsent = emailResult == null ||
+        emailResult.errorCode == PasswordResetEmailErrorCode.unauthorized ||
+        emailResult.errorCode == PasswordResetEmailErrorCode.insufficientScope;
+
+    if (needsIncrementalConsent && allowIncrementalConsent) {
+      final authRes = await _googleAuthAdapter.signIn(
+        loginHintEmail: lookup.companyGmail,
+        extraScopes: const <String>[PasswordRecoveryService.gmailSendScope],
+      );
+      if (!authRes.success) {
+        _passwordRecoveryService.clearChallenge();
+        return PasswordRecoverySendOutcome(
+          success: false,
+          canUseGoogleIdentityFallback: true,
+          maskedEmail: lookup.maskedCompanyGmail,
+          message: authRes.message,
+        );
+      }
+
+      final signedEmail = authRes.email.trim().toLowerCase();
+      if (signedEmail.isNotEmpty &&
+          signedEmail != lookup.companyGmail.toLowerCase()) {
+        _passwordRecoveryService.clearChallenge();
+        return PasswordRecoverySendOutcome(
+          success: false,
+          maskedEmail: lookup.maskedCompanyGmail,
+          message:
+              'Şirket Gmail hesabı (${lookup.maskedCompanyGmail}) ile eşleşen Google hesabıyla oturum açmalısınız.',
+        );
+      }
+
+      if (authRes.accessToken.trim().isNotEmpty) {
+        try {
+          await _syncService.saveOAuthTokens(
+            accessToken: authRes.accessToken,
+            refreshToken: authRes.refreshToken.trim().isEmpty
+                ? null
+                : authRes.refreshToken,
+          );
+        } catch (e) {
+          debugPrint('PdksProviders: saveOAuthTokens kurtarma uyarısı: $e');
+        }
+        emailResult = await _passwordRecoveryService.sendChallengeEmail(
+          accessToken: authRes.accessToken.trim(),
+          recipientEmail: lookup.companyGmail,
+          companyName: state.companySettings.displayCompanyNameForLogin,
+          targetUsername: lookup.normalizedUsername,
+          verificationCode: challenge.code,
+        );
+      }
+    }
+
+    if (emailResult == null || !emailResult.success) {
+      _passwordRecoveryService.clearChallenge();
+      final code = emailResult?.errorCode ?? PasswordResetEmailErrorCode.networkOrOther;
+      final allowFallback = code == PasswordResetEmailErrorCode.apiDisabled ||
+          code == PasswordResetEmailErrorCode.insufficientScope ||
+          code == PasswordResetEmailErrorCode.unauthorized;
+      return PasswordRecoverySendOutcome(
+        success: false,
+        canUseGoogleIdentityFallback: allowFallback,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message: emailResult?.message ??
+            'Doğrulama kodu e-postası gönderilemedi.',
+      );
+    }
+
+    _db.appendAuditLog(
+      actorEmployeeId: lookup.normalizedUsername,
+      actionType: 'PASSWORD_RESET_CODE_SENT',
+      targetRecordId: lookup.normalizedUsername,
+      oldValue: 'requested',
+      newValue: 'email=${lookup.maskedCompanyGmail}',
+    );
+    refreshDashboard();
+
+    return PasswordRecoverySendOutcome(
+      success: true,
+      maskedEmail: lookup.maskedCompanyGmail,
+      expiresInMinutes: PasswordRecoveryService.codeValidity.inMinutes,
+      message:
+          '6 haneli doğrulama kodu şirketin Gmail hesabına (${lookup.maskedCompanyGmail}) gönderildi.',
+    );
+  }
+
+  /// Gmail API etkin olmayan durumlarda şirketin kayıtlı Gmail hesabını canlı Google OAuth ile doğrular.
+  Future<PasswordRecoveryVerifyOutcome>
+      verifyCompanyGmailOwnershipViaGoogleOAuth({
+    required String identifier,
+    UserRole? role,
+  }) async {
+    final lookup = lookupRecoverableAccount(identifier: identifier, role: role);
+    if (!lookup.found || !lookup.hasCompanyGmail) {
+      return PasswordRecoveryVerifyOutcome(
+        success: false,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message: lookup.errorMessage ?? 'Hesap veya şirket Gmail adresi bulunamadı.',
+      );
+    }
+    final effectiveRole = role ?? lookup.resolvedRole ?? UserRole.admin;
+
+    final authRes = await _googleAuthAdapter.signIn(
+      loginHintEmail: lookup.companyGmail,
+    );
+    if (!authRes.success) {
+      return PasswordRecoveryVerifyOutcome(
+        success: false,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message: authRes.message,
+      );
+    }
+
+    final verifiedEmail = authRes.email.trim().toLowerCase();
+    if (verifiedEmail.isEmpty ||
+        verifiedEmail != lookup.companyGmail.toLowerCase()) {
+      return PasswordRecoveryVerifyOutcome(
+        success: false,
+        maskedEmail: lookup.maskedCompanyGmail,
+        message:
+            'Doğrulanan Google hesabı şirketin kayıtlı Gmail adresi (${lookup.maskedCompanyGmail}) ile eşleşmiyor.',
+      );
+    }
+
+    if (authRes.accessToken.trim().isNotEmpty) {
+      try {
+        await _syncService.saveOAuthTokens(
+          accessToken: authRes.accessToken,
+          refreshToken:
+              authRes.refreshToken.trim().isEmpty ? null : authRes.refreshToken,
+        );
+      } catch (e) {
+        debugPrint('PdksProviders: OAuth sahiplik doğrulama token uyarısı: $e');
+      }
+    }
+
+    _passwordRecoveryService.markVerifiedByGoogleOAuth(
+      username: lookup.normalizedUsername,
+      role: effectiveRole,
+      verifiedEmail: verifiedEmail,
+    );
+    _db.appendAuditLog(
+      actorEmployeeId: lookup.normalizedUsername,
+      actionType: 'PASSWORD_RESET_GOOGLE_VERIFIED',
+      targetRecordId: lookup.normalizedUsername,
+      oldValue: 'unverified',
+      newValue: 'email=${lookup.maskedCompanyGmail}',
+    );
+    refreshDashboard();
+
+    return PasswordRecoveryVerifyOutcome(
+      success: true,
+      maskedEmail: lookup.maskedCompanyGmail,
+      message:
+          'Şirket Gmail hesabı (${lookup.maskedCompanyGmail}) doğrulandı. Yeni parolanızı belirleyebilirsiniz.',
+    );
+  }
+
+  /// Doğrulama kodu veya Google OAuth doğrulaması onaylandıktan sonra yeni parolayı kaydeder.
+  Future<String?> completePasswordReset({
+    required String identifier,
+    UserRole? role,
+    String? verificationCode,
+    required String newPassword,
+  }) async {
+    final lookup = lookupRecoverableAccount(identifier: identifier, role: role);
+    if (!lookup.found) {
+      return lookup.errorMessage ?? 'Hesap bulunamadı.';
+    }
+    final effectiveRole = role ?? lookup.resolvedRole ?? UserRole.admin;
+
+    final cleanPass = newPassword.trim();
+    if (effectiveRole == UserRole.admin) {
+      if (cleanPass.length < 6) {
+        return 'Yeni parola en az 6 karakter olmalıdır.';
+      }
+      if (lookup.kind == RecoverableAccountKind.rootAdmin &&
+          cleanPass == CompanySettings.defaultAdminPassword) {
+        return 'Güvenliğiniz için varsayılan başlangıç parolası (123) kullanılamaz.';
+      }
+      if (cleanPass.toLowerCase() == lookup.normalizedUsername) {
+        return 'Yeni parola kullanıcı adı ile aynı olamaz.';
+      }
+    } else {
+      if (cleanPass.length < 4) {
+        return 'Yeni personel parolası en az 4 karakter olmalıdır.';
+      }
+    }
+
+    final check = _passwordRecoveryService.verifyChallenge(
+      username: lookup.normalizedUsername,
+      role: effectiveRole,
+      code: verificationCode,
+    );
+    if (!check.verified) {
+      return check.message;
+    }
+
+    final hashed = HasibuSecurityService.hashPassword(cleanPass);
+    switch (lookup.kind!) {
+      case RecoverableAccountKind.rootAdmin:
+        _db.saveCompanySettings(
+          state.companySettings.copyWith(
+            adminPassword: hashed,
+            adminPasswordUpdated: true,
+          ),
+        );
+        break;
+      case RecoverableAccountKind.appUser:
+        final user = _db.findAppUserByUsername(lookup.normalizedUsername);
+        if (user == null) {
+          return 'Yetkili kullanıcı hesabı bulunamadı.';
+        }
+        _db.upsertAppUser(user.copyWith(passwordHash: hashed));
+        break;
+      case RecoverableAccountKind.employee:
+        Employee? targetEmp;
+        for (final emp in _db.getEmployees()) {
+          if (emp.cardNo == lookup.normalizedUsername) {
+            targetEmp = emp;
+            break;
+          }
+        }
+        if (targetEmp == null) {
+          return 'Personel kaydı bulunamadı.';
+        }
+        _db.upsertEmployee(targetEmp.copyWith(password: hashed));
+        break;
+    }
+
+    _passwordRecoveryService.clearChallenge();
+    _db.appendAuditLog(
+      actorEmployeeId: lookup.normalizedUsername,
+      actionType: 'PASSWORD_RESET_COMPLETED',
+      targetRecordId: lookup.normalizedUsername,
+      oldValue: 'recovery_verified',
+      newValue: 'updated_pbkdf2',
+    );
+    refreshDashboard();
+
+    if (state.isGoogleCloudConnected ||
+        state.companySettings.syncFolderPath.trim().isNotEmpty) {
+      unawaited(_pushAutoBackupOnChange('Parola Sıfırlama'));
+    }
+    return null;
+  }
+
+  /// Tekil giriş: Girilen kullanıcı adı veya personel kart numarasına göre
+  /// Ana Yönetici, Yetkili Kullanıcı veya Personel hesabını otomatik algılayıp oturum açar.
+  UnifiedLoginResult attemptUnifiedLogin({
+    required String identifier,
+    required String password,
+  }) {
+    final rawId = identifier.trim();
+    final lowerId = rawId.toLowerCase();
+    final cleanPass = password.trim();
+
+    if (rawId.isEmpty || cleanPass.isEmpty) {
+      state = state.copyWith(
+        authSession: state.authSession.copyWith(
+          isAuthenticated: false,
+          errorMessage: () =>
+              'Lütfen kullanıcı adı / kart no ve parolanızı girin.',
+        ),
+      );
+      return const UnifiedLoginResult(outcome: AdminLoginOutcome.failed);
+    }
+
+    // 1. Ana Yönetici hesabı kontrolü
+    final expectedAdmin = state.companySettings.adminUsername.trim().toLowerCase();
+    if (lowerId == expectedAdmin) {
+      final outcome = attemptAdminLogin(username: rawId, password: cleanPass);
+      return UnifiedLoginResult(
+        outcome: outcome,
+        resolvedRole: UserRole.admin,
+        resolvedUsername: state.companySettings.adminUsername.trim(),
+      );
+    }
+
+    // 2. Yetkili Kullanıcı (AppUserAccount) hesabı kontrolü
+    final appUser = _db.findAppUserByUsername(lowerId);
+    if (appUser != null) {
+      final ok = loginAsAdmin(username: appUser.username, password: cleanPass);
+      return UnifiedLoginResult(
+        outcome: ok ? AdminLoginOutcome.authenticated : AdminLoginOutcome.failed,
+        resolvedRole: appUser.role.baseRole,
+        resolvedUsername: appUser.username,
+      );
+    }
+
+    // 3. Personel kart / sicil no kontrolü
+    final isNumericCard = RegExp(r'^\d+$').hasMatch(rawId);
+    final paddedCard = isNumericCard ? rawId.padLeft(5, '0') : rawId;
+    Employee? matchedEmp;
+    for (final emp in _db.getEmployees()) {
+      if (emp.cardNo.toLowerCase() == lowerId || emp.cardNo == paddedCard) {
+        matchedEmp = emp;
+        break;
+      }
+    }
+    if (matchedEmp != null) {
+      final ok = loginAsEmployee(cardNo: matchedEmp.cardNo, pin: cleanPass);
+      return UnifiedLoginResult(
+        outcome: ok ? AdminLoginOutcome.authenticated : AdminLoginOutcome.failed,
+        resolvedRole: UserRole.employee,
+        resolvedUsername: matchedEmp.cardNo,
+      );
+    }
+
+    state = state.copyWith(
+      authSession: state.authSession.copyWith(
+        isAuthenticated: false,
+        errorMessage: () => 'Kullanıcı adı / kart no veya parola hatalı.',
+      ),
+    );
+    return const UnifiedLoginResult(outcome: AdminLoginOutcome.failed);
   }
 
   /// Yönetici / Yetkili Kullanıcı Girişi doğrular.
@@ -3417,9 +4031,11 @@ final pdksDashboardProvider =
   final db = ref.watch(hasibuDatabaseProvider);
   final sync = ref.watch(googleDriveSyncServiceProvider);
   final authAdapter = ref.watch(googleAuthAdapterProvider);
+  final recoveryService = ref.watch(passwordRecoveryServiceProvider);
   return PdksDashboardNotifier(
     db: db,
     syncService: sync,
     googleAuthAdapter: authAdapter,
+    passwordRecoveryService: recoveryService,
   );
 });

@@ -534,15 +534,20 @@ enum HasibuThemeMode {
 
 @immutable
 class CompanySettings {
+  static const String defaultCompanyName = 'HASİBU İŞLETME YÖNETİMİ';
+  static const String defaultAdminPassword = '123';
+
   final String companyName;
   final bool autoPollEnabled;
   final int autoPollMinutes;
   final String adminUsername;
   final String adminPassword;
+  final bool adminPasswordUpdated;
   final String defaultEmployeePin;
   final String syncGmailAccount;
   final String syncFolderPath;
   final String? logoPath;
+  final String? logoDataBase64;
   final HasibuThemeMode adminThemeMode;
   final String licenseToken;
   final int lastVerifiedTimestamp;
@@ -554,15 +559,17 @@ class CompanySettings {
   final String cloudProfileLabel;
 
   const CompanySettings({
-    this.companyName = 'HASİBU İŞLETME YÖNETİMİ',
+    this.companyName = defaultCompanyName,
     this.autoPollEnabled = true,
     this.autoPollMinutes = 5,
     this.adminUsername = 'admin',
-    this.adminPassword = '123',
+    this.adminPassword = defaultAdminPassword,
+    this.adminPasswordUpdated = false,
     this.defaultEmployeePin = '1234',
     this.syncGmailAccount = '',
     this.syncFolderPath = '',
     this.logoPath,
+    this.logoDataBase64,
     this.adminThemeMode = HasibuThemeMode.light,
     this.licenseToken = '',
     this.lastVerifiedTimestamp = 0,
@@ -574,16 +581,34 @@ class CompanySettings {
     this.cloudProfileLabel = 'Ana İşletme Kasası',
   });
 
+  bool get hasCustomCompanyName {
+    final trimmed = companyName.trim();
+    return trimmed.isNotEmpty && trimmed.toUpperCase() != defaultCompanyName;
+  }
+
+  String get displayCompanyNameForLogin =>
+      hasCustomCompanyName ? companyName.trim() : 'İşletme Yönetimi';
+
+  bool get isUsingDefaultAdminPassword => HasibuSecurityService.verifyPassword(
+        defaultAdminPassword,
+        adminPassword,
+      );
+
+  bool get requiresInitialAdminPasswordChange =>
+      !adminPasswordUpdated && isUsingDefaultAdminPassword;
+
   CompanySettings copyWith({
     String? companyName,
     bool? autoPollEnabled,
     int? autoPollMinutes,
     String? adminUsername,
     String? adminPassword,
+    bool? adminPasswordUpdated,
     String? defaultEmployeePin,
     String? syncGmailAccount,
     String? syncFolderPath,
     String? Function()? logoPath,
+    String? Function()? logoDataBase64,
     HasibuThemeMode? adminThemeMode,
     String? licenseToken,
     int? lastVerifiedTimestamp,
@@ -600,10 +625,13 @@ class CompanySettings {
       autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
       adminUsername: adminUsername ?? this.adminUsername,
       adminPassword: adminPassword ?? this.adminPassword,
+      adminPasswordUpdated: adminPasswordUpdated ?? this.adminPasswordUpdated,
       defaultEmployeePin: defaultEmployeePin ?? this.defaultEmployeePin,
       syncGmailAccount: syncGmailAccount ?? this.syncGmailAccount,
       syncFolderPath: syncFolderPath ?? this.syncFolderPath,
       logoPath: logoPath != null ? logoPath() : this.logoPath,
+      logoDataBase64:
+          logoDataBase64 != null ? logoDataBase64() : this.logoDataBase64,
       adminThemeMode: adminThemeMode ?? this.adminThemeMode,
       licenseToken: licenseToken ?? this.licenseToken,
       lastVerifiedTimestamp:
@@ -626,10 +654,12 @@ class CompanySettings {
         'autoPollMinutes': autoPollMinutes,
         'adminUsername': adminUsername,
         'adminPassword': adminPassword,
+        'adminPasswordUpdated': adminPasswordUpdated,
         'defaultEmployeePin': defaultEmployeePin,
         'syncGmailAccount': syncGmailAccount,
         'syncFolderPath': syncFolderPath,
         'logoPath': logoPath,
+        'logoDataBase64': logoDataBase64,
         'adminThemeMode': adminThemeMode.name,
         'licenseToken': licenseToken,
         'lastVerifiedTimestamp': lastVerifiedTimestamp,
@@ -641,40 +671,52 @@ class CompanySettings {
         'cloudProfileLabel': cloudProfileLabel,
       };
 
-  factory CompanySettings.fromJson(Map<String, dynamic> json) =>
-      CompanySettings(
-        companyName:
-            json['companyName'] as String? ?? 'HASİBU İŞLETME YÖNETİMİ',
-        autoPollEnabled: json['autoPollEnabled'] as bool? ?? true,
-        autoPollMinutes: json['autoPollMinutes'] as int? ?? 5,
-        adminUsername: json['adminUsername'] as String? ?? 'admin',
-        adminPassword: json['adminPassword'] as String? ?? '123',
-        defaultEmployeePin: json['defaultEmployeePin'] as String? ?? '1234',
-        syncGmailAccount: json['syncGmailAccount'] as String? ?? '',
-        syncFolderPath: json['syncFolderPath'] as String? ?? '',
-        logoPath: json['logoPath'] as String?,
-        adminThemeMode:
-            HasibuThemeMode.fromName(json['adminThemeMode'] as String?),
-        licenseToken: json['licenseToken'] as String? ?? '',
-        lastVerifiedTimestamp:
-            (json['lastVerifiedTimestamp'] as num?)?.toInt() ?? 0,
-        hardwareFingerprint: json['hardwareFingerprint'] as String? ?? '',
-        autoCloudBackupEnabled: json['autoCloudBackupEnabled'] as bool? ?? true,
-        autoCloudBackupMinutes:
-            (json['autoCloudBackupMinutes'] as num?)?.toInt() ?? 30,
-        autoCloudBackupOnChange:
-            json['autoCloudBackupOnChange'] as bool? ?? true,
-        cloudProfileId:
-            (json['cloudProfileId'] as String? ?? 'default').trim().isEmpty
-                ? 'default'
-                : (json['cloudProfileId'] as String).trim(),
-        cloudProfileLabel:
-            (json['cloudProfileLabel'] as String? ?? 'Ana İşletme Kasası')
-                    .trim()
-                    .isEmpty
-                ? 'Ana İşletme Kasası'
-                : (json['cloudProfileLabel'] as String).trim(),
-      );
+  factory CompanySettings.fromJson(Map<String, dynamic> json) {
+    final parsedPassword =
+        json['adminPassword'] as String? ?? defaultAdminPassword;
+    final hasUpdatedFlag = json.containsKey('adminPasswordUpdated');
+    final parsedUpdated = hasUpdatedFlag
+        ? (json['adminPasswordUpdated'] as bool? ?? false)
+        : !HasibuSecurityService.verifyPassword(
+            defaultAdminPassword,
+            parsedPassword,
+          );
+    final rawLogoBase64 = (json['logoDataBase64'] as String?)?.trim();
+    return CompanySettings(
+      companyName: json['companyName'] as String? ?? defaultCompanyName,
+      autoPollEnabled: json['autoPollEnabled'] as bool? ?? true,
+      autoPollMinutes: json['autoPollMinutes'] as int? ?? 5,
+      adminUsername: json['adminUsername'] as String? ?? 'admin',
+      adminPassword: parsedPassword,
+      adminPasswordUpdated: parsedUpdated,
+      defaultEmployeePin: json['defaultEmployeePin'] as String? ?? '1234',
+      syncGmailAccount: json['syncGmailAccount'] as String? ?? '',
+      syncFolderPath: json['syncFolderPath'] as String? ?? '',
+      logoPath: json['logoPath'] as String?,
+      logoDataBase64:
+          (rawLogoBase64 == null || rawLogoBase64.isEmpty) ? null : rawLogoBase64,
+      adminThemeMode: HasibuThemeMode.fromName(json['adminThemeMode'] as String?),
+      licenseToken: json['licenseToken'] as String? ?? '',
+      lastVerifiedTimestamp:
+          (json['lastVerifiedTimestamp'] as num?)?.toInt() ?? 0,
+      hardwareFingerprint: json['hardwareFingerprint'] as String? ?? '',
+      autoCloudBackupEnabled: json['autoCloudBackupEnabled'] as bool? ?? true,
+      autoCloudBackupMinutes:
+          (json['autoCloudBackupMinutes'] as num?)?.toInt() ?? 30,
+      autoCloudBackupOnChange:
+          json['autoCloudBackupOnChange'] as bool? ?? true,
+      cloudProfileId:
+          (json['cloudProfileId'] as String? ?? 'default').trim().isEmpty
+              ? 'default'
+              : (json['cloudProfileId'] as String).trim(),
+      cloudProfileLabel:
+          (json['cloudProfileLabel'] as String? ?? 'Ana İşletme Kasası')
+                  .trim()
+                  .isEmpty
+              ? 'Ana İşletme Kasası'
+              : (json['cloudProfileLabel'] as String).trim(),
+    );
+  }
 }
 
 @immutable

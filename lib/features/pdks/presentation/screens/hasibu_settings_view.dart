@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/security/hasibu_security_service.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
 import 'app_users_management_card.dart';
 import 'cloud_backup_center_dialog.dart';
+import 'employee_dossier_panel.dart';
 import 'hasibu_release_notes_dialog.dart';
+
+export 'leaves_and_reports_view.dart' show LeavesAndReportsSettingsView;
 
 // ============================================================================
 // ORTAK BİLEŞEN 0: MİNİMALİST TEMA PALETİ (AÇIK / KOYU / SİSTEM UYUMLU)
@@ -50,6 +55,7 @@ class CompanyLogoBadge extends StatelessWidget {
   final double size;
   final double borderRadius;
   final VoidCallback? onTap;
+  final bool preferCompanyMonogramWhenDefault;
 
   const CompanyLogoBadge({
     super.key,
@@ -57,6 +63,7 @@ class CompanyLogoBadge extends StatelessWidget {
     this.size = 40,
     this.borderRadius = 11,
     this.onTap,
+    this.preferCompanyMonogramWhenDefault = false,
   });
 
   static const List<({IconData icon, Color bg, Color fg, String label})>
@@ -111,6 +118,99 @@ class CompanyLogoBadge extends StatelessWidget {
         .toUpperCase();
   }
 
+  Widget _buildInitialsBadge() {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F172A), Color(0xFF0284C7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(borderRadius),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        _companyInitials(settings.companyName),
+        style: TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: size * 0.38,
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCorporatePlaceholderBadge(BuildContext context) {
+    if (settings.hasCustomCompanyName) {
+      return _buildInitialsBadge();
+    }
+    final pal = HasibuPalette.of(context);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: pal.subtle,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: pal.border),
+      ),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.business_rounded,
+        color: pal.isDark ? const Color(0xFF38BDF8) : const Color(0xFF0F172A),
+        size: size * 0.48,
+      ),
+    );
+  }
+
+  Widget _buildContainedImageFrame(BuildContext context, Widget child) {
+    final pal = HasibuPalette.of(context);
+    final innerRadius = (borderRadius - 2).clamp(2.0, borderRadius);
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size >= 56 ? 4 : 2),
+      decoration: BoxDecoration(
+        color: pal.card,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(color: pal.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(innerRadius),
+        child: child,
+      ),
+    );
+  }
+
+  Widget? _tryBuildBase64Logo(BuildContext context, int presetIdx) {
+    final encoded = settings.logoDataBase64?.trim() ?? '';
+    if (encoded.isEmpty) return null;
+    try {
+      final bytes = base64Decode(encoded);
+      if (bytes.isEmpty) return null;
+      return _buildContainedImageFrame(
+        context,
+        Image.memory(
+          bytes,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.high,
+          isAntiAlias: true,
+          errorBuilder: (ctx, error, stackTrace) =>
+              preferCompanyMonogramWhenDefault
+                  ? _buildCorporatePlaceholderBadge(ctx)
+                  : _buildPreset(presetIdx),
+        ),
+      );
+    } catch (e) {
+      debugPrint('CompanyLogoBadge: base64 logo çözülemedi: $e');
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final raw = settings.logoPath?.trim() ?? '';
@@ -122,28 +222,7 @@ class CompanyLogoBadge extends StatelessWidget {
 
     Widget content;
     if (raw == 'logo:initials') {
-      content = Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF0284C7)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(borderRadius),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          _companyInitials(settings.companyName),
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-            fontSize: size * 0.38,
-            letterSpacing: -0.5,
-          ),
-        ),
-      );
+      content = _buildInitialsBadge();
     } else if (raw == 'logo:hasibu_alt') {
       content = ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
@@ -158,37 +237,48 @@ class CompanyLogoBadge extends StatelessWidget {
               _buildPreset(presetIdx),
         ),
       );
-    } else if (raw.isEmpty || raw == 'logo:1' || raw == 'logo:hasibu') {
-      content = ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: Image.asset(
-          'assets/icon/hasibu_icon.png',
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.high,
-          isAntiAlias: true,
-          errorBuilder: (context, error, stackTrace) =>
-              _buildPreset(presetIdx),
-        ),
-      );
     } else if (raw.isNotEmpty && !isPreset) {
       final file = File(raw);
       if (file.existsSync()) {
-        content = ClipRRect(
-          borderRadius: BorderRadius.circular(borderRadius),
-          child: Image.file(
+        content = _buildContainedImageFrame(
+          context,
+          Image.file(
             file,
             width: size,
             height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _buildPreset(presetIdx),
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            errorBuilder: (ctx, error, stackTrace) =>
+                _tryBuildBase64Logo(ctx, presetIdx) ??
+                (preferCompanyMonogramWhenDefault
+                    ? _buildCorporatePlaceholderBadge(ctx)
+                    : _buildPreset(presetIdx)),
           ),
         );
       } else {
-        content = _buildPreset(presetIdx);
+        content = _tryBuildBase64Logo(context, presetIdx) ??
+            (preferCompanyMonogramWhenDefault
+                ? _buildCorporatePlaceholderBadge(context)
+                : _buildPreset(presetIdx));
       }
+    } else if (raw.isEmpty || raw == 'logo:1' || raw == 'logo:hasibu') {
+      content = (!isPreset ? _tryBuildBase64Logo(context, presetIdx) : null) ??
+          (preferCompanyMonogramWhenDefault
+              ? _buildCorporatePlaceholderBadge(context)
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  child: Image.asset(
+                    'assets/icon/hasibu_icon.png',
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                    isAntiAlias: true,
+                    errorBuilder: (context, error, stackTrace) =>
+                        _buildPreset(presetIdx),
+                  ),
+                ));
     } else {
       content = _buildPreset(presetIdx);
     }
@@ -253,12 +343,16 @@ Future<void> showCompanyLogoDialog(
     context: context,
     builder: (dialogCtx) => StatefulBuilder(
       builder: (ctx, setDialogState) {
+        final previewPath = pathCtrl.text.trim();
+        final previewIsPreset = previewPath.startsWith('logo:');
         final previewSettings = settings.copyWith(
           companyName: nameCtrl.text.trim().isEmpty
               ? settings.companyName
               : nameCtrl.text.trim(),
-          logoPath: () =>
-              pathCtrl.text.trim().isEmpty ? null : pathCtrl.text.trim(),
+          logoPath: () => previewPath.isEmpty ? null : previewPath,
+          logoDataBase64: () => (previewIsPreset || previewPath.isEmpty)
+              ? null
+              : settings.logoDataBase64,
         );
         final pal = HasibuPalette.of(ctx);
 
@@ -430,12 +524,32 @@ Future<void> showCompanyLogoDialog(
               onPressed: () async {
                 final notifier = ref.read(pdksDashboardProvider.notifier);
                 final cleanLogo = pathCtrl.text.trim();
+                String? encodedBase64;
+                if (cleanLogo.isNotEmpty && !cleanLogo.startsWith('logo:')) {
+                  try {
+                    final file = File(cleanLogo);
+                    if (await file.exists()) {
+                      final length = await file.length();
+                      if (length <= 512 * 1024) {
+                        final bytes = await file.readAsBytes();
+                        if (bytes.isNotEmpty) {
+                          encodedBase64 = base64Encode(bytes);
+                        }
+                      }
+                    } else if (cleanLogo == settings.logoPath?.trim()) {
+                      encodedBase64 = settings.logoDataBase64;
+                    }
+                  } catch (e) {
+                    debugPrint('showCompanyLogoDialog: logo base64 hatası: $e');
+                  }
+                }
                 await notifier.updateCompanySettings(
                   settings.copyWith(
                     companyName: nameCtrl.text.trim().isEmpty
                         ? settings.companyName
                         : nameCtrl.text.trim(),
                     logoPath: () => cleanLogo.isEmpty ? null : cleanLogo,
+                    logoDataBase64: () => encodedBase64,
                   ),
                 );
                 if (dialogCtx.mounted) {
@@ -1411,21 +1525,15 @@ Future<void> showEmployeeHistoryAndDossierDialog(
     return;
   }
   int activeTab = initialTabIndex.clamp(0, 1);
-  PersonnelDocumentCategory selectedCategory =
-      PersonnelDocumentCategory.kimlikFotokopisi;
-  final docTitleCtrl = TextEditingController(
-    text: PersonnelDocumentCategory.kimlikFotokopisi.label,
-  );
-  final docPathCtrl = TextEditingController();
-  final docNotesCtrl = TextEditingController();
 
   await showDialog<void>(
     context: context,
-    builder: (dialogCtx) => StatefulBuilder(
-      builder: (ctx, setDialogState) {
-        final pal = HasibuPalette.of(ctx);
-        final state = ref.watch(pdksDashboardProvider);
-        final notifier = ref.read(pdksDashboardProvider.notifier);
+    builder: (dialogCtx) => Consumer(
+      builder: (ctx, dialogRef, _) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final pal = HasibuPalette.of(ctx);
+          final state = dialogRef.watch(pdksDashboardProvider);
+          final notifier = dialogRef.read(pdksDashboardProvider.notifier);
 
         final matchedStatuses = state.dailyStatuses
             .where((s) => s.employee.id == employee.id)
@@ -1463,14 +1571,6 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                   e.state == DailyAttendanceState.onLeave ||
                   e.state == DailyAttendanceState.sickReport,
             )
-            .length;
-
-        final mandatoryCategories = PersonnelDocumentCategory.values
-            .where((c) => c.isMandatory)
-            .toList(growable: false);
-        final uploadedCategorySet = empDocs.map((d) => d.category).toSet();
-        final int completedMandatoryCount = mandatoryCategories
-            .where((c) => uploadedCategorySet.contains(c))
             .length;
 
         return AlertDialog(
@@ -1712,6 +1812,7 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                 width: double.infinity,
                 child: SegmentedButton<int>(
                   key: const ValueKey('employee_detail_tab_selector'),
+                  showSelectedIcon: false,
                   segments: [
                     ButtonSegment<int>(
                       value: 0,
@@ -1740,8 +1841,8 @@ Future<void> showEmployeeHistoryAndDossierDialog(
             ],
           ),
           content: SizedBox(
-            width: 780,
-            height: 520,
+            width: (MediaQuery.sizeOf(ctx).width - 56).clamp(280.0, 740.0),
+            height: (MediaQuery.sizeOf(ctx).height * 0.60).clamp(280.0, 540.0),
             child: activeTab == 0
                 ? ListView(
                     children: [
@@ -1885,355 +1986,7 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                         ),
                     ],
                   )
-                : ListView(
-                    children: [
-                      // 1. ZORUNLU ÖZLÜK EVRAKLARI KONTROL LİSTESİ
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: pal.subtle,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: pal.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    'Resmi Özlük Dosyası Kontrol Listesi ($completedMandatoryCount / ${mandatoryCategories.length} Zorunlu Evrak)',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: pal.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  'Eksik evraka dokunarak hızlı seçebilirsiniz',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: pal.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final cat in mandatoryCategories)
-                                  InkWell(
-                                    borderRadius: BorderRadius.circular(8),
-                                    onTap: () {
-                                      setDialogState(() {
-                                        selectedCategory = cat;
-                                        docTitleCtrl.text = cat.label;
-                                      });
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 5,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: uploadedCategorySet.contains(cat)
-                                            ? const Color(0xFF059669)
-                                                .withValues(alpha: 0.14)
-                                            : const Color(0xFFD97706)
-                                                .withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color:
-                                              uploadedCategorySet.contains(cat)
-                                                  ? const Color(0xFF059669)
-                                                  : const Color(0xFFD97706),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            uploadedCategorySet.contains(cat)
-                                                ? Icons.check_circle_rounded
-                                                : Icons.upload_file_rounded,
-                                            size: 14,
-                                            color: uploadedCategorySet
-                                                    .contains(cat)
-                                                ? const Color(0xFF059669)
-                                                : const Color(0xFFD97706),
-                                          ),
-                                          const SizedBox(width: 5),
-                                          Text(
-                                            cat.label,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: uploadedCategorySet
-                                                      .contains(cat)
-                                                  ? const Color(0xFF059669)
-                                                  : const Color(0xFFD97706),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      // 2. YENİ RESMİ EVRAK DİJİTAL KOPYASI EKLEME FORMU
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: pal.card,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: pal.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Yeni Resmi Evrak Dijital Kopyası Ekle (.PDF, .JPG, .PNG, .DOCX)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: pal.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: DropdownButtonFormField<
-                                      PersonnelDocumentCategory>(
-                                    isExpanded: true,
-                                    initialValue: selectedCategory,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Resmi Evrak Türü',
-                                    ),
-                                    items: [
-                                      for (final c
-                                          in PersonnelDocumentCategory.values)
-                                        DropdownMenuItem(
-                                          value: c,
-                                          child: Text(
-                                            c.label,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                    ],
-                                    onChanged: (val) {
-                                      if (val == null) return;
-                                      setDialogState(() {
-                                        selectedCategory = val;
-                                        docTitleCtrl.text = val.label;
-                                      });
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey(
-                                      'dossier_doc_title_field',
-                                    ),
-                                    controller: docTitleCtrl,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Evrak Başlığı / Adı',
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    key: const ValueKey(
-                                      'dossier_doc_path_field',
-                                    ),
-                                    controller: docPathCtrl,
-                                    decoration: const InputDecoration(
-                                      labelText:
-                                          'Dijital Kopya Dosya Yolu (.pdf / .jpg / .png)',
-                                      hintText:
-                                          r'Örn: C:\Evraklar\00001_Kimlik_Kopyasi.pdf',
-                                      prefixIcon: Icon(
-                                        Icons.description_outlined,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (Platform.isWindows) ...[
-                                  const SizedBox(width: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: () async {
-                                      final picked = await EmployeeProfileAvatar
-                                          .pickDocumentFromDesktop();
-                                      if (picked != null) {
-                                        setDialogState(
-                                          () => docPathCtrl.text = picked,
-                                        );
-                                      }
-                                    },
-                                    icon: const Icon(
-                                      Icons.attach_file_rounded,
-                                      size: 17,
-                                    ),
-                                    label: const Text('Bilgisayardan Seç'),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: docNotesCtrl,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Evrak Notu / Açıklama',
-                                      hintText:
-                                          'Örn: Islak imzalı aslı arşivde, dijital kopyası doğrulandı',
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                FilledButton.icon(
-                                  key: const ValueKey(
-                                    'dossier_add_document_button',
-                                  ),
-                                  onPressed: () async {
-                                    final title = docTitleCtrl.text.trim();
-                                    if (title.isEmpty) return;
-                                    final path = docPathCtrl.text.trim().isEmpty
-                                        ? 'Dijital_Arsiv/${emp.cardNo}_${selectedCategory.name}.pdf'
-                                        : docPathCtrl.text.trim();
-                                    final doc = PersonnelDocument(
-                                      id: 'doc_${emp.id}_${DateTime.now().millisecondsSinceEpoch}',
-                                      employeeId: emp.id,
-                                      category: selectedCategory,
-                                      title: title,
-                                      filePath: path,
-                                      uploadDate: state.selectedDate,
-                                      notes: docNotesCtrl.text.trim(),
-                                    );
-                                    await notifier.savePersonnelDocument(doc);
-                                    if (dialogCtx.mounted) {
-                                      setDialogState(() {
-                                        docPathCtrl.clear();
-                                        docNotesCtrl.clear();
-                                      });
-                                    }
-                                  },
-                                  icon: const Icon(
-                                    Icons.cloud_upload_outlined,
-                                    size: 17,
-                                  ),
-                                  label: const Text('Özlük Dosyasına Ekle'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Kayıtlı Dijital Özlük Evrakları (${empDocs.length})',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w700,
-                          color: pal.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (empDocs.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(
-                            'Bu personelin özlük dosyasına henüz dijital evrak eklenmemiş.',
-                            style: TextStyle(color: pal.textSecondary),
-                          ),
-                        ),
-                      for (final doc in empDocs)
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            color: pal.subtle,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: pal.border),
-                          ),
-                          child: ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(9),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0284C7)
-                                    .withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                doc.filePath.toLowerCase().endsWith('.pdf')
-                                    ? Icons.picture_as_pdf_rounded
-                                    : Icons.insert_drive_file_rounded,
-                                color: const Color(0xFF0284C7),
-                                size: 20,
-                              ),
-                            ),
-                            title: Text(
-                              '${doc.title} (${doc.category.label})',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: pal.textPrimary,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Dijital Kopya: ${doc.filePath} • Yükleme: ${doc.uploadDate}'
-                              '${doc.notes.isNotEmpty ? " • ${doc.notes}" : ""}',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: pal.textSecondary,
-                              ),
-                            ),
-                            trailing: Wrap(
-                              spacing: 4,
-                              children: [
-                                if (Platform.isWindows &&
-                                    File(doc.filePath).existsSync())
-                                  OutlinedButton.icon(
-                                    onPressed: () => EmployeeProfileAvatar
-                                        .openDigitalDocument(doc.filePath),
-                                    icon: const Icon(
-                                      Icons.open_in_new_rounded,
-                                      size: 15,
-                                    ),
-                                    label: const Text('Evrakı Aç'),
-                                  ),
-                                IconButton(
-                                  tooltip: 'Evrakı Sil',
-                                  color: const Color(0xFFDC2626),
-                                  onPressed: () =>
-                                      notifier.deletePersonnelDocument(doc.id),
-                                  icon: const Icon(
-                                    Icons.delete_outline_rounded,
-                                    size: 19,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                : EmployeeDossierPanel(employee: emp),
           ),
           actions: [
             TextButton(
@@ -2243,12 +1996,9 @@ Future<void> showEmployeeHistoryAndDossierDialog(
           ],
         );
       },
+      ),
     ),
   );
-
-  docTitleCtrl.dispose();
-  docPathCtrl.dispose();
-  docNotesCtrl.dispose();
 }
 
 Color attendanceStateColor(DailyAttendanceState state) {
@@ -2616,7 +2366,11 @@ class _CompanyAndBranchesSettingsViewState
     _pollMinutesCtrl =
         TextEditingController(text: settings.autoPollMinutes.toString());
     _adminUserCtrl = TextEditingController(text: settings.adminUsername);
-    _adminPassCtrl = TextEditingController(text: settings.adminPassword);
+    _adminPassCtrl = TextEditingController(
+      text: HasibuSecurityService.isPasswordHashed(settings.adminPassword)
+          ? ''
+          : settings.adminPassword,
+    );
     _empPinCtrl = TextEditingController(text: settings.defaultEmployeePin);
     _gmailCtrl = TextEditingController(text: settings.syncGmailAccount);
     _driveFolderCtrl = TextEditingController(text: settings.syncFolderPath);
@@ -2769,12 +2523,18 @@ class _CompanyAndBranchesSettingsViewState
                     ),
                   ),
                   SizedBox(
-                    width: 150,
+                    width: 190,
                     child: TextField(
                       controller: _adminPassCtrl,
-                      decoration: const InputDecoration(
+                      obscureText: true,
+                      decoration: InputDecoration(
                         labelText: 'Yönetici Parolası',
-                        prefixIcon: Icon(Icons.lock_outline_rounded),
+                        hintText: HasibuSecurityService.isPasswordHashed(
+                          settings.adminPassword,
+                        )
+                            ? 'Değiştirmek için yeni parola girin'
+                            : null,
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
                       ),
                     ),
                   ),
@@ -2896,6 +2656,21 @@ class _CompanyAndBranchesSettingsViewState
                               ? '$rawGmail@gmail.com'
                               : rawGmail;
                       _gmailCtrl.text = cleanGmail;
+                      final typedAdminPass = _adminPassCtrl.text.trim();
+                      final shouldUpdateAdminPass = typedAdminPass.isNotEmpty &&
+                          !HasibuSecurityService.verifyPassword(
+                            typedAdminPass,
+                            settings.adminPassword,
+                          );
+                      final nextAdminPass = shouldUpdateAdminPass
+                          ? HasibuSecurityService.hashPassword(typedAdminPass)
+                          : settings.adminPassword;
+                      final nextAdminUpdated = settings.adminPasswordUpdated ||
+                          shouldUpdateAdminPass ||
+                          !HasibuSecurityService.verifyPassword(
+                            CompanySettings.defaultAdminPassword,
+                            nextAdminPass,
+                          );
                       await ref
                           .read(pdksDashboardProvider.notifier)
                           .updateCompanySettings(
@@ -2903,12 +2678,16 @@ class _CompanyAndBranchesSettingsViewState
                               companyName: _companyNameCtrl.text.trim(),
                               autoPollMinutes: mins.clamp(1, 1440),
                               adminUsername: _adminUserCtrl.text.trim(),
-                              adminPassword: _adminPassCtrl.text.trim(),
+                              adminPassword: nextAdminPass,
+                              adminPasswordUpdated: nextAdminUpdated,
                               defaultEmployeePin: _empPinCtrl.text.trim(),
                               syncGmailAccount: cleanGmail,
                               syncFolderPath: _driveFolderCtrl.text.trim(),
                             ),
                           );
+                      if (shouldUpdateAdminPass && mounted) {
+                        _adminPassCtrl.clear();
+                      }
                       final syncRes = await ref
                           .read(pdksDashboardProvider.notifier)
                           .saveGmailSyncAccount(
@@ -4233,319 +4012,7 @@ class _AttendanceCorrectionSettingsViewState
   }
 }
 
-// ============================================================================
-// 4. İZİNLİ VE RAPORLU PERSONEL BİLGİLERİNİ GİRME / YÖNETME
-// ============================================================================
-class LeavesAndReportsSettingsView extends ConsumerStatefulWidget {
-  const LeavesAndReportsSettingsView({super.key});
-
-  @override
-  ConsumerState<LeavesAndReportsSettingsView> createState() =>
-      _LeavesAndReportsSettingsViewState();
-}
-
-class _LeavesAndReportsSettingsViewState
-    extends ConsumerState<LeavesAndReportsSettingsView> {
-  int? _selectedEmployeeId;
-  LeaveType _selectedLeaveType = LeaveType.yillikIzin;
-  late final TextEditingController _startDateCtrl;
-  late final TextEditingController _endDateCtrl;
-  late final TextEditingController _noteCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    final date = ref.read(pdksDashboardProvider).selectedDate;
-    _startDateCtrl = TextEditingController(text: date);
-    _endDateCtrl = TextEditingController(text: date);
-    _noteCtrl = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _startDateCtrl.dispose();
-    _endDateCtrl.dispose();
-    _noteCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickLeaveDate(TextEditingController ctrl) async {
-    final initial = DateTime.tryParse(ctrl.text.trim()) ?? DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2020, 1, 1),
-      lastDate: DateTime(2035, 12, 31),
-      locale: const Locale('tr', 'TR'),
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      ctrl.text = PdksDashboardNotifier.formatDateKey(picked);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(pdksDashboardProvider);
-    final pal = HasibuPalette.of(context);
-    final activeEmps = state.dailyStatuses
-        .where((s) => !s.employee.isSeparatedNow)
-        .map((s) => s.employee)
-        .toList(growable: false);
-    final employees = activeEmps.isNotEmpty
-        ? activeEmps
-        : state.dailyStatuses.map((e) => e.employee).toList(growable: false);
-    final empMap = {for (final e in employees) e.id: e};
-
-    if (employees.isEmpty) {
-      _selectedEmployeeId = null;
-    } else if (_selectedEmployeeId == null ||
-        !empMap.containsKey(_selectedEmployeeId)) {
-      _selectedEmployeeId = employees.first.id;
-    }
-    final selectedEmp =
-        _selectedEmployeeId != null ? empMap[_selectedEmployeeId] : null;
-
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: pal.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: pal.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'İzinli veya Raporlu Personel Kaydı Oluştur',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: pal.textPrimary,
-                ),
-              ),
-              if (selectedEmp != null) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0284C7).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.28),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.beach_access_rounded,
-                        size: 15,
-                        color: Color(0xFF0284C7),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          '${selectedEmp.fullName} • Kalan Yıllık İzin: ${selectedEmp.remainingAnnualLeave} Gün (Hak: ${selectedEmp.annualLeaveEntitlement} / Kullanılan: ${selectedEmp.usedAnnualLeave})',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: pal.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 300,
-                    child: employees.isEmpty
-                        ? const InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Personel Seçin',
-                            ),
-                            child: Text('Yetkili şubede personel bulunamadı'),
-                          )
-                        : DropdownButtonFormField<int>(
-                            key: ValueKey('leave_emp_$_selectedEmployeeId'),
-                            isExpanded: true,
-                            initialValue: _selectedEmployeeId,
-                            decoration: const InputDecoration(
-                              labelText: 'Personel Seçin',
-                            ),
-                            items: [
-                              for (final e in employees)
-                                DropdownMenuItem(
-                                  value: e.id,
-                                  child: Text(
-                                    '${e.fullName} (#${e.cardNo})',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            onChanged: (v) =>
-                                setState(() => _selectedEmployeeId = v),
-                          ),
-                  ),
-                  SizedBox(
-                    width: 200,
-                    child: DropdownButtonFormField<LeaveType>(
-                      isExpanded: true,
-                      initialValue: _selectedLeaveType,
-                      decoration: const InputDecoration(
-                        labelText: 'İzin / Rapor Türü',
-                      ),
-                      items: [
-                        for (final lt in LeaveType.values)
-                          DropdownMenuItem(
-                            value: lt,
-                            child: Text(
-                              lt.label,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() => _selectedLeaveType = v);
-                        }
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: 190,
-                    child: TextField(
-                      controller: _startDateCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Başlangıç (YYYY-AA-GG)',
-                        suffixIcon: IconButton(
-                          tooltip: 'Takvimden Başlangıç Tarihi Seç',
-                          icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                          onPressed: () => _pickLeaveDate(_startDateCtrl),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 190,
-                    child: TextField(
-                      controller: _endDateCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Bitiş (YYYY-AA-GG)',
-                        suffixIcon: IconButton(
-                          tooltip: 'Takvimden Bitiş Tarihi Seç',
-                          icon: const Icon(Icons.calendar_today_rounded, size: 16),
-                          onPressed: () => _pickLeaveDate(_endDateCtrl),
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 260,
-                    child: TextField(
-                      controller: _noteCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Açıklama / Rapor Notu',
-                        hintText: 'Örn: 3 Günlük Hastane Raporu',
-                      ),
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      final empId = _selectedEmployeeId;
-                      if (empId == null) return;
-                      final start =
-                          DateTime.tryParse(_startDateCtrl.text.trim()) ??
-                              DateTime(2026, 10, 19);
-                      final end =
-                          DateTime.tryParse(_endDateCtrl.text.trim()) ?? start;
-                      final count = await ref
-                          .read(pdksDashboardProvider.notifier)
-                          .assignLeaveDateRange(
-                            employeeId: empId,
-                            startDate: start,
-                            endDate: end,
-                            leaveType: _selectedLeaveType,
-                            note: _noteCtrl.text,
-                          );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              '$count günlük ${_selectedLeaveType.label} kaydı eklendi.',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    icon: const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('İzin / Rapor Kaydet'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Kayıtlı İzinler & Sağlık Raporları (${state.allLeaveRecords.length})',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: pal.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        for (final rec in state.allLeaveRecords)
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            decoration: BoxDecoration(
-              color: pal.card,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: pal.border),
-            ),
-            child: ListTile(
-              leading: empMap[rec.employeeId] != null
-                  ? EmployeeProfileAvatar(
-                      employee: empMap[rec.employeeId]!,
-                      size: 38,
-                    )
-                  : const CircleAvatar(child: Icon(Icons.person_outline)),
-              title: Text(
-                '${empMap[rec.employeeId]?.fullName ?? "Personel #${rec.employeeId}"} • ${rec.leaveType.label}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13.5,
-                ),
-              ),
-              subtitle: Text('Tarih: ${rec.date} • Not: ${rec.note}'),
-              trailing: IconButton(
-                color: const Color(0xFFDC2626),
-                tooltip: 'İzin/Rapor Kaydını Sil',
-                onPressed: () => ref
-                    .read(pdksDashboardProvider.notifier)
-                    .deleteLeaveRecord(rec.id),
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
+// `LeavesAndReportsSettingsView` -> `leaves_and_reports_view.dart` dosyasına taşındı (üstte export ediliyor).
 
 enum _EmployeeListFilter { all, active, terminated }
 

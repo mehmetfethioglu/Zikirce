@@ -16,6 +16,7 @@ abstract interface class GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   });
 
   /// Kullanıcı etkileşimi olmadan kayıtlı Google erişim belirtecini sessizce yeniler.
@@ -40,12 +41,14 @@ class DesktopLoopbackGoogleAuthAdapter implements GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) {
     return _syncService.startInteractiveBrowserGoogleSignIn(
       loginHintEmail: loginHintEmail,
       customClientId: customClientId,
       customClientSecret: customClientSecret,
       timeout: timeout,
+      extraScopes: extraScopes,
     );
   }
 
@@ -104,6 +107,7 @@ class NativeMobileGoogleAuthAdapter implements GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) async {
     try {
       await _ensureInitialized();
@@ -114,12 +118,17 @@ class NativeMobileGoogleAuthAdapter implements GoogleAuthAdapter {
         );
       }
 
+      final scopes = <String>{
+        ..._driveScopes,
+        ...extraScopes.map((s) => s.trim()).where((s) => s.isNotEmpty),
+      }.toList(growable: false);
+
       final account = await GoogleSignIn.instance.authenticate(
-        scopeHint: _driveScopes,
+        scopeHint: scopes,
       );
       final authClient = account.authorizationClient;
-      var authorization = await authClient.authorizationForScopes(_driveScopes);
-      authorization ??= await authClient.authorizeScopes(_driveScopes);
+      var authorization = await authClient.authorizationForScopes(scopes);
+      authorization ??= await authClient.authorizeScopes(scopes);
 
       final accessToken = authorization.accessToken.trim();
       if (accessToken.isEmpty) {

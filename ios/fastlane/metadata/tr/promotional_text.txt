@@ -1,0 +1,1 @@
+Tekil otomatik giriş, Gmail ile güvenli şifre kurtarma, çok şubeli QR/GPS yoklama, yüz okutma terminali ve AES-256-GCM şifreli bulut yedekleme.

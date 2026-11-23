@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uygulamanın güncel sürüm sabitleri (`pubspec.yaml` ile eşgüdümlü).
-const String hasibuAppVersion = '1.0.13';
-const int hasibuAppBuildNumber = 14;
-const String hasibuFullVersionLabel = 'v1.0.13 (Build 14)';
+const String hasibuAppVersion = '1.0.14';
+const int hasibuAppBuildNumber = 15;
+const String hasibuFullVersionLabel = 'v1.0.14 (Build 15)';
 
 /// Tekil sürüm notu kaydı.
 @immutable
@@ -30,6 +30,20 @@ class HasibuReleaseNoteEntry {
 
 /// Kronolojik olarak güncelden eskiye Hasibu sürüm notları listesi.
 const List<HasibuReleaseNoteEntry> hasibuReleaseNotesRegistry = [
+  HasibuReleaseNoteEntry(
+    version: '1.0.14',
+    buildNumber: 15,
+    releaseDate: '23.11.2026',
+    title: 'Tekil Giriş, Şifre Kurtarma, Dijital Özlük & Kapalı Test Hazırlığı',
+    categoryTag: 'Güvenlik & Deneyim',
+    highlights: [
+      'Tekil Otomatik Giriş Ekranı: Rol sekmesi seçmeden yönetici, şube sorumlusu ve personel hesapları otomatik algılanır; üst çubuğa minimalist Google Bulut oturum ikonu ve ilk kurulumda zorunlu yönetici şifre kalkanı eklendi.',
+      'Birleşik Şifre Kurtarma: Unutulan parolalar şirket Gmail hesabı üzerinden gönderilen 6 haneli tek kullanımlık doğrulama kodu (10 dakika geçerli) veya Google kimlik doğrulama yedeğiyle güvenle sıfırlanır.',
+      'Sadeleştirilmiş İzin & Devam Raporları: Aramalı, şube ve çalışma durumu filtreli ortak personel rehberi (masaüstü yan rehber + mobil seçici) ile hızlı izin gün kısayolları eklendi.',
+      'Dijital Özlük Kontrol Paneli: Zorunlu ve opsiyonel özlük evrakları için eksik/yüklü filtreleme, durum göstergesi ve sadeleştirilmiş evrak yükleme deneyimi sunuldu.',
+      'Kapalı Test & ASO/GEO Uyumluluğu: Google Play Kapalı Test (Alpha), Apple TestFlight Türkçe/İngilizce mağaza kimliği ve resmi gizlilik/destek web portalı hazırlandı.',
+    ],
+  ),
   HasibuReleaseNoteEntry(
     version: '1.0.13',
     buildNumber: 14,

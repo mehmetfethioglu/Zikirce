@@ -3,13 +3,77 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hasibu (ihasibu) — Resmi Ana Sayfa, Gizlilik Politikası ve Destek</title>
-  <meta name="description" content="Hasibu (ihasibu) kurumsal PDKS, çok şubeli yüz okutma köprüsü, Windows & Android senkronizasyonu resmi web sayfası, gizlilik politikası ve destek merkezi." />
+  <title>Hasibu (ihasibu) — Çok Şubeli PDKS, Vardiya, QR/GPS Yoklama ve Dijital Özlük</title>
+  <meta name="description" content="Hasibu (ihasibu); fabrikalar ve çok şubeli işletmeler için çevrimdışı öncelikli PDKS, Tenfei D35 yüz okutma köprüsü, QR/GPS yoklama, vardiya, izin ve AES-256-GCM şifreli Google Drive eşitleme platformudur." />
+  <link rel="canonical" href="https://mehmetfethioglu.github.io/hasibu-privacy/" />
+  <link rel="alternate" hreflang="tr" href="https://mehmetfethioglu.github.io/hasibu-privacy/" />
+  <link rel="alternate" hreflang="en" href="https://mehmetfethioglu.github.io/hasibu-privacy/" />
+  <link rel="alternate" hreflang="x-default" href="https://mehmetfethioglu.github.io/hasibu-privacy/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Hasibu (ihasibu) — Kurumsal PDKS, Vardiya &amp; Dijital Özlük" />
+  <meta property="og:description" content="Çok şubeli personel devam takip (PDKS), yüz okutma terminali senkronizasyonu, QR/GPS yoklama ve AES-256-GCM şifreli Google Drive yedekleme." />
+  <meta property="og:url" content="https://mehmetfethioglu.github.io/hasibu-privacy/" />
+  <meta property="og:image" content="https://mehmetfethioglu.github.io/hasibu-privacy/assets/hasibu_icon.png" />
+  <meta property="og:locale" content="tr_TR" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Hasibu (ihasibu) — Kurumsal PDKS &amp; Vardiya" />
+  <meta name="twitter:description" content="Çok şubeli personel devam takip (PDKS), QR/GPS yoklama ve şifreli dijital özlük." />
   <link rel="icon" type="image/png" href="assets/hasibu_icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "name": "Hasibu",
+        "alternateName": "Hasibu PDKS",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Android, iOS, Windows",
+        "softwareVersion": "1.0.14",
+        "description": "Offline-first enterprise attendance (PDKS), multi-branch biometric terminal sync, QR/GPS check-in, shift scheduling, leave management, and AES-256-GCM encrypted personnel dossier platform.",
+        "url": "https://mehmetfethioglu.github.io/hasibu-privacy/",
+        "downloadUrl": "https://mehmetfethioglu.github.io/hasibu-privacy/indir.html",
+        "inLanguage": ["tr-TR", "en-US"],
+        "author": {
+          "@type": "Organization",
+          "name": "Akarworks (Akar Bilişim Teknolojileri)",
+          "email": "akarbilisimteknolojileri@gmail.com",
+          "url": "https://mehmetfethioglu.github.io/hasibu-privacy/"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "TRY"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Hasibu nedir ve ne işe yarar?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Hasibu; fabrikalar ve çok şubeli işletmeler için geliştirilmiş çevrimdışı öncelikli PDKS, yüz okutma terminali senkronizasyonu, QR/GPS yoklama, vardiya, izin ve SQLCipher/AES-256-GCM şifreli dijital özlük platformudur."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is Hasibu and how does it protect privacy?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Hasibu is an offline-first enterprise attendance (PDKS) and HR platform that stores records locally in SQLCipher AES-256 and encrypts optional Google Drive backups client-side with AES-256-GCM under the restricted drive.file scope."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <div class="page-shell">
@@ -25,6 +89,7 @@
         <a class="tab-link active" href="index.html" data-tab="home">Ana Sayfa</a>
         <a class="tab-link" href="privacy.html" data-tab="privacy">Gizlilik Politikası</a>
         <a class="tab-link" href="support.html" data-tab="support">Destek</a>
+        <a class="tab-link" href="indir.html">İndir &amp; Test</a>
       </nav>
     </header>
 
@@ -32,51 +97,43 @@
       <!-- SEKME 1: ANA SAYFA -->
       <section id="home" class="tab-panel active" aria-labelledby="tab-home-heading">
         <div class="hero">
-          <span class="pill">Akarworks / Akar Bilişim Teknolojileri • Resmi Uygulama Sayfası</span>
-          <h2 id="tab-home-heading">Hasibu (ihasibu) ile Çok Şubeli PDKS ve Güvenli Google Drive Eşitlemesi</h2>
+          <span class="pill">Akarworks / Akar Bilişim Teknolojileri • v1.0.14 Resmi Ürün Portalı</span>
+          <h2 id="tab-home-heading">Hasibu (ihasibu) ile Çok Şubeli PDKS, QR/GPS Yoklama ve Güvenli Drive Eşitlemesi</h2>
           <p>
-            <strong>Hasibu (ihasibu)</strong>, fabrikalar ve perakende şubeler için geliştirilmiş çok platformlu
-            (Windows ve Android) personel devam kontrol (PDKS), yüz okutma terminali köprüsü ve kurumsal yönetim uygulamasıdır.
-            Şube verileri cihaz üzerinde <strong>AES-256-GCM</strong> ile şifrelenerek yalnızca kullanıcının kendi Google Drive hesabında
-            uygulamanın oluşturduğu izole yedek dosyalarına yazılır.
+            <strong>Hasibu (ihasibu)</strong>, fabrikalar ve çok şubeli işletmeler için geliştirilmiş çok platformlu
+            (Android, iOS ve Windows ARM64) personel devam kontrol (PDKS), yüz okutma terminali köprüsü, vardiya, izin ve şifreli dijital özlük uygulamasıdır.
+            Şube verileri cihaz üzerinde <strong>SQLCipher AES-256</strong> ile korunur ve isteğe bağlı yedekler <strong>AES-256-GCM</strong> ile şifrelenerek yalnızca kullanıcının kendi Google Drive hesabında saklanır.
           </p>
           <div class="cta-row">
-            <a class="btn btn-primary" href="privacy.html">Gizlilik Politikasını İncele</a>
+            <a class="btn btn-primary" href="indir.html">İndir &amp; Kapalı Teste Katıl</a>
+            <a class="btn" href="privacy.html">Gizlilik Politikasını İncele</a>
             <a class="btn" href="support.html">Destek &amp; Kurulum Yardımı</a>
           </div>
         </div>
 
         <div class="grid-2">
           <article class="card">
-            <h3>Çok Şubeli Anlık Yüz Okutma Köprüsü</h3>
+            <h3>Çok Şubeli Anlık Yüz Okutma &amp; QR/GPS</h3>
             <p>
-              Şubelerdeki Windows 10 64-bit terminallerde çalışan arka plan köprüsü, yerel ağdaki Tenfei / ZKTeco cihazlarından
-              okutma olaylarını gerçek zamanlı yakalar ve her şube için ayrı şifreli gelen kutusu (<code>hasibu_branch_inbox_*.enc</code>)
-              dosyasına aktararak merkezle çakışmasız eşitleme sağlar.
+              Şubelerdeki Windows x64 arka plan köprüsü Tenfei / ZKTeco cihazlarından okutma olaylarını gerçek zamanlı yakalar ve her şube için ayrı şifreli gelen kutusu (<code>hasibu_branch_inbox_*.enc</code>) dosyasına aktarır. Mobil ekipler için 30 saniyelik TOTP QR ve GPS konum doğrulaması sunar.
             </p>
           </article>
           <article class="card">
             <h3>Uçtan Uca İstemci Tarafı Şifreleme</h3>
             <p>
-              Yerel veritabanı <strong>SQLCipher AES-256</strong>, bulut yedekleri ise kullanıcının belirlediği Workspace Key üzerinden
-              türetilen anahtarla <strong>AES-256-GCM</strong> ile şifrelenir. Windows ortamında OAuth belirteçleri ve şifreleme anahtarları
-              Windows <strong>DPAPI</strong> kasasında korunur.
+              Yerel veritabanı <strong>SQLCipher AES-256</strong>, bulut yedekleri ise kullanıcının belirlediği Workspace Key veya Google hesap kasası üzerinden türetilen anahtarla <strong>AES-256-GCM</strong> ile şifrelenir. Parolalar PBKDF2/Argon2id ile korunur; OAuth belirteçleri DPAPI/Keystore/Keychain kasasında tutulur.
             </p>
           </article>
           <article class="card">
-            <h3>Google Drive İzin Kapsamı Şeffaflığı</h3>
+            <h3>Tekil Giriş, İzin &amp; Dijital Özlük</h3>
             <p>
-              Hasibu (<code>ihasibu</code>), Google Drive hesabınızdaki diğer kişisel dosya ve klasörlere erişmez.
-              Yalnızca <code>drive.file</code> dar yetkisiyle uygulamanın kendisinin oluşturduğu şifreli <code>.enc</code> senkronizasyon
-              dosyalarını okur ve günceller.
+              Rol sekmesi seçmeden yönetici, şube sorumlusu ve personel hesabını otomatik algılayan tekil giriş ekranı; şirket Gmail hesabı üzerinden 6 haneli tek kullanımlık şifre kurtarma; çok günlü devam/devamsızlık CSV raporu ve dijital özlük kontrol paneli içerir.
             </p>
           </article>
           <article class="card">
             <h3>Official English Summary</h3>
             <p>
-              <strong>Hasibu (ihasibu)</strong> is an enterprise attendance (PDKS) and multi-branch terminal sync application
-              developed by Akar Bilişim Teknolojileri (Akarworks). All sync archives are encrypted client-side with AES-256-GCM
-              before being stored inside the user's own Google Drive via the restricted <code>drive.file</code> scope.
+              <strong>Hasibu (ihasibu)</strong> is an offline-first enterprise attendance (PDKS), shift scheduling, leave tracking, and digital personnel dossier platform developed by Akarworks. All sync archives are encrypted client-side with AES-256-GCM inside the user's own Google Drive via the restricted <code>drive.file</code> scope.
             </p>
           </article>
         </div>
@@ -85,11 +142,11 @@
       <!-- SEKME 2: GİZLİLİK POLİTİKASI -->
       <section id="privacy" class="tab-panel" aria-labelledby="tab-privacy-heading">
         <div class="hero">
-          <span class="pill">Yürürlük Tarihi: 22 Kasım 2026 • KVKK &amp; Google API Limited Use Uyumlu</span>
+          <span class="pill">Yürürlük Tarihi: 23 Kasım 2026 • KVKK &amp; Google API Limited Use Uyumlu</span>
           <h2 id="tab-privacy-heading">Hasibu (ihasibu) Gizlilik Politikası &amp; Kullanım Koşulları</h2>
           <p>
             Bu sayfa <strong>Akarworks / Akar Bilişim Teknolojileri</strong> tarafından geliştirilen <strong>Hasibu (ihasibu)</strong>
-            uygulamasının (Windows, Android ve Şube Köprüsü) kişisel veri ve Google API kullanıcı verisi işleme esaslarını açıklar.
+            uygulamasının (Android, iOS, Windows ve Şube Köprüsü) kişisel veri ve Google API kullanıcı verisi işleme esaslarını açıklar.
           </p>
           <div class="cta-row">
             <a class="btn" href="privacy.html">Kalıcı Bağlantı (privacy.html)</a>
@@ -99,7 +156,7 @@
         <article class="card">
           <h3>1. Veri Sorumlusu ve Uygulama Kimliği</h3>
           <ul>
-            <li><strong>Uygulama Adı:</strong> Hasibu (Google Cloud OAuth Projesi: <code>ihasibu</code>)</li>
+            <li><strong>Uygulama Adı:</strong> Hasibu (Paket: <code>com.akarworks.hasibu</code> • OAuth Projesi: <code>ihasibu</code>)</li>
             <li><strong>Geliştirici / Veri Sorumlusu:</strong> Akarworks — Akar Bilişim Teknolojileri</li>
             <li><strong>Resmi İletişim E-Postası:</strong> <a href="mailto:akarbilisimteknolojileri@gmail.com">akarbilisimteknolojileri@gmail.com</a> / <a href="mailto:mehmetfethioglu@gmail.com">mehmetfethioglu@gmail.com</a></li>
           </ul>
@@ -112,6 +169,7 @@
             <ul>
               <li><code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>: Uygulama içinde hangi Google hesabıyla oturum açıldığının doğrulanması ve senkronizasyon durumunun gösterilmesi.</li>
               <li><code>https://www.googleapis.com/auth/drive.file</code>: Kullanıcının kendi Google Drive hesabında yalnızca Hasibu tarafından oluşturulan AES-256-GCM şifreli yedek ve şube kutusu dosyalarının (<code>hasibu_sync*.enc</code>, <code>hasibu_branch_inbox_*.enc</code>) oluşturulması, güncellenmesi ve okunması.</li>
+              <li><code>https://www.googleapis.com/auth/gmail.send</code> <em>(isteğe bağlı — yalnızca Şifremi Unuttum akışında)</em>: Kullanıcı veya yönetici parola sıfırlama talep ettiğinde, yetkili şirket Gmail hesabı üzerinden 6 haneli tek kullanımlık doğrulama kodu e-postası göndermek için kullanılır; gelen kutusu veya diğer e-postalar asla okunmaz.</li>
             </ul>
           </div>
           <h4>Google API Services User Data Policy — Sınırlı Kullanım (Limited Use) Taahhüdü</h4>
@@ -126,8 +184,8 @@
         <article class="card">
           <h3>3. İşlenen İşletme Verileri ve İstemci Tarafı Güvenlik</h3>
           <ul>
-            <li><strong>Yerel Saklama:</strong> Personel sicil, vardiya, devam hareketi ve şube kayıtları kullanıcının kendi cihazında SQLCipher (AES-256) yerel veritabanında tutulur; geliştiriciye ait merkezi bir sunucuya gönderilmez.</li>
-            <li><strong>Bulut Senkronizasyonu:</strong> Drive'a yüklenen tüm paketler yükleme öncesinde kullanıcının cihazında <strong>AES-256-GCM</strong> ile şifrelenir. Şifreleme anahtarı (Workspace Key) ve OAuth belirteçleri Windows DPAPI / Android Keystore güvenli deposunda saklanır.</li>
+            <li><strong>Yerel Saklama:</strong> Personel sicil, vardiya, devam hareketi, özlük belgeleri ve şube kayıtları kullanıcının kendi cihazında SQLCipher (AES-256) yerel veritabanında tutulur; geliştiriciye ait merkezi bir sunucuya gönderilmez.</li>
+            <li><strong>Bulut Senkronizasyonu:</strong> Drive'a yüklenen tüm paketler yükleme öncesinde kullanıcının cihazında <strong>AES-256-GCM</strong> ile şifrelenir. Şifreleme anahtarları ve OAuth belirteçleri Windows DPAPI / Android Keystore / iOS Keychain güvenli deposunda saklanır.</li>
           </ul>
         </article>
 
@@ -154,8 +212,9 @@
           <h3>6. Privacy Policy Summary (English)</h3>
           <p>
             <strong>Hasibu (ihasibu)</strong> operates solely under the user's local device and their personal/corporate Google Drive account.
-            We request <code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>, and <code>https://www.googleapis.com/auth/drive.file</code>
-            strictly to verify the signed-in account and store/sync client-side AES-256-GCM encrypted backup archives created by Hasibu.
+            We request <code>openid</code>, <code>userinfo.email</code>, <code>userinfo.profile</code>, <code>https://www.googleapis.com/auth/drive.file</code>,
+            and optionally <code>https://www.googleapis.com/auth/gmail.send</code> (strictly when requested for 6-digit password reset emails)
+            to verify the signed-in account and store/sync client-side AES-256-GCM encrypted backup archives created by Hasibu.
             We do not operate central tracking servers, sell user data, or serve ads. Hasibu's use and transfer of information received from Google APIs
             adheres to the Google API Services User Data Policy, including the Limited Use requirements. Access may be revoked anytime at
             <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.
@@ -169,7 +228,7 @@
           <span class="pill">Resmi Teknik Destek &amp; Kurulum Rehberi</span>
           <h2 id="tab-support-heading">Hasibu (ihasibu) Destek Merkezi</h2>
           <p>
-            Kurulum, Windows 10 64-bit şube yüz okutma köprüsü, Google Drive senkronizasyonu veya veri silme talepleriniz için doğrudan destek ekibimize ulaşabilirsiniz.
+            Kurulum, Windows 10 64-bit şube yüz okutma köprüsü, Google Drive senkronizasyonu, şifre kurtarma veya veri silme talepleriniz için doğrudan destek ekibimize ulaşabilirsiniz.
           </p>
           <div class="cta-row">
             <a class="btn btn-primary" href="mailto:akarbilisimteknolojileri@gmail.com?subject=Hasibu%20Destek%20Talebi">E-Posta ile Destek Al</a>
@@ -190,8 +249,8 @@
             <h3>Sık Sorulan Konular</h3>
             <ul>
               <li><strong>Şube Köprüsü Kurulumu:</strong> Merkez Hasibu → <em>Bulut Yedek Merkezi</em> → <em>Şube Köprüsü Ayar JSON Kopyala</em> adımından alınan yapılandırma <code>HasibuBranchBridge.exe --setup</code> ile içe aktarılır.</li>
-              <li><strong>Erişim İptali:</strong> Google Drive yetkisini dilediğiniz zaman Google Hesap İzinleri sayfasından kaldırabilirsiniz.</li>
-              <li><strong>Veri Silme Talebi:</strong> Yukarıdaki destek e-posta adresine konu satırına <code>Hasibu Veri Silme</code> yazarak talepte bulunabilirsiniz.</li>
+              <li><strong>Şifre Kurtarma:</strong> Giriş ekranındaki <em>Şifremi Unuttum</em> adımından kayıtlı şirket Gmail hesabınıza 6 haneli doğrulama kodu gönderebilirsiniz.</li>
+              <li><strong>Erişim İptali &amp; Veri Silme:</strong> Google Drive yetkisini Google Hesap İzinleri sayfasından kaldırabilir veya <code>Hasibu Veri Silme</code> konulu e-posta gönderebilirsiniz.</li>
             </ul>
           </article>
         </div>
@@ -202,6 +261,7 @@
       <span>© 2026 Akarworks / Akar Bilişim Teknolojileri — Hasibu (ihasibu)</span>
       <div class="footer-links">
         <a href="index.html">Ana Sayfa</a>
+        <a href="indir.html">İndir &amp; Kapalı Test</a>
         <a href="privacy.html">Gizlilik Politikası</a>
         <a href="privacy.html#terms">Kullanım Koşulları</a>
         <a href="support.html">Destek</a>

@@ -73,8 +73,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('login_submit_button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('login_first_setup_info_card')),
+      findsOneWidget,
+    );
 
+    await tester.tap(
+      find.byKey(const ValueKey('login_fill_initial_admin_button')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('login_submit_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('force_admin_password_dialog')),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('force_admin_new_password_field')),
+      'Admin#2026',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('force_admin_confirm_password_field')),
+      'Admin#2026',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('force_admin_password_submit_button')),
+    );
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(

@@ -1,0 +1,26 @@
+# Hasibu (1.0.14+15)
+> Çok şubeli kurumsal PDKS, yüz okutma terminali, QR/GPS yoklama, vardiya, izin ve şifreli dijital özlük platformu.
+
+## What is Hasibu?
+Hasibu is an offline-first enterprise attendance (PDKS), shift scheduling, leave tracking, and digital personnel dossier platform developed by Akarworks (Akar Bilişim Teknolojileri). Engineered in 2026 for factories, workshops, and multi-branch teams across Android, iOS, and Windows ARM64, Hasibu stores employee, shift, and attendance records locally inside a SQLCipher AES-256 encrypted database with 0 central tracking servers and 0 third-party ads. Authorized managers monitor real-time check-ins across isolated branches, verify field staff via 30-second HMAC-SHA1 TOTP QR and GPS validation, synchronize Tenfei D35 or ZKTeco face terminals through a Windows x64 branch bridge, and export multi-day CSV attendance reports. Password recovery issues 6-digit single-use verification codes through optional Gmail API integration. All optional Google Drive backups use client-side AES-256-GCM encryption under the restricted drive.file scope, supporting Turkish (tr-TR) and English (en-US) workflows.
+
+## Key Pages & Portals
+- [Official Home & Overview](https://mehmetfethioglu.github.io/hasibu-privacy/): Enterprise attendance architecture, encryption details, and bilingual overview.
+- [Download & Closed Testing Portal](https://mehmetfethioglu.github.io/hasibu-privacy/indir.html): Google Play Closed Test (Alpha), Apple TestFlight, Windows ARM64 MSIX, and Branch Bridge access.
+- [Privacy Policy & KVKK/GDPR Compliance](https://mehmetfethioglu.github.io/hasibu-privacy/privacy.html): Zero-tracking policy, SQLCipher/AES-256-GCM security, and Google API Limited Use disclosure.
+- [Technical Support & Setup Guide](https://mehmetfethioglu.github.io/hasibu-privacy/support.html): Branch bridge setup steps, Drive revocation instructions, and support channels.
+- [Extended AI Knowledge Base](https://mehmetfethioglu.github.io/hasibu-privacy/llms-full.txt): Complete technical architecture, security layers, and FAQ.
+
+## Core Capabilities
+- Live Attendance Dashboard with multi-branch scoping (`allowedBranchIds`) and strict supervisor isolation.
+- Tenfei D35 / ZKTeco TCP/IP terminal sync and Windows x64 background branch bridge (`hasibu_branch_inbox_<slug>.enc`).
+- Dynamic 30-second HMAC-SHA1 TOTP QR & GPS check-in verification.
+- Multi-day attendance/absence report filtering and one-tap CSV export.
+- Unified auto sign-in with first-setup admin password shield and 6-digit Gmail OTP password recovery.
+- Encrypted digital personnel dossier (`.hasibu_doc`, AES-256-GCM) with mandatory/optional document checklist.
+
+## Contact & Attribution
+- Developer: Akarworks / Akar Bilişim Teknolojileri
+- Package ID: `com.akarworks.hasibu`
+- Support Email: `akarbilisimteknolojileri@gmail.com`
+- Languages: `tr-TR`, `en-US`

@@ -1007,6 +1007,7 @@ class GoogleDriveSyncService {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) async {
     HttpServer? server;
     try {
@@ -1128,19 +1129,27 @@ class GoogleDriveSyncService {
             return;
           }
 
+          final requestedScopes = <String>{
+            'openid',
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/drive.file',
+            ...extraScopes.map((s) => s.trim()).where((s) => s.isNotEmpty),
+          }.join(' ');
+
           final authUri =
               Uri.parse('https://accounts.google.com/o/oauth2/v2/auth').replace(
             queryParameters: <String, String>{
               'client_id': activeClientId,
               'redirect_uri': redirectUri,
               'response_type': 'code',
-              'scope':
-                  'openid email profile https://www.googleapis.com/auth/drive.file',
+              'scope': requestedScopes,
               'code_challenge': pkceChallenge,
               'code_challenge_method': 'S256',
               'state': oauthState,
               'access_type': 'offline',
               'prompt': 'select_account consent',
+              if (extraScopes.isNotEmpty) 'include_granted_scopes': 'true',
               if (hint.isNotEmpty) 'login_hint': hint,
             },
           );

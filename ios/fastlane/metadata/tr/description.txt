@@ -1,0 +1,32 @@
+Hasibu; fabrikalar, atölyeler ve çok şubeli işletmeler için geliştirilmiş çevrimdışı öncelikli (offline-first) kurumsal Personel Devam Kontrol Sistemi (PDKS), vardiya planlama, izin takibi ve şifreli dijital özlük platformudur.
+
+Merkezi izleme sunucularına bağımlı kalmadan tüm işletme ve personel verilerinizi kendi iPhone veya iPad cihazınızda SQLCipher AES-256 ile şifrelenmiş olarak tutar; dilerseniz yalnızca kendi Google Drive hesabınıza AES-256-GCM uçtan uca şifrelemeyle yedekleyebilirsiniz.
+
+ÖNE ÇIKAN ÖZELLİKLER
+
+• Canlı Yoklama ve Çoklu Şube Yönetimi
+Tüm şubelerdeki anlık giriş-çıkış hareketlerini, geç kalanları, erken çıkanları ve devamsızlıkları tek kokpitten izleyin. Çoklu şube kapsamı ve katı şube sorumlusu izolasyonu sayesinde her yönetici yalnızca yetkili olduğu şubelerin verilerini görür ve yönetir.
+
+• Yüz Okutma Terminali ve Şube Köprüsü
+Tenfei D35 ve ZKTeco uyumlu yüz okutma terminallerinden TCP/IP üzerinden kayıt çekin. Şubelerdeki Windows arka plan köprüsü ile her şube için çakışmasız şifreli gelen kutusu senkronizasyonu sağlayın.
+
+• Şube QR / GPS Yoklama
+Saha ve mağaza personeli için 30 saniyelik dinamik TOTP (HMAC-SHA1) güvenlikli QR kod okutma ve GPS konum doğrulamalı mobil giriş-çıkış kaydı oluşturun.
+
+• Çok Günlü Devam / Devamsızlık Raporu ve CSV Dışa Aktarım
+Seçili tarih aralığı, şube ve çalışma durumuna göre günlük puantaj, mesai, geç kalma ve devamsızlık özetlerini görüntüleyin ve tek dokunuşla CSV raporu olarak dışa aktarın.
+
+• İzin, Rapor, Hareket Düzeltme ve İK Talepleri
+Yıllık izin, istirahat raporu ve mazeret kayıtlarını aramalı ortak personel rehberi ve hızlı gün kısayollarıyla kolayca işleyin. Çalışanlar Personel Portalı üzerinden kendi izin taleplerini iletebilir ve vardiya bilgilerini görebilir.
+
+• Şifreli Dijital Özlük Dosyası
+Kimlik, sözleşme, sağlık raporu ve sertifika gibi zorunlu/opsiyonel özlük belgelerini durum filtreleriyle takip edin ve AES-256-GCM şifreli yerel kasada güvenle arşivleyin.
+
+• Tekil Otomatik Giriş ve Güvenli Şifre Kurtarma
+Rol sekmesi seçmeden yönetici, şube sorumlusu veya personel hesabını otomatik tanıyın; ilk kurulumda zorunlu yönetici parola kalkanı ve şirket Gmail hesabı üzerinden 6 haneli tek kullanımlık doğrulama koduyla güvenli şifre sıfırlama kullanın.
+
+GİZLİLİK VE VERİ GÜVENLİĞİ
+Hasibu reklam içermez, kullanıcı profillemesi yapmaz ve verilerinizi üçüncü taraf sunuculara aktarmaz. Google Drive senkronizasyonu yalnızca drive.file dar yetkisini kullanarak uygulamanın oluşturduğu şifreli yedek arşivlerini yönetir.
+
+Resmi Gizlilik Politikası: https://mehmetfethioglu.github.io/hasibu-privacy/privacy.html
+Destek: https://mehmetfethioglu.github.io/hasibu-privacy/support.html

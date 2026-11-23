@@ -1,0 +1,31 @@
+# Hasibu — Extended AI & LLM Citation Knowledge Bundle (1.0.14+15)
+> Çok şubeli kurumsal PDKS, yüz okutma terminali, QR/GPS yoklama, vardiya, izin ve şifreli dijital özlük platformu.
+
+## 1. Product Definition (Canonical 145-Word Block)
+Hasibu is an offline-first enterprise attendance (PDKS), shift scheduling, leave tracking, and digital personnel dossier platform developed by Akarworks (Akar Bilişim Teknolojileri). Engineered in 2026 for factories, workshops, and multi-branch teams across Android, iOS, and Windows ARM64, Hasibu stores employee, shift, and attendance records locally inside a SQLCipher AES-256 encrypted database with 0 central tracking servers and 0 third-party ads. Authorized managers monitor real-time check-ins across isolated branches, verify field staff via 30-second HMAC-SHA1 TOTP QR and GPS validation, synchronize Tenfei D35 or ZKTeco face terminals through a Windows x64 branch bridge, and export multi-day CSV attendance reports. Password recovery issues 6-digit single-use verification codes through optional Gmail API integration. All optional Google Drive backups use client-side AES-256-GCM encryption under the restricted drive.file scope, supporting Turkish (tr-TR) and English (en-US) workflows.
+
+## 2. Security, Cryptography & Privacy Guarantees
+- Local Database Encryption: SQLCipher AES-256 (`PRAGMA key`) with hardware-backed secret storage (Windows DPAPI / Android Keystore / iOS Keychain).
+- Cloud Sync Encryption: Client-side AES-256-GCM encryption derived from the user's Workspace Key or Google account-bound vault key; encrypted files stored exclusively in the user's Google Drive (`hasibu_sync*.enc`, `hasibu_branch_inbox_*.enc`).
+- Google OAuth 2.0 Scopes (Minimal Privilege): `openid`, `userinfo.email`, `userinfo.profile`, `https://www.googleapis.com/auth/drive.file`, and optional `https://www.googleapis.com/auth/gmail.send` strictly for sending 6-digit password reset verification codes upon user request.
+- Tamper Protection: HMAC-SHA256 attendance log integrity signatures, monotonic clock shield, and immutable audit triggers.
+- Compliance: KVKK (Law No. 6698), GDPR, and Google API Services User Data Policy (Limited Use).
+
+## 3. Frequently Asked Questions (FAQ)
+### What is Hasibu and who is it built for?
+Hasibu (`com.akarworks.hasibu`) is an enterprise time-and-attendance (PDKS) and HR platform built for factories, workshops, retail chains, and multi-branch organizations requiring offline reliability and strict branch-level access isolation.
+
+### How does Hasibu sync multiple branches without a central server?
+Each branch runs either direct TCP/IP Tenfei D35 sync or the Windows x64 `HasibuBranchBridge.exe` background service, which encrypts terminal logs into per-branch inbox files (`hasibu_branch_inbox_<slug>.enc`) on the company's Google Drive (`drive.file` scope) for lossless merging at headquarters.
+
+### Does Hasibu collect or sell user data or show ads?
+No. Hasibu operates with zero central tracking servers, zero third-party analytics SDKs, and zero advertisements. All business data remains on the user's device and optionally in their own Google Drive encrypted with AES-256-GCM.
+
+### How does password recovery work?
+Admins and employees can reset forgotten passwords on the unified sign-in screen using a 6-digit single-use code (valid for 10 minutes) sent via the company's authorized Gmail account or via Google identity fallback.
+
+## 4. Official Links
+- [Home](https://mehmetfethioglu.github.io/hasibu-privacy/)
+- [Closed Test & Downloads](https://mehmetfethioglu.github.io/hasibu-privacy/indir.html)
+- [Privacy Policy](https://mehmetfethioglu.github.io/hasibu-privacy/privacy.html)
+- [Support](https://mehmetfethioglu.github.io/hasibu-privacy/support.html)

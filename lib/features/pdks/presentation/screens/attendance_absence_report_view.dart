@@ -356,6 +356,7 @@ class _AttendanceAbsenceReportViewState
         rows.fold<int>(0, (s, r) => s + r.onLeaveDays + r.sickReportDays);
     final totalMissingOutDays =
         rows.fold<int>(0, (s, r) => s + r.missingCheckOutDays);
+    final showBranchInCards = branches.length > 1 && effectiveBranchId == null;
 
     return CustomScrollView(
       slivers: [
@@ -370,7 +371,7 @@ class _AttendanceAbsenceReportViewState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. ÜST KONTROL VE FİLTRE KARTI
+                // 1. SADE ÜST BAŞLIK, DÖNEM VE FİLTRE KARTI
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -400,61 +401,57 @@ class _AttendanceAbsenceReportViewState
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Seçili Dönem: $rangeDisplay • Yüz okutma, geç kalma, izin ve devamsızlık icmali',
+                                'Dönem: $rangeDisplay',
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   color: pal.textSecondary,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
-                          FilledButton.icon(
-                            key: const ValueKey(
-                              'report_export_period_csv_button',
-                            ),
-                            onPressed: () => _showPeriodCsvExportDialog(
-                              startKey: startKey,
-                              endKey: endKey,
-                            ),
-                            icon: const Icon(Icons.table_view_rounded, size: 17),
-                            label: const Text('Excel / CSV Rapor İndir'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          for (final preset in AttendanceReportPreset.values)
-                            ChoiceChip(
-                              key: ValueKey('report_preset_${preset.name}'),
-                              visualDensity: VisualDensity.compact,
-                              label: Text(
-                                preset.label,
-                                style: const TextStyle(fontSize: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              OutlinedButton.icon(
+                                key: const ValueKey(
+                                  'report_pick_date_range_button',
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: _pickDateRange,
+                                icon: const Icon(
+                                  Icons.date_range_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  rangeDisplay,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
-                              selected: _preset == preset,
-                              onSelected: (_) => _applyPreset(preset),
-                            ),
-                          OutlinedButton.icon(
-                            key: const ValueKey('report_pick_date_range_button'),
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: _pickDateRange,
-                            icon: const Icon(
-                              Icons.date_range_rounded,
-                              size: 16,
-                            ),
-                            label: Text(
-                              rangeDisplay,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                              FilledButton.icon(
+                                key: const ValueKey(
+                                  'report_export_period_csv_button',
+                                ),
+                                style: FilledButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () => _showPeriodCsvExportDialog(
+                                  startKey: startKey,
+                                  endKey: endKey,
+                                ),
+                                icon: const Icon(
+                                  Icons.table_view_rounded,
+                                  size: 16,
+                                ),
+                                label: const Text('Excel / CSV'),
                               ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
@@ -599,9 +596,21 @@ class _AttendanceAbsenceReportViewState
                       ),
                       const SizedBox(height: 10),
                       Wrap(
-                        spacing: 8,
+                        spacing: 6,
                         runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
+                          for (final preset in AttendanceReportPreset.values)
+                            ChoiceChip(
+                              key: ValueKey('report_preset_${preset.name}'),
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                preset.label,
+                                style: const TextStyle(fontSize: 11.5),
+                              ),
+                              selected: _preset == preset,
+                              onSelected: (_) => _applyPreset(preset),
+                            ),
                           FilterChip(
                             key: const ValueKey('report_filter_only_absent'),
                             visualDensity: VisualDensity.compact,
@@ -642,69 +651,16 @@ class _AttendanceAbsenceReportViewState
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                // 2. 6'LI ÖZET KPI KARTLARI
-                LayoutBuilder(
-                  builder: (ctx, constraints) {
-                    final double w;
-                    if (constraints.maxWidth >= 980) {
-                      w = (constraints.maxWidth - 40) / 6;
-                    } else if (constraints.maxWidth >= 560) {
-                      w = (constraints.maxWidth - 16) / 3;
-                    } else {
-                      w = (constraints.maxWidth - 8) / 2;
-                    }
-                    return Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'Personel',
-                          value: '$totalStaff',
-                          icon: Icons.groups_rounded,
-                          color: pal.isDark
-                              ? const Color(0xFF38BDF8)
-                              : const Color(0xFF0F172A),
-                        ),
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'Toplam Devam (Gün)',
-                          value: '$totalPresentDays',
-                          icon: Icons.check_circle_rounded,
-                          color: const Color(0xFF059669),
-                        ),
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'Devamsızlık (Gün)',
-                          value: '$totalAbsentDays',
-                          icon: Icons.person_off_rounded,
-                          color: const Color(0xFFDC2626),
-                        ),
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'Geç Kalma (Gün / Dk)',
-                          value: '$totalLateDays / $totalLateMinutes',
-                          icon: Icons.schedule_rounded,
-                          color: const Color(0xFFD97706),
-                        ),
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'İzinli / Raporlu',
-                          value: '$totalLeaveAndSickDays',
-                          icon: Icons.beach_access_rounded,
-                          color: const Color(0xFF0284C7),
-                        ),
-                        _ReportKpiCard(
-                          width: w,
-                          title: 'Eksik Çıkış',
-                          value: '$totalMissingOutDays',
-                          icon: Icons.warning_amber_rounded,
-                          color: const Color(0xFFEA580C),
-                        ),
-                      ],
-                    );
-                  },
+                const SizedBox(height: 10),
+                // 2. SADE 4'LÜ ÖZET ŞERİDİ
+                _CompactReportSummaryStrip(
+                  totalStaff: totalStaff,
+                  totalPresentDays: totalPresentDays,
+                  totalAbsentDays: totalAbsentDays,
+                  totalLateDays: totalLateDays,
+                  totalLateMinutes: totalLateMinutes,
+                  totalLeaveAndSickDays: totalLeaveAndSickDays,
+                  totalMissingOutDays: totalMissingOutDays,
                 ),
               ],
             ),
@@ -730,7 +686,10 @@ class _AttendanceAbsenceReportViewState
             sliver: SliverList.separated(
               itemCount: rows.length,
               separatorBuilder: (context, index) => const SizedBox(height: 8),
-              itemBuilder: (ctx, idx) => _PeriodSummaryCard(item: rows[idx]),
+              itemBuilder: (ctx, idx) => _PeriodSummaryCard(
+                item: rows[idx],
+                showBranchName: showBranchInCards,
+              ),
             ),
           ),
       ],
@@ -738,69 +697,203 @@ class _AttendanceAbsenceReportViewState
   }
 }
 
-class _ReportKpiCard extends StatelessWidget {
-  final double width;
-  final String title;
+class _CompactReportSummaryStrip extends StatelessWidget {
+  final int totalStaff;
+  final int totalPresentDays;
+  final int totalAbsentDays;
+  final int totalLateDays;
+  final int totalLateMinutes;
+  final int totalLeaveAndSickDays;
+  final int totalMissingOutDays;
+
+  const _CompactReportSummaryStrip({
+    required this.totalStaff,
+    required this.totalPresentDays,
+    required this.totalAbsentDays,
+    required this.totalLateDays,
+    required this.totalLateMinutes,
+    required this.totalLeaveAndSickDays,
+    required this.totalMissingOutDays,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = HasibuPalette.of(context);
+    final lateText = totalLateDays > 0
+        ? '$totalLateDays gün • $totalLateMinutes dk'
+        : '0 gün';
+    final items = <({String label, String value, Color color})>[
+      (
+        label: 'Personel',
+        value: '$totalStaff',
+        color: pal.textPrimary,
+      ),
+      (
+        label: 'Toplam Devam (Gün)',
+        value: '$totalPresentDays',
+        color: const Color(0xFF059669),
+      ),
+      (
+        label: 'Devamsızlık (Gün)',
+        value: '$totalAbsentDays',
+        color: totalAbsentDays > 0
+            ? const Color(0xFFDC2626)
+            : pal.textSecondary,
+      ),
+      (
+        label: 'Geç Kalma',
+        value: lateText,
+        color: totalLateDays > 0
+            ? const Color(0xFFD97706)
+            : pal.textSecondary,
+      ),
+    ];
+
+    final hasExtras = totalLeaveAndSickDays > 0 || totalMissingOutDays > 0;
+    final extraParts = <String>[
+      if (totalLeaveAndSickDays > 0) 'İzin / Rapor: ${totalLeaveAndSickDays}g',
+      if (totalMissingOutDays > 0) 'Eksik Çıkış: ${totalMissingOutDays}g',
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: pal.card,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth >= 640) {
+                return IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      for (int i = 0; i < items.length; i++) ...[
+                        if (i > 0)
+                          VerticalDivider(width: 1, color: pal.border),
+                        Expanded(
+                          child: _SummaryStripCell(
+                            label: items[i].label,
+                            value: items[i].value,
+                            color: items[i].color,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }
+
+              return Column(
+                children: [
+                  IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _SummaryStripCell(
+                            label: items[0].label,
+                            value: items[0].value,
+                            color: items[0].color,
+                          ),
+                        ),
+                        VerticalDivider(width: 1, color: pal.border),
+                        Expanded(
+                          child: _SummaryStripCell(
+                            label: items[1].label,
+                            value: items[1].value,
+                            color: items[1].color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: pal.border),
+                  IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _SummaryStripCell(
+                            label: items[2].label,
+                            value: items[2].value,
+                            color: items[2].color,
+                          ),
+                        ),
+                        VerticalDivider(width: 1, color: pal.border),
+                        Expanded(
+                          child: _SummaryStripCell(
+                            label: items[3].label,
+                            value: items[3].value,
+                            color: items[3].color,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (hasExtras) ...[
+            Divider(height: 1, color: pal.border),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              child: Text(
+                extraParts.join('  •  '),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: pal.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryStripCell extends StatelessWidget {
+  final String label;
   final String value;
-  final IconData icon;
   final Color color;
 
-  const _ReportKpiCard({
-    required this.width,
-    required this.title,
+  const _SummaryStripCell({
+    required this.label,
     required this.value,
-    required this.icon,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     final pal = HasibuPalette.of(context);
-    return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: pal.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: pal.border),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(7),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: color,
             ),
-            child: Icon(icon, size: 16, color: color),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w800,
-                    color: color,
-                  ),
-                ),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
-                    color: pal.textSecondary,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: pal.textSecondary,
             ),
           ),
         ],
@@ -811,8 +904,20 @@ class _ReportKpiCard extends StatelessWidget {
 
 class _PeriodSummaryCard extends ConsumerWidget {
   final EmployeeAttendancePeriodSummary item;
+  final bool showBranchName;
 
-  const _PeriodSummaryCard({required this.item});
+  const _PeriodSummaryCard({
+    required this.item,
+    required this.showBranchName,
+  });
+
+  static String _shortDayMonth(String dateKey) {
+    final parts = dateKey.split('-');
+    if (parts.length == 3) {
+      return '${parts[2].padLeft(2, '0')}.${parts[1].padLeft(2, '0')}';
+    }
+    return dateKey;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -825,8 +930,21 @@ class _PeriodSummaryCard extends ConsumerWidget {
             ? const Color(0xFFD97706)
             : const Color(0xFF059669));
 
-    final visibleAbsentDates = item.absentDateKeys.take(6).toList(growable: false);
-    final hiddenAbsentCount = item.absentDateKeys.length - visibleAbsentDates.length;
+    final subtitle = showBranchName
+        ? '#${item.employee.cardNo} • ${item.department.name} • ${item.branch.name}'
+        : '#${item.employee.cardNo} • ${item.department.name}';
+
+    final visibleAbsentDates =
+        item.absentDateKeys.take(4).map(_shortDayMonth).toList(growable: false);
+    final hiddenAbsentCount =
+        item.absentDateKeys.length - visibleAbsentDates.length;
+
+    final extraParts = <String>[
+      if (item.onLeaveDays > 0) 'İzin: ${item.onLeaveDays}g',
+      if (item.sickReportDays > 0) 'Rapor: ${item.sickReportDays}g',
+      if (item.missingCheckOutDays > 0)
+        'Eksik çıkış: ${item.missingCheckOutDays}g',
+    ];
 
     return Material(
       color: pal.card,
@@ -841,7 +959,7 @@ class _PeriodSummaryCard extends ConsumerWidget {
           initialTabIndex: 0,
         ),
         child: Container(
-          padding: const EdgeInsets.all(13),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: pal.border),
@@ -849,14 +967,15 @@ class _PeriodSummaryCard extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Satır 1: Avatar + İsim/Bölüm + Sade Devam Oranı
               Row(
                 children: [
                   EmployeeProfileAvatar(
                     employee: item.employee,
-                    size: 40,
-                    borderColor: rateColor.withValues(alpha: 0.45),
+                    size: 38,
+                    borderColor: rateColor.withValues(alpha: 0.40),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,9 +990,9 @@ class _PeriodSummaryCard extends ConsumerWidget {
                             color: pal.textPrimary,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 1),
                         Text(
-                          '#${item.employee.cardNo} • ${item.department.name} • ${item.branch.name}',
+                          subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -891,115 +1010,104 @@ class _PeriodSummaryCard extends ConsumerWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: rateColor.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(6),
+                      color: rateColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '%$ratePercent Devam',
+                      '%$ratePercent',
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.w800,
                         color: rateColor,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: pal.textMuted,
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  _MetricBadge(
-                    label: 'Devam: ${item.presentDays}g',
-                    color: const Color(0xFF059669),
-                  ),
-                  _MetricBadge(
-                    label: 'Devamsız: ${item.absentDays}g',
-                    color: item.absentDays > 0
-                        ? const Color(0xFFDC2626)
-                        : pal.textSecondary,
-                  ),
-                  _MetricBadge(
-                    label: item.lateDays > 0
-                        ? 'Geç: ${item.lateDays}g (+${item.totalLateMinutes} dk)'
-                        : 'Geç: 0',
-                    color: item.lateDays > 0
-                        ? const Color(0xFFD97706)
-                        : pal.textSecondary,
-                  ),
-                  if (item.onLeaveDays > 0)
-                    _MetricBadge(
-                      label: 'İzin: ${item.onLeaveDays}g',
-                      color: const Color(0xFF0284C7),
-                    ),
-                  if (item.sickReportDays > 0)
-                    _MetricBadge(
-                      label: 'Rapor: ${item.sickReportDays}g',
-                      color: const Color(0xFF7C3AED),
-                    ),
-                  if (item.missingCheckOutDays > 0)
-                    _MetricBadge(
-                      label: 'Eksik Çıkış: ${item.missingCheckOutDays}g',
-                      color: const Color(0xFFEA580C),
-                    ),
-                  _MetricBadge(
-                    label: 'Net: $workedHours sa',
-                    color: const Color(0xFF0F766E),
-                  ),
-                ],
-              ),
-              if (visibleAbsentDates.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+              // Satır 2: Sade 4 Sütunlu Metrik Çubuğu
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: pal.subtle,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Row(
                   children: [
-                    const Text(
-                      'Devamsız Günler:',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFDC2626),
+                    Expanded(
+                      child: _CardMetricColumn(
+                        label: 'Devam',
+                        value: '${item.presentDays}g',
+                        valueColor: item.presentDays > 0
+                            ? const Color(0xFF059669)
+                            : pal.textMuted,
                       ),
                     ),
-                    for (final dateKey in visibleAbsentDates)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFDC2626).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: const Color(0xFFDC2626)
-                                .withValues(alpha: 0.35),
-                          ),
-                        ),
-                        child: Text(
-                          PdksDashboardNotifier.formatDisplayDate(
-                            dateKey,
-                            includeTodayBadge: false,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFDC2626),
-                          ),
-                        ),
+                    Expanded(
+                      child: _CardMetricColumn(
+                        label: 'Devamsız',
+                        value: '${item.absentDays}g',
+                        valueColor: item.absentDays > 0
+                            ? const Color(0xFFDC2626)
+                            : pal.textMuted,
                       ),
-                    if (hiddenAbsentCount > 0)
-                      Text(
-                        '+$hiddenAbsentCount gün',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFDC2626),
-                        ),
+                    ),
+                    Expanded(
+                      child: _CardMetricColumn(
+                        label: 'Geç',
+                        value: item.lateDays > 0
+                            ? '${item.lateDays}g (${item.totalLateMinutes}d)'
+                            : '—',
+                        valueColor: item.lateDays > 0
+                            ? const Color(0xFFD97706)
+                            : pal.textMuted,
                       ),
+                    ),
+                    Expanded(
+                      child: _CardMetricColumn(
+                        label: 'Net Süre',
+                        value: '$workedHours sa',
+                        valueColor: pal.textPrimary,
+                      ),
+                    ),
                   ],
+                ),
+              ),
+              // Satır 3: Yalnızca istisna varsa tek sakin metin satırı
+              if (visibleAbsentDates.isNotEmpty) ...[
+                const SizedBox(height: 7),
+                Text(
+                  'Devamsız günler: ${visibleAbsentDates.join(', ')}'
+                  '${hiddenAbsentCount > 0 ? ' (+$hiddenAbsentCount)' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+              ],
+              if (extraParts.isNotEmpty) ...[
+                SizedBox(height: visibleAbsentDates.isNotEmpty ? 3 : 7),
+                Text(
+                  extraParts.join(' • '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: pal.textSecondary,
+                  ),
                 ),
               ],
             ],
@@ -1010,28 +1118,46 @@ class _PeriodSummaryCard extends ConsumerWidget {
   }
 }
 
-class _MetricBadge extends StatelessWidget {
+class _CardMetricColumn extends StatelessWidget {
   final String label;
-  final Color color;
+  final String value;
+  final Color valueColor;
 
-  const _MetricBadge({required this.label, required this.color});
+  const _CardMetricColumn({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.11),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
+    final pal = HasibuPalette.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            color: pal.textMuted,
+          ),
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            color: valueColor,
+          ),
+        ),
+      ],
     );
   }
 }

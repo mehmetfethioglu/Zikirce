@@ -1,0 +1,1 @@
+personel,puantaj,izin,rapor,qr,gps,terminal,mesai,devam,takip,bulut,yedek,portal,dosya,kart

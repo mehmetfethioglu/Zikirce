@@ -22,6 +22,7 @@ class _FakeGoogleAuthAdapter implements GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) async {
     return const BrowserGoogleSignInResult(
       success: false,
@@ -636,9 +637,15 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Login ekranından Şube Sorumlusu ile giriş yap
-        await tester.tap(find.byKey(const ValueKey('login_user_chip_devteysti_mgr')));
-        await tester.pumpAndSettle();
+        // Login ekranından Şube Sorumlusu ile giriş yap (kayıtlı kullanıcı chip'leri gizli olmalı)
+        expect(
+          find.byKey(const ValueKey('login_user_chip_devteysti_mgr')),
+          findsNothing,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('login_username_field')),
+          'devteysti_mgr',
+        );
         await tester.enterText(
           find.byKey(const ValueKey('login_password_field')),
           'Dev#2026',
@@ -740,8 +747,14 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const ValueKey('login_user_chip_empty_mgr')));
-        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('login_user_chip_empty_mgr')),
+          findsNothing,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('login_username_field')),
+          'empty_mgr',
+        );
         await tester.enterText(
           find.byKey(const ValueKey('login_password_field')),
           'Empty#999',
@@ -954,8 +967,14 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(const ValueKey('login_user_chip_bolge_mgr')));
-        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('login_user_chip_bolge_mgr')),
+          findsNothing,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('login_username_field')),
+          'bolge_mgr',
+        );
         await tester.enterText(
           find.byKey(const ValueKey('login_password_field')),
           'Multi#2026',

@@ -1,5 +1,5 @@
-What's new in v1.0.13:
-• Multi-Branch Scoping: Assign multiple authorized branches per user with strict isolation from Merkez and unauthorized branches
-• Authorized Branch Switcher across reports, CSV exports, employee portal, and QR/GPS views
-• Persistent Google Cloud Session & Multi-User Sign-In
-• Zero-step Google account cloud encryption, short passphrase sync & overwrite guard
+What's new in v1.0.14:
+• Unified Auto Sign-In: Automatically detects admin, branch supervisor, and employee accounts with first-setup password shield.
+• Password Recovery: Reset forgotten passwords via 6-digit one-time verification code sent through company Gmail.
+• Streamlined Leave & Absence Reports: Searchable employee directory picker, branch filters, and quick-day shortcuts.
+• Digital Dossier Panel: Mandatory document checklist, status filters, and closed-testing polish.

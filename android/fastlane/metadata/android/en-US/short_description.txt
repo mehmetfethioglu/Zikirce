@@ -1,0 +1,1 @@
+Multi-branch attendance (PDKS), QR/GPS check-in, shifts, leave & encrypted HR.

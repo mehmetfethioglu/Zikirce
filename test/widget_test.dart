@@ -21,6 +21,31 @@ import 'package:hasibu/router.dart';
 import 'package:hasibu/screens/mobil_arayuz_iyilestirme_screen.dart';
 
 
+Future<void> _completeInitialAdminLogin(WidgetTester tester) async {
+  await tester.tap(
+    find.byKey(const ValueKey('login_fill_initial_admin_button')),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('login_submit_button')));
+  await tester.pumpAndSettle();
+  expect(
+    find.byKey(const ValueKey('force_admin_password_dialog')),
+    findsOneWidget,
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('force_admin_new_password_field')),
+    'Admin#2026',
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('force_admin_confirm_password_field')),
+    'Admin#2026',
+  );
+  await tester.tap(
+    find.byKey(const ValueKey('force_admin_password_submit_button')),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('Tenfei D35 ZKTeco TCP 4370 Protocol Tests', () {
     test('encodeZkTime and decodeZkTime round-trip accurately', () {
@@ -472,19 +497,23 @@ void main() {
 
     // 1. Uygulama doğrudan açılmaz, Oturum Açma (Login Gate) ekranı ve Şirket Logosu gelir
     expect(find.byKey(const ValueKey('login_submit_button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('login_hasibu_brand')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('login_company_logo_badge')),
       findsOneWidget,
     );
     expect(
-      find.byKey(const ValueKey('login_company_logo_button')),
+      find.byKey(const ValueKey('login_cloud_session_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('login_first_setup_info_card')),
       findsOneWidget,
     );
     expect(find.text('Tüm Şubeler & Merkez'), findsNothing);
 
-    // 2. Yönetici olarak oturum aç (varsayılan admin / 123 dolu gelir)
-    await tester.tap(find.byKey(const ValueKey('login_submit_button')));
-    await tester.pumpAndSettle();
+    // 2. İlk kurulum yönetici bilgileriyle giriş yapıp zorunlu parola güncellemesini tamamla
+    await _completeInitialAdminLogin(tester);
 
     // 3. Uygulama içerisinde üst barda Şirket Logosu, Kişisel Tema ve Ayarlar butonu görünür; mobil geçici buton kaldırılmıştır
     expect(
@@ -677,8 +706,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'Login screen overflow');
 
-    await tester.tap(find.byKey(const ValueKey('login_submit_button')));
-    await tester.pumpAndSettle();
+    await _completeInitialAdminLogin(tester);
     expect(tester.takeException(), isNull, reason: 'Live PDKS screen overflow');
 
     // Alt navigasyon çubuğunda 4 sade hedef görünür
@@ -1823,8 +1851,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Yönetici oturumu aç
-      await tester.tap(find.byKey(const ValueKey('login_submit_button')));
-      await tester.pumpAndSettle();
+      await _completeInitialAdminLogin(tester);
 
       // 1. Personel & Bölüm ekranında kartlarda İşe Giriş tarihi ve Çıkış tarihi düzenlemesi
       await tester.tap(find.byKey(const ValueKey('nav_employees_mgmt')));

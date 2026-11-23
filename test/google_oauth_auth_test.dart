@@ -60,6 +60,7 @@ class _FakeGoogleAuthAdapter implements GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) async {
     signInCallCount++;
     return nextResult;

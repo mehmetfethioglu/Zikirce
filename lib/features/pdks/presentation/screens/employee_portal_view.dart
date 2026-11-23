@@ -745,6 +745,12 @@ class _PortalWorkspaceContent extends ConsumerWidget {
           completedMandatoryDocs: completedMandatory,
           totalMandatoryDocs: mandatoryCategories.length,
           totalDocs: empDocs.length,
+          onOpenDossier: () => showEmployeeHistoryAndDossierDialog(
+            context,
+            ref,
+            emp,
+            initialTabIndex: 1,
+          ),
         ),
         const SizedBox(height: 14),
         _PortalQuickActionHub(
@@ -1262,12 +1268,14 @@ class _PortalKpiGrid extends StatelessWidget {
   final int completedMandatoryDocs;
   final int totalMandatoryDocs;
   final int totalDocs;
+  final VoidCallback? onOpenDossier;
 
   const _PortalKpiGrid({
     required this.current,
     required this.completedMandatoryDocs,
     required this.totalMandatoryDocs,
     required this.totalDocs,
+    this.onOpenDossier,
   });
 
   @override
@@ -1333,6 +1341,7 @@ class _PortalKpiGrid extends StatelessWidget {
         subValue: hireSub,
       ),
       _PortalKpiCard(
+        key: const ValueKey('portal_dossier_kpi_card'),
         icon: Icons.folder_shared_rounded,
         accent: completedMandatoryDocs >= totalMandatoryDocs
             ? const Color(0xFF059669)
@@ -1341,6 +1350,7 @@ class _PortalKpiGrid extends StatelessWidget {
         value: '$completedMandatoryDocs / $totalMandatoryDocs Zorunlu',
         subValue: 'Toplam $totalDocs dijital evrak kayıtlı',
         progress: docsProgress,
+        onTap: onOpenDossier,
       ),
     ];
 
@@ -1369,85 +1379,103 @@ class _PortalKpiCard extends StatelessWidget {
   final String value;
   final String subValue;
   final double? progress;
+  final VoidCallback? onTap;
 
   const _PortalKpiCard({
+    super.key,
     required this.icon,
     required this.accent,
     required this.label,
     required this.value,
     required this.subValue,
     this.progress,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final pal = HasibuPalette.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: pal.card,
+    return Material(
+      color: pal.card,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: pal.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: pal.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 16, color: accent),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.13),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, size: 16, color: accent),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: pal.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
+                      color: pal.textMuted,
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: pal.textSecondary,
+              const SizedBox(height: 10),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: pal.textPrimary,
+                ),
+              ),
+              if (progress != null) ...[
+                const SizedBox(height: 7),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 5,
+                    backgroundColor: pal.chip,
+                    color: accent,
                   ),
                 ),
+              ],
+              const SizedBox(height: 6),
+              Text(
+                subValue,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: pal.textMuted),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: pal.textPrimary,
-            ),
-          ),
-          if (progress != null) ...[
-            const SizedBox(height: 7),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 5,
-                backgroundColor: pal.chip,
-                color: accent,
-              ),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Text(
-            subValue,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11, color: pal.textMuted),
-          ),
-        ],
+        ),
       ),
     );
   }

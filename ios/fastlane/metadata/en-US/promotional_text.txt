@@ -1,0 +1,1 @@
+Unified auto sign-in, Gmail code password recovery, multi-branch QR/GPS check-in, face terminal sync, and AES-256-GCM encrypted cloud backup.

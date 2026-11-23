@@ -1,0 +1,32 @@
+Hasibu is an offline-first enterprise time and attendance (PDKS), shift scheduling, leave tracking, and encrypted personnel dossier platform built for multi-branch companies, factories, and retail teams.
+
+Unlike cloud-locked HR platforms, Hasibu keeps your employee and attendance records locally encrypted with SQLCipher AES-256 on your iPhone or iPad and lets you synchronize client-side AES-256-GCM encrypted backups directly to your own Google Drive account.
+
+KEY CAPABILITIES
+
+• Live Attendance Dashboard & Multi-Branch Isolation
+Monitor real-time clock-ins, late arrivals, early departures, and absences across every branch from one unified cockpit. Multi-branch scoping and strict supervisor isolation ensure each manager only accesses authorized branches.
+
+• Biometric Face Terminal Sync & Branch Bridge
+Pull attendance logs over TCP/IP from Tenfei D35 and ZKTeco-compatible terminals. Connect branch bridge agents for conflict-free per-branch encrypted inbox synchronization.
+
+• Dynamic QR / GPS Branch Check-In
+Verify on-site check-ins for field and store staff using 30-second rotating TOTP (HMAC-SHA1) QR codes combined with GPS branch coordinate validation.
+
+• Multi-Day Attendance Reports & CSV Export
+Filter attendance, lateness, overtime, and absence summaries by date range, branch, and employment status, then export clean CSV reports in one tap.
+
+• Leave Management, Corrections & Employee Self-Service
+Record annual leave, sick reports, and excused absences using a searchable employee directory and quick-day shortcuts. Staff can submit HR requests and view shift schedules through the Employee Portal.
+
+• Encrypted Digital Personnel Dossier
+Track mandatory and optional onboarding documents with missing/uploaded filters and store files in an AES-256-GCM encrypted local vault.
+
+• Unified Auto Sign-In & Password Recovery
+Automatically detects admin, branch supervisor, and employee accounts without switching tabs, enforces a first-setup admin password shield, and supports 6-digit one-time verification code recovery via your company Gmail.
+
+PRIVACY & ZERO-TRACKING ARCHITECTURE
+Hasibu contains no ads, runs zero third-party analytics trackers, and uses the restricted Google Drive drive.file scope solely for encrypted backups created by Hasibu.
+
+Privacy Policy: https://mehmetfethioglu.github.io/hasibu-privacy/privacy.html
+Support: https://mehmetfethioglu.github.io/hasibu-privacy/support.html

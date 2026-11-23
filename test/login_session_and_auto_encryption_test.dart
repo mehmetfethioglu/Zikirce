@@ -59,6 +59,7 @@ class _FakeGoogleAuthAdapter implements GoogleAuthAdapter {
     String? customClientId,
     String? customClientSecret,
     Duration timeout = const Duration(seconds: 120),
+    List<String> extraScopes = const <String>[],
   }) async {
     return nextResult;
   }
@@ -702,19 +703,50 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
 
+      expect(find.byKey(const ValueKey('login_hasibu_brand')), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('login_google_connected_banner')),
+        find.byKey(const ValueKey('login_company_logo_badge')),
         findsOneWidget,
       );
-      expect(find.byKey(const ValueKey('login_user_chip_ik_ayse')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('login_cloud_session_button')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('login_forgot_password_button')),
+        findsOneWidget,
+      );
+      // Kayıtlı kullanıcı listesi ve büyük bulut banner'ı ana ekranda gizli olmalı
+      expect(find.byKey(const ValueKey('login_user_chip_ik_ayse')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('login_google_connected_banner')),
+        findsNothing,
+      );
       expect(
         find.byKey(const ValueKey('login_remember_username_checkbox')),
         findsOneWidget,
       );
 
-      // Chip seçimi + giriş -> kullanıcı adı SharedPreferences'a kaydedilmeli
-      await tester.tap(find.byKey(const ValueKey('login_user_chip_ik_ayse')));
+      // Üst minimalist bulut ikonuna tıklanınca bulut oturumu diyaloğu açılmalı
+      await tester.tap(find.byKey(const ValueKey('login_cloud_session_button')));
       await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byKey(const ValueKey('login_google_connected_banner')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('login_btn_pull_cloud_users')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Kapat'));
+      await tester.pumpAndSettle();
+
+      // Kullanıcı adı elle girilip oturum açılınca SharedPreferences'a kaydedilmeli
+      await tester.enterText(
+        find.byKey(const ValueKey('login_username_field')),
+        'ik_ayse',
+      );
       await tester.enterText(
         find.byKey(const ValueKey('login_password_field')),
         'Ayse#2026',

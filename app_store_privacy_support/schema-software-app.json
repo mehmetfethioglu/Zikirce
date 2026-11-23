@@ -1,0 +1,49 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Hasibu",
+      "alternateName": "Hasibu PDKS",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Android, iOS, Windows",
+      "softwareVersion": "1.0.14",
+      "description": "Offline-first enterprise attendance (PDKS), multi-branch biometric terminal sync, QR/GPS check-in, shift scheduling, leave management, and AES-256-GCM encrypted personnel dossier platform.",
+      "url": "https://mehmetfethioglu.github.io/hasibu-privacy/",
+      "downloadUrl": "https://mehmetfethioglu.github.io/hasibu-privacy/indir.html",
+      "inLanguage": ["tr-TR", "en-US"],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks (Akar Bilişim Teknolojileri)",
+        "email": "akarbilisimteknolojileri@gmail.com",
+        "url": "https://mehmetfethioglu.github.io/hasibu-privacy/"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Hasibu nedir ve ne işe yarar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hasibu; fabrikalar ve çok şubeli işletmeler için geliştirilmiş çevrimdışı öncelikli PDKS, yüz okutma terminali senkronizasyonu, QR/GPS yoklama, vardiya, izin ve SQLCipher/AES-256-GCM şifreli dijital özlük platformudur."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Hasibu and how does it protect privacy?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Hasibu is an offline-first enterprise attendance (PDKS) and HR platform that stores records locally in SQLCipher AES-256 and encrypts optional Google Drive backups client-side with AES-256-GCM under the restricted drive.file scope."
+          }
+        }
+      ]
+    }
+  ]
+}

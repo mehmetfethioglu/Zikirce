@@ -84,3 +84,114 @@ jobs:
           name: hasibu-ios-signed-ipa
           path: build/ios/ipa/Hasibu.ipa
           retention-days: 14
+
+      - name: 7. Sync iOS ASO Metadata to App Store Connect (TestFlight)
+        if: ${{ env.APP_STORE_KEY_ID != '' && env.APP_STORE_ISSUER_ID != '' && env.APP_STORE_PRIVATE_KEY != '' }}
+        continue-on-error: true
+        run: |
+          python3 -m pip install --user --quiet pyjwt cryptography requests || pip3 install --break-system-packages --quiet pyjwt cryptography requests
+          python3 - << 'EOF'
+          import os, re, time, jwt, requests
+          from pathlib import Path
+
+          key_id = os.environ["APP_STORE_KEY_ID"].strip()
+          issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
+          private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+
+          def make_headers():
+              now = int(time.time())
+              payload = {"iss": issuer_id, "iat": now - 30, "exp": now + 1100, "aud": "appstoreconnect-v1"}
+              token = jwt.encode(payload, private_key, algorithm="ES256", headers={"kid": key_id, "typ": "JWT"})
+              return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+          repo_root = Path(".")
+          pubspec_txt = (repo_root / "pubspec.yaml").read_text(encoding="utf-8")
+          m_ver = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)", pubspec_txt, re.MULTILINE)
+          version_name = m_ver.group(1) if m_ver else "1.0.14"
+          build_number = m_ver.group(2) if m_ver else "15"
+
+          tr_wn = (repo_root / "docs" / "play_store_whats_new" / "whatsnew-tr-TR")
+          en_wn = (repo_root / "docs" / "play_store_whats_new" / "whatsnew-en-US")
+          whats_new_tr = tr_wn.read_text(encoding="utf-8").strip() if tr_wn.exists() else f"Hasibu v{version_name} ({build_number})"
+          whats_new_en = en_wn.read_text(encoding="utf-8").strip() if en_wn.exists() else f"Hasibu v{version_name} ({build_number})"
+
+          meta_root = repo_root / "ios" / "fastlane" / "metadata"
+          ios_meta = {}
+          for folder in ("tr", "en-US"):
+              fdir = meta_root / folder
+              if not fdir.is_dir():
+                  continue
+              data = {}
+              for fname in ("name.txt", "subtitle.txt", "keywords.txt", "promotional_text.txt", "description.txt", "privacy_url.txt", "support_url.txt", "marketing_url.txt"):
+                  fpath = fdir / fname
+                  if fpath.exists():
+                      data[fname.replace(".txt", "")] = fpath.read_text(encoding="utf-8").strip()
+              ios_meta[folder] = data
+
+          BASE = "https://api.appstoreconnect.apple.com/v1"
+          r = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.hasibu", headers=make_headers(), timeout=30)
+          r.raise_for_status()
+          apps = r.json().get("data", [])
+          if not apps:
+              print("WARN: App com.akarworks.hasibu not found in App Store Connect.")
+              raise SystemExit(0)
+          app_id = apps[0]["id"]
+          print(f"Found App Store Connect App ID: {app_id}")
+
+          editable_states = {"PREPARE_FOR_SUBMISSION", "WAITING_FOR_REVIEW", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
+          ai_res = requests.get(f"{BASE}/apps/{app_id}/appInfos", headers=make_headers(), timeout=30)
+          if ai_res.status_code == 200 and ios_meta:
+              app_infos = ai_res.json().get("data", [])
+              chosen_info = next((a for a in app_infos if a.get("attributes", {}).get("appStoreState") in editable_states), app_infos[0] if app_infos else None)
+              if chosen_info:
+                  ail_res = requests.get(f"{BASE}/appInfos/{chosen_info['id']}/appInfoLocalizations", headers=make_headers(), timeout=30)
+                  if ail_res.status_code == 200:
+                      for loc in ail_res.json().get("data", []):
+                          locale = loc["attributes"]["locale"]
+                          folder = "tr" if locale.startswith("tr") else ("en-US" if locale.startswith("en") else None)
+                          if not folder or folder not in ios_meta:
+                              continue
+                          mf = ios_meta[folder]
+                          attrs = {}
+                          if mf.get("name"):
+                              attrs["name"] = mf["name"]
+                          if mf.get("subtitle"):
+                              attrs["subtitle"] = mf["subtitle"]
+                          if mf.get("privacy_url"):
+                              attrs["privacyPolicyUrl"] = mf["privacy_url"]
+                          if attrs:
+                              pr = requests.patch(
+                                  f"{BASE}/appInfoLocalizations/{loc['id']}",
+                                  headers=make_headers(),
+                                  json={"data": {"type": "appInfoLocalizations", "id": loc["id"], "attributes": attrs}},
+                                  timeout=30,
+                              )
+                              print(f"appInfoLocalizations[{locale}] -> {pr.status_code}")
+
+          v_res = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers(), timeout=30)
+          if v_res.status_code == 200:
+              versions = v_res.json().get("data", [])
+              editable_v = next((v for v in versions if v["attributes"]["appStoreState"] in editable_states), None)
+              if editable_v:
+                  vid = editable_v["id"]
+                  locs_res = requests.get(f"{BASE}/appStoreVersions/{vid}/appStoreVersionLocalizations", headers=make_headers(), timeout=30)
+                  if locs_res.status_code == 200:
+                      for loc in locs_res.json().get("data", []):
+                          locale = loc["attributes"]["locale"]
+                          folder = "tr" if locale.startswith("tr") else ("en-US" if locale.startswith("en") else None)
+                          attrs = {"whatsNew": whats_new_tr if locale.startswith("tr") else whats_new_en}
+                          if folder and folder in ios_meta:
+                              mf = ios_meta[folder]
+                              for src_k, dst_k in (("keywords", "keywords"), ("promotional_text", "promotionalText"), ("description", "description"), ("support_url", "supportUrl"), ("marketing_url", "marketingUrl")):
+                                  if mf.get(src_k):
+                                      attrs[dst_k] = mf[src_k]
+                          pr = requests.patch(
+                              f"{BASE}/appStoreVersionLocalizations/{loc['id']}",
+                              headers=make_headers(),
+                              json={"data": {"type": "appStoreVersionLocalizations", "id": loc["id"], "attributes": attrs}},
+                              timeout=30,
+                          )
+                          print(f"appStoreVersionLocalizations[{locale}] -> {pr.status_code}")
+              else:
+                  print("No editable App Store version found; TestFlight changelog already uploaded via Fastlane.")
+          EOF

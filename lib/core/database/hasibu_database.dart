@@ -77,10 +77,12 @@ class HasibuDatabase {
         auto_poll_minutes INTEGER NOT NULL DEFAULT 5,
         admin_username TEXT NOT NULL DEFAULT 'admin',
         admin_password TEXT NOT NULL DEFAULT '123',
+        admin_password_updated INTEGER NOT NULL DEFAULT 0,
         default_employee_pin TEXT NOT NULL DEFAULT '1234',
         sync_gmail_account TEXT NOT NULL DEFAULT '',
         sync_folder_path TEXT NOT NULL DEFAULT '',
         logo_path TEXT,
+        logo_data_base64 TEXT,
         admin_theme_mode TEXT NOT NULL DEFAULT 'light',
         license_token TEXT NOT NULL DEFAULT '',
         last_verified_timestamp INTEGER NOT NULL DEFAULT 0,
@@ -257,10 +259,12 @@ class HasibuDatabase {
     for (final colSql in <String>[
       "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'",
       "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'",
+      "ALTER TABLE company_settings ADD COLUMN admin_password_updated INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
       "ALTER TABLE company_settings ADD COLUMN sync_gmail_account TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE company_settings ADD COLUMN sync_folder_path TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE company_settings ADD COLUMN logo_path TEXT",
+      "ALTER TABLE company_settings ADD COLUMN logo_data_base64 TEXT",
       "ALTER TABLE company_settings ADD COLUMN admin_theme_mode TEXT NOT NULL DEFAULT 'light'",
       "ALTER TABLE company_settings ADD COLUMN license_token TEXT NOT NULL DEFAULT ''",
       "ALTER TABLE company_settings ADD COLUMN last_verified_timestamp INTEGER NOT NULL DEFAULT 0",
@@ -460,16 +464,27 @@ class HasibuDatabase {
     final rawProfileId = (r['cloud_profile_id'] as String? ?? 'default').trim();
     final rawProfileLabel =
         (r['cloud_profile_label'] as String? ?? 'Ana İşletme Kasası').trim();
+    final adminPass =
+        r['admin_password'] as String? ?? CompanySettings.defaultAdminPassword;
+    final rawUpdated = ((r['admin_password_updated'] as int?) ?? 0) == 1;
+    final rawLogoBase64 = (r['logo_data_base64'] as String?)?.trim();
     return CompanySettings(
       companyName: r['company_name'] as String,
       autoPollEnabled: (r['auto_poll_enabled'] as int) == 1,
       autoPollMinutes: r['auto_poll_minutes'] as int,
       adminUsername: r['admin_username'] as String? ?? 'admin',
-      adminPassword: r['admin_password'] as String? ?? '123',
+      adminPassword: adminPass,
+      adminPasswordUpdated: rawUpdated ||
+          !HasibuSecurityService.verifyPassword(
+            CompanySettings.defaultAdminPassword,
+            adminPass,
+          ),
       defaultEmployeePin: r['default_employee_pin'] as String? ?? '1234',
       syncGmailAccount: r['sync_gmail_account'] as String? ?? '',
       syncFolderPath: r['sync_folder_path'] as String? ?? '',
       logoPath: r['logo_path'] as String?,
+      logoDataBase64:
+          (rawLogoBase64 == null || rawLogoBase64.isEmpty) ? null : rawLogoBase64,
       adminThemeMode:
           HasibuThemeMode.fromName(r['admin_theme_mode'] as String?),
       licenseToken: r['license_token'] as String? ?? '',
@@ -511,24 +526,32 @@ class HasibuDatabase {
     final cleanProfileLabel = settings.cloudProfileLabel.trim().isEmpty
         ? 'Ana İşletme Kasası'
         : settings.cloudProfileLabel.trim();
+    final effectiveAdminPass = settings.adminPassword.trim().isEmpty
+        ? CompanySettings.defaultAdminPassword
+        : settings.adminPassword.trim();
+    final effectiveAdminPasswordUpdated = settings.adminPasswordUpdated ||
+        !HasibuSecurityService.verifyPassword(
+          CompanySettings.defaultAdminPassword,
+          effectiveAdminPass,
+        );
+    final cleanLogoBase64 = settings.logoDataBase64?.trim();
 
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO company_settings
-      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, admin_theme_mode, license_token, last_verified_timestamp, hardware_fingerprint, auto_cloud_backup_enabled, auto_cloud_backup_minutes, auto_cloud_backup_on_change, cloud_profile_id, cloud_profile_label)
-      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, company_name, auto_poll_enabled, auto_poll_minutes, admin_username, admin_password, admin_password_updated, default_employee_pin, sync_gmail_account, sync_folder_path, logo_path, logo_data_base64, admin_theme_mode, license_token, last_verified_timestamp, hardware_fingerprint, auto_cloud_backup_enabled, auto_cloud_backup_minutes, auto_cloud_backup_on_change, cloud_profile_id, cloud_profile_label)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       settings.companyName.trim().isEmpty
-          ? 'HASİBU İŞLETME YÖNETİMİ'
+          ? CompanySettings.defaultCompanyName
           : settings.companyName.trim(),
       settings.autoPollEnabled ? 1 : 0,
       settings.autoPollMinutes.clamp(1, 1440),
       settings.adminUsername.trim().isEmpty
           ? 'admin'
           : settings.adminUsername.trim(),
-      settings.adminPassword.trim().isEmpty
-          ? '123'
-          : settings.adminPassword.trim(),
+      effectiveAdminPass,
+      effectiveAdminPasswordUpdated ? 1 : 0,
       settings.defaultEmployeePin.trim().isEmpty
           ? '1234'
           : settings.defaultEmployeePin.trim(),
@@ -537,6 +560,9 @@ class HasibuDatabase {
       settings.logoPath?.trim().isEmpty == true
           ? null
           : settings.logoPath?.trim(),
+      (cleanLogoBase64 == null || cleanLogoBase64.isEmpty)
+          ? null
+          : cleanLogoBase64,
       settings.adminThemeMode.name,
       effectiveToken,
       effectiveVerifiedTs,
@@ -2028,6 +2054,12 @@ class HasibuDatabase {
           resolvedProfileId = effectiveProfileId;
         }
         final mergedSettings = incoming.copyWith(
+          adminPasswordUpdated: incoming.adminPasswordUpdated ||
+              !incoming.isUsingDefaultAdminPassword,
+          logoDataBase64: () =>
+              (incoming.logoDataBase64?.trim().isNotEmpty == true)
+                  ? incoming.logoDataBase64
+                  : existing.logoDataBase64,
           hardwareFingerprint: existing.hardwareFingerprint.trim().isNotEmpty
               ? existing.hardwareFingerprint.trim()
               : incoming.hardwareFingerprint,

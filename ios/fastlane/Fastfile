@@ -125,12 +125,17 @@ platform :ios do
       raise ex
     end
 
-    changelog_text = <<~CHANGELOG
-      Hasibu v1.0.13 (Build 14) TestFlight Surumu:
-      - Coklu sube kapsami secimi ve kati sube sorumlusu izolasyonu.
-      - Kalici Google bulut oturumu, coklu kullanici girisi ve sifir-adimli sifreleme.
-      - iOS 27 SDK / Xcode 27 uyumlu derleme (ITMS-90725).
-    CHANGELOG
+    whatsnew_file = File.expand_path("../../docs/play_store_whats_new/whatsnew-tr-TR", __dir__)
+    if File.exist?(whatsnew_file)
+      changelog_text = File.read(whatsnew_file, encoding: "UTF-8").strip
+    else
+      changelog_text = <<~CHANGELOG
+        Hasibu v1.0.14 (Build 15) TestFlight Surumu:
+        - Tekil otomatik giris, ilk kurulum sifre kalkani ve Gmail dogrulama kodlu sifre kurtarma.
+        - Sadelestirilmis izin ve devamsizlik raporlari, aramali ortak personel rehberi.
+        - Dijital ozluk dosyasi kontrol paneli ve kapali test iyilestirmeleri.
+      CHANGELOG
+    end
 
     upload_to_testflight(
       api_key: api_key,
