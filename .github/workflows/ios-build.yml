@@ -2,6 +2,11 @@ name: Kilerce iOS Build & TestFlight
 
 on:
   workflow_dispatch:
+    inputs:
+      upload_only_run_id:
+        description: "Optional Run ID containing kilerce-ios-signed-ipa to upload straight to TestFlight"
+        required: false
+        default: ""
   push:
     branches: [ kilerce-ios ]
     paths-ignore:
@@ -12,6 +17,7 @@ on:
 jobs:
   register-bundle-id:
     name: Register Bundle ID & Check App Store Connect App
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.upload_only_run_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -86,6 +92,7 @@ jobs:
   build-ios:
     name: Build iOS (macOS Apple Silicon) & Upload TestFlight
     needs: register-bundle-id
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.upload_only_run_id == '' }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -146,3 +153,48 @@ jobs:
           name: kilerce-ios-signed-ipa
           path: build/ios/ipa/Kilerce.ipa
           retention-days: 14
+
+  upload-existing-ipa:
+    name: Upload Existing Signed IPA to TestFlight
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.upload_only_run_id != '' }}
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
+      APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
+      APP_STORE_PRIVATE_KEY: ${{ secrets.APP_STORE_PRIVATE_KEY }}
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Download Signed IPA Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kilerce-ios-signed-ipa
+          run-id: ${{ github.event.inputs.upload_only_run_id }}
+          github-token: ${{ github.token }}
+          path: build/ios/ipa
+
+      - name: 3. Upload Signed IPA to TestFlight
+        run: |
+          ls -lh build/ios/ipa/
+          cd ios
+          bundle install
+          python3 - << 'PY'
+          import json, os
+          key = {
+              "key_id": os.environ["APP_STORE_KEY_ID"].strip(),
+              "issuer_id": os.environ["APP_STORE_ISSUER_ID"].strip(),
+              "key": os.environ["APP_STORE_PRIVATE_KEY"].strip(),
+              "in_house": False,
+          }
+          with open("asc_api_key.json", "w", encoding="utf-8") as f:
+              json.dump(key, f)
+          PY
+          trap 'rm -f asc_api_key.json' EXIT
+          bundle exec fastlane pilot upload \
+            --api_key_path asc_api_key.json \
+            --ipa ../build/ios/ipa/Kilerce.ipa \
+            --app_identifier com.akarworks.kilerce \
+            --skip_waiting_for_build_processing true
