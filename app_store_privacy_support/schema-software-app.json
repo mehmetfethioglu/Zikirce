@@ -6,8 +6,8 @@
       "name": "Zamera",
       "operatingSystem": "Android, iOS",
       "applicationCategory": "PhotographyApplication",
-      "softwareVersion": "0.1.5",
-      "description": "Zamera is a professional on-device true-color artwork photography and cinema camera application developed by Akarworks for iOS and Android with CIEDE2000 calibration, 14-bit Bayer RAW / ProRAW capture, transparent AI sticker cutout, Pro Media Studio, and zero telemetry.",
+      "softwareVersion": "0.1.6",
+      "description": "Zamera is a professional on-device true-color artwork photography and unified cinema camera application developed by Akarworks for iOS and Android with CIEDE2000 calibration, 14-bit Bayer RAW / ProRAW capture, transparent AI sticker cutout, 10-bit Pro Video, Pro Media Studio, and zero telemetry.",
       "url": "https://mehmetfethioglu.github.io/zamera-privacy/",
       "inLanguage": [
         "tr-TR",
@@ -19,11 +19,34 @@
         "email": "theakar@windowslive.com",
         "url": "https://mehmetfethioglu.github.io/zamera-privacy/"
       },
-      "offers": {
-        "@type": "Offer",
-        "price": "0.00",
-        "priceCurrency": "TRY"
-      }
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Zamera Free (Probe, Standard Pro Photo, Portrait, Rec.709 Video & Daily Quotas)",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        },
+        {
+          "@type": "Offer",
+          "name": "Zamera Pro Annual (1-Month / 30-Day Free Trial)",
+          "price": "19.99",
+          "priceCurrency": "USD",
+          "description": "30-day (1-month) free trial included, then billed annually via StoreKit 2 or Google Play Billing."
+        },
+        {
+          "@type": "Offer",
+          "name": "Zamera Pro Lifetime (Launch Offer)",
+          "price": "34.99",
+          "priceCurrency": "USD",
+          "description": "One-time lifetime unlock (regularly 49.99 USD) with zero recurring fees."
+        },
+        {
+          "@type": "Offer",
+          "name": "Zamera Pro Monthly",
+          "price": "3.99",
+          "priceCurrency": "USD"
+        }
+      ]
     },
     {
       "@type": "FAQPage",
@@ -33,7 +56,7 @@
           "name": "Does Zamera collect or upload photos, videos, or personal data?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Zamera v0.1.5 processes 100% of photos, videos, color calibration matrices, and transparent sticker cutouts locally on the user's device without cloud uploads, analytics trackers, or advertising SDKs."
+            "text": "No. Zamera v0.1.6 processes 100% of photos, videos, color calibration matrices, and transparent sticker cutouts locally on the user's device without cloud uploads, analytics trackers, or advertising SDKs."
           }
         },
         {
@@ -42,6 +65,14 @@
           "acceptedAnswer": {
             "@type": "Answer",
             "text": "On-device ML Kit Subject Segmentation and U2-Net on Android as well as Apple Vision foreground masking on iOS run offline on device hardware, and extracted PNG stickers stay exclusively in your local sandbox until you choose to copy or share them."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does Zamera Pro billing preserve zero-telemetry privacy?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Zamera Pro offers a 1-month (30-day) free trial on the annual plan, a monthly option, and a one-time Lifetime buyout strictly through native Apple StoreKit 2 and Google Play Billing without any third-party monetization or analytics SDKs."
           }
         }
       ]

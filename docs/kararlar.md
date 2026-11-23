@@ -20,7 +20,17 @@
   - iOS minimum sürüm: **iOS 17.0** (Apple Log, ProRAW ve fiziksel lens API'leri)
   - Android minimum sürüm: **minSdk 29 (Android 10)**, **compileSdk / targetSdk 36** ve **16 KB page-size** native hizalama uyumu.
 
-## ADR-5: İki Platformda Çift Mod (Sanat Modu + Pro Mod) ve Pro Video İzolasyonu
-- **Durum:** Onaylandı (06.11.2026)
-- **Karar:** Hem Android (Xiaomi 17 Pro Max vb.) hem iOS (iPhone 17 Pro Max vb.) üzerinde **Sanat Modu (Gerçek Renk)** ve **Pro Fotoğraf Modu** tam özellikli çalışır.
-- **Pro Video İzolasyonu:** Pro Video özelliği sistemden çıkarılmaz; `packages/zamera_video` altında **ayrı bir paket ve ayrı bir kamera oturumu** olarak izole edilir. `--dart-define=ZAMERA_VIDEO=false` derleme bayrağıyla Faz 3'e kadar devre dışı tutulabilir ve gerekirse 1–2 hafta içinde **"Zamera Cine"** adlı kardeş uygulamaya ayrılabilir.
+## ADR-5: Birleşik Dört Mod (Sanat + Pro Foto + Portre + Pro Video) ve Zamera Cine Ayrıştırmasının İptali
+- **Durum:** Revize Edildi (16.11.2026 — Zamera Cine yan uygulama fikri iptal edildi)
+- **Karar:** Hem Android hem iOS üzerinde **Sanat Modu (Gerçek Renk)**, **Pro Fotoğraf Modu**, **Stüdyo Portre Modu** ve **Pro Sinema Video Modu** tek `com.akarworks.zamera` uygulaması içinde çalışır.
+- **Oturum İzolasyonu:** `packages/zamera_video` ayrı bir *Zamera Cine* yan uygulamasına bölünmeyecektir; ancak `CameraOwnershipCoordinator` ile fotoğraf/video kamera oturumu ayrımı korunur ve Pro Sinema (10-bit HLG10 / Apple Log / ProRes 422 HQ / özel `.cube` LUT) doğrudan **Zamera Pro** abonelik değerinin ana parçasıdır.
+
+## ADR-6: Aha-Öncelikli Hibrit Freemium Gelir Modeli (1 Ay Ücretsiz Deneme) ve Sıfır-Telemetri Tahsilat
+- **Durum:** Onaylandı (16.11.2026)
+- **Karar:**
+  - **Sıfır Üçüncü Parti Gelir/Analitik SDK'sı:** Gizlilik taahhüdünü (`privacy.html` & `PrivacyInfo.xcprivacy` *"Data Not Collected"*) korumak için RevenueCat/Adapty vb. dış sunucuya veri gönderen SDK'lar kullanılmaz. Tahsilat yalnızca resmi `in_app_purchase` (`StoreKit 2` + `Google Play Billing`) üzerinden cihaz içi yürütülür.
+  - **Planlar:**
+    - `com.akarworks.zamera.pro.monthly`: **\$3.99 / ay** (TR: **₺99,99 / ay**), denemesiz giriş ve fiyat çıpası.
+    - `com.akarworks.zamera.pro.annual`: **\$19.99 / yıl** (TR: **₺449,99 / yıl**) — **Varsayılan önerilen plan, 30 gün (1 Ay) ücretsiz deneme**.
+    - `com.akarworks.zamera.pro.lifetime`: Lansman **\$34.99** / Normal **\$49.99** (TR: Lansman **₺799,99** / Normal **₺1.199,99**), tek seferlik ömür boyu satın alma.
+  - **Aha-Öncelikli Kota Politikası:** Donanım Probe, standart JPEG/HEIF Pro Foto, Portre, Rec.709 Video, canlı Sanat A/B perde karşılaştırması ve Sticker önizlemesi ücretsizdir. Günde **1 TrueColor RAW çekimi**, **1 RAW DNG çekim/paylaşımı** ve **3 şeffaf/konturlu PNG Sticker dışa aktarımı** ücretsiz kanca olarak sunulur; kota sonrasında ve doğrudan 24-Yama ColorChecker Kalibrasyonu, Kayıpsız PNG Arşivi, 10-bit Log/ProRes profilleri ile özel `.cube` LUT yüklemede **Zamera Pro** paywall açılır.

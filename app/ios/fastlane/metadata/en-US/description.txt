@@ -1,0 +1,24 @@
+Zamera is a 100% on-device professional camera, true-color calibration studio, and cinema video app built for artists, photographers, and mobile filmmakers.
+
+FOUR STUDIO MODES IN ONE UNIFIED APP:
+
+1. ART MODE — TRUE COLOR (ΔE₀₀ ≤ 1.0)
+• 24-Patch ColorChecker Calibration: Solves persistent per-lens 3x3 CCM matrices and 8x6 flat-field corrections directly from a 14-bit RAW frame of an X-Rite / Calibrite ColorChecker Classic target.
+• Scientific CIEDE2000 Engine: Embedded Rust core (zamera_core) executes Sharma 2005 CIEDE2000 math, Bradford D50→D65 adaptation, and constant-hue gamut compression without vendor tone-curve distortion.
+• Live Colorimeter & A/B Split Curtain: Inspect real-time CIE L*a*b* (D50), #HEX, and ΔE₀₀ readings, or compare TrueColor 1:1 against stock OEM rendering side-by-side.
+
+2. PRO PHOTO & MANUAL DSLR (PASM)
+• 14-Bit Bayer RAW & Apple ProRAW (.DNG): Discrete physical lens lock (13mm ultrawide, 24mm main, 100mm telephoto), 1/3-EV stops for ISO, shutter speed, Kelvin/Tint white balance, AEL/AFL lock, and ±2 EV 3-frame AE bracketing.
+• Live Light Meter & 64-Bin RGB Histogram: Monitor highlights, shadows, and channel balance in real time and after capture.
+
+3. STUDIO PORTRAIT & 100% TRANSPARENT PNG STICKERS
+• Virtual Aperture & Studio Lighting: Re-adjust f/1.4–f/16 computational bokeh and studio light intensity post-capture.
+• Apple Vision Sticker Studio: Cut tapped subjects into tight-cropped, edge-decontaminated 100% transparent or white-outlined PNG stickers and copy directly to the clipboard with full UTType.png alpha.
+
+4. PRO CINEMA VIDEO & MEDIA STUDIO
+• 180° Shutter Lock, Apple Log & ProRes 422 HQ: Capture 4K/1080p 24/25/30/60p with custom .cube 3D LUT preview, Rack Focus (A·B·A↔B), False Color IRE, and 48kHz stereo dBFS audio meters.
+• Pro Media Studio: Review clips in an SMPTE timecode cinema player, extract still frames, cut stickers from frames, filter across 6 archive categories, and share JPEG or DNG RAW files separately.
+
+ZERO-TELEMETRY PRIVACY & ZAMERA PRO (STOREKIT 2)
+• Zero Cloud Uploads & Zero Ads: No photos, videos, or stickers ever leave your device; zero third-party analytics SDKs.
+• Daily Free Allowances + Zamera Pro: Hardware Probe, standard Pro Photo/Portrait, Rec.709 Video, and daily free quotas (1 TrueColor capture, 1 RAW DNG, 3 Transparent Stickers) are free. Optional Zamera Pro (Annual with 1-month / 30-day free trial, Monthly, or Lifetime) runs natively on-device via StoreKit 2.

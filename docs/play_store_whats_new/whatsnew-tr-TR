@@ -1,3 +1,4 @@
-Zamera v0.1.5:
-• Şeffaf Sticker Kesimi: Siyah arka plan hatası ve ön kamera dokunuş sapması giderildi; ML Kit & U²-Net hibrit motoruyla seçilen nesne %100 şeffaf veya beyaz konturlu PNG olarak kesilir.
-• Pro Media & Sticker Stüdyosu: Tam ekran galeri, film şeridi, 6 filtreli arşiv, Sticker Rafı, TrueColor/Portre A/B perde karşılaştırması, 64-bin RGB histogram, RAW paylaşımı ve SMPTE video oynatıcı eklendi.
+Zamera v0.1.6:
+• Zamera Pro (1 Ay Ücretsiz Deneme): Yıllık Pro'da 30 gün ücretsiz deneme, Lansman Ömür Boyu ve Aylık planlar eklendi; tahsilat sıfır izleyiciyle yalnızca Google Play Billing üzerinden cihaz içi çalışır.
+• Birleşik 4 Mod: Sanat (ΔE00), Pro DSLR, Portre ve 10-bit Pro Sinema Video tek uygulamada birleştirildi.
+• Günlük Ücretsiz Kotalar & Kararlılık: Günlük ücretsiz TrueColor/RAW/Sticker kotaları, Ayarlar Pro kartı ve hızlı çekim arşiv kimlik düzeltmesi.

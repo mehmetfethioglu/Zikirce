@@ -7,10 +7,10 @@ on:
         description: "Google Play Track (alpha, internal, beta, production)"
         required: false
         default: "alpha"
-      enable_video_module:
-        description: "Enable Pro Video module (ZAMERA_VIDEO)"
+      status:
+        description: "Google Play Release Status (completed, draft)"
         required: false
-        default: "true"
+        default: "completed"
 
 jobs:
   build-and-publish-android:
@@ -22,7 +22,7 @@ jobs:
       ANDROID_KEY_PROPERTIES: ${{ secrets.ZAMERA_KEY_PROPERTIES || secrets.ANDROID_KEY_PROPERTIES }}
       PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
       PLAY_TRACK: ${{ github.event.inputs.track || 'alpha' }}
-      ZAMERA_VIDEO: ${{ github.event.inputs.enable_video_module || 'true' }}
+      PLAY_STATUS: ${{ github.event.inputs.status || 'completed' }}
 
     steps:
       - name: 1. Checkout repository
@@ -72,8 +72,8 @@ jobs:
           export GRADLE_OPTS="-Dorg.gradle.internal.http.socketTimeout=180000 -Dorg.gradle.internal.http.connectionTimeout=180000"
           for attempt in 1 2 3; do
             echo "📦 Attempt $attempt: Building AAB & APK..."
-            if flutter build appbundle --release --android-skip-build-dependency-validation --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }} && \
-               flutter build apk --release --android-skip-build-dependency-validation --dart-define=ZAMERA_VIDEO=${{ env.ZAMERA_VIDEO }}; then
+            if flutter build appbundle --release --android-skip-build-dependency-validation && \
+               flutter build apk --release --android-skip-build-dependency-validation; then
               echo "✅ Android build succeeded on attempt $attempt"
               break
             fi
@@ -102,5 +102,5 @@ jobs:
           packageName: com.akarworks.zamera
           releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
           track: ${{ env.PLAY_TRACK }}
-          status: draft
+          status: ${{ env.PLAY_STATUS }}
           whatsNewDirectory: docs/play_store_whats_new

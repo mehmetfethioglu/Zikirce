@@ -5,9 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:zamera_capture/zamera_capture.dart';
 
 import '../../constants/camera_colors.dart';
+import '../../dialogs/zamera_paywall_sheet.dart';
 import '../../models/media_archive_item.dart';
+import '../../models/zamera_monetization_models.dart';
 import '../../painters/checkerboard_and_lift_painter.dart';
 import '../../services/zamera_media_archive_store.dart';
+import '../../services/zamera_monetization_service.dart';
 
 /// Modal studio sheet for inspecting, restyling (pure transparent vs white contour),
 /// copying, sharing, and archiving extracted transparent PNG stickers.
@@ -19,6 +22,7 @@ class StickerStudioSheet extends StatefulWidget {
   final String? sourceMediaId;
   final MediaArchiveRepository? archiveRepository;
   final ValueChanged<ZameraMediaItem>? onStickerArchived;
+  final MonetizationService? monetization;
 
   const StickerStudioSheet({
     super.key,
@@ -29,6 +33,7 @@ class StickerStudioSheet extends StatefulWidget {
     this.sourceMediaId,
     this.archiveRepository,
     this.onStickerArchived,
+    this.monetization,
   });
 
   static Future<void> show(
@@ -40,6 +45,7 @@ class StickerStudioSheet extends StatefulWidget {
     String? sourceMediaId,
     MediaArchiveRepository? archiveRepository,
     ValueChanged<ZameraMediaItem>? onStickerArchived,
+    MonetizationService? monetization,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -56,6 +62,7 @@ class StickerStudioSheet extends StatefulWidget {
         sourceMediaId: sourceMediaId,
         archiveRepository: archiveRepository,
         onStickerArchived: onStickerArchived,
+        monetization: monetization,
       ),
     );
   }
@@ -68,6 +75,7 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
   bool _whiteOutline = false;
   bool _isExtracting = true;
   bool _isSaving = false;
+  bool _sessionExportAuthorized = false;
   String? _errorMessage;
   String? _transparentPngPath;
   String? _outlinedPngPath;
@@ -81,7 +89,41 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
   @override
   void initState() {
     super.initState();
+    widget.monetization?.addListener(_onMonetizationChanged);
     _extractCutout(addWhiteOutline: _whiteOutline);
+  }
+
+  @override
+  void dispose() {
+    widget.monetization?.removeListener(_onMonetizationChanged);
+    super.dispose();
+  }
+
+  void _onMonetizationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _consumeStickerExportIfNeeded() async {
+    final service = widget.monetization;
+    if (service == null || _sessionExportAuthorized) return true;
+    final allowed = await service.consumeFeatureOrCheckPro(
+      ZameraProFeature.stickerCutoutExport,
+    );
+    if (allowed) {
+      _sessionExportAuthorized = true;
+      return true;
+    }
+    if (!mounted) return false;
+    await ZameraPaywallSheet.show(
+      context,
+      monetization: service,
+      triggeredFeature: ZameraProFeature.stickerCutoutExport,
+    );
+    if (service.hasProAccess) {
+      _sessionExportAuthorized = true;
+      return true;
+    }
+    return false;
   }
 
   Future<void> _extractCutout({required bool addWhiteOutline}) async {
@@ -169,6 +211,7 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
   Future<void> _copyToClipboard() async {
     final path = _activePngPath;
     if (path == null || path.isEmpty) return;
+    if (!await _consumeStickerExportIfNeeded() || !mounted) return;
     try {
       HapticFeedback.selectionClick();
       final ok = await ZameraCapture.copyPngToClipboard(pngPath: path);
@@ -189,6 +232,7 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
   Future<void> _shareSticker() async {
     final path = _activePngPath;
     if (path == null || path.isEmpty) return;
+    if (!await _consumeStickerExportIfNeeded() || !mounted) return;
     try {
       HapticFeedback.lightImpact();
       await ZameraCapture.shareMediaFiles(
@@ -210,6 +254,7 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
 
   Future<void> _saveToShelfAndGallery() async {
     if (_isExtracting || _isSaving) return;
+    if (!await _consumeStickerExportIfNeeded() || !mounted) return;
     setState(() {
       _isSaving = true;
       _statusMessage = 'Sticker rafına ve galeriye kaydediliyor...';
@@ -540,6 +585,22 @@ class _StickerStudioSheetState extends State<StickerStudioSheet> {
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
               ),
             ),
+            if (widget.monetization != null &&
+                !widget.monetization!.hasProAccess) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                _sessionExportAuthorized
+                    ? 'Bu kesim için dışa aktarım hakkı doğrulandı · Günlük kalan: ${widget.monetization!.remainingFreeToday(ZameraProFeature.stickerCutoutExport)}/3'
+                    : 'Günlük kalan ücretsiz sticker dışa aktarımı: ${widget.monetization!.remainingFreeToday(ZameraProFeature.stickerCutoutExport)}/3',
+                key: const ValueKey<String>('sticker_quota_hint'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: Colors.white54,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ],
         ),
       ),

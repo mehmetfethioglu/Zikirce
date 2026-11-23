@@ -38,8 +38,8 @@ class ReleaseNote {
 
 /// Central repository of Zamera features and version release history.
 class AppVersionInfo {
-  static const String currentVersion = '0.1.5';
-  static const int currentBuildNumber = 6;
+  static const String currentVersion = '0.1.6';
+  static const int currentBuildNumber = 7;
   static const String appName = 'Zamera';
   static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/zamera-privacy/';
   static const String supportEmail = 'theakar@windowslive.com';
@@ -85,6 +85,25 @@ class AppVersionInfo {
 
   /// Changelog history of all releases.
   static const List<ReleaseNote> releaseHistory = [
+    ReleaseNote(
+      version: '0.1.6',
+      buildNumber: 7,
+      releaseDate: '23 Kasım 2026',
+      titleTr: 'Zamera Pro (1 Ay Ücretsiz Deneme) & Birleşik 4 Mod Mimarisi',
+      titleEn: 'Zamera Pro (1-Month Free Trial) & Unified 4-Mode Studio',
+      bulletPointsTr: [
+        'Zamera Pro & Sıfır-Telemetri Tahsilat: Yıllık Plan (1 Ay / 30 Gün Ücretsiz Deneme), Lansman Ömür Boyu Pro ve Aylık Pro planları eklendi; satın alımlar 3. parti izleyici olmadan yalnızca cihaz içi StoreKit 2 ve Google Play Billing üzerinden işlenir.',
+        'Birleşik 4 Mod Mimarisi: Sanat Modu (ΔE00 ≤ 1.0), Pro DSLR (PASM), Stüdyo Portre ve 10-bit Pro Sinema Video tek com.akarworks.zamera uygulamasında kalıcı olarak birleştirildi (Zamera Cine ayrımı kaldırıldı).',
+        'Aha-Öncelikli Günlük Ücretsiz Kotalar & Ayarlar: Günde 1 TrueColor çekimi, 1 RAW DNG çekim/paylaşımı ve 3 şeffaf PNG Sticker dışa aktarımı ücretsiz kanca olarak açıldı; Ayarlar ekranına Zamera Pro yönetim kartı eklendi.',
+        'Medya Arşivi Kararlılığı & ASO/GEO Güncellemesi: Hızlı/seri çekimlerde arşiv kimlik çakışması giderildi; Türkçe ve İngilizce mağaza vitrini ile gizlilik/destek portalları güncellendi.',
+      ],
+      bulletPointsEn: [
+        'Zamera Pro & Zero-Telemetry Billing: Added Annual Pro (1-Month / 30-Day Free Trial), Launch Lifetime Pro, and Monthly Pro plans processed strictly on-device via StoreKit 2 and Google Play Billing with zero third-party tracking SDKs.',
+        'Unified 4-Mode Architecture: Permanently unified Art Mode (ΔE00 ≤ 1.0), Pro DSLR (PASM), Portrait Studio, and 10-bit Pro Cinema Video inside com.akarworks.zamera (retiring the separate Zamera Cine split).',
+        'Aha-First Daily Free Allowances & Settings: Added daily free allowances (1 TrueColor shot, 1 RAW DNG capture/share, and 3 transparent PNG sticker exports) alongside a dedicated Zamera Pro management card in Settings.',
+        'Media Archive Stability & ASO/GEO Refresh: Resolved rapid-capture archive ID collisions and updated bilingual TR/EN store metadata and privacy/support portals.',
+      ],
+    ),
     ReleaseNote(
       version: '0.1.5',
       buildNumber: 6,

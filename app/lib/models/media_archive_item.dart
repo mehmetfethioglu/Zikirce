@@ -50,6 +50,8 @@ enum ZameraArchiveFilter {
 
 /// Immutable record representing any Zamera captured photo, video, extracted frame, or sticker.
 class ZameraMediaItem {
+  static int _idSequence = 0;
+
   final String id;
   final ZameraMediaKind kind;
   final DateTime createdAt;
@@ -252,7 +254,7 @@ class ZameraMediaItem {
     final now = createdAt ?? DateTime.now();
     final path = res.jpegPath ?? res.oemJpegPath ?? res.dngPath ?? '';
     return ZameraMediaItem(
-      id: id ?? 'pho_${now.microsecondsSinceEpoch}',
+      id: id ?? 'pho_${now.microsecondsSinceEpoch}_${++_idSequence}',
       kind: ZameraMediaKind.photo,
       createdAt: now,
       primaryPath: path,
@@ -288,7 +290,7 @@ class ZameraMediaItem {
   }) {
     final now = createdAt ?? DateTime.now();
     return ZameraMediaItem(
-      id: id ?? 'vid_${now.microsecondsSinceEpoch}',
+      id: id ?? 'vid_${now.microsecondsSinceEpoch}_${++_idSequence}',
       kind: ZameraMediaKind.video,
       createdAt: now,
       primaryPath: res.videoPath,
@@ -320,7 +322,7 @@ class ZameraMediaItem {
   }) {
     final now = createdAt ?? DateTime.now();
     return ZameraMediaItem(
-      id: id ?? 'stk_${now.microsecondsSinceEpoch}',
+      id: id ?? 'stk_${now.microsecondsSinceEpoch}_${++_idSequence}',
       kind: ZameraMediaKind.sticker,
       createdAt: now,
       primaryPath: pngPath,

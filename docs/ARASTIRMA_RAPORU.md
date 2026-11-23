@@ -1,191 +1,126 @@
-# Zamera — Rapor v2: Denetim, Düzeltmeler ve Revize Mimari
+# Zamera — Rapor v3: Kapsamlı Kod Tabanı Denetimi, Gerçekleşen Mimari ve Gelir Modeli
 
-> Kapsam: v1 raporunun ([zamera_arastirma_ve_mimari_raporu.md](file:///C:/Users/theak/.gemini/antigravity/brain/9d7b95f2-176e-444e-81e6-0a0e4a4da58e/zamera_arastirma_ve_mimari_raporu.md)) talepleri karşılayıp karşılamadığını denetler. Yeni gereksinim de rapora işlendi: **Sanat Modu ve Pro Mod iki platformda da** çalışacak.
-> Repo varlığı ve lisansları GitHub API'den **6 Kasım 2026** tarihinde canlı olarak doğrulandı.
-
----
-
-## 0. Sonuç: v1 Talepleri Karşılıyor mu?
-
-**Kısmen.** Yön (native kamera + ortak çekirdek + Flutter UI) doğruydu. Ancak raporda **asıl problemi ("gerçek renk") çözmeyen bir renk yöntemi**, **lisans açısından kullanılamayacak kütüphane önerileri**, **teknik olarak çalışmayacak bir önizleme tasarımı** ve **projeyi durdurabilecek riskler (Windows'ta iOS derlenemez, Xiaomi API kısıtları)** vardı. Ayrıca v1, platformları birbirine bağlıyordu (Sanat Modu = Android, Pro Mod = iOS). Yeni gereksinim bunun tersini, yani iki platformda da iki modun olmasını istiyor.
-
-| # | v1'deki iddia / eksik | Önem | Düzeltme |
-|---|---|---|---|
-| 1 | Kağıt beyazına dokunup beyaz dengesi almak "gerçek renk" verir | 🔴 Kritik | Yanlış. Çizim kağıdı nötr değildir (krem tonlu veya optik beyazlatıcılı/mavimsi olabilir). Kağıdı nötrlemek, eserin rengini **bozar**. Doğru yol: **gri kart / ColorChecker** ile beyaz dengesi ve **renk profili kalibrasyonu**, ardından ΔE2000 ölçümü (§2). |
-| 2 | ColorChecker "opsiyonel" diye geçiyor | 🔴 Kritik | Gerçek renk için **zorunlu çekirdek** bu. Telefonun DNG içine yazdığı `ColorMatrix`/`ForwardMatrix` genel amaçlıdır. Sensör ile pigment arasındaki metamerizm sadece ölçüme dayalı profille küçültülebilir. |
-| 3 | Ekran (display) ve renk yönetimi hiç konuşulmamış | 🔴 Kritik | Xiaomi ekranı varsayılan olarak "Canlı/Vivid" modda doymuş gösterir. ICC etiketi olmayan P3 dosya sRGB sanılır. Sorunun bir kısmı **çekimde değil, gösterimde** olabilir (§1). |
-| 4 | Pipeline'da ton eğrisi hiç yok ("S-curve yok") | 🟠 Yüksek | Doğrusal veri, OETF (sRGB transfer fonksiyonu) uygulanmadan koyu görünür. Lens gölgelenmesi (vinyet) düzeltmesi ve kanal bazlı siyah seviyesi de eksikti. Doğru sıra §2.3'te. |
-| 5 | Android'de `NOISE_REDUCTION_OFF`/`EDGE_OFF` ile "sıfır ISP" | 🟡 Orta | Bu bayraklar RAW'u değil, sadece işlenmiş YUV/JPEG'i etkiler. `RAW_SENSOR` zaten işlenmemiş gelir. |
-| 6 | Zebra, peaking ve histogram Flutter `FragmentProgram` ile, `Texture` üzerinde yapılır | 🔴 Kritik | **Çalışmaz.** Flutter shader'ı `Texture` widget'ındaki kamera karesini örnekleyemez. Bu araçlar **native GPU'da** (Metal / OpenGL ES-Vulkan) çizilip Flutter'a hazır texture olarak verilmeli. |
-| 7 | Piksel verisi Dart üzerinden Rust'a gidiyor (diyagram belirsiz) | 🟠 Yüksek | 50–100 MB'lık RAW kareler **asla Dart'a girmemeli**. Akış: Kotlin → JNI → Rust, Swift → C ABI → Rust. Dart ↔ Rust (`flutter_rust_bridge`) sadece komut ve sonuç taşır. |
-| 8 | "120 FPS vizör", "milisaniyede 50MP işleme", "~800 satır native", "3 haftalık plan" | 🟠 Yüksek | Gerçekçi değil. Kamera önizlemesi sensör hızındadır (30/60 fps). 50MP demosaic CPU'da yüzlerce ms ile saniyeler arası sürer. Native katman binlerce satır olur. Gerçekçi süre 4–6 ay (§6). |
-| 9 | iPhone'da "48 MP Pure Bayer RAW 12/14-bit" | 🔴 Kritik | Yanlış. AVFoundation tek karelik **Bayer RAW'ı 12 MP** verir (quad-Bayer). 48 MP sadece **ProRAW** ile alınır, o da çok kareli Apple işlemesinden geçer (Halide Process Zero da bu yüzden 12 MP). |
-| 10 | "Lenslere müdahale": diyafram yok, ND yok | 🟠 Yüksek | iPhone lenslerinde **diyafram sabittir**. Gündüz 180° shutter kullanmak **fiziksel ND filtre** gerektirir. Müdahale edilebilenler: fiziksel lens seçimi, manuel odak (`lensPosition`), ISO/shutter, WB, stabilizasyon modu, format. |
-| 11 | Xiaomi'de fiziksel lens ve RAW erişimi garanti gibi sunulmuş | 🔴 Kritik | HyperOS, tele/ultra geniş lensleri ve bunların RAW akışını 3. parti uygulamalardan **sıklıkla gizler**. 50MP tam çözünürlük RAW, `ULTRA_HIGH_RESOLUTION_SENSOR` yeteneğine bağlıdır. **Faz 0'da cihaz üzerinde ölçülmeli.** |
-| 12 | Lisanslar hiç incelenmemiş | 🔴 Kritik | `dng-rs` **lisanssız** (kullanılamaz). `zenraw` AGPL-3.0. `motioncam`, `PhotonCamera`, Open Camera GPL'dir (kod kopyalanırsa uygulamanın tamamı GPL olur ve App Store ile çatışır). Tablo §5'te. |
-| 13 | `f0enix/motioncam` "en güçlü referans" | 🟡 Orta | Repo **2021'den beri güncellenmiyor** (85★, GPL-3.0). `OpenMotionFX/OpenCamera` 3★, olgun değil. |
-| 14 | Kullanıcı Windows'ta, iOS derleme yolu yok | 🔴 Kritik | iOS derlemesi için **macOS + Xcode** şart: kendi Mac'iniz veya CI (GitHub Actions macOS / Codemagic). Cihaza kalıcı kurulum için **Apple Developer hesabı (99 \$/yıl)** gerekir. Ücretsiz hesapla imza 7 günde bir yenilenir. |
-| 15 | Android Pro video (Log/10-bit) ve ses hiç yok | 🟠 Yüksek | Android'de standart Log API'si yok. Seçenekler: **HLG10 10-bit HEVC** (`DynamicRangeProfiles`) ve düz ton eğrisi. Düğün için ses seviye göstergesi ve harici mikrofon şart. |
-| 16 | Bugün ücretsiz çözüm listesinde Lightroom yok | 🟡 Orta | **Adobe Lightroom Mobile kamerası** iki platformda da ücretsiz DNG ve Pro mod sunar. Sanat Modu testinde hemen kullanılabilir. |
+> **Tarih:** 16 Kasım 2026 (`v0.1.5+6` sonrası mimari ve ticari güncelleme)
+> **Kapsam:** v1 ([ilk rapor](file:///C:/Users/theak/.gemini/antigravity/brain/9d7b95f2-176e-444e-81e6-0a0e4a4da58e/zamera_arastirma_ve_mimari_raporu.md)) ve v2 (06.11.2026 revize tasarım) aşamalarından sonra repoda fiilen inşa edilen **Flutter + Native (Camera2/AVFoundation) + Rust (`zamera_core`)** kod tabanının kapsamlı teknik denetimi, **Zamera Cine ayrıştırmasının iptali** ve **1 Ay Ücretsiz Denemeli Hibrit Freemium Gelir Modeli** kararlarını içerir.
 
 ---
 
-## 1. Kod Yazmadan Önce: Sorunun Kaynağını Teşhis Et (1 gün, ücretsiz)
+## 1. Gerçekleşen Monorepo Mimarisi ve Kod Envanteri
 
-"Renkler değişiyor" şikâyetinin üç olası kaynağı var. Hangisinin baskın olduğunu bilmeden uygulama yazmak riskli:
+İlk tasarımda öngörülen 4–6 aylık çekirdeğin tamamı `com.akarworks.zamera` altında çalışır duruma getirilmiştir. Kod tabanının doğrulanmış katman envanteri:
 
-1. **Gösterim (Ekran):** Xiaomi'de `Ayarlar → Ekran → Renk şeması`'ndan **Orijinal renk / sRGB** seçin. iPhone'da True Tone ve Night Shift kapalı olsun. Dosya başka bir ekranda farklı mı görünüyor?
-2. **Işık:** Karışık ışık (pencere + sarı ampul) hiçbir kamerada doğru renk vermez. **5000K, CRI ≥ 95** iki lamba, 45° açıyla. Parlak yüzeyler (grafit, marker, yağlı boya) için opsiyonel çapraz polarizasyon.
-3. **Çekim (ISP):** Aynı çizimi aynı ışıkta (a) stok kamera, (b) Xiaomi Pro mod RAW + sabit WB, (c) Lightroom DNG ile çekin. Kadraja bir **gri kart** (≈150–300 TL) koyun.
-
-> [!IMPORTANT]
-> Bu test sorunu büyük ölçüde çözerse, Zamera'nın Sanat Modu'nun asıl değeri **iş akışı otomasyonu** olur: kalibrasyon, perspektif düzeltme, düzgün aydınlatma, doğru etiketli dışa aktarım.
-
----
-
-## 2. Sanat Modu (Gerçek Renk) — Düzeltilmiş Bilimsel Yöntem (iOS + Android)
-
-### 2.1 Hedef ve ölçüt
-- Hedef: Ortalama **ΔE2000 ≤ 2–3** (müze dijitalleştirme kılavuzları FADGI/Metamorfoze ile aynı mantık; telefon için gerçekçi hedef).
-- Uygulama her kalibrasyondan sonra ΔE raporu gösterir. "Gerçek renk" bir iddia olarak değil, **ölçülen bir sayı** olarak sunulur.
-
-### 2.2 Kalibrasyon akışı (bir ışık düzeni için bir kez)
-1. **ColorChecker** (24 yamalı; ucuz klonları ile başlanabilir) aynı ışıkta RAW olarak çekilir.
-2. Uygulama 4 köşe işaretiyle yamaları bulur (ileride otomatik tespit).
-3. Yamaların lineer kamera RGB değerleri ile referans Lab/XYZ değerleri arasında **3×3 matris** en küçük kareler yöntemiyle oturtulur (beyazı koruyan kısıtla). Gerekirse ince ayar için **3D LUT** eklenir.
-4. Sonuç bir **Profil** olarak saklanır (cihaz + lens + ışık düzeni). DNG içine `ColorMatrix`/`ForwardMatrix` olarak da yazılabilir.
-5. **Flat-field:** Boş, düzgün bir kağıt çekilir. Kanal bazında ortalamasına normalize edilerek sadece **uzamsal ışık düzensizliği** düzeltilir (renk dengesini değiştirmez).
-
-### 2.3 Doğru işleme sırası (Rust çekirdek, iki platformda aynı)
-1. Kanal bazlı siyah seviyesi çıkarma ve beyaz seviyeye normalize etme
-2. Lens gölgelenmesi düzeltmesi (Android `LENS_SHADING_MAP`) ve flat-field
-3. Beyaz dengesi: **gri kart / ColorChecker nötr yamalarından** (kağıttan değil)
-4. Demosaic
-5. Kalibre matris ile Kamera RGB → XYZ (D50)
-6. Bradford adaptasyonu ile D50 → D65, ardından lineer sRGB veya Display P3
-7. (Opsiyonel) 3D LUT ince ayarı
-8. **OETF** (sRGB/P3 transfer eğrisi). Yaratıcı kontrast eğrisi yok.
-9. **16-bit TIFF/PNG + gömülü ICC** (arşiv) ve **sRGB JPEG** (paylaşım). Orijinal DNG her zaman saklanır.
-
-$$
-\mathbf{RGB}_{\text{çıkış}} = \text{OETF}\Big(M_{\text{XYZ}\to\text{hedef}} \cdot M_{\text{Bradford}} \cdot M_{\text{kalibre}} \cdot \operatorname{diag}(\mathbf{g}_{\text{WB}}) \cdot \frac{\mathbf{raw} - \mathbf{b}}{w - \mathbf{b}} \Big)
-$$
-
-### 2.4 Platforma göre RAW kaynağı
-| | iPhone 17 Pro Max | Xiaomi 17 Pro Max |
-|---|---|---|
-| Sanat için önerilen | **Bayer RAW, 12 MP, tek kare** (çok kare/AI işleme yok). A4 için ≈ 345 ppi, yeterli. | `RAW_SENSOR`, ana kamera (muhtemelen 12.5 MP binned) |
-| Yüksek çözünürlük | ProRAW 48 MP (Apple işlemeli, yine de lineer DNG) | 50 MP, `SENSOR_PIXEL_MODE_MAXIMUM_RESOLUTION` destekleniyorsa (**Faz 0**) |
-| DNG yazımı | `AVCapturePhoto.fileDataRepresentation()` | `DngCreator` |
-| Ekstra | Perspektif düzeltme (4 köşe), tripod/uzaktan deklanşör, pozlama kilidi (beyaz kağıt ≈ L* 95, patlamasın) | Aynısı |
+| Katman | Konum | Doğrulanmış Kapsam & Sorumluluk |
+| :--- | :--- | :--- |
+| **Rust Renk Çekirdeği** | [`rust/zamera_core/src/lib.rs`](file:///c:/Users/theak/source/repos/zamera/rust/zamera_core/src/lib.rs) (`3.275` satır, `12` birim test) | Sharma 2005 doğrulanmış **CIEDE2000 (`ΔE₀₀`)**, Bradford D50→D65 kromatik adaptasyon, McCamy CCT / DNG mired interpolasyonu, **24-Yama ColorChecker en küçük kareler $3\times 3$ çözücü**, $8\times 6$ Flat-Field kazanç hesabı, sabit tonlu negatif gamut sıkıştırma, 16-bit Bayer demosaic + homografi perspektif düzeltme, `.cube` 3D LUT trilinear örnekleyici (`CubeLut3D`), 180° enstantane/Auto-ISO matematiği ve ses Peak/RMS dBFS + 6-bant IRE False Color. |
+| **Android Native Eklentisi** | [`packages/zamera_capture/android/`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture) | `ZameraCapturePlugin.kt` (`7.122` satır), `PortraitOpticalEngine.kt` (`1.289` satır), `StickerCutoutEngine.kt` (`707` satır), `ZameraMediaFileProvider.kt` (`131` satır). Camera2 donanım/lens probe, 14-bit `RAW_SENSOR` yakalama, TFLite (`depth_anything_v2_small.tflite` ~27.7 MB, `selfie_multiclass_256x256.tflite` ~16.4 MB, `u2netp.tflite` ~4.6 MB) + ML Kit Subject Segmentation hibrit sticker/portre motoru ve 16 KB page-size hizalı JNI `libzamera_core.so`. |
+| **iOS Native Eklentisi** | [`packages/zamera_capture/ios/`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) | `ZameraCapturePlugin.swift` (`3.742` satır) + `PrivacyInfo.xcprivacy`. AVFoundation fiziksel lens ayrımı (13mm/24mm/100mm), 12MP Bayer RAW vs 48MP ProRAW, Apple Log & ProRes 422 HQ kayıt, Apple Vision özne maskeleme + unpremultiplied RGBA/`UTType.png` şeffaf sticker panoya kopyalama. |
+| **Birleşik Pro Video Paketi** | [`packages/zamera_video/lib/zamera_video.dart`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_video/lib/zamera_video.dart) (`912` satır) | `CameraOwnershipCoordinator` ile fotoğraf ve video kamera oturumlarını serileştirir; termal koruma (`ZameraThermalLevel`), 180° shutter kilidi, `.cube` 3D LUT ve platform bazlı profil kayıt tablosu (`Rec.709`, `HLG10`, `Flat SDR`, `Apple Log`, `ProRes 422 HQ`) sunar. **16.11.2026 itibarıyla *Zamera Cine* olarak ayrı uygulamaya bölme fikri kalıcı olarak iptal edilmiştir (ADR-5).** |
+| **Flutter UI & Stüdyo** | [`app/lib/`](file:///c:/Users/theak/source/repos/zamera/app/lib) | 4 birleşik kamera modu (`SANAT`, `PRO`, `PORTRE`, `VİDEO`), 120 FPS eşmerkezli 3-halkalı (`Ring 0/1/2`) radyal kadran, Bumpless PASM (`P/Tv/Sv/M`), 3x AEB, Tam Ekran **Pro Media & Sticker Stüdyosu** ([media_studio_screen.dart](file:///c:/Users/theak/source/repos/zamera/app/lib/screens/media_studio_screen.dart): 6 filtreli arşiv, `TrueColor ↔ OEM` A/B split perde, CIE `L*a*b*`/`ΔE₀₀` büyüteci, 64-bin RGB histogram, SMPTE video oynatıcı) ve sıfır-telemetri **Zamera Pro** katmanı. |
+| **CI/CD & Web/GEO** | [`.github/workflows/`](file:///c:/Users/theak/source/repos/zamera/.github/workflows) & [`docs/`](file:///c:/Users/theak/source/repos/zamera/docs) | GitHub Actions üzerinden Rust `cargo-deny` lisans kapısı + Android AAB/APK (16 KB hizalı) + macOS Xcode/Fastlane TestFlight/App Store Connect otomasyonu ve GitHub Pages gizlilik/destek portalı. |
 
 ---
 
-## 3. Pro Mod — İki Platform için Özellik Matrisi
-
-✅ mümkün · ⚠️ cihaz/API doğrulaması gerekli · ❌ platform izin vermiyor
-
-| Özellik | iPhone 17 Pro Max (AVFoundation) | Xiaomi 17 Pro Max (Camera2) |
-|---|---|---|
-| Manuel ISO / Shutter | ✅ `setExposureModeCustom` | ✅ `MANUAL_SENSOR` (⚠️ yetenek kontrolü) |
-| Manuel WB (Kelvin/Tint) | ✅ `deviceWhiteBalanceGains` | ✅ `COLOR_CORRECTION_GAINS` (⚠️ `MANUAL_POST_PROCESSING`) |
-| Manuel odak / focus pull | ✅ `setFocusModeLocked(lensPosition:)` | ✅ `LENS_FOCUS_DISTANCE` |
-| **Fiziksel lens kilidi** (otomatik geçiş yok) | ✅ 13 / 24 / 100 mm ayrı cihazlar | ⚠️ HyperOS tele/UW'yu gizleyebilir |
-| Diyafram | ❌ Sabit | ⚠️ `LENS_INFO_AVAILABLE_APERTURES` kontrol edilecek |
-| RAW fotoğraf | ✅ Bayer 12 MP / ProRAW 48 MP | ✅ Ana kamera · ⚠️ diğer lensler |
-| Log video | ✅ Apple Log · ⚠️ Apple Log 2 3. parti API'si doğrulanacak | ❌ standart Log yok → **HLG10 10-bit HEVC** + düz eğri |
-| ProRes 422 HQ | ✅ (yüksek fps için harici SSD) | ❌ → yüksek bitrate HEVC 10-bit |
-| RAW video | ⚠️ ProRes RAW (Blackmagic yapabiliyor, API erişimi doğrulanacak) | ⚠️ `RAW_SENSOR` DNG dizisi (MotionCam yöntemi, yüksek bant genişliği) |
-| Open Gate (4:3 tam sensör) | ⚠️ format listesinden doğrulanacak | ⚠️ |
-| 180° shutter kilidi, sabit fps | ✅ | ✅ |
-| Stabilizasyon modu seçimi | ✅ off/standard/cinematic | ✅ `VIDEO_STABILIZATION_MODE` / OIS |
-| Zebra, peaking, false color, histogram, waveform | ✅ Metal shader | ✅ GLES/Vulkan shader |
-| 3D LUT önizleme (Log izleme) | ✅ | ✅ |
-| Ses seviye göstergesi, harici USB-C mikrofon | ✅ | ✅ |
-| Timecode / Genlock | ⚠️ | ❌ |
-| Harici SSD'ye kayıt | ✅ | ⚠️ SAF üzerinden, yavaş olabilir |
-
-> [!WARNING]
-> Pro **video** tarafında Blackmagic Camera (ücretsiz) iPhone'da zaten çok güçlü. Önerim: Zamera'nın iOS Pro Video modu MVP'de **temel düzeyde** kalsın (Log + ProRes + kilitler + zebra/peaking + ses). Asıl yatırım, rakipsiz olan **Sanat Modu + Pro Foto** ve iki platformda **aynı deneyim** olsun.
-
----
-
-## 4. Revize Mimari
-
-**Karar değişmedi, ama sınırlar düzeltildi:** Flutter (UI) + **Native kamera ve GPU motoru** (Kotlin/Swift + shader) + **Rust renk çekirdeği** (sadece gerçek zamanlı olmayan işler).
+## 2. Gerçekleşen Mimari Diyagramı ve Fiziksel Cihaz Doğrulaması
 
 ```mermaid
 flowchart TD
-    UI["Flutter UI: Sanat Modu, Pro Mod, Galeri, Profil Yönetimi"]
-    subgraph AND["Android Native"]
-        A1["Camera2 Kontrolcü (Kotlin)"]
-        A2["Önizleme GPU: GLES/Vulkan Shader - zebra, peaking, LUT"]
-        A3["Kayıt: MediaCodec HEVC 10-bit, DngCreator"]
+    UI["Flutter UI: 4 Birlesik Mod (Sanat, Pro Foto, Portre, Pro Video) + Media Studio"]
+    MON["ZameraMonetizationController: StoreKit 2 / Google Play Billing (0 Dis Sunucu)"]
+    OWN["CameraOwnershipCoordinator: Foto / Video Oturum Kilidi"]
+    subgraph AND["Android Native (Camera2 + TFLite + ML Kit)"]
+        A1["ZameraCapturePlugin.kt + PortraitOpticalEngine + StickerCutoutEngine"]
+        A2["MediaCodec HLG10 / Flat SDR & DngCreator"]
     end
-    subgraph IOS["iOS Native"]
-        I1["AVFoundation Kontrolcü (Swift)"]
-        I2["Önizleme GPU: Metal Shader - zebra, peaking, LUT"]
-        I3["Kayıt: ProRes, Apple Log, ProRAW, Bayer RAW"]
+    subgraph IOS["iOS Native (AVFoundation + Vision + CoreImage)"]
+        I1["ZameraCapturePlugin.swift (13/24/100mm, Bayer RAW / ProRAW)"]
+        I2["Apple Log / ProRes 422 HQ & UTType.png Pano"]
     end
-    CORE["Rust zamera_core: Kalibrasyon, Delta E, RAW to sRGB/P3 pipeline, flat-field, perspektif, LUT/ICC, DNG metadata"]
-    UI -->|"Pigeon: komutlar ve durum"| A1
-    UI -->|"Pigeon: komutlar ve durum"| I1
-    A2 -->|"Texture ID"| UI
-    I2 -->|"Texture ID"| UI
-    A1 -->|"JNI: RAW buffer, sifir kopya"| CORE
-    I1 -->|"C ABI: RAW buffer"| CORE
-    UI -->|"flutter_rust_bridge: is baslat, sonuc al"| CORE
+    CORE["Rust zamera_core (3.275 satir, 0-GPL): CIEDE2000, Bradford, 24-Yama Cozucu, Flat-Field, 3D LUT"]
+
+    UI -->|"MethodChannel"| A1
+    UI -->|"MethodChannel"| I1
+    UI <-->|"Oturum Serilestirme"| OWN
+    UI <-->|"in_app_purchase (JWS / Play Billing)"| MON
+    A1 -->|"Texture ID + Telemetry"| UI
+    I1 -->|"Texture ID + Telemetry"| UI
+    A1 -->|"JNI Zero-Copy RAW"| CORE
+    I1 -->|"C ABI Zero-Copy RAW"| CORE
 ```
 
-### Katman gerekçeleri
-- **Flutter:** Tek UI kodu, iki platformda aynı Sanat ve Pro deneyimi. Kamera karesi Flutter'a yalnızca **native tarafta işlenmiş texture** olarak gelir.
-- **Native:** Donanım API'leri (Camera2, AVFoundation) ve gerçek zamanlı shader'lar zorunlu olarak burada yazılır. Shader mantığı küçüktür, iki dilde (GLSL/Metal) yazmak kabul edilebilir.
-- **Rust:** Renk bilimi iki platformda **birebir aynı sonucu** vermeli. Aynı DNG'den aynı profil ile aynı piksel çıkmalı. Tek kaynak bu tutarlılığı garanti eder ve birim testlerle doğrulanabilir.
-- **Alternatifler:** C++ çekirdek (OpenCV `mcc` ile otomatik ColorChecker tespiti ve LibRaw gibi daha olgun kütüphaneler) geçerli bir alternatif. Kotlin Multiplatform da düşünülebilir, ama UI paylaşımında Flutter daha olgun. Saf Rust UI ve hazır Flutter kamera paketleri (`camera`, `camera_awesome`) v1'deki gerekçelerle **elenmiş durumda**.
+### Doğrulanmış Fiziksel Cihaz Probe Bulguları — Xiaomi 14 (`houji`)
+
+[`xiaomi_14_23127PN0CG.json`](file:///c:/Users/theak/source/repos/zamera/docs/cihaz_yetenekleri/xiaomi_14_23127PN0CG.json) (Xiaomi `23127PN0CG`, Android 16 / SDK 36, `zamera_core 0.3.0`) çıktısı v2'deki kritik Xiaomi risklerini saha verisiyle netleştirmiştir:
+
+| Kamera ID | Rol | Donanım & Yetenekler | Doğrulanmış Probe Bulgusu |
+| :--- | :--- | :--- | :--- |
+| **`0` (Mantıksal Arka)** | Çoklu Kamera | `LEVEL_3`, `LOGICAL_MULTI_CAMERA`, `RAW`, `HLG10` | `RAW_SENSOR 4096×3072`, `6.55mm f/1.6 OIS`, `sensorWhiteLevel: 16383` (14-bit), fiziksel alt ID'ler: `["2", "3"]`. |
+| **`2` (Fiziksel Ana)** | 23mm Ana Lens | `LEVEL_3`, `RAW_SENSOR 4096×3072`, `HLG10` | `cameraIdList` içinde `isDirectlyOpenableInCameraIdList: false` raporlansa da `6.55mm f/1.6`, ISO `50..3188`, `OIS` ve `14-bit` RAW yetenekleri doğrulanmıştır. |
+| **`3` (Fiziksel Ultra Geniş)** | 14mm UW | `LEVEL_3`, `RAW_SENSOR 4080×3072`, `HLG10` | `2.16mm f/2.2`, `10-bit` (`sensorWhiteLevel: 1023`), `supportsOis: false`, ISO `50..3200`. |
+| **`1` (Ön Kamera)** | Selfie | `LEVEL_3`, `RAW_SENSOR 3264×2448`, `HLG10` | `2.83mm f/2.0`, `sensorWhiteLevel: 1023`, ön kamera ayna dokunuş düzeltmesi v0.1.5+6 ile giderildi. |
+| **50MP Tam Çözünürlük** | `ULTRA_HIGH_RES` | `maxResolutionRawSensorSizes: []` | Bu HyperOS derlemesinde 3. parti Camera2 akışına 50MP tam piksel RAW açılmamıştır; 12.6MP `4096×3072` RAW güvenilir standarttır. |
+
+> [!NOTE]
+> iOS tarafı için [`iphone_pro_probe.json`](file:///c:/Users/theak/source/repos/zamera/docs/cihaz_yetenekleri/README.md) saha dökümü henüz fiziksel cihazdan eklenmemiştir; iOS derleme ve TestFlight hattı GitHub Actions `macos-latest` üzerinde aktiftir.
 
 ---
 
-## 5. Açık Kaynak Envanteri — Doğrulanmış Lisanslar (06.11.2026)
+## 3. Kapsamlı Teknik Denetim: Güçlü Yönler ve İyileştirme Alanları
 
-| Repo | Lisans | ★ | Son push | Zamera'da kullanım |
-|---|---|---|---|---|
-| `fzyzcjy/flutter_rust_bridge` | MIT | 5.5k | 2026-11 | ✅ Bağımlılık |
-| `ybouane/flashraw` | Apache-2.0 | 119 | 2026-10 | ✅ RAW/DNG okuma (DNG'yi yeniden işlerken) |
-| `Hexilee/rsraw` (LibRaw) | MIT (+LibRaw LGPL/CDDL) | 21 | 2026-03 | ⚠️ LGPL dinamik linkleme şartı |
-| `pedrocr/rawloader`, `dnglab/dnglab`, `darktable-org/rawspeed` | LGPL-2.1 | 382 / 711 / 462 | güncel | ⚠️ Dinamik linkleme şartı. iOS'ta pratik değil, referans olarak okunmalı |
-| `apertus-open-source-cinema/dng-rs` | **Lisans yok** | 28 | 2026-07 | ❌ Kullanılamaz (v1 önermişti) |
-| `imazen/zenraw` | **AGPL-3.0** | 4 | 2026-11 | ❌ |
-| `eszdman/PhotonCamera` | GPL-3.0 | 1.1k | 2026-10 | 📖 Sadece algoritma referansı, kod kopyalanmaz |
-| `f0enix/motioncam` | GPL-3.0 | 85 | **2021** | 📖 Eski. RAW video yöntemi için referans |
-| `KillerInk/FreeDcam` | GPL-2.0 | 373 | 2026-07 | 📖 Camera2 yetenek keşfi referansı |
-| `danopdev/SimpleRawCamera`, `tribixbite/CustomCamera` | MIT | 19 / 11 | güncel | ✅ Camera2 manuel kontrol örnekleri (küçük projeler) |
-| `k-arindam/SwiftUICamera`, `NextLevel/NextLevel` | MIT | 23 / 2.3k | 2025 / 2026 | ✅ AVFoundation örnekleri |
-| Apple AVCam örnek kodu | Apple Sample Code License | – | – | ✅ iOS iskeleti |
-| `frolovilya/kamepa-app`, `robo-fish/ManualCamera` | **Lisans yok** | 8 / 7 | eski | ❌ Kod kullanılamaz |
-| `OpenMotionFX/OpenCamera` | MIT | 3 | 2026-07 | ⚠️ Olgun değil |
+### Güçlü Yönler (Üretim Hazırlığı)
+1. **Sıfır-GPL ve Sıfır-Telemetri Disiplini:** [`deny.toml`](file:///c:/Users/theak/source/repos/zamera/rust/zamera_core/deny.toml) yalnızca ticari mağaza uyumlu lisanslara (`MIT`, `Apache-2.0`, `BSD`, `ISC`, `Zlib`, `CC0`) izin verir. [`PrivacyInfo.xcprivacy`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_capture/ios/zamera_capture/Sources/zamera_capture/PrivacyInfo.xcprivacy) sıfır veri toplama beyanını korur; tüm renk/AI/sticker motorları cihaz içinde çalışır.
+2. **Bellek & IPC Güvenliği:** `MediaStudioScreen` RGBA decode önbelleğini `_maxDecodedCacheEntries = 4` ile LRU olarak sınırlar; `camera_home_screen.dart` ise 120 FPS radyal kadran hareketlerinin MethodChannel'ı tıkamaması için `_isPushingControls` / `_pendingControlsPush` koales mekanizması kullanır.
+3. **16 KB Page-Size & Donanım Uyumluluğu:** Android NDK Rust derlemesi `-Wl,-z,max-page-size=16384` bayrağıyla Google Play Android 15/16 zorunluluğunu karşılar.
+4. **Sözleşme Testi Kapsamı:** Flutter/Dart katmanında renk bilimi (`Sharma 2005`), PASM pozlama durakları, radial ring geometrisi, Media Studio arşivi, 3D LUT/180° sinema matematiği ve gelir/kota akışları birim ve widget testleriyle kapsanmıştır.
 
-> [!CAUTION]
-> GPL lisanslı bir koddan tek bir dosya bile kopyalamak, Zamera'nın tamamını GPL yapar. Bu durum App Store dağıtım şartlarıyla çatışır. GPL projeler sadece **okunup öğrenilmeli**.
-
-**Hazır ücretsiz uygulamalar (bugün):** iOS: Blackmagic Camera, Final Cut Camera · İki platform: **Lightroom Mobile** (DNG) · Android: Open Camera (GPL, Camera2 RAW).
+### Teknik Borç ve Sonraki Mühendislik Adımları
+1. **Büyük Dosya Bölünmesi (SRP):** [`camera_home_screen.dart`](file:///c:/Users/theak/source/repos/zamera/app/lib/screens/camera_home_screen.dart) (`~5.700` satır), [`ZameraCapturePlugin.kt`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_capture/android/src/main/kotlin/com/akarworks/zamera_capture/ZameraCapturePlugin.kt) (`7.122` satır) ve [`ZameraCapturePlugin.swift`](file:///c:/Users/theak/source/repos/zamera/packages/zamera_capture/ios/Classes/ZameraCapturePlugin.swift) (`3.742` satır) çok büyük hale gelmiştir. Sonraki refactor sprint'inde kamera oturumu, video kayıt, sticker/portre köprüsü ve HUD durumları ayrı denetleyici sınıflara ayrılmalıdır.
+2. **Fiziksel iPhone Saha Doğrulaması:** Bir iPhone Pro cihazından `Zamera Probe` JSON dökümü alınıp `docs/cihaz_yetenekleri/iphone_pro_probe.json` olarak arşivlenmeli; Apple Log ve ProRes 422 HQ harici SSD akışı saha testiyle doğrulanmalıdır.
+3. **Uzun Kayıt & Depolama Koruması:** 4K ProRes 422 HQ ve yüksek bitrate HLG10 çekimlerinde kayıt başlatılmadan önce cihaz boş disk alanı eşiği kontrol edilmelidir.
 
 ---
 
-## 6. Gerçekçi Yol Haritası (1 deneyimli geliştirici)
+## 4. Onaylanan Gelir Modeli ve Fiyatlandırma Stratejisi (ADR-6)
 
-| Faz | Süre | Çıktı | Çıkış kriteri |
-|---|---|---|---|
-| **0 — Altyapı ve Cihaz Keşfi** | 1–2 hafta | macOS/CI hattı, Apple Developer hesabı. Her iki cihazdan **yetenek dökümü**: Camera2 hardware level, RAW, fiziksel ID'ler, max-res RAW, 10-bit profiller; AVFoundation formatları, Log, ProRes RAW | Özellik matrisindeki her ⚠️ ✅ veya ❌ olarak işaretlenmiş olmalı |
-| **1 — Sanat Modu (iki platform)** | 4–6 hafta | RAW yakalama, ColorChecker kalibrasyonu, Rust pipeline, flat-field, perspektif, ICC'li dışa aktarım | Aynı ışıkta ortalama ΔE2000 ≤ 3, iki platformda aynı DNG'den aynı çıktı |
-| **2 — Pro Foto (iki platform)** | 3–4 hafta | Manuel kontroller, lens kilidi, histogram/zebra/peaking (native shader), RAW+JPEG | Sahada düğün foto testi |
-| **3 — Pro Video** | 4–6 hafta | iOS: Log + ProRes + SSD. Android: HLG10 HEVC. İkisinde de 180° kilit, LUT önizleme, ses göstergesi | 30 dk kesintisiz kayıt, ısınma testi |
-| **4 — Cila ve Dağıtım** | 2–3 hafta | TestFlight / dahili test, çökme raporlama | – |
+### Neden "Aha-Öncelikli Hibrit Freemium + 1 Ay Ücretsiz Deneme"?
+1. **Sunucu Maliyeti `$0`:** Rust renk bilimi, TFLite/ML Kit/Apple Vision sticker ve portre işleme %100 cihaz üzerinde koşar. GPU/bulut faturası olmadığı için **Ömür Boyu (Lifetime)** seçeneği %85 net mağaza marjıyla sürdürülebilirdir ve kamera kategorisindeki *abonelik yorgunluğunu* kazanca dönüştürür.
+2. **Reklam (AdMob) Yasağı:** Zamera'nın en büyük rekabet avantajı *"%100 Çevrimdışı & Sıfır İzleyici"* güvenidir; reklam SDK'sı App Store gizlilik rozetini bozar.
+3. **Peşin Ücretli İndirme Riski:** Android cihazlarda üretici Camera2 kısıtları nedeniyle peşin ücretli uygulama 1★ iade riskini artırır. Ücretsiz Faz 0 Probe ve temel çekim bu riski sıfırlar.
+4. **Sıfır-Telemetri Ödeme Mimarisi:** RevenueCat/Adapty gibi 3. parti gelir SDK'ları yerine doğrudan [`in_app_purchase`](file:///c:/Users/theak/source/repos/zamera/app/lib/services/zamera_monetization_gateway.dart) üzerinden Apple **StoreKit 2** ve **Google Play Billing** kullanılır; harici analitik sunucusuna hiçbir veri gitmez.
 
-**Toplam: ≈ 4–6 ay.** Riski en yüksek kalemler: Xiaomi API kısıtları, iPhone'da 3. parti ProRes RAW / Log 2 erişimi, uzun kayıtta ısınma.
+### Katman & Günlük "Aha-Anı" Kota Matrisi
+
+| Özellik / Mod | Ücretsiz Katman | Zamera Pro (veya Aktif 1 Ay Deneme) |
+| :--- | :--- | :--- |
+| **Faz 0 Donanım & Lens Probe** | Sınırsız ücretsiz | Sınırsız |
+| **Standart Pro Foto & Portre** | `JPEG`, `HEIF 10B`, PASM, 3x AEB, Portre modu sınırsız | Sınırsız |
+| **Standart Pro Video (`Rec.709`)** | 4K/1080p, 180° shutter kilidi ve Rack Focus sınırsız | Sınırsız |
+| **Sanat Modu Canlı Önizleme & A/B Perde** | Canlı spot renk ölçer & `TrueColor ↔ OEM` inceleme ücretsiz | Sınırsız |
+| **TrueColor 1:1 Sanat Çekimi** | Günde **1 ücretsiz** tam kalibreli çekim | **Sınırsız** |
+| **14-Bit DNG RAW / 48MP ProRAW** | Günde **1 ücretsiz** RAW çekim veya DNG paylaşım | **Sınırsız** |
+| **Şeffaf PNG Sticker Kesimi & Rafı** | Önizleme ücretsiz; günde **3 ücretsiz** dışa aktarım (kopyala/paylaş/kaydet) | **Sınırsız** |
+| **24-Yama ColorChecker Sensör Kalibrasyonu** | Paywall (`ZameraProFeature.colorCheckerCalibration`) | **Açık** |
+| **Kayıpsız 1:1 PNG Arşivi** | Paywall (`ZameraProFeature.losslessPngArchive`) | **Açık** |
+| **10-Bit Sinema (`HLG10`/`Apple Log`/`ProRes`) & Özel `.cube` LUT** | Paywall (`ZameraProFeature.cinemaTenBitLogProRes`) | **Açık** |
+
+### Önerilen Fiyatlandırma Tablosu (`ZameraPlanId`)
+
+| Plan (`productId`) | Küresel (USD) | Türkiye (PPP) | Rolü ve Deneme Koşulu |
+| :--- | :--- | :--- | :--- |
+| **Yıllık Pro** *(Varsayılan Seçili)* (`com.akarworks.zamera.pro.annual`) | **\$19.99 / yıl** | **₺449,99 / yıl** | **30 Gün (1 Ay) Ücretsiz Deneme**; ana tekrarlayan gelir (MRR/ARR) motoru. |
+| **Ömür Boyu Pro** (`com.akarworks.zamera.pro.lifetime`) | **\$34.99** *(Normal: \$49.99)* | **₺799,99** *(Normal: ₺1.199,99)* | Lansman indirimiyle abonelik karşıtı kullanıcıları yüksek peşin nakde dönüştürür. |
+| **Aylık Pro** (`com.akarworks.zamera.pro.monthly`) | **\$3.99 / ay** | **₺99,99 / ay** | Kısa dönem/sergi projeleri için giriş ve yıllık plan fiyat çıpası. |
+
+### Faz 2 Ek Gelir Kaldıraçları (Fiziksel Renk Referans Kartı)
+1. **Satış Ortaklığı (Affiliate — Sıfır Stok Maliyeti):** Kalibrasyon ekranında fiziksel 24-yama ColorChecker kartı olmayan sanatçılar için güvenilir perakendeciye (Amazon/Trendyol vb.) affiliate linki ile yönlendirme ve komisyon geliri.
+2. **"Zamera Cep Renk Kartı + 1 Yıl Zamera Pro QR" Kiti (Orta Vade):** Yüksek marjlı fiziksel kalibrasyon kartı ve abonelik aktivasyon QR paketiyle yazılım dışı savunulabilir gelir hendeği oluşturma.
 
 ---
 
-## 7. Karar Bekleyen Noktalar
-1. **Mac erişimi:** Kendi Mac'iniz mi olacak, yoksa CI (GitHub Actions / Codemagic) mi? Apple Developer hesabı açılacak mı?
-2. **Dağıtım:** Uygulama sadece aile içi mi kullanılacak (lisans esnekliği daha fazla), yoksa mağazada yayınlanacak mı?
-3. **Çekirdek dili:** Rust (önerilen, güvenli ve taşınabilir) mi, yoksa C++ (OpenCV ile otomatik ColorChecker tespiti gibi daha olgun kütüphaneler) mi?
+## 5. Kapanan Karar Noktaları Özeti
+
+- **`ADR-1` (CI/CD):** Windows geliştirme ortamına rağmen Android ve iOS derleme/yayın hatları GitHub Actions üzerinde kuruldu (`android-release.yml`, `ios-release.yml`).
+- **`ADR-2` (Lisans):** `cargo-deny` ile GPL/AGPL bağımlılıklar kesin yasaklandı; `in_app_purchase` (BSD-3-Clause) eklendi.
+- **`ADR-3` (Çekirdek):** Renk bilimi saf Rust (`zamera_core`) ile iki platformda bit-düzeyinde eşitlendi.
+- **`ADR-4` (Hedefler):** `com.akarworks.zamera` (iOS 17.0+, Android minSdk 29 / targetSdk 36 / 16 KB hizalı).
+- **`ADR-5` (Birleşik Sinema):** *Zamera Cine* ayrıştırması **iptal edildi**; 4 mod tek uygulamada birleşik ve oturum-izole çalışır.
+- **`ADR-6` (Gelir Modeli):** **1 Ay (30 Gün) Ücretsiz Denemeli** Aha-Öncelikli Hibrit Freemium + Lifetime Pro, sıfır-telemetri StoreKit 2 / Google Play Billing doğrulamasıyla entegre edildi.

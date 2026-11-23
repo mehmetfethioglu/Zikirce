@@ -1,0 +1,4 @@
+Zamera v0.1.6:
+• Zamera Pro (1 Ay Ücretsiz Deneme): Yıllık Pro'da 30 gün ücretsiz deneme, Lansman Ömür Boyu ve Aylık planlar eklendi; tahsilat sıfır izleyiciyle yalnızca Google Play Billing üzerinden cihaz içi çalışır.
+• Birleşik 4 Mod: Sanat (ΔE00), Pro DSLR, Portre ve 10-bit Pro Sinema Video tek uygulamada birleştirildi.
+• Günlük Ücretsiz Kotalar & Kararlılık: Günlük ücretsiz TrueColor/RAW/Sticker kotaları, Ayarlar Pro kartı ve hızlı çekim arşiv kimlik düzeltmesi.

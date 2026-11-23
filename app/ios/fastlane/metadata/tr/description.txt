@@ -1,0 +1,24 @@
+Zamera; sanat eserleri, fotoğrafçılar ve mobil sinemacılar için geliştirilmiş, %100 cihaz içi çalışan profesyonel kamera, gerçek renk kalibrasyonu ve stüdyo medya uygulamasıdır.
+
+DÖRT PROFESYONEL MOD TEK UYGULAMADA:
+
+1. SANAT MODU — GERÇEK RENK (ΔE₀₀ ≤ 1.0)
+• 24-Yama ColorChecker Kalibrasyonu: X-Rite / Calibrite 24-yama ColorChecker Classic hedefiyle her fiziksel lens için kalıcı 3x3 CCM matrisi ve 8x6 düz-alan düzeltmesi hesaplar.
+• CIEDE2000 Renk Bilimi: Gömülü Rust çekirdeği (zamera_core); Sharma 2005 doğrulanmış ΔE₀₀, Bradford D50→D65 ve sabit tonlu gamut sıkıştırmasıyla üretici ton eğrisi bozulmalarını ortadan kaldırır.
+• Canlı Kolorimetre & A/B Split Perde: CIE L*a*b* (D50), #HEX ve ΔE₀₀ değerlerini canlı okuyun; TrueColor 1:1 ile Stok Kamera görüntüsünü yan yana inceleyin.
+
+2. PRO FOTOĞRAF & MANUEL DSLR (PASM)
+• 14-Bit Bayer RAW & Apple ProRAW (.DNG): Ayrık fiziksel lens kilidi (13mm ultra geniş, 24mm ana, 100mm telefoto), 1/3-EV duraklarında ISO, enstantane, Kelvin/Tint beyaz dengesi, AEL/AFL kilidi ve ±2 EV 3-kare AE braketleme (AEB).
+• Canlı Pozometre & 64-Bin RGB Histogram: Her karede parlama, gölge ve kanal dengesini hassas biçimde izleyin.
+
+3. STÜDYO PORTRE & %100 ŞEFFAF PNG STICKER KESİMİ
+• Sanal Diyafram & Sahne Işığı: Çekim sonrasında f/1.4–f/16 derinlik alanını ve portre ışığını yeniden işleyin.
+• Apple Vision Çıkartma Stüdyosu: Dokunduğunuz nesneyi kenar RGB dekontaminasyonlu %100 şeffaf veya beyaz konturlu PNG sticker olarak kesin ve UTType.png biçiminde şeffaf biçimde panoya kopyalayın.
+
+4. PRO SİNEMA VİDEO & MEDIA STÜDYOSU
+• 180° Enstantane Kilidi, Apple Log & ProRes 422 HQ: 4K/1080p 24/25/30/60p, özel .cube 3D LUT yükleme, Rack Focus (A·B·A↔B), False Color IRE ve 48kHz stereo dBFS ses ölçümü.
+• Pro Media Stüdyosu: SMPTE zaman kodlu oynatıcı, videodan kare yakalama, kareden sticker kesimi, 6 filtreli arşiv ve ayrı JPEG/DNG paylaşımı.
+
+%100 GİZLİLİK & ZAMERA PRO (STOREKIT 2)
+• Sıfır Telemetri & Sıfır Reklam: Hiçbir fotoğraf, video veya sticker sunucuya yüklenmez.
+• Günlük Ücretsiz Kotalar + Zamera Pro: Donanım Probe, standart Pro Foto/Portre, Rec.709 Video ve günlük kotalar (1 TrueColor çekim, 1 RAW DNG, 3 Şeffaf Sticker) ücretsizdir. Zamera Pro (Yıllık planda 1 ay / 30 gün ücretsiz deneme, Aylık veya Ömür Boyu) tamamen cihaz içi StoreKit 2 üzerinden sunulur.

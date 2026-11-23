@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'constants/camera_colors.dart';
 import 'screens/camera_home_screen.dart';
 import 'services/version_tracking_service.dart';
+import 'services/zamera_monetization_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,13 +28,27 @@ Future<void> main() async {
     versionService = null;
   }
 
-  runApp(ZameraApp(versionService: versionService));
+  MonetizationService? monetizationService;
+  try {
+    monetizationService = await ZameraMonetizationController.initialize();
+  } catch (e, stackTrace) {
+    debugPrint('Zamera Monetization initialization failed: $e\n$stackTrace');
+    monetizationService = null;
+  }
+
+  runApp(
+    ZameraApp(
+      versionService: versionService,
+      monetization: monetizationService,
+    ),
+  );
 }
 
 class ZameraApp extends StatelessWidget {
   final VersionTrackingService? versionService;
+  final MonetizationService? monetization;
 
-  const ZameraApp({super.key, this.versionService});
+  const ZameraApp({super.key, this.versionService, this.monetization});
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +65,10 @@ class ZameraApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: ZameraHomeScreen(versionService: versionService),
+      home: ZameraHomeScreen(
+        versionService: versionService,
+        monetization: monetization,
+      ),
     );
   }
 }

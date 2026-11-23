@@ -1,3 +1,4 @@
-Zamera v0.1.5:
-• True Transparent Sticker Cutout: Fixed black background & front-camera mirror tap offset; hybrid ML Kit & U²-Net engine isolates tapped subjects as 100% transparent or white-outlined PNGs.
-• Pro Media & Sticker Studio: Full-screen gallery, filmstrip, 6-filter archive, Sticker Shelf, TrueColor/Portrait A/B split curtain, 64-bin RGB histogram, RAW share, and SMPTE video player with frame grab.
+Zamera v0.1.6:
+• Zamera Pro (1-Month Free Trial): Added Annual Pro with a 30-day free trial, Launch Lifetime Pro, and Monthly Pro strictly via native Google Play Billing with zero third-party telemetry.
+• Unified 4-Mode Studio: Art Mode (ΔE00), Pro DSLR, Portrait, and 10-bit Pro Cinema Video are permanently unified in one app.
+• Daily Free Quotas & Stability: Added daily free TrueColor/RAW/Sticker allowances, Settings Pro card, and fixed rapid-capture archive ID collisions.

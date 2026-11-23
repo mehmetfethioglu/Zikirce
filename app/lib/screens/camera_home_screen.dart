@@ -18,7 +18,10 @@ import '../services/zamera_settings_store.dart';
 import '../dialogs/release_notes_dialog.dart';
 import '../dialogs/settings_sheet.dart';
 import '../dialogs/calibration_probe_sheet.dart';
+import '../dialogs/zamera_paywall_sheet.dart';
+import '../models/zamera_monetization_models.dart';
 import '../screens/media_studio_screen.dart';
+import '../services/zamera_monetization_service.dart';
 import '../widgets/pro_dslr_hud_bar.dart';
 import '../widgets/radial_shutter_feature_arc.dart';
 import '../widgets/truecolor_spot_meter_badge.dart';
@@ -37,6 +40,7 @@ class ZameraHomeScreen extends StatefulWidget {
   final ColorCalibrationStore calibrationStore;
   final ZameraSettingsRepository settingsStore;
   final MediaArchiveRepository? archiveStore;
+  final MonetizationService? monetization;
 
   const ZameraHomeScreen({
     super.key,
@@ -44,6 +48,7 @@ class ZameraHomeScreen extends StatefulWidget {
     this.calibrationStore = const ColorCalibrationStore(),
     this.settingsStore = const SharedPrefsZameraSettingsStore(),
     this.archiveStore,
+    this.monetization,
   });
 
   @override
@@ -197,6 +202,24 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     if (mounted) setState(() {});
   }
 
+  void _onMonetizationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _ensureFeatureUnlocked(ZameraProFeature feature) async {
+    final service = widget.monetization;
+    if (service == null) return true;
+    final allowed = await service.consumeFeatureOrCheckPro(feature);
+    if (allowed) return true;
+    if (!mounted) return false;
+    await ZameraPaywallSheet.show(
+      context,
+      monetization: service,
+      triggeredFeature: feature,
+    );
+    return service.hasProAccess;
+  }
+
   void _archiveCapturedPhoto(
     CapturePhotoResult res, {
     required bool isPortraitMode,
@@ -234,6 +257,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _mediaArchive.addListener(_onMediaArchiveChanged);
+    widget.monetization?.addListener(_onMonetizationChanged);
     unawaited(_mediaArchive.load());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vs = widget.versionService;
@@ -514,6 +538,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     _selfTimerCountdown?.cancel();
     _rackFocusResetTimer?.cancel();
     _mediaArchive.removeListener(_onMediaArchiveChanged);
+    widget.monetization?.removeListener(_onMonetizationChanged);
     if (_ownsMediaArchive && _mediaArchive is ChangeNotifier) {
       (_mediaArchive as ChangeNotifier).dispose();
     }
@@ -1110,6 +1135,10 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
 
   Future<void> _loadCustomCubeLutSample() async {
     HapticFeedback.selectionClick();
+    if (!await _ensureFeatureUnlocked(ZameraProFeature.cinemaTenBitLogProRes) ||
+        !mounted) {
+      return;
+    }
     try {
       final picked = await ZameraVideo.pickCubeLutFile();
       final String cubeContent;
@@ -1444,6 +1473,40 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     bool calibrateColorChecker = false,
   }) async {
     if (_isCapturing) return;
+    final wantsCalibration = isArtworkMode && calibrateColorChecker;
+    final wantsLosslessPng =
+        _losslessPng || (!isPortraitMode && _userPrefs.photoFormat.isLosslessPng);
+    final wantsTrueColorShot =
+        isArtworkMode && !calibrateColorChecker && !lockGrayCardFromCenter;
+    final wantsProRawDng =
+        !isArtworkMode &&
+        !isPortraitMode &&
+        (_preferProRaw48Mp || _userPrefs.photoFormat.capturesRaw);
+
+    if (wantsCalibration &&
+        !await _ensureFeatureUnlocked(
+          ZameraProFeature.colorCheckerCalibration,
+        )) {
+      return;
+    }
+    if (wantsLosslessPng &&
+        !await _ensureFeatureUnlocked(ZameraProFeature.losslessPngArchive)) {
+      return;
+    }
+    if (wantsTrueColorShot &&
+        !await _ensureFeatureUnlocked(
+          ZameraProFeature.unlimitedTrueColorCapture,
+        )) {
+      return;
+    }
+    if (wantsProRawDng &&
+        !await _ensureFeatureUnlocked(
+          ZameraProFeature.rawDngCaptureAndExport,
+        )) {
+      return;
+    }
+    if (!mounted) return;
+
     HapticFeedback.heavyImpact();
     setState(() {
       _isCapturing = true;
@@ -1905,8 +1968,18 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           final profiles = _availableVideoProfiles;
           final idx =
               (t * (profiles.length - 1)).round().clamp(0, profiles.length - 1);
-          if (_videoProfile != profiles[idx]) {
-            _videoProfile = profiles[idx];
+          final candidate = profiles[idx];
+          final hasCinemaPro = widget.monetization?.hasProAccess ?? true;
+          if (!hasCinemaPro &&
+              candidate != ZameraVideoProfile.universalRec709Locked) {
+            if (_videoProfile != ZameraVideoProfile.universalRec709Locked) {
+              _videoProfile = ZameraVideoProfile.universalRec709Locked;
+              needsVideoSessionRestart = !_isVideoRecording;
+            }
+            _statusBanner =
+                '${candidate.shortLabel} Zamera Pro gerektirir (dokunarak açın)';
+          } else if (_videoProfile != candidate) {
+            _videoProfile = candidate;
             needsVideoSessionRestart = !_isVideoRecording;
           }
           break;
@@ -2183,6 +2256,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                     onOpenCalibration: () => _showCalibrationAndProbeSheet(),
                     initialPreferences: _userPrefs,
                     availableVideoProfiles: _availableVideoProfiles,
+                    monetization: widget.monetization,
                     onPreferencesChanged: (nextPrefs) {
                       _applyUserPreferences(nextPrefs, persist: true);
                     },
@@ -3313,8 +3387,14 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               accentColor: kIosYellow,
             ),
             pillKey: const ValueKey('artwork_pill_lossless_png'),
-            onTap: () {
+            onTap: () async {
               _triggerRadialHaptic();
+              if (!_losslessPng) {
+                final unlocked = await _ensureFeatureUnlocked(
+                  ZameraProFeature.losslessPngArchive,
+                );
+                if (!unlocked || !mounted) return;
+              }
               setState(() {
                 _losslessPng = !_losslessPng;
                 _statusBanner = _losslessPng
@@ -3794,8 +3874,14 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
           (
             label: prof.shortLabel,
             applyOnDrag: false,
-            onSelect: () {
+            onSelect: () async {
               if (_isVideoRecording) return;
+              if (prof != ZameraVideoProfile.universalRec709Locked) {
+                final unlocked = await _ensureFeatureUnlocked(
+                  ZameraProFeature.cinemaTenBitLogProRes,
+                );
+                if (!unlocked || !mounted) return;
+              }
               setState(() {
                 _videoProfile = prof;
               });
@@ -4881,11 +4967,17 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             },
       onSelectProfile: _isVideoRecording
           ? null
-          : (profId) {
+          : (profId) async {
               final matched = _availableVideoProfiles
                   .where((p) => p.name == profId)
                   .firstOrNull;
               if (matched == null) return;
+              if (matched != ZameraVideoProfile.universalRec709Locked) {
+                final unlocked = await _ensureFeatureUnlocked(
+                  ZameraProFeature.cinemaTenBitLogProRes,
+                );
+                if (!unlocked || !mounted) return;
+              }
               HapticFeedback.selectionClick();
               setState(() {
                 _videoProfile = matched;
@@ -5537,6 +5629,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       initialPortraitLightIntensity: _portraitLightIntensity,
       initialPortraitSubjectRadius: _portraitSubjectRadius,
       initialFocusTapNorm: _lastFocusTapNorm,
+      monetization: widget.monetization,
     );
     if (mounted) {
       _startTelemetryTimer();

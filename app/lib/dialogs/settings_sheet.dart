@@ -4,8 +4,11 @@ import 'package:zamera_video/zamera_video.dart' show ZameraVideoProfile;
 
 import '../constants/camera_colors.dart';
 import '../models/app_version_info.dart';
+import '../models/zamera_monetization_models.dart';
 import '../models/zamera_preferences.dart';
+import '../services/zamera_monetization_service.dart';
 import 'release_notes_dialog.dart';
+import 'zamera_paywall_sheet.dart';
 
 /// Comprehensive full-screen Settings & Configuration dialog for Zamera.
 class SettingsSheet extends StatefulWidget {
@@ -15,6 +18,7 @@ class SettingsSheet extends StatefulWidget {
   final ValueChanged<ZameraPreferences>? onPreferencesChanged;
   final VoidCallback? onResetPreferences;
   final List<ZameraVideoProfile> availableVideoProfiles;
+  final MonetizationService? monetization;
 
   const SettingsSheet({
     super.key,
@@ -28,6 +32,7 @@ class SettingsSheet extends StatefulWidget {
       ZameraVideoProfile.androidHlg10Hevc10Bit,
       ZameraVideoProfile.zameraFlatSdr,
     ],
+    this.monetization,
   });
 
   static Future<void> show(
@@ -43,6 +48,7 @@ class SettingsSheet extends StatefulWidget {
       ZameraVideoProfile.androidHlg10Hevc10Bit,
       ZameraVideoProfile.zameraFlatSdr,
     ],
+    MonetizationService? monetization,
   }) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
@@ -54,6 +60,7 @@ class SettingsSheet extends StatefulWidget {
           onPreferencesChanged: onPreferencesChanged,
           onResetPreferences: onResetPreferences,
           availableVideoProfiles: availableVideoProfiles,
+          monetization: monetization,
         ),
       ),
     );
@@ -70,6 +77,7 @@ class _SettingsSheetState extends State<SettingsSheet> {
   void initState() {
     super.initState();
     _prefs = widget.initialPreferences;
+    widget.monetization?.addListener(_onMonetizationChanged);
   }
 
   @override
@@ -78,10 +86,49 @@ class _SettingsSheetState extends State<SettingsSheet> {
     if (oldWidget.initialPreferences != widget.initialPreferences) {
       _prefs = widget.initialPreferences;
     }
+    if (oldWidget.monetization != widget.monetization) {
+      oldWidget.monetization?.removeListener(_onMonetizationChanged);
+      widget.monetization?.addListener(_onMonetizationChanged);
+    }
   }
 
-  void _updatePreferences(ZameraPreferences next) {
+  @override
+  void dispose() {
+    widget.monetization?.removeListener(_onMonetizationChanged);
+    super.dispose();
+  }
+
+  void _onMonetizationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updatePreferences(ZameraPreferences next) async {
     if (next == _prefs) return;
+    final monetization = widget.monetization;
+    if (monetization != null && !monetization.hasProAccess) {
+      ZameraProFeature? gatedFeature;
+      if (next.photoFormat != _prefs.photoFormat) {
+        if (next.photoFormat == PhotoCaptureFormat.losslessPng) {
+          gatedFeature = ZameraProFeature.losslessPngArchive;
+        } else if (next.photoFormat.capturesRaw) {
+          gatedFeature = ZameraProFeature.rawDngCaptureAndExport;
+        }
+      } else if (next.defaultVideoProfile != _prefs.defaultVideoProfile &&
+          next.defaultVideoProfile !=
+              ZameraVideoProfile.universalRec709Locked) {
+        gatedFeature = ZameraProFeature.cinemaTenBitLogProRes;
+      }
+
+      if (gatedFeature != null) {
+        await ZameraPaywallSheet.show(
+          context,
+          monetization: monetization,
+          triggeredFeature: gatedFeature,
+        );
+        if (!mounted || !monetization.hasProAccess) return;
+      }
+    }
+
     setState(() {
       _prefs = next;
     });
@@ -191,6 +238,12 @@ class _SettingsSheetState extends State<SettingsSheet> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: <Widget>[
+                                if (widget.monetization != null) ...<Widget>[
+                                  _ZameraProStatusSection(
+                                    monetization: widget.monetization!,
+                                  ),
+                                  const SizedBox(height: 14),
+                                ],
                                 _PhotoFormatsSection(
                                   preferences: _prefs,
                                   onChanged: _updatePreferences,
@@ -241,6 +294,12 @@ class _SettingsSheetState extends State<SettingsSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
+                        if (widget.monetization != null) ...<Widget>[
+                          _ZameraProStatusSection(
+                            monetization: widget.monetization!,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         _PhotoFormatsSection(
                           preferences: _prefs,
                           onChanged: _updatePreferences,
@@ -1148,6 +1207,148 @@ class _LicensePolicyDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Kapat', style: TextStyle(color: kIosYellow)),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZameraProStatusSection extends StatelessWidget {
+  final MonetizationService monetization;
+
+  const _ZameraProStatusSection({required this.monetization});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = monetization.state;
+    final hasPro = monetization.hasProAccess;
+    final statusBadge = switch (state.status) {
+      ZameraEntitlementStatus.proLifetime => 'ÖMÜR BOYU PRO AKTİF',
+      ZameraEntitlementStatus.proActive => 'ZAMERA PRO AKTİF',
+      ZameraEntitlementStatus.trialActive when hasPro =>
+        '1 AY ÜCRETSİZ DENEME AKTİF',
+      _ => 'ÜCRETSİZ SÜRÜM',
+    };
+    final artRem = monetization.remainingFreeToday(
+      ZameraProFeature.unlimitedTrueColorCapture,
+    );
+    final rawRem = monetization.remainingFreeToday(
+      ZameraProFeature.rawDngCaptureAndExport,
+    );
+    final stickerRem = monetization.remainingFreeToday(
+      ZameraProFeature.stickerCutoutExport,
+    );
+    final subtitleText = hasPro
+        ? 'Sınırsız TrueColor 1:1, ColorChecker, 14-bit DNG RAW, 10-bit Log/ProRes ve Sticker dışa aktarımı açık.'
+        : 'Bugünkü kalan ücretsiz haklar: Sanat $artRem/1 · RAW $rawRem/1 · Sticker $stickerRem/3';
+
+    return Column(
+      key: const ValueKey<String>('settings_pro_status_card'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const _SettingsSectionHeader(title: 'ZAMERA PRO & LİSANS'),
+        _SettingsCardContainer(
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: (hasPro ? kZameraCyan : kIosYellow).withValues(
+                      alpha: 0.16,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    hasPro
+                        ? Icons.verified_rounded
+                        : Icons.workspace_premium_rounded,
+                    color: hasPro ? kZameraCyan : kIosYellow,
+                    size: 19,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        statusBadge,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: hasPro ? kZameraCyan : kIosYellow,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitleText,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.white70,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                if (!hasPro) ...<Widget>[
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const ValueKey<String>('settings_open_paywall_btn'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: kIosYellow,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onPressed: () => ZameraPaywallSheet.show(
+                        context,
+                        monetization: monetization,
+                      ),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                      label: const Text(
+                        '1 Ay Ücretsiz Dene',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                OutlinedButton(
+                  key: const ValueKey<String>(
+                    'settings_restore_purchases_btn',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: kZameraCyan,
+                    side: const BorderSide(color: kZameraCyan),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed: state.isBusy
+                      ? null
+                      : monetization.restorePurchases,
+                  child: Text(
+                    state.isBusy ? 'Sorgulanıyor...' : 'Satın Alımları Geri Yükle',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );

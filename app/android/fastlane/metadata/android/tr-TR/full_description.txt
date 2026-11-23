@@ -1,0 +1,24 @@
+Zamera; sanat eserleri, profesyoneller ve mobil sinemacılar için geliştirilmiş, %100 cihaz içi çalışan profesyonel kamera, gerçek renk kalibrasyonu ve stüdyo medya uygulamasıdır.
+
+ÖNE ÇIKAN DÖRT PROFESYONEL MOD TEK UYGULAMADA:
+
+1. SANAT MODU — GERÇEK RENK (ΔE₀₀ ≤ 1.0)
+• 24-Yama ColorChecker Kalibrasyonu: X-Rite / Calibrite 24-yama ColorChecker Classic hedefi üzerinden her fiziksel lens için kalıcı 3x3 CCM matrisi ve 8x6 düz-alan (flat-field) düzeltmesi uygular.
+• CIEDE2000 Bilimsel Doğruluk: Gömülü Rust (zamera_core) çekirdeği; Sharma 2005 doğrulanmış ΔE₀₀, Bradford D50→D65 ve sabit tonlu gamut sıkıştırmasıyla üretici S-eğrisi sapmalarını ortadan kaldırır.
+• Canlı Kolorimetre & A/B Denetimi: Vizörde ve çekim sonrasında CIE L*a*b* (D50), #HEX ve ΔE₀₀ ölçümü yapar; TrueColor 1:1 ile Stok OEM görüntüyü Split Perde ile yan yana karşılaştırır.
+
+2. PRO FOTOĞRAF & MANUEL DSLR (PASM)
+• 14-Bit Bayer RAW (.DNG) & JPEG/HEIF: Fiziksel lens kilidi (ultra geniş, ana kamera, telefoto), 1/3-EV duraklarında ISO, enstantane (30"..1/8000s), Kelvin/Tint beyaz dengesi, AEL/AFL kilidi ve ±2 EV 3-kare AE braketleme (AEB).
+• Canlı Pozometre & 64-Bin RGB Histogram: Çekim öncesi ve sonrasında parlama, gölge ve kanal dengesini anlık takip edin.
+
+3. STÜDYO PORTRE & %100 ŞEFFAF PNG STICKER KESİMİ
+• Sanal Diyafram & Sahne Işığı: Çekim sonrasında f/1.4–f/16 derinlik alanını ve stüdyo ışığını yeniden düzenleyin.
+• Cihaz İçi Yapay Zeka Çıkartma Stüdyosu: ML Kit Subject Segmentation ve U²-Net hibrit motoruyla dokunduğunuz nesneyi kenar dekontaminasyonlu %100 şeffaf veya beyaz konturlu PNG sticker olarak kesin, tek dokunuşla panoya kopyalayın.
+
+4. PRO SİNEMA VİDEO & MEDIA STÜDYOSU
+• 180° Enstantane Kilidi & 10-Bit Profiller: 4K/1080p 24/25/30/60p, 10-bit HLG10/Log, özel .cube 3D LUT yükleme, Rack Focus (A·B·A↔B), False Color IRE ve 48kHz stereo dBFS ses göstergesi.
+• Tam Ekran Pro Media Stüdyosu: SMPTE zaman kodlu oynatıcı, videodan kare yakalama, kareden sticker kesimi, 6 filtreli arşiv ve ayrı JPEG/RAW paylaşımı.
+
+%100 GİZLİLİK & ZAMERA PRO
+• Sıfır Telemetri & Sıfır Reklam: Hiçbir fotoğraf, video, ses veya sticker sunucuya yüklenmez; 3. parti reklam veya analiz SDK'sı yoktur.
+• Günlük Ücretsiz Deneyim + Zamera Pro: Donanım Probe, standart Pro Foto/Portre, Rec.709 Video ve günlük kotalar (1 TrueColor çekim, 1 RAW DNG, 3 Şeffaf Sticker) ücretsizdir. Zamera Pro (Yıllık planda 1 ay / 30 gün ücretsiz deneme, Aylık veya Ömür Boyu) yalnızca Google Play Billing ile cihaz içi işlenir.

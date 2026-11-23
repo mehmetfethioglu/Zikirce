@@ -8,6 +8,7 @@ import 'package:zamera_capture/zamera_capture.dart';
 import '../../constants/camera_colors.dart';
 import '../../models/media_archive_item.dart';
 import '../../services/zamera_media_archive_store.dart';
+import '../../services/zamera_monetization_service.dart';
 import 'sticker_studio_sheet.dart';
 
 /// Embedded Cinema Video Player with SMPTE timecode, speed/mute controls,
@@ -17,6 +18,7 @@ class CinemaVideoPlayerView extends StatefulWidget {
   final MediaArchiveRepository? archiveRepository;
   final ValueChanged<ZameraMediaItem>? onFrameExtractedToArchive;
   final ValueChanged<ZameraMediaItem>? onStickerArchived;
+  final MonetizationService? monetization;
 
   const CinemaVideoPlayerView({
     super.key,
@@ -24,6 +26,7 @@ class CinemaVideoPlayerView extends StatefulWidget {
     this.archiveRepository,
     this.onFrameExtractedToArchive,
     this.onStickerArchived,
+    this.monetization,
   });
 
   /// Formats [ms] as SMPTE timecode `HH:MM:SS:FF` at [fps].
@@ -221,6 +224,7 @@ class _CinemaVideoPlayerViewState extends State<CinemaVideoPlayerView> {
           sourceMediaId: widget.item.id,
           archiveRepository: widget.archiveRepository,
           onStickerArchived: widget.onStickerArchived,
+          monetization: widget.monetization,
         );
       } else {
         final frameItem = ZameraMediaItem(

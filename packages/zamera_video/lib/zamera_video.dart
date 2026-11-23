@@ -140,8 +140,8 @@ class ZameraVideoIsolationInfo {
   const ZameraVideoIsolationInfo({
     this.isEnabledByFlag = kZameraVideoEnabled,
     this.isolationPolicy =
-        'Tam İzole Oturum (packages/zamera_video): Fotoğraf/Sanat oturumu kapatılmadan video oturumu açılmaz. '
-            'Gerekirse tek komutla "Zamera Cine" yan uygulamasına ayrılabilir.',
+        'Birleşik İzole Oturum (packages/zamera_video): Fotoğraf/Sanat oturumu kapatılmadan video oturumu açılmaz; '
+            'Pro Video kalıcı olarak Zamera Pro çatısı altında bütünleşiktir.',
     this.plannedProfiles = ZameraVideoProfile.values,
   });
 }

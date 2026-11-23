@@ -8,10 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:zamera_capture/zamera_capture.dart';
 
 import '../constants/camera_colors.dart';
+import '../dialogs/zamera_paywall_sheet.dart';
 import '../models/inspector_colorimetry.dart';
 import '../models/media_archive_item.dart';
+import '../models/zamera_monetization_models.dart';
 import '../painters/checkerboard_and_lift_painter.dart';
 import '../services/zamera_media_archive_store.dart';
+import '../services/zamera_monetization_service.dart';
 import '../widgets/studio/cinema_video_player_view.dart';
 import '../widgets/studio/media_archive_grid_view.dart';
 import '../widgets/studio/portrait_refocus_panel.dart';
@@ -50,6 +53,7 @@ class MediaStudioScreen extends StatefulWidget {
   final double initialPortraitLightIntensity;
   final double initialPortraitSubjectRadius;
   final Offset? initialFocusTapNorm;
+  final MonetizationService? monetization;
 
   const MediaStudioScreen({
     super.key,
@@ -60,6 +64,7 @@ class MediaStudioScreen extends StatefulWidget {
     this.initialPortraitLightIntensity = 0.80,
     this.initialPortraitSubjectRadius = 0.36,
     this.initialFocusTapNorm,
+    this.monetization,
   });
 
   static Future<void> open(
@@ -71,6 +76,7 @@ class MediaStudioScreen extends StatefulWidget {
     double initialPortraitLightIntensity = 0.80,
     double initialPortraitSubjectRadius = 0.36,
     Offset? initialFocusTapNorm,
+    MonetizationService? monetization,
   }) {
     return Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -82,6 +88,7 @@ class MediaStudioScreen extends StatefulWidget {
           initialPortraitLightIntensity: initialPortraitLightIntensity,
           initialPortraitSubjectRadius: initialPortraitSubjectRadius,
           initialFocusTapNorm: initialFocusTapNorm,
+          monetization: monetization,
         ),
       ),
     );
@@ -456,6 +463,7 @@ class _MediaStudioScreenState extends State<MediaStudioScreen> {
       isFrontCamera: item.isFrontCamera,
       sourceMediaId: item.id,
       archiveRepository: widget.archiveRepository,
+      monetization: widget.monetization,
       onStickerArchived: (stickerItem) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -465,6 +473,29 @@ class _MediaStudioScreenState extends State<MediaStudioScreen> {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _shareDngWithGate(String dngPath) async {
+    final service = widget.monetization;
+    if (service != null) {
+      final allowed = await service.consumeFeatureOrCheckPro(
+        ZameraProFeature.rawDngCaptureAndExport,
+      );
+      if (!allowed) {
+        if (!mounted) return;
+        await ZameraPaywallSheet.show(
+          context,
+          monetization: service,
+          triggeredFeature: ZameraProFeature.rawDngCaptureAndExport,
+        );
+        if (!service.hasProAccess || !mounted) return;
+      }
+    }
+    await _sharePaths(
+      [dngPath],
+      mimeType: 'image/x-adobe-dng',
+      title: 'RAW DNG Paylaş',
     );
   }
 
@@ -723,6 +754,7 @@ class _MediaStudioScreenState extends State<MediaStudioScreen> {
                             item: item,
                             archiveRepository: widget.archiveRepository,
                             onFrameExtractedToArchive: _jumpToMediaItem,
+                            monetization: widget.monetization,
                           );
                         }
                         final displayPath =
@@ -920,11 +952,7 @@ class _MediaStudioScreenState extends State<MediaStudioScreen> {
                 : 'image/jpeg',
           ),
           onShareDng: item.hasRaw
-              ? () => _sharePaths(
-                  [item.dngPath!],
-                  mimeType: 'image/x-adobe-dng',
-                  title: 'RAW DNG Paylaş',
-                )
+              ? () => _shareDngWithGate(item.dngPath!)
               : null,
         );
       case _StudioTool.colorSplit:
