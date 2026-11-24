@@ -539,7 +539,8 @@ jobs:
                           "attributes": {
                               "contactEmail": CONTACT_EMAIL,
                               "contactFirstName": "Mehmet",
-                              "contactLastName": "Fethioglu",
+                              "contactLastName": "Akar",
+                              "contactPhone": "+905459592179",
                               "demoAccountRequired": False,
                           },
                       }
