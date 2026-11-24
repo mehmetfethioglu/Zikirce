@@ -77,7 +77,7 @@ class _QrSyncModalState extends State<QrSyncModal>
       if (rawVal != null && rawVal.isNotEmpty) {
         setState(() {
           _isProcessingScan = true;
-          _scanMessage = 'Şerhler doğrulanıyor ve içe aktarılıyor...';
+          _scanMessage = 'Notlar doğrulanıyor ve içe aktarılıyor...';
         });
 
         final countRes = await widget.syncService.importFromPayload(rawVal);
@@ -91,7 +91,7 @@ class _QrSyncModalState extends State<QrSyncModal>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '🎉 $importedCount adet şerh başarıyla içe aktarıldı!',
+                '🎉 $importedCount adet not başarıyla içe aktarıldı!',
               ),
             ),
           );
@@ -135,7 +135,7 @@ class _QrSyncModalState extends State<QrSyncModal>
             ),
             const SizedBox(height: 12),
             Text(
-              '📡 Çevrimdışı P2P Şerh Takası',
+              '📡 Çevrimdışı QR Not Paylaşımı',
               style: GoogleFonts.literata(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -146,7 +146,7 @@ class _QrSyncModalState extends State<QrSyncModal>
             TabBar(
               controller: _tabController,
               tabs: const [
-                Tab(icon: Icon(Icons.qr_code), text: 'Şerhleri Paylaş (QR)'),
+                Tab(icon: Icon(Icons.qr_code), text: 'Notları Paylaş (QR)'),
                 Tab(
                   icon: Icon(Icons.qr_code_scanner),
                   text: 'QR İle İçe Aktar',

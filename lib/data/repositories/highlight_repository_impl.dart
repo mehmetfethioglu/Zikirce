@@ -84,7 +84,7 @@ class HighlightRepositoryImpl implements HighlightRepository {
       final list = result.dataOrNull ?? [];
 
       final buffer = StringBuffer();
-      buffer.writeln('# 📜 Tahrir Şerh & Alıntı Arşivi');
+      buffer.writeln('# 📜 Tahrir Not & Alıntı Arşivi');
       buffer.writeln('**Dışa Aktarma Tarihi:** ${DateTime.now().toLocal()}\n');
 
       for (final h in list) {

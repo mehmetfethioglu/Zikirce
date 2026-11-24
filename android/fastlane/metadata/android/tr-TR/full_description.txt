@@ -1,0 +1,26 @@
+Tahrir; bozuk, çift sütunlu veya taranmış PDF belgeleri, EPUB kitapları ve Markdown notları telefon ekranına uygun akıcı bir okuma deneyimine dönüştüren çevrimdışı akıllı e-kitap ve PDF okuyucusudur.
+
+Akıllı PDF Reflow ve Çift Sütunlu Akademik Okuma
+• LayoutColumnDetector ile çift sütunlu akademik makaleleri ve klasik eserleri önce sol, sonra sağ sütun sırasıyla okunabilir akış metnine dönüştürün.
+• Parşömen, Mürekkep Gece ve AMOLED siyah okuma temaları, tek dokunuşla kenar boşluğu kırpma (Auto-Crop) ve yön duyarlı sayfa başı/sonu hizalaması ile 6 inç ekranlarda dahi göz yorulmadan okuyun.
+• Sayfa altı dipnotları metni kesmeden tıklanabilir interaktif dipnot baloncuklarına dönüşür.
+
+300 DPI Çevrimdışı OCR ve 34.795 Köklü Zemberek Tashih Motoru
+• Taranmış ve kirli OCR katmanlı PDF sayfalarını 300 DPI çözünürlükte cihaz içi tarayın, SQLite önbelleğiyle anında açın.
+• 34.795 Türkçe/Osmanlıca kök ve fiil gövdesi barındıran Zemberek biçimbilim kâhini, 3 katmanlı yerel AI düzeltici ve Gözden Geçir paneli ile "rı/ri→n" ligatür kaynaşmalarını, ünsüz benzeşmelerini ve bağlamsal kelime hatalarını tek dokunuşla onarın.
+• "Tüm Kitabı Tara" ile PDF ve EPUB bölümlerini baştan sona otomatik tashih edin.
+
+Tek Dokunuşla Popup Lügat ve Osmanlıca Terkip Çözümleyici
+• Okuma akışından kopmadan herhangi bir kelimeye dokunun; etimolojik köken, sözcük türü, kök+ek morfolojik çözümleme ve Osmanlıca Farsça izafet terkiplerini anında görün.
+
+Kıraat & Akıcı Fasıl Okuma Koçu + Göz Atölyesi
+• Açık kitabınızdan çıkarılan kavramlarla 60 saniyelik ön-ısınma yapın; sayfa içinde 2–4 kelimelik semantik öbek temposu ve soluklaşan rehberlik ile akıcı okuyun.
+• Cezasız birleşik okuma serisi, metin yoğunluğuna uyumlu hedef WPM, dayanıklılık mühürleri, fasıl sonu aktif hatırlama ve Piramit, Takistoskop, Schulte egzersizlerini içeren Göz Atölyesi ile okuma disiplininizi geliştirin.
+
+Haşiye (Derkenar), Obsidian Dışa Aktarım ve Alıntı Stüdyosu
+• 4 kategori ve 5 mürekkep rengiyle paragraf altı derkenar şerhleri alın; notlarınızı tek dokunuşla Obsidian/Notion uyumlu Markdown (.md) dosyasına veya internet olmadan QR Kod (P2P) ile arkadaşınıza aktarın.
+• Seçtiğiniz cümleleri Parşömen, 9:16 Story, Kare ve AMOLED şablonlarında yüksek çözünürlüklü PNG alıntı kartına dönüştürün; bitirdiğiniz kitaplar için Okuma Beratı kazanın.
+
+Sesli Okuma (TTS), Prosedürel Ambiyans ve %100 Cihaz İçi Gizlilik
+• İnternet gerektirmeyen prosedürel Yağmur, Şömine, Kütüphane ve Ney sesleri eşliğinde TTS karaoke sesli okuma ve otomatik Audio Ducking kullanın.
+• Tek tıkla tam JSON yedekleme/geri yükleme, "Tahrir ile Aç" dosya köprüsü ve sıfır reklam/izleyici garantisiyle tüm kitap ve notlarınız yalnızca cihazınızda güvende kalır.

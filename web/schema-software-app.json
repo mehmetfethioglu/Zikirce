@@ -1,0 +1,51 @@
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Tahrir: Akıllı PDF & E-Kitap",
+      "alternateName": "Tahrir: PDF, EPUB & OCR Reader",
+      "operatingSystem": "Android, iOS, Windows, macOS",
+      "applicationCategory": "BookApplication",
+      "softwareVersion": "1.14.0",
+      "description": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and 100% deterministic privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with 0 ad trackers and 0 cloud dependencies, featuring 300 DPI on-device OCR, 34,795-root Zemberek proofreading, Popup Lexicon, Guided Flow reading coach, and Obsidian Markdown marginalia export.",
+      "url": "https://akarworks.com/tahrir",
+      "downloadUrl": "https://akarworks.com/tahrir/indir.html",
+      "inLanguage": [
+        "tr-TR",
+        "en-US"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "Akarworks",
+        "url": "https://akarworks.com"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0.00",
+        "priceCurrency": "TRY"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Tahrir nedir ve ne işe yarar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tahrir; bozuk, çift sütunlu veya taranmış PDF belgelerini ve EPUB kitaplarını 300 DPI cihaz içi OCR ve 34.795 köklü Zemberek tashih motoruyla temizleyip mobil ekranlara uyumlu akıcı okuma, Popup Lügat, Haşiye (Obsidian Markdown dışa aktarımı) ve Kıraat akıcı okuma koçu sunan %100 çevrimdışı okuyucudur."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is Tahrir?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader featuring multi-column PDF reflow, 300 DPI on-device OCR scanning, 34,795-root Zemberek morphological proofreading, one-tap Popup Lexicon, Guided Flow semantic reading coach, and Obsidian-compatible marginalia export with zero ads or tracking."
+          }
+        }
+      ]
+    }
+  ]
+}

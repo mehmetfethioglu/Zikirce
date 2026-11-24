@@ -1,0 +1,3 @@
+• Kapsamlı rı/ri → n Ligatür Kaynaşması Onarımı: "aynca→ayrıca", "aynntılan→ayrıntıları", "yatınmlan→yatırımları", "cumhunyet→cumhuriyet", "fikn→fikri" gibi tekli ve çiftli ligatürleri onarır.
+• Morfolojik Çoğul+İyelik (-lan/-len/-lann) Çözümleyicisi: "insanlann→insanların", "kurumlan→kurumları" eklerini ortaçları koruyarak düzeltir.
+• Bağlamsal rı/ri → n Tashihi: "bunlardan bin→biri", "gen çekildiğinde→geri", "içen girdi→içeri" bağlam hatalarını onarır.

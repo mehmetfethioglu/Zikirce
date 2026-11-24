@@ -1,0 +1,25 @@
+Tahrir is a 100% offline-first smart PDF, EPUB, and Markdown reader designed to turn scanned, multi-column, and poorly formatted documents into an effortless reading experience on iPhone and iPad.
+
+Smart PDF Reflow & Multi-Column Academic Layout
+• Automatically detect two-column academic articles and reflow text in true left-to-right reading order with preserved headings and paragraphs.
+• Switch seamlessly between Warm Parchment, Ink Night, and true AMOLED Black themes, one-tap Auto-Crop margin zoom, and direction-aware page alignment.
+• Tap inline footnote markers to inspect references cleanly without losing your place.
+
+300 DPI On-Device OCR & Morphological Proofreading
+• Scan image-based or corrupted-OCR PDF pages locally at 300 DPI and cache cleaned pages in SQLite for instant reopening.
+• Repair OCR ligature fusions, consonant devoicing typos, broken hyphens, and contextual confusions using a 34,795-root morphological lexicon and Word-style Proofread & Full-Book Scan panel.
+
+One-Tap Popup Lexicon & Compound Analysis
+• Tap any word directly inside your book to inspect definitions, etymology, stem+suffix morphology, and one-tap OCR corrections without leaving the page.
+
+Guided Flow Reading Coach & Eye Workshop
+• Start with a 60-second lexical warmup generated from your active book, then flow through pages with 2–4 word semantic chunk highlighting and gradual scaffolding fade.
+• Track zero-penalty daily streaks, density-adaptive target WPM, Original PDF line-ruler pacing, active recall reflections, and optional Eye Workshop drills (Pyramid, Tachistoscope, Schulte Table).
+
+Marginalia, Obsidian Export, QR Exchange & Quote Studio
+• Annotate passages across 4 categories and 5 ink colors, export clean Obsidian/Notion Markdown (.md) notes, or exchange marginalia offline via peer-to-peer QR Code.
+• Create high-resolution PNG quote cards in Parchment, 9:16 Story, Square, or AMOLED styles and unlock sealed Book Completion Certificates.
+
+Offline TTS Karaoke, Procedural Soundscapes & Zero Tracking
+• Listen with live karaoke word tracking and procedural offline ambient audio (Rain, Fireplace, Library, Café, Ney) with automatic TTS audio ducking.
+• Full JSON library backup & restore, Files app integration, zero ads, and zero third-party telemetry.

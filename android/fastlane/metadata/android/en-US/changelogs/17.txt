@@ -1,0 +1,3 @@
+• Comprehensive rı/ri → n Ligature Fusion Healing: Repairs single and dual ligature fusions ("aynca→ayrıca", "aynntılan→ayrıntıları", "yatınmlan→yatırımları", "cumhunyet→cumhuriyet", "fikn→fikri").
+• Morphological Plural+Possessive Resolver: Restores "-lan/-len/-lann" suffixes ("insanlann→insanların", "kurumlan→kurumları") while protecting passive participles.
+• Contextual rı/ri → n Disambiguation: Fixes real-word fusions ("bunlardan bin→biri", "gen çekildiğinde→geri", "içen girdi→içeri").

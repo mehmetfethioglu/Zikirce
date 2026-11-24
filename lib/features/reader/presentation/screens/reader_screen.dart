@@ -11,23 +11,45 @@ import '../../../../domain/entities/highlight_entity.dart';
 import '../../../analytics_and_habits/presentation/widgets/completion_seal_dialog.dart';
 import '../../../marginalia/presentation/widgets/dictionary_sheet.dart';
 import '../../../marginalia/presentation/widgets/quote_studio_sheet.dart';
+import '../../../speed_reading/domain/guided_flow_models.dart';
+import '../../../speed_reading/presentation/providers/speed_reading_provider.dart';
+import '../../../speed_reading/presentation/widgets/eye_workshop_sheet.dart';
+import '../../../speed_reading/presentation/widgets/lexical_warmup_sheet.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 import '../../domain/content_block.dart';
+import '../../engine/ocr_proofreader_engine.dart';
 import '../../engine/text_segmenter.dart';
+import '../../services/offline_ai_service.dart';
+import '../providers/guided_flow_provider.dart';
 import '../providers/reader_provider.dart';
 import '../widgets/ambient_sound_sheet.dart';
 import '../widgets/arabic_text_card.dart';
 import '../widgets/calligraphy_header_widget.dart';
+import '../widgets/concept_radar_sheet.dart';
+import '../widgets/fasil_reflection_sheet.dart';
+import '../widgets/guided_flow_capsule_hud.dart';
 import '../widgets/inline_crop_card.dart';
 import '../widgets/interactive_snippet_badge_widget.dart';
 import '../widgets/line_focus_overlay.dart';
 import '../widgets/non_latin_warning_banner.dart';
+import '../widgets/ocr_review_sheet.dart';
+import '../widgets/popup_lugat_card.dart';
 import '../widgets/reading_settings_sheet.dart';
 import '../widgets/text_block_widget.dart';
+import '../widgets/xray_split_view_widget.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
   final BookEntity book;
+  final bool autoStartRitual;
+  final int? initialGuidedFasilMinutes;
 
-  const ReaderScreen({super.key, required this.book});
+  const ReaderScreen({
+    super.key,
+    required this.book,
+    this.autoStartRitual = false,
+    this.initialGuidedFasilMinutes,
+  });
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
@@ -35,19 +57,29 @@ class ReaderScreen extends ConsumerStatefulWidget {
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   bool _showControls = true;
+  Object? _lastGuidedSyncSignature;
   late PdfViewerController _pdfViewerController;
+  late final ScrollController _reflowScrollController;
 
   @override
   void initState() {
     super.initState();
     _pdfViewerController = PdfViewerController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(readerProvider.notifier).openBook(widget.book);
+    _reflowScrollController = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(readerProvider.notifier).openBook(widget.book);
+      if (widget.autoStartRitual && mounted) {
+        await ref.read(readerProvider.notifier).startMutalaaRitual();
+      }
+      if (widget.initialGuidedFasilMinutes != null && mounted) {
+        _startGuidedFasil(durationMinutes: widget.initialGuidedFasilMinutes!);
+      }
     });
   }
 
   @override
   void dispose() {
+    _reflowScrollController.dispose();
     _pdfViewerController.dispose();
     super.dispose();
   }
@@ -56,35 +88,207 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     setState(() => _showControls = !_showControls);
   }
 
-  void _goToNextPage() {
-    ref.read(readerProvider.notifier).nextPage();
+  void _scrollToPageEdge({required bool toBottom}) {
+    if (!mounted) return;
+    if (!toBottom && _reflowScrollController.hasClients) {
+      _reflowScrollController.jumpTo(0.0);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_reflowScrollController.hasClients) return;
+      if (!toBottom) {
+        _reflowScrollController.jumpTo(0.0);
+        return;
+      }
+      _reflowScrollController.jumpTo(
+        _reflowScrollController.position.maxScrollExtent,
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_reflowScrollController.hasClients) return;
+        final maxExtent = _reflowScrollController.position.maxScrollExtent;
+        if ((_reflowScrollController.offset - maxExtent).abs() > 1.0) {
+          _reflowScrollController.jumpTo(maxExtent);
+        }
+      });
+    });
+  }
+
+  Future<void> _goToNextPage() async {
+    await ref.read(readerProvider.notifier).nextPage();
     if (widget.book.format == BookFormat.pdf) {
       _pdfViewerController.nextPage();
     }
+    _scrollToPageEdge(toBottom: false);
   }
 
-  void _goToPreviousPage() {
-    ref.read(readerProvider.notifier).previousPage();
+  Future<void> _goToPreviousPage() async {
+    await ref.read(readerProvider.notifier).previousPage();
     if (widget.book.format == BookFormat.pdf) {
       _pdfViewerController.previousPage();
     }
+    _scrollToPageEdge(toBottom: true);
   }
 
-  void _jumpToPage(int page) {
-    ref.read(readerProvider.notifier).jumpToPage(page);
+  Future<void> _jumpToPage(int page) async {
+    final prevPage = ref.read(readerProvider).currentPage;
+    if (page == prevPage) return;
+    final isGoingBackOnePage = page == prevPage - 1;
+    await ref.read(readerProvider.notifier).jumpToPage(page);
     if (widget.book.format == BookFormat.pdf) {
       _pdfViewerController.jumpToPage(page);
     }
+    _scrollToPageEdge(toBottom: isGoingBackOnePage);
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(
+      guidedFlowProvider.select((s) => s.justCompletedFasil),
+      (prev, next) {
+        if (next != true || prev == true) return;
+        final flowSnapshot = ref.read(guidedFlowProvider);
+        ref.read(guidedFlowProvider.notifier).clearCompletionFlag();
+
+        final activeReader = ref.read(readerProvider);
+        final activeBook = activeReader.currentBook ?? widget.book;
+        final readerNotifier = ref.read(readerProvider.notifier);
+        final speedNotifier = ref.read(speedReadingProvider.notifier);
+        final visitedPages = flowSnapshot.visitedPages.isNotEmpty
+            ? flowSnapshot.visitedPages
+            : <int>{activeReader.currentPage};
+        final insights = readerNotifier.collectInsightsForPages(visitedPages);
+        final elapsedSeconds = (flowSnapshot.totalDurationSeconds -
+                flowSnapshot.remainingSeconds)
+            .clamp(1, flowSnapshot.totalDurationSeconds);
+        final averageWpm = (elapsedSeconds >= 8 && flowSnapshot.wordsRead >= 10)
+            ? ((flowSnapshot.wordsRead * 60) / elapsedSeconds)
+                .round()
+                .clamp(100, 900)
+            : flowSnapshot.currentEffectiveWpm;
+        final centralRecall = insights.summaryBulletPoints.isNotEmpty
+            ? insights.summaryBulletPoints.first
+            : '${activeBook.title} eserinde ${flowSnapshot.pagesRead} sayfa kesintisiz odaklanarak okudun.';
+
+        final summary = FasilReflectionSummary(
+          bookTitle: activeBook.title,
+          bookId: activeBook.id,
+          startPage: flowSnapshot.startPage,
+          endPage: flowSnapshot.currentPage,
+          pagesRead: flowSnapshot.pagesRead,
+          wordsRead: flowSnapshot.wordsRead,
+          durationSeconds: elapsedSeconds,
+          averageWpm: averageWpm,
+          keyConcepts: insights.keyConcepts,
+          centralRecallSentence: centralRecall,
+          densityTier: flowSnapshot.densityTier,
+          insightSnippets: insights.summaryBulletPoints,
+        );
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          FasilReflectionSheet.show(
+            context,
+            summary: summary,
+            onSeal: ({required tempoFeedback, hasiyeNoteText}) async {
+              await speedNotifier.recordGuidedFasilCompleted(
+                bookId: activeBook.id,
+                bookTitle: activeBook.title,
+                startPage: summary.startPage,
+                endPage: summary.endPage,
+                pagesRead: summary.pagesRead,
+                wordsRead: summary.wordsRead,
+                durationSeconds: summary.durationSeconds,
+                averageWpm: summary.averageWpm,
+                tempoFeedback: tempoFeedback,
+                densityTier: summary.densityTier,
+                keyConcepts: summary.keyConcepts,
+                centralRecallSentence: summary.centralRecallSentence,
+                hasiyeNoteText: hasiyeNoteText,
+                insightSnippets: summary.insightSnippets,
+              );
+              if (hasiyeNoteText != null &&
+                  hasiyeNoteText.trim().isNotEmpty &&
+                  mounted) {
+                await readerNotifier.loadCurrentPageHighlights();
+              }
+            },
+          );
+        });
+      },
+    );
+
+    ref.listen<int?>(
+      guidedFlowProvider.select((s) => s.activeChunk?.paragraphIndex),
+      (prev, next) {
+        if (next == null || next == prev) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_reflowScrollController.hasClients) return;
+          final currentReader = ref.read(readerProvider);
+          final reflow = currentReader.currentReflowData;
+          final contentLen = reflow?.contentBlocks.length ?? 0;
+          final legacyLen = reflow?.paragraphs.length ??
+              (currentReader.epubChapters.isNotEmpty &&
+                      currentReader.currentEpubChapterIndex >= 0 &&
+                      currentReader.currentEpubChapterIndex <
+                          currentReader.epubChapters.length
+                  ? currentReader
+                      .epubChapters[currentReader.currentEpubChapterIndex]
+                      .paragraphs
+                      .length
+                  : 0);
+          final totalBlocks = contentLen > 0 ? contentLen : legacyLen;
+          if (totalBlocks <= 1) return;
+          final ratio = (next / (totalBlocks - 1)).clamp(0.0, 1.0);
+          final maxExtent = _reflowScrollController.position.maxScrollExtent;
+          if (maxExtent <= 0) return;
+          final targetOffset = (maxExtent * ratio).clamp(0.0, maxExtent);
+          if ((_reflowScrollController.offset - targetOffset).abs() < 48) {
+            return;
+          }
+          _reflowScrollController.animateTo(
+            targetOffset,
+            duration: const Duration(milliseconds: 360),
+            curve: Curves.easeOutCubic,
+          );
+        });
+      },
+    );
+
     final readerState = ref.watch(readerProvider.select((s) => s));
     final themeState = ref.watch(readerThemeProvider.select((s) => s));
+    final guidedFlow = ref.watch(guidedFlowProvider.select((s) => s));
     final showCelebration = ref.watch(
       readerProvider.select((s) => s.showCompletionCelebration),
     );
     final theme = Theme.of(context);
+
+    final isOriginalPdfMode = widget.book.format == BookFormat.pdf &&
+        (readerState.isOriginalPdfView || readerState.isXRaySplitMode);
+    if (guidedFlow.isActive && !readerState.isLoading) {
+      final syncSig = Object.hash(
+        readerState.currentPage,
+        isOriginalPdfMode,
+        readerState.currentEpubChapterIndex,
+        readerState.currentReflowData?.rawText.hashCode,
+      );
+      if (_lastGuidedSyncSignature != syncSig) {
+        _lastGuidedSyncSignature = syncSig;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !ref.read(guidedFlowProvider).isActive) return;
+          final latestState = ref.read(readerProvider);
+          final latestPdfMode = widget.book.format == BookFormat.pdf &&
+              (latestState.isOriginalPdfView || latestState.isXRaySplitMode);
+          ref.read(guidedFlowProvider.notifier).syncPageContent(
+                currentPage: latestState.currentPage,
+                paragraphs: ref
+                    .read(readerProvider.notifier)
+                    .getCurrentPageIndexableBlocks(),
+                isOriginalPdfMode: latestPdfMode,
+              );
+        });
+      }
+    } else if (!guidedFlow.isActive) {
+      _lastGuidedSyncSignature = null;
+    }
 
     if (showCelebration) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,7 +331,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     return Scaffold(
       body: LineFocusOverlay(
-        isEnabled: readerState.isLineFocusEnabled,
+        isEnabled: readerState.isLineFocusEnabled ||
+            (guidedFlow.isActive && guidedFlow.isOriginalPdfMode),
+        autoPaceProgress: (guidedFlow.isActive && guidedFlow.isOriginalPdfMode)
+            ? guidedFlow.pdfLineProgress
+            : null,
         child: SafeArea(
           child: Stack(
             children: [
@@ -156,9 +364,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   }
                 },
                 child: SizedBox.expand(
-                  child: readerState.isOriginalPdfView
-                      ? _buildOriginalPdfView(readerState, themeState, theme)
-                      : _buildSmartReflowContent(readerState, themeState, theme),
+                  child: readerState.isXRaySplitMode
+                      ? XRaySplitViewWidget(
+                          originalPdfView: _buildOriginalPdfView(
+                            readerState,
+                            themeState,
+                            theme,
+                            forXRayComparison: true,
+                          ),
+                          smartReflowView: _buildSmartReflowContent(
+                            readerState,
+                            themeState,
+                            theme,
+                            guidedFlow,
+                          ),
+                          onExitXRay: () =>
+                              ref.read(readerProvider.notifier).toggleXRaySplitMode(),
+                        )
+                      : (readerState.isOriginalPdfView
+                          ? _buildOriginalPdfView(readerState, themeState, theme)
+                          : _buildSmartReflowContent(
+                              readerState,
+                              themeState,
+                              theme,
+                              guidedFlow,
+                            )),
                 ),
               ),
 
@@ -174,14 +404,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
 
-              // Top Minimal App Bar (Auto-hiding)
-              if (_showControls)
+              // Top Minimal App Bar (Auto-hiding, max 4 items)
+              if (_showControls && !readerState.isZenMode)
                 Positioned(
                   top: 0,
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: theme.scaffoldBackgroundColor.withOpacity(0.96),
                       border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
@@ -196,9 +426,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                          visualDensity: VisualDensity.compact,
+                          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
                           onPressed: () => Navigator.of(context).pop(),
                         ),
+                        const SizedBox(width: 2),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,50 +441,178 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.literata(
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 14,
+                                  fontSize: 13.5,
                                 ),
                               ),
                               Text(
                                 'Sayfa ${readerState.currentPage} / $totalPages',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                                  fontSize: 10.5,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        if (widget.book.format == BookFormat.pdf) ...[
+                          const SizedBox(width: 4),
+                          _buildCompactViewSelector(readerState, theme),
+                        ],
+                        if (!readerState.isOriginalPdfView)
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Gözden Geçir (Tashih)',
+                            icon: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                Icon(
+                                  Icons.spellcheck_rounded,
+                                  size: 20,
+                                  color: readerState.isOcrReviewHighlightEnabled
+                                      ? AppColors.amberGold
+                                      : null,
+                                ),
+                                if (readerState.currentReflowData
+                                        ?.ocrReviewReport.hasAnyActivity ??
+                                    false)
+                                  Positioned(
+                                    right: -1,
+                                    top: -1,
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: (readerState
+                                                        .currentReflowData
+                                                        ?.ocrReviewReport
+                                                        .suggestionCount ??
+                                                    0) >
+                                                0
+                                            ? AppColors.amberGold
+                                            : const Color(0xFF10B981),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            onPressed: () => OcrReviewSheet.show(context),
+                          ),
                         IconButton(
-                          tooltip: 'İçindekiler & Sayfa Gezgini',
-                          icon: const Icon(Icons.format_list_bulleted, size: 20),
-                          onPressed: () => _showTableOfContentsSheet(context, readerState),
-                        ),
-                        IconButton(
-                          tooltip: 'Bilişsel Özet (Yerel AI)',
-                          icon: const Icon(Icons.auto_awesome_outlined, size: 20),
-                          onPressed: () => _showAiInsightsDialog(context),
-                        ),
-                        IconButton(
-                          tooltip: 'Ambiyans Sesleri',
-                          icon: const Icon(Icons.headphones_outlined, size: 20),
-                          onPressed: () {
-                            final notifier = ref.read(readerProvider.notifier);
-                            AmbientSoundSheet.show(context, notifier.ambientService);
-                          },
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Araçlar',
+                          icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                          onPressed: () =>
+                              _showReaderToolsSheet(context, readerState, themeState),
                         ),
                       ],
                     ),
                   ),
                 ),
 
-              // Bottom Reading Toolbar (Auto-hiding)
-              if (_showControls)
+              // Odak Seansı Aktif Sayaç Kapsülü
+              if (readerState.isRitualActive)
+                Positioned(
+                  top: (_showControls && !readerState.isZenMode) ? 68 : 12,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: () {
+                        final notifier = ref.read(readerProvider.notifier);
+                        AmbientSoundSheet.show(context, notifier.ambientService);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF1E1B18),
+                              Color(0xFF2D241E),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: AppColors.amberGold.withValues(alpha: 0.75),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.amberGold.withValues(alpha: 0.22),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🕯️', style: TextStyle(fontSize: 13)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Odak Seansı • ${_formatRitualTimer(readerState.ritualRemainingSeconds)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.warmBone,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () => ref
+                                  .read(readerProvider.notifier)
+                                  .stopMutalaaRitual(),
+                              child: const Icon(
+                                Icons.close_rounded,
+                                size: 15,
+                                color: AppColors.amberGold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Bottom Guided Flow Capsule HUD or Auto-hiding Reading Toolbar
+              if (guidedFlow.isActive)
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  child: Center(
+                    child: GuidedFlowCapsuleHud(
+                      phase: guidedFlow.phase,
+                      currentWpm: guidedFlow.currentEffectiveWpm,
+                      remainingSeconds: guidedFlow.remainingSeconds,
+                      isPaused: guidedFlow.isPaused,
+                      pausedByInteraction: guidedFlow.pausedByInteraction,
+                      isOriginalPdfMode: guidedFlow.isOriginalPdfMode,
+                      onTogglePause: () =>
+                          ref.read(guidedFlowProvider.notifier).togglePause(),
+                      onAdjustWpm: (delta) =>
+                          ref.read(guidedFlowProvider.notifier).adjustWpm(delta),
+                      onFinishEarly: () => ref
+                          .read(guidedFlowProvider.notifier)
+                          .finishEarlyAndReflect(),
+                      onStop: () => ref
+                          .read(guidedFlowProvider.notifier)
+                          .stopWithoutReflection(),
+                    ),
+                  ),
+                )
+              else if (_showControls && !readerState.isZenMode)
                 Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
                     decoration: BoxDecoration(
                       color: theme.scaffoldBackgroundColor.withOpacity(0.96),
                       border: Border(top: BorderSide(color: theme.colorScheme.outline)),
@@ -267,64 +627,52 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Page Scrubber Slider
+                        // Üst Satır: ‹ + Slider + Sayfa X/Y + ›
                         _buildPageSlider(readerState, theme),
+                        const SizedBox(height: 2),
+                        // Alt Satır: 4 Temiz Hızlı Aksiyon
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            IconButton(
-                              tooltip: 'Önceki Sayfa',
-                              icon: const Icon(Icons.chevron_left, size: 28),
-                              onPressed: _goToPreviousPage,
+                            _buildBottomQuickAction(
+                              theme: theme,
+                              icon: Icons.text_fields_rounded,
+                              label: 'Görünüm',
+                              isActive: false,
+                              onTap: () => ReadingSettingsSheet.show(context),
                             ),
-                            IconButton(
-                              tooltip: 'Sesli Dinle (TTS)',
-                              icon: Icon(
-                                readerState.isTtsPlaying
-                                    ? Icons.pause_circle_filled
-                                    : Icons.play_circle_filled,
-                                color: theme.colorScheme.primary,
-                                size: 28,
+                            _buildBottomQuickAction(
+                              theme: theme,
+                              icon: readerState.isTtsPlaying
+                                  ? Icons.volume_up_rounded
+                                  : Icons.headphones_rounded,
+                              label: 'Ses & Ambiyans',
+                              isActive:
+                                  readerState.isTtsPlaying || readerState.isRitualActive,
+                              onTap: () => _showAudioAndAmbientSheet(
+                                context,
+                                readerState,
+                                theme,
                               ),
-                              onPressed: () => ref.read(readerProvider.notifier).toggleTts(),
                             ),
-                            IconButton(
-                              tooltip: 'Odak Cetveli',
-                              icon: Icon(
-                                readerState.isLineFocusEnabled
-                                    ? Icons.line_weight
-                                    : Icons.crop_free,
-                                color: readerState.isLineFocusEnabled
-                                    ? theme.colorScheme.primary
-                                    : null,
+                            _buildBottomQuickAction(
+                              theme: theme,
+                              icon: Icons.bolt_rounded,
+                              label: 'Hızlı Oku',
+                              isActive: false,
+                              accentColor: AppColors.amberGold,
+                              onTap: () => _openLiveSpeedReadingCoach(readerState),
+                            ),
+                            _buildBottomQuickAction(
+                              theme: theme,
+                              icon: Icons.menu_book_rounded,
+                              label: 'Araçlar',
+                              isActive: false,
+                              onTap: () => _showReaderToolsSheet(
+                                context,
+                                readerState,
+                                themeState,
                               ),
-                              onPressed: () =>
-                                  ref.read(readerProvider.notifier).toggleLineFocus(),
-                            ),
-                            IconButton(
-                              tooltip: readerState.isOriginalPdfView
-                                  ? 'Akıllı Akış Moduna Geç'
-                                  : 'Orijinal PDF Görünümüne Geç',
-                              icon: Icon(
-                                readerState.isOriginalPdfView
-                                    ? Icons.view_headline
-                                    : Icons.picture_as_pdf,
-                                color: readerState.isOriginalPdfView
-                                    ? theme.colorScheme.primary
-                                    : null,
-                              ),
-                              onPressed: () =>
-                                  ref.read(readerProvider.notifier).toggleDualView(),
-                            ),
-                            IconButton(
-                              tooltip: 'Tipografi & Temalar',
-                              icon: const Icon(Icons.text_format),
-                              onPressed: () => ReadingSettingsSheet.show(context),
-                            ),
-                            IconButton(
-                              tooltip: 'Sonraki Sayfa',
-                              icon: const Icon(Icons.chevron_right, size: 28),
-                              onPressed: _goToNextPage,
                             ),
                           ],
                         ),
@@ -339,45 +687,995 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  String _formatRitualTimer(int totalSeconds) {
+    final mins = (totalSeconds ~/ 60).toString().padLeft(2, '0');
+    final secs = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$mins:$secs';
+  }
+
+  bool _isPageGatedBySmartReflowPro(ReaderState readerState) {
+    final isSampleBook = widget.book.filePath.startsWith('sample://');
+    final isPro = ref.read(subscriptionProvider).isPro;
+    return !isSampleBook &&
+        widget.book.format == BookFormat.pdf &&
+        !readerState.isOriginalPdfView &&
+        readerState.currentPage > 15 &&
+        !isPro;
+  }
+
+  void _startGuidedFasil({required int durationMinutes}) {
+    final readerState = ref.read(readerProvider);
+    if (_isPageGatedBySmartReflowPro(readerState)) {
+      TahrirProSheet.show(context);
+      return;
+    }
+
+    final isPro = ref.read(subscriptionProvider).isPro;
+    final speedState = ref.read(speedReadingProvider);
+    if (!speedState.canStartFreeFasilToday(isPro: isPro) ||
+        (durationMinutes > 5 && !isPro)) {
+      TahrirProSheet.show(context);
+      return;
+    }
+
+    final readerNotifier = ref.read(readerProvider.notifier);
+    final plainText = readerNotifier.getCurrentPagePlainText();
+    final insights = const OfflineAiService().analyzeText(plainText);
+    final densityTier =
+        TextDensityTier.fromComplexityLabel(insights.complexityLevel);
+    final targetWpm = speedState.targetWpmForDensity(densityTier);
+    final paragraphs = readerNotifier.getCurrentPageIndexableBlocks();
+    final isOriginalPdfMode = widget.book.format == BookFormat.pdf &&
+        (readerState.isOriginalPdfView || readerState.isXRaySplitMode);
+
+    ref.read(guidedFlowProvider.notifier).startFasil(
+      durationMinutes: durationMinutes,
+      targetWpm: targetWpm,
+      densityTier: densityTier,
+      scaffoldingEnabled: isPro,
+      currentPage: readerState.currentPage,
+      paragraphs: paragraphs,
+      isOriginalPdfMode: isOriginalPdfMode,
+      onRequestNextPage: () async {
+        if (!mounted) return false;
+        final current = ref.read(readerProvider);
+        final activeBook = current.currentBook ?? widget.book;
+        final isChapterBased = activeBook.format == BookFormat.epub ||
+            activeBook.format == BookFormat.markdown ||
+            activeBook.format == BookFormat.txt;
+        final maxPage = isChapterBased && current.epubChapters.isNotEmpty
+            ? current.epubChapters.length
+            : (activeBook.totalPages > 0 ? activeBook.totalPages : 1);
+        if (current.currentPage >= maxPage) {
+          return false;
+        }
+        await _goToNextPage();
+        if (!mounted) return false;
+        final updated = ref.read(readerProvider);
+        final updatedPdfMode = widget.book.format == BookFormat.pdf &&
+            (updated.isOriginalPdfView || updated.isXRaySplitMode);
+        ref.read(guidedFlowProvider.notifier).syncPageContent(
+              currentPage: updated.currentPage,
+              paragraphs: ref
+                  .read(readerProvider.notifier)
+                  .getCurrentPageIndexableBlocks(),
+              isOriginalPdfMode: updatedPdfMode,
+            );
+        return true;
+      },
+    );
+
+    setState(() => _showControls = false);
+  }
+
+  void _openLiveSpeedReadingCoach(ReaderState readerState) {
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+    if (_isPageGatedBySmartReflowPro(readerState)) {
+      TahrirProSheet.show(context);
+      return;
+    }
+
+    final readerNotifier = ref.read(readerProvider.notifier);
+    final plainText = readerNotifier.getCurrentPagePlainText();
+    final insights = const OfflineAiService().analyzeText(plainText);
+    final densityTier =
+        TextDensityTier.fromComplexityLabel(insights.complexityLevel);
+    final speedState = ref.read(speedReadingProvider);
+    final isPro = ref.read(subscriptionProvider).isPro;
+    final targetWpm = speedState.targetWpmForDensity(densityTier);
+    final canStartFreeToday = speedState.canStartFreeFasilToday(isPro: isPro);
+    final theme = Theme.of(context);
+
+    var selectedPreset = FasilDurationPreset.spark5;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (modalCtx, setSheetState) {
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.bolt_rounded,
+                        color: AppColors.amberGold,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Sayfa İçi Akıcı Fasıl',
+                          style: GoogleFonts.literata(
+                            fontSize: 17.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.of(sheetCtx).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'Sayfa ${readerState.currentPage} • ${densityTier.label} • Hedef $targetWpm WPM',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.68),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: FasilDurationPreset.values.map((preset) {
+                      final isSelected = preset == selectedPreset;
+                      final locked = preset.requiresPro && !isPro;
+                      return ChoiceChip(
+                        selected: isSelected,
+                        selectedColor:
+                            AppColors.terracotta.withValues(alpha: 0.18),
+                        onSelected: (_) {
+                          if (locked) {
+                            Navigator.of(sheetCtx).pop();
+                            TahrirProSheet.show(context);
+                            return;
+                          }
+                          setSheetState(() => selectedPreset = preset);
+                        },
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${preset.minutes} Dk',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: isSelected
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
+                              ),
+                            ),
+                            if (locked) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 13,
+                                color: AppColors.amberGold,
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    selectedPreset.subtitle,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.62),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () {
+                        Navigator.of(sheetCtx).pop();
+                        if (!canStartFreeToday ||
+                            (selectedPreset.requiresPro && !isPro)) {
+                          TahrirProSheet.show(context);
+                          return;
+                        }
+                        final activeBook =
+                            ref.read(readerProvider).currentBook ?? widget.book;
+                        LexicalWarmupSheet.show(
+                          context,
+                          loadPack: () => ref
+                              .read(speedReadingProvider.notifier)
+                              .prepareBookWarmupPack(
+                                book: activeBook,
+                                fallbackPageText: plainText,
+                              ),
+                          preset: selectedPreset,
+                          onLaunchFasil: () {
+                            if (!mounted) return;
+                            _startGuidedFasil(
+                              durationMinutes: selectedPreset.minutes,
+                            );
+                          },
+                        );
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.terracotta,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        '⚡ 60 Sn Isın ve Fasla Başla',
+                        style: GoogleFonts.inter(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(sheetCtx).pop();
+                        _startGuidedFasil(
+                          durationMinutes: selectedPreset.minutes,
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Doğrudan Sayfa İçi Faslı Başlat',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Divider(
+                    height: 1,
+                    color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.center_focus_strong_rounded,
+                      color: AppColors.amberGold,
+                    ),
+                    title: Text(
+                      'Tarama Modu (RSVP + ORP)',
+                      style: GoogleFonts.inter(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Odak noktalı hızlı tarama aracıyla sayfayı gözden geçir',
+                      style: GoogleFonts.inter(fontSize: 11.5),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      if (plainText.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Bu sayfada tarama modu için yeterli metin bulunamadı.',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      EyeWorkshopSheet.showSecondaryRsvp(
+                        context,
+                        text: plainText,
+                        title:
+                            '${widget.book.title} • Sayfa ${readerState.currentPage}',
+                        initialWpm: targetWpm,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openConceptRadarFor(String initialConcept) {
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+    if (!ref.read(subscriptionProvider).isPro) {
+      TahrirProSheet.show(context);
+      return;
+    }
+    final insights = ref.read(readerProvider.notifier).getPageInsights();
+    ConceptRadarSheet.show(
+      context,
+      initialConcept: initialConcept,
+      suggestedConcepts: insights.keyConcepts,
+      onJumpToPage: _jumpToPage,
+    );
+  }
+
+  Widget _buildCompactViewSelector(ReaderState readerState, ThemeData theme) {
+    final activeMode = readerState.isXRaySplitMode
+        ? 'xray'
+        : (readerState.isOriginalPdfView ? 'pdf' : 'reflow');
+
+    Widget buildChip(String modeKey, String label) {
+      final isSelected = activeMode == modeKey;
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          final notifier = ref.read(readerProvider.notifier);
+          if (modeKey == 'reflow') {
+            notifier.setOriginalPdfView(false);
+          } else if (modeKey == 'pdf') {
+            notifier.setOriginalPdfView(true);
+          } else if (modeKey == 'xray') {
+            if (!readerState.isXRaySplitMode) {
+              notifier.toggleXRaySplitMode();
+            }
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? theme.colorScheme.primary.withValues(alpha: 0.16)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 10.5,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+              color: isSelected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurface.withValues(alpha: 0.72),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          buildChip('reflow', 'Akış'),
+          buildChip('pdf', 'PDF'),
+          buildChip('xray', 'X-Ray'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomQuickAction({
+    required ThemeData theme,
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onTap,
+    Color? accentColor,
+  }) {
+    final effectiveColor = accentColor ??
+        (isActive
+            ? theme.colorScheme.primary
+            : theme.colorScheme.onSurface.withValues(alpha: 0.82));
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20, color: effectiveColor),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
+                color: effectiveColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAudioAndAmbientSheet(
+    BuildContext context,
+    ReaderState readerState,
+    ThemeData theme,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Sesli Okuma & Ambiyans',
+                style: GoogleFonts.literata(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor:
+                      theme.colorScheme.primary.withValues(alpha: 0.14),
+                  child: Icon(
+                    readerState.isTtsPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                title: Text(
+                  readerState.isTtsPlaying
+                      ? 'Sesli Okumayı Duraklat (TTS)'
+                      : 'Bu Sayfayı Sesli Dinle (TTS)',
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  'Sayfadaki metni kelime takibiyle seslendirir.',
+                  style: GoogleFonts.inter(fontSize: 11.5),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (_isPageGatedBySmartReflowPro(readerState)) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
+                  ref.read(readerProvider.notifier).toggleTts();
+                },
+              ),
+              const Divider(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.amberGold.withValues(alpha: 0.16),
+                  child: const Icon(
+                    Icons.graphic_eq_rounded,
+                    color: AppColors.amberGold,
+                  ),
+                ),
+                title: Text(
+                  'Stüdyo Ambiyans Sesleri & Odak',
+                  style: GoogleFonts.inter(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                subtitle: Text(
+                  'Yağmur, Kütüphane, Şömine ve Ney sesleriyle odaklanın.',
+                  style: GoogleFonts.inter(fontSize: 11.5),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final notifier = ref.read(readerProvider.notifier);
+                  AmbientSoundSheet.show(context, notifier.ambientService);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReaderToolsSheet(
+    BuildContext context,
+    ReaderState readerState,
+    ReaderThemeState themeState,
+  ) {
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+    final theme = Theme.of(context);
+    final isPro = ref.read(subscriptionProvider).isPro;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Okuma Araçları & İçindekiler',
+                style: GoogleFonts.literata(
+                  fontSize: 17.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.format_list_bulleted_rounded),
+                title: const Text('İçindekiler & Dipnotlar'),
+                subtitle: const Text('Bölümler ve sayfa gezgini'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showTableOfContentsSheet(context, readerState);
+                },
+              ),
+              Builder(
+                builder: (_) {
+                  final report = readerState.currentReflowData?.ocrReviewReport ??
+                      const OcrPageReviewReport.empty();
+                  final accuracy = report.pageAccuracyPercent.toStringAsFixed(0);
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(
+                      Icons.spellcheck_rounded,
+                      color: Color(0xFF10B981),
+                    ),
+                    title: const Text('✨ Gözden Geçir & Kusursuz Okuma Tashihi'),
+                    subtitle: Text(
+                      'Berraklık %$accuracy · ${report.suggestionCount} şüpheli · ${report.autoCorrectedCount} otomatik tashih',
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      OcrReviewSheet.show(context);
+                    },
+                  );
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.bolt_rounded,
+                  color: AppColors.amberGold,
+                ),
+                title: const Text('⚡ Sayfa İçi Akıcı Fasıl'),
+                subtitle: const Text(
+                  '60 sn ısınma, ritim kalibrasyonu ve RSVP tarama',
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openLiveSpeedReadingCoach(readerState);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.radar_rounded,
+                  color: AppColors.terracotta,
+                ),
+                title: Row(
+                  children: [
+                    const Expanded(child: Text('🧭 Kavram Radarı')),
+                    if (!isPro)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.amberGold.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'PRO',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.amberGold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                subtitle: const Text('Kitap boyunca kavram indeksini tara'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (!isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
+                  _openConceptRadarFor('');
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.self_improvement_rounded),
+                title: Text(
+                  readerState.isRitualActive
+                      ? '🕯️ 25 Dk Odak Seansını Bitir'
+                      : '🕯️ 25 Dk Odak Seansı Başlat',
+                ),
+                subtitle: const Text('Pomodoro sayacı ve odak ritüeli'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final notifier = ref.read(readerProvider.notifier);
+                  if (readerState.isRitualActive) {
+                    notifier.stopMutalaaRitual();
+                  } else {
+                    notifier.startMutalaaRitual();
+                  }
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.psychology_outlined),
+                title: const Text('🧠 Sayfa Özeti & Çalışma Soruları'),
+                subtitle: const Text('3 maddelik özet ve Sokratik sorular'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (_isPageGatedBySmartReflowPro(readerState)) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
+                  _showAiInsightsDialog(context);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  readerState.isLineFocusEnabled
+                      ? Icons.line_weight_rounded
+                      : Icons.horizontal_rule_rounded,
+                ),
+                title: Text(
+                  readerState.isLineFocusEnabled
+                      ? '📏 Odak Cetvelini Kapat'
+                      : '📏 Odak Cetvelini Aç',
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(readerProvider.notifier).toggleLineFocus();
+                },
+              ),
+              if (widget.book.format == BookFormat.pdf)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.crop_rounded),
+                  title: Text(
+                    readerState.isPdfAutoCrop
+                        ? '✂️ Otomatik Kenar Kırpma (Açık)'
+                        : '✂️ Otomatik Kenar Kırpma (Kapalı)',
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    final nextCrop = !readerState.isPdfAutoCrop;
+                    ref.read(readerProvider.notifier).togglePdfAutoCrop();
+                    _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;
+                  },
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.fullscreen_rounded),
+                title: Text(
+                  readerState.isZenMode
+                      ? '⛶ Tam Ekran Zen Modundan Çık'
+                      : '⛶ Tam Ekran Zen Modu',
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  ref.read(readerProvider.notifier).toggleZenMode();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPageSlider(ReaderState readerState, ThemeData theme) {
     final rawTotal = readerState.currentBook?.totalPages ?? widget.book.totalPages;
     final total = rawTotal > 0 ? rawTotal : 1;
     final current = readerState.currentPage.clamp(1, total).toDouble();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-      child: Row(
-        children: [
-          Text(
-            '${readerState.currentPage}',
-            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-          Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 2.5,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              ),
-              child: Slider(
-                value: current,
-                min: 1,
-                max: total.toDouble(),
-                divisions: total > 1 ? total - 1 : 1,
-                onChanged: (val) {
-                  _jumpToPage(val.round());
-                },
-              ),
+    return Row(
+      children: [
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          tooltip: 'Önceki Sayfa',
+          icon: const Icon(Icons.chevron_left_rounded, size: 24),
+          onPressed: _goToPreviousPage,
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2.5,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+            ),
+            child: Slider(
+              value: current,
+              min: 1,
+              max: total.toDouble(),
+              divisions: total > 1 ? total - 1 : 1,
+              onChanged: (val) {
+                _jumpToPage(val.round());
+              },
             ),
           ),
-          Text(
-            '$total',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+        ),
+        Text(
+          'Sayfa ${readerState.currentPage}/$total',
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.72),
+          ),
+        ),
+        IconButton(
+          visualDensity: VisualDensity.compact,
+          tooltip: 'Sonraki Sayfa',
+          icon: const Icon(Icons.chevron_right_rounded, size: 24),
+          onPressed: _goToNextPage,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSmartReflowProShieldCard(
+    ReaderState readerState,
+    ThemeData theme,
+  ) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 90, 24, 140),
+        child: Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: AppColors.amberGold.withValues(alpha: 0.55),
+              width: 1.5,
             ),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: AppColors.amberGold.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.amberGold,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'İlk 15 Sayfa Akıllı Dönüşüm Denemesi Tamamlandı',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.literata(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'PDF kitaplarınızın ilk 15 sayfasında Cihaz İçi 300 DPI OCR, Otomatik Tashih ve Akıllı Parşömen Akışını ücretsiz deneyimlediniz. 16. sayfadan itibaren akıllı dönüşüme devam etmek için Tahrir Pro\'ya geçebilir veya kitabınızı Orijinal PDF görünümünde tamamen ücretsiz okumaya devam edebilirsiniz.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  height: 1.48,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.76),
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.terracotta,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () => TahrirProSheet.show(context),
+                icon: const Icon(Icons.workspace_premium_rounded, size: 19),
+                label: Text(
+                  '✨ Tahrir Pro ile Sınırsız Sayfa Aç',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () =>
+                    ref.read(readerProvider.notifier).setOriginalPdfView(true),
+                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                label: Text(
+                  '📄 Orijinal PDF Görünümünde Ücretsiz Okumaya Devam Et',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPopupLugatForWord(
+    BuildContext context,
+    String tappedWord,
+    String paragraphText,
+    OcrPageReviewReport ocrReport,
+    int pageNumber,
+  ) {
+    final cleanLower = OcrProofreaderEngine.toTurkishLower(
+      tappedWord.replaceAll(
+        RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
+        '',
+      ),
+    );
+    final strippedLower = OcrProofreaderEngine.toTurkishLower(
+      tappedWord.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''),
+    );
+    if (cleanLower.isEmpty && strippedLower.isEmpty) return;
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+
+    OcrCorrectionItem? matchedCorrection;
+    for (final c in ocrReport.autoCorrections) {
+      final corrLower = OcrProofreaderEngine.toTurkishLower(c.correctedWord);
+      final origLower = OcrProofreaderEngine.toTurkishLower(c.originalWord);
+      if (corrLower == cleanLower ||
+          origLower == cleanLower ||
+          corrLower == strippedLower ||
+          origLower == strippedLower) {
+        matchedCorrection = c;
+        break;
+      }
+    }
+
+    OcrSuggestionItem? matchedSuggestion;
+    for (final s in ocrReport.suggestions) {
+      final suspLower = OcrProofreaderEngine.toTurkishLower(s.suspiciousWord);
+      if (suspLower == cleanLower || suspLower == strippedLower) {
+        matchedSuggestion = s;
+        break;
+      }
+    }
+
+    PopupLugatCard.show(
+      context,
+      word: tappedWord,
+      surroundingParagraph: paragraphText,
+      ocrCorrection: matchedCorrection,
+      ocrSuggestion: matchedSuggestion,
+      onCorrectWord: (w) => OcrReviewSheet.showQuickWordCorrectionDialog(
+        context,
+        ref,
+        w,
+      ),
+      onApplyDirectCorrection: (orig, corr) {
+        ref.read(readerProvider.notifier).applyOcrWordCorrection(
+              originalWord: orig,
+              correctedWord: corr,
+            );
+      },
+      onOpenFullDictionary: (w) => DictionarySheet.show(context, w),
+      onOpenConceptRadar: _openConceptRadarFor,
+      onAddHighlight: (w) => _showAddHighlightDialog(
+        context,
+        selectedText: w,
+        pageNumber: pageNumber,
       ),
     );
   }
@@ -386,11 +1684,32 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     ReaderState readerState,
     ReaderThemeState themeState,
     ThemeData theme,
+    GuidedFlowState guidedFlow,
   ) {
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
+    final isSampleBook = widget.book.filePath.startsWith('sample://');
+    if (!isSampleBook &&
+        widget.book.format == BookFormat.pdf &&
+        !readerState.isOriginalPdfView &&
+        readerState.currentPage > 15 &&
+        !isPro) {
+      return _buildSmartReflowProShieldCard(readerState, theme);
+    }
+
     final reflowData = readerState.currentReflowData;
     final contentBlocks = reflowData?.contentBlocks ?? const <ContentBlock>[];
     final footnotes = reflowData?.footnotes ?? const <PageFootnote>[];
     final showWarning = reflowData?.hasNonLatinOrVisualWarning ?? false;
+    final ocrReport =
+        reflowData?.ocrReviewReport ?? const OcrPageReviewReport.empty();
+    final autoCorrectedSet = {
+      for (final c in ocrReport.autoCorrections)
+        OcrProofreaderEngine.toTurkishLower(c.correctedWord),
+    };
+    final suspiciousSet = {
+      for (final s in ocrReport.suggestions)
+        OcrProofreaderEngine.toTurkishLower(s.suspiciousWord),
+    };
 
     // If page contains no text (e.g. cover page, illustration, or scanned PDF)
     if ((contentBlocks.isEmpty &&
@@ -414,12 +1733,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             warningOffset);
 
     return ListView.builder(
+      controller: _reflowScrollController,
+      cacheExtent: 2500,
       physics: const BouncingScrollPhysics(),
       padding: EdgeInsets.fromLTRB(
         themeState.sideMargin,
-        _showControls ? 70 : 24,
+        _showControls ? 86 : 24,
         themeState.sideMargin,
-        _showControls ? 120 : 40,
+        (_showControls || guidedFlow.isActive) ? 136 : 40,
       ),
       itemCount: totalItems,
       itemBuilder: (context, index) {
@@ -431,6 +1752,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         }
 
         final effectiveIndex = index - warningOffset;
+        final activeChunk = guidedFlow.isActive ? guidedFlow.activeChunk : null;
+        final ({int start, int end, double opacity})? guidedChunkRange =
+            (activeChunk != null && activeChunk.paragraphIndex == effectiveIndex)
+                ? (
+                    start: activeChunk.startOffset,
+                    end: activeChunk.endOffset,
+                    opacity: guidedFlow.phase.highlightOpacity,
+                  )
+                : null;
 
         // ContentBlock tabanlı modern render
         if (contentBlocks.isNotEmpty) {
@@ -444,15 +1774,46 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   block: block,
                   themeState: themeState,
                   activeTtsWord: readerState.activeTtsWord,
+                  isReadingAloud: readerState.isTtsPlaying,
+                  activeGuidedChunkRange: guidedChunkRange,
                   blockHighlights: readerState.currentPageHighlights,
+                  isOcrReviewHighlightEnabled:
+                      readerState.isOcrReviewHighlightEnabled,
+                  autoCorrectedWordsLower: autoCorrectedSet,
+                  suspiciousWordsLower: suspiciousSet,
                   onPlayTts: () => ref.read(readerProvider.notifier).toggleTts(),
-                  onOpenDictionary: (selected) => DictionarySheet.show(context, selected),
-                  onOpenQuoteStudio: (selected) => QuoteStudioSheet.show(
+                  onTapWord: (tappedWord, paragraphText) =>
+                      _showPopupLugatForWord(
                     context,
-                    quoteText: selected,
-                    bookTitle: widget.book.title,
-                    author: widget.book.author,
+                    tappedWord,
+                    paragraphText,
+                    ocrReport,
+                    readerState.currentPage,
                   ),
+                  onCorrectWord: (selected) =>
+                      OcrReviewSheet.showQuickWordCorrectionDialog(
+                    context,
+                    ref,
+                    selected,
+                  ),
+                  onOpenDictionary: (selected) {
+                    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+                    DictionarySheet.show(context, selected);
+                  },
+                  onOpenConceptRadar: _openConceptRadarFor,
+                  onOpenQuoteStudio: (selected) {
+                    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+                    QuoteStudioSheet.show(
+                      context,
+                      quoteText: selected,
+                      bookTitle: widget.book.title,
+                      author: widget.book.author,
+                      onSaveToNotes: () => _saveQuoteCardToNotes(
+                        selectedText: selected,
+                        pageNumber: readerState.currentPage,
+                      ),
+                    );
+                  },
                   onAddHighlight: (selected) => _showAddHighlightDialog(
                     context,
                     selectedText: selected,
@@ -503,15 +1864,45 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
             themeState: themeState,
             activeTtsWord: readerState.activeTtsWord,
+            isReadingAloud: readerState.isTtsPlaying,
+            activeGuidedChunkRange: guidedChunkRange,
             blockHighlights: readerState.currentPageHighlights,
+            isOcrReviewHighlightEnabled:
+                readerState.isOcrReviewHighlightEnabled,
+            autoCorrectedWordsLower: autoCorrectedSet,
+            suspiciousWordsLower: suspiciousSet,
             onPlayTts: () => ref.read(readerProvider.notifier).toggleTts(),
-            onOpenDictionary: (selected) => DictionarySheet.show(context, selected),
-            onOpenQuoteStudio: (selected) => QuoteStudioSheet.show(
+            onTapWord: (tappedWord, paragraphText) => _showPopupLugatForWord(
               context,
-              quoteText: selected,
-              bookTitle: widget.book.title,
-              author: widget.book.author,
+              tappedWord,
+              paragraphText,
+              ocrReport,
+              readerState.currentPage,
             ),
+            onCorrectWord: (selected) =>
+                OcrReviewSheet.showQuickWordCorrectionDialog(
+              context,
+              ref,
+              selected,
+            ),
+            onOpenDictionary: (selected) {
+              ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+              DictionarySheet.show(context, selected);
+            },
+            onOpenConceptRadar: _openConceptRadarFor,
+            onOpenQuoteStudio: (selected) {
+              ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+              QuoteStudioSheet.show(
+                context,
+                quoteText: selected,
+                bookTitle: widget.book.title,
+                author: widget.book.author,
+                onSaveToNotes: () => _saveQuoteCardToNotes(
+                  selectedText: selected,
+                  pageNumber: readerState.currentPage,
+                ),
+              );
+            },
             onAddHighlight: (selected) => _showAddHighlightDialog(
               context,
               selectedText: selected,
@@ -771,8 +2162,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Widget _buildOriginalPdfView(
     ReaderState readerState,
     ReaderThemeState themeState,
-    ThemeData theme,
-  ) {
+    ThemeData theme, {
+    bool forXRayComparison = false,
+  }) {
     final file = File(widget.book.filePath);
     if (file.existsSync()) {
       final colorFilter = _resolvePdfColorFilter(themeState, theme.brightness);
@@ -789,7 +2181,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   controller: _pdfViewerController,
                   canShowScrollHead: false,
                   canShowScrollStatus: false,
-                  enableDoubleTapZooming: true,
+                  enableDoubleTapZooming: !forXRayComparison,
                   pageLayoutMode: PdfPageLayoutMode.single,
                   onPageChanged: (PdfPageChangedDetails details) {
                     ref.read(readerProvider.notifier).syncPdfPage(details.newPageNumber);
@@ -799,99 +2191,193 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             ),
           ),
-          Positioned(
-            right: 16,
-            bottom: _showControls ? 116 : 24,
-            child: Material(
-              color: theme.colorScheme.surface.withOpacity(0.92),
-              elevation: 4,
-              borderRadius: BorderRadius.circular(24),
-              child: InkWell(
+          if (!forXRayComparison)
+            Positioned(
+              right: 16,
+              bottom: _showControls ? 116 : 24,
+              child: Material(
+                color: theme.colorScheme.surface.withOpacity(0.92),
+                elevation: 4,
                 borderRadius: BorderRadius.circular(24),
-                onTap: () {
-                  final nextCrop = !readerState.isPdfAutoCrop;
-                  ref.read(readerProvider.notifier).togglePdfAutoCrop();
-                  _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        readerState.isPdfAutoCrop ? Icons.crop : Icons.crop_free,
-                        size: 16,
-                        color: readerState.isPdfAutoCrop
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurface,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        readerState.isPdfAutoCrop ? 'Auto-Crop 1.18x' : 'Auto-Crop 1.0x',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () {
+                    final nextCrop = !readerState.isPdfAutoCrop;
+                    ref.read(readerProvider.notifier).togglePdfAutoCrop();
+                    _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          readerState.isPdfAutoCrop ? Icons.crop : Icons.crop_free,
+                          size: 16,
                           color: readerState.isPdfAutoCrop
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurface,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          readerState.isPdfAutoCrop ? 'Auto-Crop 1.18x' : 'Auto-Crop 1.0x',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: readerState.isPdfAutoCrop
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       );
     }
 
-    // Fallback if virtual/sample book or file not on disk
-    return Center(
+    // Örnek eserler için X-Ray karşılaştırmasında gerçekçi çift sütunlu sıkışık PDF mizanpajı göster
+    final rawText = readerState.currentReflowData?.rawText ?? '';
+    final midpoint = (rawText.length ~/ 2).clamp(0, rawText.length);
+    final leftCol = rawText.isNotEmpty ? rawText.substring(0, midpoint) : '';
+    final rightCol = rawText.isNotEmpty ? rawText.substring(midpoint) : '';
+
+    return Container(
+      color: const Color(0xFFE5E5E5),
+      padding: EdgeInsets.fromLTRB(
+        14,
+        _showControls ? 82 : 24,
+        14,
+        _showControls ? 128 : 28,
+      ),
       child: Container(
-        margin: const EdgeInsets.all(24),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.colorScheme.outline),
-          boxShadow: [
+          color: const Color(0xFFFAFAFA),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.black26),
+          boxShadow: const [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 4),
             ),
           ],
         ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(Icons.picture_as_pdf, size: 56, color: Colors.deepOrangeAccent),
-            const SizedBox(height: 16),
-            Text(
-              'Orijinal Vektörel Mizanpaj (Sayfa ${readerState.currentPage})',
-              style: GoogleFonts.literata(fontWeight: FontWeight.bold, fontSize: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'PDF SCAN • MATBAA MİZANPAJI (2 SÜTUN)',
+                  style: GoogleFonts.inter(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black54,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                Text(
+                  'S. ${readerState.currentPage}',
+                  style: GoogleFonts.inter(
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black54,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Bu örnek eser için dijital reflow modu önerilmektedir.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                color: theme.colorScheme.onSurface.withOpacity(0.7),
-                fontSize: 13,
+            const Divider(color: Colors.black38, height: 10),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        leftCol,
+                        textAlign: TextAlign.justify,
+                        style: GoogleFonts.ebGaramond(
+                          fontSize: 8.5,
+                          height: 1.18,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 520,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: Colors.black12,
+                    ),
+                    Expanded(
+                      child: Text(
+                        rightCol,
+                        textAlign: TextAlign.justify,
+                        style: GoogleFonts.ebGaramond(
+                          fontSize: 8.5,
+                          height: 1.18,
+                          color: Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.auto_stories, size: 18),
-              label: const Text('Akıllı Akış Moduna Geç'),
-              onPressed: () =>
-                  ref.read(readerProvider.notifier).setOriginalPdfView(false),
-            ),
+            if (!forXRayComparison) ...[
+              const Divider(color: Colors.black26, height: 12),
+              Center(
+                child: FilledButton.tonalIcon(
+                  icon: const Icon(Icons.auto_stories, size: 16),
+                  label: const Text('Tahrir Akıllı Akışa Dön'),
+                  onPressed: () =>
+                      ref.read(readerProvider.notifier).setOriginalPdfView(false),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _saveQuoteCardToNotes({
+    required String selectedText,
+    required int pageNumber,
+  }) async {
+    final trimmed = selectedText.trim();
+    if (trimmed.isEmpty) return;
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
+
+    final repo = ref.read(highlightRepositoryProvider);
+    final habitRepo = ref.read(habitRepositoryProvider);
+    final bookId = widget.book.id ?? 1;
+
+    await repo.insertHighlight(
+      HighlightEntity(
+        bookId: bookId,
+        pageNumber: pageNumber,
+        selectedText: trimmed,
+        userNote: 'Alıntı Stüdyosu Kartı',
+        category: HighlightCategory.quote,
+        colorHex: '#F59E0B',
+        createdAt: DateTime.now(),
+      ),
+    );
+    await ref.read(readerProvider.notifier).loadCurrentPageHighlights();
+    ref.read(highlightsRevisionProvider.notifier).state++;
+
+    final allRes = await repo.getAllHighlights();
+    if ((allRes.dataOrNull?.length ?? 0) >= 10) {
+      await habitRepo.addEarnedSeal('seal_scholar');
+    }
   }
 
   void _showAddHighlightDialog(
@@ -901,6 +2387,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }) {
     final trimmed = selectedText.trim();
     if (trimmed.isEmpty) return;
+    ref.read(guidedFlowProvider.notifier).pauseForInteraction();
 
     showModalBottomSheet(
       context: context,
@@ -925,19 +2412,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             createdAt: DateTime.now(),
           ));
           await ref.read(readerProvider.notifier).loadCurrentPageHighlights();
+          ref.read(highlightsRevisionProvider.notifier).state++;
           final allRes = await repo.getAllHighlights();
           if ((allRes.dataOrNull?.length ?? 0) >= 10) {
             await habitRepo.addEarnedSeal('seal_scholar');
           }
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('✨ Şerh ve vurgu derkenara kaydedildi!')),
+              const SnackBar(content: Text('✨ Not ve vurgu kaydedildi!')),
             );
           }
         },
       ),
     );
   }
+
 
   void _showTableOfContentsSheet(BuildContext context, ReaderState readerState) {
     final theme = Theme.of(context);
@@ -1152,7 +2641,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'Kilit Kavramlar:',
+                'Kilit Kavramlar (Radarda İncelemek İçin Dokun):',
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               const SizedBox(height: 6),
@@ -1160,9 +2649,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 spacing: 6,
                 runSpacing: 6,
                 children: insights.keyConcepts
-                    .map((k) => Chip(
+                    .map((k) => ActionChip(
+                          avatar: const Icon(Icons.radar_rounded, size: 13),
                           visualDensity: VisualDensity.compact,
                           label: Text(k, style: const TextStyle(fontSize: 11)),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _openConceptRadarFor(k);
+                          },
                         ))
                     .toList(),
               ),
@@ -1219,6 +2713,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
         ),
         actions: [
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.radar_rounded, size: 16),
+            label: const Text('Kavram Radarı & İndeks'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              final initial =
+                  insights.keyConcepts.isNotEmpty ? insights.keyConcepts.first : '';
+              _openConceptRadarFor(initial);
+            },
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Anladım'),
@@ -1303,7 +2807,7 @@ class _AddHighlightBottomSheetState extends State<_AddHighlightBottomSheet> {
               ),
               const SizedBox(height: 14),
               Text(
-                '✍️ Derkenar Şerhi & Vurgu Ekle',
+                '✍️ Not & Vurgu Ekle',
                 style: GoogleFonts.literata(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -1403,8 +2907,8 @@ class _AddHighlightBottomSheetState extends State<_AddHighlightBottomSheet> {
                 controller: _noteController,
                 maxLines: 3,
                 decoration: InputDecoration(
-                  labelText: 'Haşiye / Şerh Notunuz (İsteğe Bağlı)',
-                  hintText: 'Bu ibare hakkındaki tefekkür, sual veya şerhinizi yazın...',
+                  labelText: 'Notunuz (İsteğe Bağlı)',
+                  hintText: 'Bu metin hakkındaki düşüncenizi veya notunuzu yazın...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1415,7 +2919,7 @@ class _AddHighlightBottomSheetState extends State<_AddHighlightBottomSheet> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                  label: const Text('Şerhi Kaydet'),
+                  label: const Text('Notu Kaydet'),
                   onPressed: () async {
                     final note = _noteController.text;
                     Navigator.pop(context);

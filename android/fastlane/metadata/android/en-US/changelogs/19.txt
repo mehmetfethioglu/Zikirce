@@ -1,0 +1,3 @@
+• Flawless Reading Proofreader: Expanded Turkish morphology (-laş/-leş, copula forms), consonant assimilation ("kitapda→kitapta", "gitdi→gitti"), and apostrophe/number suffix fixes.
+• Contextual & Hyphen Healing: Real-word context repairs, cross-block broken/soft hyphens, and automatic footnote proofreading.
+• Full-Book OCR Scan: Scans every page and EPUB chapter in one tap, persisting fixes and jumping directly to remaining issues.

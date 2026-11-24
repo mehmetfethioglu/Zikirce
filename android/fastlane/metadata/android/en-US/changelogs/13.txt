@@ -1,0 +1,4 @@
+• Full JSON Backup & Restore: Export and restore all books, highlights, and reading progress in one tap.
+• Streamlined 3-Shelf Library & 3-Step Onboarding: Recent Front Covers, Reading & Completed shelves + welcome guide.
+• Clean Reader Toolbars & Live Marginalia Sync: Simplified 4-action top/bottom bars and instant highlight sync.
+• "Open with Tahrir" File Bridge & Reduced APK Size: Open PDF/EPUB/TXT directly from OS and optimized package size.

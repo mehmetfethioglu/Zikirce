@@ -1,0 +1,3 @@
+• 3-Tier On-Device AI OCR Engine: ML Kit micro-gap geometry fusion, Turkish morphological SymSpell + N-Gram context model & Beam Search decoder.
+• Compound Corruption Healing: Repairs simultaneous syllable splits and character transpositions 100% offline in < 5 ms.
+• Direction-Aware Page Edge Alignment: Aligns to page top when moving forward and page bottom when returning backward.

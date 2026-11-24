@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../engine/glyph_reverse_mapper.dart';
 import '../engine/hybrid_page_parser.dart';
+import '../engine/ocr_text_healer.dart';
 import '../engine/text_segmenter.dart';
 
 class OcrPageResult {
@@ -30,6 +31,7 @@ class OcrService {
   /// Checks if the page's raw extracted text contains severe font corruption or broken CMap
   static bool requiresOcrEnhancement(String rawText) {
     if (rawText.trim().isEmpty) return true;
+    if (OcrTextHealer.isDirtyEmbeddedOcrLayer(rawText)) return true;
 
     // Check for garbage noise sequences
     if (TextSegmenter.isGarbageNoise(rawText)) return true;

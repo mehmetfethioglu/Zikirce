@@ -2,23 +2,28 @@ import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 
 enum QuoteTemplate { story, square, parchment, amoled }
 
-class QuoteStudioSheet extends StatefulWidget {
+class QuoteStudioSheet extends ConsumerStatefulWidget {
   final String quoteText;
   final String bookTitle;
   final String author;
+  final Future<void> Function()? onSaveToNotes;
 
   const QuoteStudioSheet({
     super.key,
     required this.quoteText,
     required this.bookTitle,
     required this.author,
+    this.onSaveToNotes,
   });
 
   static void show(
@@ -26,6 +31,7 @@ class QuoteStudioSheet extends StatefulWidget {
     required String quoteText,
     required String bookTitle,
     required String author,
+    Future<void> Function()? onSaveToNotes,
   }) {
     showModalBottomSheet(
       context: context,
@@ -38,24 +44,53 @@ class QuoteStudioSheet extends StatefulWidget {
         quoteText: quoteText,
         bookTitle: bookTitle,
         author: author,
+        onSaveToNotes: onSaveToNotes,
       ),
     );
   }
 
   @override
-  State<QuoteStudioSheet> createState() => _QuoteStudioSheetState();
+  ConsumerState<QuoteStudioSheet> createState() => _QuoteStudioSheetState();
 }
 
-class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
+class _QuoteStudioSheetState extends ConsumerState<QuoteStudioSheet> {
   final GlobalKey _cardBoundaryKey = GlobalKey();
   QuoteTemplate _selectedTemplate = QuoteTemplate.parchment;
+  bool _showWatermark = true;
   bool _isExporting = false;
+  bool _isSaving = false;
+  bool _isSavedToNotes = false;
+
+  Future<void> _saveToNotes({bool showFeedback = true}) async {
+    if (_isSavedToNotes || _isSaving || widget.onSaveToNotes == null) return;
+    setState(() => _isSaving = true);
+    try {
+      await widget.onSaveToNotes!();
+      if (mounted) {
+        setState(() => _isSavedToNotes = true);
+        if (showFeedback) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✨ Alıntı kartı Notlar bölümüne kaydedildi!'),
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
 
   Future<void> _exportAndSharePng() async {
     if (_isExporting) return;
     setState(() => _isExporting = true);
 
     try {
+      // Paylaşırken henüz kaydedilmemişse otomatik olarak Notlar bölümüne de kaydet
+      await _saveToNotes(showFeedback: false);
+
       final boundaryContext = _cardBoundaryKey.currentContext;
       final boundary = boundaryContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) {
@@ -103,6 +138,7 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
 
     return SafeArea(
       child: Padding(
@@ -164,7 +200,96 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                 key: _cardBoundaryKey,
                 child: _buildPreviewCard(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+
+              // Tahrir Filigranı Toggle (Pro Gate)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.verified_outlined,
+                      size: 18,
+                      color: AppColors.amberGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tahrir Filigranı',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (!isPro) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.amberGold.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'PRO',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.amberGold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Switch(
+                      value: _showWatermark,
+                      onChanged: (val) {
+                        if (!val && !isPro) {
+                          TahrirProSheet.show(context);
+                          return;
+                        }
+                        setState(() => _showWatermark = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Notlara Kaydet Butonu
+              if (widget.onSaveToNotes != null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    icon: Icon(
+                      _isSavedToNotes
+                          ? Icons.bookmark_added_rounded
+                          : Icons.bookmark_add_outlined,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _isSavedToNotes
+                          ? 'Notlar Bölümüne Kaydedildi ✓'
+                          : 'Notlara Kaydet (Alıntı Kartı)',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: _isSavedToNotes || _isSaving
+                        ? null
+                        : () => _saveToNotes(showFeedback: true),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
 
               // Action Buttons
               Row(
@@ -173,11 +298,14 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.notes_rounded, size: 18),
                       label: const Text('Metni Paylaş'),
-                      onPressed: () {
-                        Share.share(
+                      onPressed: () async {
+                        await _saveToNotes(showFeedback: false);
+                        await Share.share(
                           '“${widget.quoteText}”\n\n— ${widget.author}, ${widget.bookTitle}\n📜 Tahrir Okuma Ekosistemi',
                         );
-                        Navigator.pop(context);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
                       },
                     ),
                   ),
@@ -269,6 +397,17 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                   color: AppColors.parchmentSecondary,
                 ),
               ),
+              if (_showWatermark) ...[
+                const SizedBox(height: 10),
+                Text(
+                  '📜 Tahrir ile oluşturuldu',
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.parchmentSecondary.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -292,23 +431,25 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
           ),
           child: Column(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('🖋️', style: TextStyle(fontSize: 14)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'TAHRİR İS MÜREKKEBİ',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.8,
-                      color: AppColors.amberGold,
+              if (_showWatermark) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('🖋️', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'TAHRİR İS MÜREKKEBİ',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.8,
+                        color: AppColors.amberGold,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
               Text(
                 '“${widget.quoteText}”',
                 textAlign: TextAlign.center,
@@ -361,21 +502,24 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Text('📜', style: TextStyle(fontSize: 18)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'TAHRİR',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2.0,
-                      color: Colors.white70,
+              if (_showWatermark)
+                Row(
+                  children: [
+                    const Text('📜', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'TAHRİR',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 2.0,
+                        color: Colors.white70,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                )
+              else
+                const SizedBox(height: 18),
               Text(
                 '“${widget.quoteText}”',
                 textAlign: TextAlign.center,
@@ -450,6 +594,17 @@ class _QuoteStudioSheetState extends State<QuoteStudioSheet> {
                   color: Colors.black54,
                 ),
               ),
+              if (_showWatermark) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '📜 Tahrir',
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black38,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

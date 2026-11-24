@@ -8,17 +8,21 @@ import '../services/scanned_pdf_ocr_service.dart';
 import 'encoding_normalizer.dart';
 import 'glyph_reverse_mapper.dart';
 import 'layout_column_detector.dart';
+import 'ocr_proofreader_engine.dart';
+import 'ocr_text_healer.dart';
 import 'text_segmenter.dart';
 
-/// Pipeline sayfa analiz sonucu (içerik blokları ve Latin dışı/hat bayrağı)
+/// Pipeline sayfa analiz sonucu (içerik blokları, Latin dışı/hat bayrağı ve OCR Gözden Geçir raporu)
 @immutable
 class PipelinePageResult {
   final List<ContentBlock> blocks;
   final bool hasNonLatinOrVisualWarning;
+  final OcrPageReviewReport ocrReviewReport;
 
   const PipelinePageResult({
     required this.blocks,
     this.hasNonLatinOrVisualWarning = false,
+    this.ocrReviewReport = const OcrPageReviewReport.empty(),
   });
 }
 
@@ -81,12 +85,36 @@ class SmartReflowPipeline {
     required String filePath,
     required int pageIndex,
   }) async {
-    final file = File(filePath);
-    if (!await file.exists()) {
+    if (filePath.startsWith('sample://')) {
       return PipelinePageResult(blocks: _generateSampleBlocks(filePath, pageIndex));
     }
 
+    final file = File(filePath);
+    if (!await file.exists()) {
+      return const PipelinePageResult(
+        blocks: [
+          TextBlock(
+            text:
+                "Bu sayfanın dijital metin katmanı okunamadı. Üst bardaki 'PDF' sekmesinden orijinal sayfa görünümüne geçebilirsiniz.",
+          ),
+        ],
+      );
+    }
+
     try {
+      // 0. ADIM: SQLite önbelleğinde daha önce OCR yapılmış veya tashih edilmiş sayfa varsa 0ms'de getir
+      final cachedPage = await scannedOcrService.tryGetCachedOrCorrectedPage(
+        filePath: filePath,
+        pageIndex: pageIndex,
+      );
+      if (cachedPage != null && cachedPage.blocks.isNotEmpty) {
+        return PipelinePageResult(
+          blocks: cachedPage.blocks,
+          hasNonLatinOrVisualWarning: cachedPage.hasNonLatinOrVisualWarning,
+          ocrReviewReport: cachedPage.ocrReviewReport,
+        );
+      }
+
       final bytes = await _getPdfBytes(file, filePath);
 
       // 1. ADIM: Isolate içinde PDF dijital metin ve koordinat çıkarımı
@@ -95,8 +123,12 @@ class SmartReflowPipeline {
         _PdfExtractParams(pdfBytes: bytes, pageIndex: pageIndex),
       );
 
-      // EĞER DİJİTAL METİN AKIŞI YOKSA -> TARANMIŞ PDF OCR SERVİSİNİ TETİKLE
-      if (analysis.lines.isEmpty && analysis.rawText.trim().isEmpty) {
+      final isEmptyDigitalText = analysis.lines.isEmpty && analysis.rawText.trim().isEmpty;
+      final isDirtyEmbeddedOcr =
+          !isEmptyDigitalText && OcrTextHealer.isDirtyEmbeddedOcrLayer(analysis.rawText);
+
+      // EĞER DİJİTAL METİN AKIŞI YOKSA VEYA GÖMÜLÜ OCR KATMANI KİRLİ/BOZUKSA -> TARANMIŞ PDF OCR SERVİSİNİ TETİKLE
+      if (isEmptyDigitalText || isDirtyEmbeddedOcr) {
         final ocrResult = await scannedOcrService.processScannedPage(
           filePath: filePath,
           pageIndex: pageIndex,
@@ -104,11 +136,16 @@ class SmartReflowPipeline {
           originalPageHeight: analysis.pageHeight,
         );
 
-        return PipelinePageResult(
-          blocks: ocrResult.blocks,
-          hasNonLatinOrVisualWarning: ocrResult.hasNonLatinOrVisualWarning,
-        );
+        if (isEmptyDigitalText || ocrResult.blocks.isNotEmpty) {
+          return PipelinePageResult(
+            blocks: ocrResult.blocks,
+            hasNonLatinOrVisualWarning: ocrResult.hasNonLatinOrVisualWarning,
+            ocrReviewReport: ocrResult.ocrReviewReport,
+          );
+        }
       }
+
+      await OcrProofreaderEngine.ensureInitialized();
 
       // 2. ADIM: Koordinat Bazlı Sütun Tespiti ve Okuma Sıralaması
       final orderedLines = LayoutColumnDetector.orderLinesByReadingFlow(
@@ -117,9 +154,9 @@ class SmartReflowPipeline {
         pageHeight: analysis.pageHeight,
       );
 
-      // 3. ADIM: Metin Temizleme, Kodlama Onarımı (EncodingNormalizer) & De-hyphenation
+      // 3. ADIM: Metin Temizleme, Kodlama Onarımı (EncodingNormalizer + OcrTextHealer) & De-hyphenation
       final rawExtractedText = orderedLines.isNotEmpty
-          ? _joinOrderedLinesWithParagraphBreaks(orderedLines, analysis.pageWidth)
+          ? joinOrderedLinesWithParagraphBreaks(orderedLines, analysis.pageWidth)
           : analysis.rawText;
 
       final mappedGlifs = GlyphReverseMapper.reverseMap(rawExtractedText);
@@ -157,22 +194,36 @@ class SmartReflowPipeline {
         ));
       }
 
-      final hasNonLatin = RegExp(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]').hasMatch(cleanText) ||
+      final hasNonLatin = blocks.any((b) => b is TextBlock && b.isArabic) ||
           pageResult.hadCorruptedCalligraphy;
 
+      // 6. ADIM: Word Tarzı Otomatik Gözden Geçirme & Kelime Tashih Motoru
+      final proofread = OcrProofreaderEngine.proofreadBlocks(
+        blocks,
+        unhealedRawText: rawExtractedText,
+      );
+
       return PipelinePageResult(
-        blocks: blocks,
+        blocks: proofread.blocks,
         hasNonLatinOrVisualWarning: hasNonLatin,
+        ocrReviewReport: proofread.report,
       );
     } catch (e) {
       debugPrint('SmartReflowPipeline error: $e');
-      return PipelinePageResult(blocks: _generateSampleBlocks(filePath, pageIndex));
+      return const PipelinePageResult(
+        blocks: [
+          TextBlock(
+            text:
+                "Bu sayfanın dijital metin katmanı okunamadı. Üst bardaki 'PDF' sekmesinden orijinal sayfa görünümüne geçebilirsiniz.",
+          ),
+        ],
+      );
     }
   }
 
   /// Ardışık satırlar arasındaki dikey boşluk, satır başı girintisi, erken satır sonu noktalaması
   /// ve punto farklarını analiz ederek paragraf ayrımlarını (`\n\n`) veya satır içi devamı (`\n`) belirler.
-  static String _joinOrderedLinesWithParagraphBreaks(
+  static String joinOrderedLinesWithParagraphBreaks(
     List<PositionedTextLine> orderedLines,
     double pageWidth,
   ) {
@@ -181,6 +232,16 @@ class SmartReflowPipeline {
     final isolatedMarkerRegex = RegExp(
       r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|[¹²³⁴⁵⁶⁷⁸⁹⁰]+|\*|\†)\s*$',
     );
+
+    // Sayfadaki satır yüksekliklerinin medyanını hesapla (alt uzantısı olmayan 'g,y,p,ş,ç'siz satırlarda sahte paragraf kırılımını önler)
+    final heights = orderedLines
+        .map((l) => l.bounds.height)
+        .where((h) => h > 2.0)
+        .toList()
+      ..sort();
+    final medianHeight = heights.isNotEmpty
+        ? heights[heights.length ~/ 2]
+        : 14.0;
 
     for (int i = 1; i < orderedLines.length; i++) {
       final prev = orderedLines[i - 1];
@@ -193,29 +254,56 @@ class SmartReflowPipeline {
         continue;
       }
 
-      final prevHeight = prev.bounds.height > 0 ? prev.bounds.height : 14.0;
+      final refHeight = medianHeight > 0
+          ? medianHeight
+          : (prev.bounds.height > 0 ? prev.bounds.height : 14.0);
       final verticalGap = curr.bounds.top - prev.bounds.bottom;
-      final hasLargeVerticalGap = verticalGap > prevHeight * 0.65;
-      final hasParagraphIndent = (curr.bounds.left - prev.bounds.left) > 14.0;
+      final hasLargeVerticalGap = verticalGap > refHeight * 0.85;
+      final hasHugeSectionGap = verticalGap > refHeight * 1.60;
+      final isNewRowBelow = curr.bounds.top >= prev.bounds.top + refHeight * 0.50;
+      final indentDelta = curr.bounds.left - prev.bounds.left;
+      final hasParagraphIndent = isNewRowBelow &&
+          indentDelta > 14.0 &&
+          indentDelta < (pageWidth > 0 ? pageWidth * 0.25 : 120.0);
 
       final prevTrimmed = prev.text.trimRight();
+      final currTrimmed = curr.text.trimLeft();
       final endsWithTerminalPunct = prevTrimmed.isNotEmpty &&
           (prevTrimmed.endsWith('.') ||
               prevTrimmed.endsWith('!') ||
               prevTrimmed.endsWith('?') ||
               prevTrimmed.endsWith(':') ||
               prevTrimmed.endsWith('”') ||
+              prevTrimmed.endsWith('»') ||
               prevTrimmed.endsWith('"'));
       final isShortLineEnd = pageWidth > 0 && prev.bounds.right < pageWidth * 0.72;
       final hasEarlySentenceBreak = endsWithTerminalPunct && isShortLineEnd;
 
-      final hasFontSizeJump =
-          prev.bounds.height > 0 && curr.bounds.height > prev.bounds.height * 1.22;
+      final isPrevHeadingLike = prevTrimmed.length < 75 &&
+          !endsWithTerminalPunct &&
+          prevTrimmed == prevTrimmed.toUpperCase() &&
+          RegExp(r'[\p{L}]', unicode: true).hasMatch(prevTrimmed);
 
-      if (hasLargeVerticalGap ||
-          hasParagraphIndent ||
-          hasEarlySentenceBreak ||
-          hasFontSizeJump) {
+      final startsWithLowercase = currTrimmed.isNotEmpty &&
+          RegExp(r'^[a-zçğıöşüâîû]').hasMatch(currTrimmed);
+
+      final hasFontSizeJump =
+          refHeight > 0 && curr.bounds.height > refHeight * 1.38;
+
+      // Poka-Yoke: Önceki satır cümle bitirici noktalama ile bitmiyorsa ve başlık değilse,
+      // veya yeni satır küçük harfle başlıyorsa cümle ortasında sahte paragraf bölünmesi ('\n\n') yapma.
+      final canBreakParagraph = isPrevHeadingLike ||
+          (!startsWithLowercase &&
+              (endsWithTerminalPunct ||
+                  hasHugeSectionGap ||
+                  hasFontSizeJump));
+
+      if (canBreakParagraph &&
+          (hasLargeVerticalGap ||
+              hasParagraphIndent ||
+              hasEarlySentenceBreak ||
+              hasFontSizeJump ||
+              isPrevHeadingLike)) {
         buffer.write('\n\n');
       } else {
         buffer.write('\n');
@@ -350,30 +438,122 @@ class SmartReflowPipeline {
     }
   }
 
-  /// Örnek / fallback içerik blokları
+  /// Yalnızca sample:// örnek kitapları için 5 farklı sayfalık içerik blokları üretir
   List<ContentBlock> _generateSampleBlocks(String filePath, int pageIndex) {
-    return [
-      const TextBlock(
-        text: 'Kapıyı Yavaşça Açıp Kapatmanın Önemi',
-        isHeading: true,
-      ),
-      const TextBlock(
-        text: 'Eve girip çıkarken kapıyı sert bir şekilde kapatma veya kapıyı şiddetli kapanacak şekilde bırakma! Çünkü bu davranış, müntesibi olmakla şeref duyduğumuz İslam nezaketine aykırıdır. Bilakis kapıyı elinle yavaş bir şekilde kapat! Umulur ki sen Âişe (radıyallâhu \'anhâ) validemizin Resûlullah (sallallâhu \'aleyhi ve sellem)\'den rivayet ettiği şu Hadîs-i Şerîfi duymuşsundur:',
-      ),
-      const TextBlock(
-        text: 'إِنَّ الرِّفْقَ لَا يَكُونُ فِي شَيْءٍ إِلَّا زَانَهُ، وَلَا يُنْزَعُ مِنْ شَيْءٍ إِلَّا شَانَهُ',
-        isArabic: true,
-      ),
-      const TextBlock(
-        text: '“Muhakkak ki yumuşaklık (kibarlık) bulunduğu şeyi güzelleştirir. Bir şeyden yumuşaklığı alındığı zaman da bu alınma o şeyi çirkinleştirir.”¹',
-        footnoteAnchors: [
-          FootnoteAnchor(
-            key: '1',
-            indexInText: 133,
-            content: 'Sahih-i Müslim, Kitabu\'l-Birr, Sıla ve Âdab, c.4, s.2004, Hadis No:2594',
+    final variant = pageIndex % 5;
+    switch (variant) {
+      case 0:
+        return [
+          const TextBlock(
+            text: 'Kapıyı Yavaşça Açıp Kapatmanın Önemi',
+            isHeading: true,
           ),
-        ],
-      ),
-    ];
+          const TextBlock(
+            text:
+                'Eve girip çıkarken kapıyı sert bir şekilde kapatma veya kapıyı şiddetli kapanacak şekilde bırakma! Çünkü bu davranış, müntesibi olmakla şeref duyduğumuz İslam nezaketine aykırıdır. Bilakis kapıyı elinle yavaş bir şekilde kapat! Umulur ki sen Âişe (radıyallâhu \'anhâ) validemizin Resûlullah (sallallâhu \'aleyhi ve sellem)\'den rivayet ettiği şu Hadîs-i Şerîfi duymuşsundur:',
+          ),
+          const TextBlock(
+            text:
+                'إِنَّ الرِّفْقَ لَا يَكُونُ فِي شَيْءٍ إِلَّا زَانَهُ، وَلَا يُنْزَعُ مِنْ شَيْءٍ إِلَّا شَانَهُ',
+            isArabic: true,
+          ),
+          const TextBlock(
+            text:
+                '“Muhakkak ki yumuşaklık (kibarlık) bulunduğu şeyi güzelleştirir. Bir şeyden yumuşaklığı alındığı zaman da bu alınma o şeyi çirkinleştirir.”¹',
+            footnoteAnchors: [
+              FootnoteAnchor(
+                key: '1',
+                indexInText: 133,
+                content:
+                    'Sahih-i Müslim, Kitabu\'l-Birr, Sıla ve Âdab, c.4, s.2004, Hadis No:2594',
+              ),
+            ],
+          ),
+        ];
+      case 1:
+        return [
+          const TextBlock(
+            text: 'Eve Girerken İzin İstemek ve Selam Vermek',
+            isHeading: true,
+          ),
+          const TextBlock(
+            text:
+                'Bir kimsenin kendi hanesine veya bir dostunun meclisine girerken önce tatlı bir sesle selam vermesi ve izin istemesi İslam âdâbının en zarif esaslarındandır. Selam, gönüller arasındaki ülfet kapısını açan ilk anahtardır.',
+          ),
+          const TextBlock(
+            text:
+                'فَإِذَا دَخَلْتُمْ بُيُوتًا فَسَلِّمُوا عَلَى أَنْفُسِكُمْ تَحِيَّةً مِنْ عِنْدِ اللَّهِ مُبَارَكَةً طَيِّبَةً',
+            isArabic: true,
+          ),
+          const TextBlock(
+            text:
+                '“Evlere girdiğiniz zaman birbirinize, Allah katından mübarek ve hoş bir esenlik dileği olarak selam verin.”¹',
+            footnoteAnchors: [
+              FootnoteAnchor(
+                key: '1',
+                indexInText: 105,
+                content: 'Nûr Sûresi, 61. Âyet-i Kerîme.',
+              ),
+            ],
+          ),
+        ];
+      case 2:
+        return [
+          const TextBlock(
+            text: 'Mecliste Oturuş ve Söz Dinleme Edebî',
+            isHeading: true,
+          ),
+          const TextBlock(
+            text:
+                'İlim ve sohbet meclislerinde konuşanın sözünü kesmemek, muhatabın yüzüne vakar ve tebessümle bakmak kâmil müminin şiarıdır. Bir sözü daha önce bilmiş olsan dahi ilk kez duyuyormuş gibi nezaketle dinlemek edeptendir.¹',
+            footnoteAnchors: [
+              FootnoteAnchor(
+                key: '1',
+                indexInText: 221,
+                content:
+                    'Ata bin Ebî Rebah: "Bir genç bana bir hadis anlatır, ben onu kendisi doğmadan önce işitmişimdir; yine de ilk defa duyuyormuş gibi dinlerim."',
+              ),
+            ],
+          ),
+        ];
+      case 3:
+        return [
+          const TextBlock(
+            text: 'Ziyaret Vakitlerine Riayet ve Misafirperverlik',
+            isHeading: true,
+          ),
+          const TextBlock(
+            text:
+                'Dost ziyareti muhabbeti artırır; ancak ziyaretin vakti ve süresi ev sahibine ağırlık vermeyecek ölçüde olmalıdır. İstirahat saatlerinde kapı çalmamak, misafiri güler yüzle karşılayıp uğurlamak sünnet-i seniyyedendir.¹',
+            footnoteAnchors: [
+              FootnoteAnchor(
+                key: '1',
+                indexInText: 226,
+                content:
+                    'İbn Hacer el-Askalânî, Fethu\'l-Bârî, İsti\'zân Kitabı: Ziyaretlerde vakit ve hâl gözetimi.',
+              ),
+            ],
+          ),
+        ];
+      default:
+        return [
+          const TextBlock(
+            text: 'Büyüklere Hürmet ve Küçüklere Şefkat',
+            isHeading: true,
+          ),
+          const TextBlock(
+            text:
+                'Toplumun nizamı ve huzuru, büyüklerin vakarına hürmet göstermek ve küçüklerin kalbine şefkatle dokunmakla kaimdir. Sözde, yürüyüşte ve ikramda önceliği ilim ve yaşça büyüklere vermek zarafetin zirvesidir.¹',
+            footnoteAnchors: [
+              FootnoteAnchor(
+                key: '1',
+                indexInText: 215,
+                content:
+                    'Ebû Dâvûd, Edeb 58, Hadis No: 4943: "Küçüklerimize merhamet etmeyen, büyüklerimizin şerefini tanımayan bizden değildir."',
+              ),
+            ],
+          ),
+        ];
+    }
   }
 }

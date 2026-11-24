@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/providers/repository_providers.dart';
 import '../../../../domain/entities/habit_profile_entity.dart';
 import '../../../../domain/entities/reading_session_entity.dart';
+import '../../../bookshelf/presentation/widgets/streak_header_badge.dart';
 import '../widgets/completion_seal_dialog.dart';
 import '../widgets/heatmap_widget.dart';
 
@@ -78,10 +79,14 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       sessionMap[dayKey] = (sessionMap[dayKey] ?? 0) + mins;
     }
 
+    final now = DateTime.now();
+    final todayKey = DateTime(now.year, now.month, now.day);
+    final todayMinutesRead = sessionMap[todayKey] ?? 0;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Okuma Analitiği & İstatistik',
+          'İstatistik & Seri',
           style: GoogleFonts.literata(fontWeight: FontWeight.w800),
         ),
         actions: [
@@ -97,6 +102,14 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Seri, Günlük Hedef ve Haftalık Zincir Kartı (İstatistik Sayfasında)
+            StreakHeaderBadge(
+              streakDays: _profile?.currentStreak ?? 0,
+              dailyMinutesGoal: _profile?.dailyGoalMinutes ?? 20,
+              todayMinutesRead: todayMinutesRead,
+            ),
+            const SizedBox(height: 16),
+
             // Top Highlights Row
             Row(
               children: [
@@ -195,7 +208,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       ('seal_first_book', 'İlk Eser Mührü', 'İlk kitabını bitirdin.', '📜'),
       ('seal_night_owl', 'Gece Tahriratı', 'Gece 00:00 sonrası okuma yaptın.', '🌙'),
       ('seal_streak_7', 'Haftalık Zincir', '7 gün kesintisiz okudun.', '🔥'),
-      ('seal_scholar', 'Şerh Üstadı', '10 farklı nota şerh düştün.', '✍️'),
+      ('seal_scholar', 'Not Üstadı', '10 farklı metne not düştün.', '✍️'),
     ];
 
     return GridView.builder(

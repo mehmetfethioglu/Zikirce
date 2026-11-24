@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/repository_providers.dart';
+import '../../../../core/services/reading_notification_service.dart';
 import '../../../../domain/entities/book_entity.dart';
 import '../../../../domain/entities/habit_profile_entity.dart';
 import '../../../reader/services/book_import_service.dart';
@@ -35,6 +38,12 @@ class BookshelfState {
         result = result.where((b) => b.format == BookFormat.pdf).toList();
       case 'epub':
         result = result.where((b) => b.format == BookFormat.epub).toList();
+      case 'txt':
+        result = result
+            .where(
+              (b) => b.format == BookFormat.txt || b.format == BookFormat.markdown,
+            )
+            .toList();
       default:
         break;
     }
@@ -99,11 +108,30 @@ class BookshelfNotifier extends StateNotifier<BookshelfState> {
     final todayMinutes = (todaySeconds / 60).round();
 
     if (booksResult.isSuccess) {
+      final loadedBooks = booksResult.dataOrNull ?? [];
+      final profile = habitResult.dataOrNull;
       state = state.copyWith(
-        books: booksResult.dataOrNull ?? [],
-        habitProfile: habitResult.dataOrNull,
+        books: loadedBooks,
+        habitProfile: profile,
         todayMinutesRead: todayMinutes,
         isLoading: false,
+      );
+
+      final activeBook = loadedBooks.isNotEmpty ? loadedBooks.first : null;
+      final progressPercent = activeBook != null
+          ? (activeBook.progressPercentage * 100).round().clamp(0, 100)
+          : 0;
+      unawaited(
+        _ref.read(readingNotificationProvider.notifier).syncHomeScreenWidget(
+              streakDays: profile?.currentStreak ?? 0,
+              todayMinutesRead: todayMinutes,
+              dailyGoalMinutes: profile?.dailyGoalMinutes ?? 20,
+              currentBookTitle: activeBook?.title ?? 'Tahrir Kütüphanesi',
+              currentBookAuthor: activeBook?.author ?? '',
+              progressPercent: progressPercent,
+              dailyQuote:
+                  'Kişi gönlünü akıl ile süsler, aklı ise bilgi ile aydınlatır.',
+            ),
       );
     } else {
       state = state.copyWith(
@@ -134,6 +162,18 @@ class BookshelfNotifier extends StateNotifier<BookshelfState> {
     return null;
   }
 
+  Future<BookEntity?> importBookFromPath(String path) async {
+    final bookRepo = _ref.read(bookRepositoryProvider);
+    final service = BookImportService(bookRepo);
+    final res = await service.importBookFromPath(path);
+
+    if (res.isSuccess && res.dataOrNull != null) {
+      await loadBooks();
+      return res.dataOrNull;
+    }
+    return null;
+  }
+
   Future<void> markBookCompleted(BookEntity book) async {
     if (book.id == null) return;
     final bookRepo = _ref.read(bookRepositoryProvider);
@@ -146,12 +186,70 @@ class BookshelfNotifier extends StateNotifier<BookshelfState> {
 
   Future<void> deleteBook(int id) async {
     final bookRepo = _ref.read(bookRepositoryProvider);
+    BookEntity? targetBook;
+    for (final b in state.books) {
+      if (b.id == id) {
+        targetBook = b;
+        break;
+      }
+    }
+    targetBook ??= (await bookRepo.getBookById(id)).dataOrNull;
+
     await bookRepo.deleteBook(id);
+
+    if (targetBook != null && targetBook.filePath.contains('tahrir_books')) {
+      try {
+        final diskFile = File(targetBook.filePath);
+        if (await diskFile.exists()) {
+          await diskFile.delete();
+        }
+      } catch (_) {}
+    }
+
     await loadBooks();
+  }
+
+  Future<BookEntity?> openOrCreateShowcaseBook({
+    required String filePath,
+    required String title,
+    required String author,
+    required int totalPages,
+  }) async {
+    for (final existing in state.books) {
+      if (existing.filePath == filePath) {
+        return existing;
+      }
+    }
+
+    final bookRepo = _ref.read(bookRepositoryProvider);
+    final now = DateTime.now();
+    final newShowcase = BookEntity(
+      title: title,
+      author: author,
+      filePath: filePath,
+      format: BookFormat.pdf,
+      totalPages: totalPages,
+      currentPage: 1,
+      progressPercentage: 0.0,
+      totalReadingTimeSeconds: 0,
+      estimatedRemainingMinutes: totalPages,
+      addedDate: now,
+      lastReadDate: now,
+    );
+
+    final insertedResult = await bookRepo.insertBook(newShowcase);
+    final insertedId = insertedResult.dataOrNull;
+    await loadBooks();
+    if (insertedId != null) {
+      for (final b in state.books) {
+        if (b.id == insertedId) return b;
+      }
+      return newShowcase.copyWith(id: insertedId);
+    }
+    return newShowcase;
   }
 }
 
 final bookshelfProvider = StateNotifierProvider<BookshelfNotifier, BookshelfState>((ref) {
   return BookshelfNotifier(ref);
 });
-

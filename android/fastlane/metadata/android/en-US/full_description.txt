@@ -1,0 +1,25 @@
+Tahrir is an offline-first smart PDF, EPUB, and Markdown reader that transforms scanned, multi-column, and poorly formatted PDF documents into a crisp, distraction-free reading flow on mobile screens.
+
+Smart PDF Reflow & Academic Multi-Column Engine
+• LayoutColumnDetector automatically orders two-column academic papers left-to-right and reconstructs true paragraphs and headings.
+• Read comfortably on compact screens with Warm Parchment, Ink Night, and AMOLED themes, one-tap Auto-Crop margin zoom, and direction-aware page edge alignment.
+• Inline footnotes turn into interactive footnote popups without breaking your sentence flow.
+
+300 DPI Offline OCR & Morphological Proofreading Engine
+• Scan image-based or broken-OCR PDF pages on-device at 300 DPI and cache results instantaneously in local SQLite storage.
+• Powered by an offline Zemberek morphological lexicon (34,795 roots), ligature/devoicing repair, and contextual disambiguation, the Word-style Proofread & Full-Book Scan panel cleans OCR typos in seconds.
+
+One-Tap Popup Lexicon & Compound Phrase Analyzer
+• Tap any word while reading to view etymology, root+suffix breakdown, classical compound phrase resolution, and one-tap OCR fixes without leaving the page.
+
+Guided Flow Reading Coach & Eye Workshop
+• Warm up in 60 seconds with key terms extracted directly from your active book, then read with in-page 2–4 word semantic chunk pacing and gradual scaffolding fade.
+• Build lasting reading habits with zero-penalty streaks, density-aware target WPM, Original PDF line pacing, recall reflections, and an optional Eye Workshop (Pyramid, Tachistoscope, Schulte Table).
+
+Marginalia, Obsidian Markdown Export & Quote Studio
+• Capture categorized highlights and inline margin notes in 5 ink colors; export notes as clean Obsidian/Notion Markdown (.md) or share offline peer-to-peer via QR Code.
+• Render favorite passages as high-resolution PNG quote cards in Parchment, 9:16 Story, Square, or AMOLED styles, and earn sealed Book Completion Certificates.
+
+Offline TTS Karaoke, Procedural Soundscapes & Total Privacy
+• Listen with live karaoke word highlighting and procedural offline ambient audio (Rain, Fireplace, Library, Café, Ney) featuring automatic TTS audio ducking.
+• Full one-tap JSON backup & restore, OS "Open with Tahrir" file support, zero ads, and zero third-party trackers keep your library 100% private on your device.

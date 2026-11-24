@@ -1,0 +1,4 @@
+• Tam Kapsamlı JSON Yedekleme & Geri Yükleme: Kitap, alıntı ve okuma verilerinizi tek dokunuşla yedekleyin ve geri yükleyin.
+• Yalın 3 Raflı Kütüphane & İlk Açılış Rehberi: Son Açılan 3 Eser, Okunanlar ve Tamamlananlar rafları + 3 adımlı rehber.
+• Sadeleştirilmiş Okuyucu Barları & Canlı Derkenar: 4'er temel aksiyonlu üst/alt barlar ve anlık Derkenar senkronizasyonu.
+• "Tahrir ile Aç" Dosya Köprüsü & Küçültülmüş APK Boyutu: Doğrudan PDF/EPUB açma ve paket boyutu optimizasyonu.

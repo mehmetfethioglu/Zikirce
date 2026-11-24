@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../domain/entities/book_entity.dart';
 import '../../../analytics_and_habits/presentation/widgets/completion_seal_dialog.dart';
 import '../../../reader/presentation/screens/reader_screen.dart';
+import '../../../speed_reading/domain/guided_flow_models.dart';
+import '../../../speed_reading/presentation/providers/speed_reading_provider.dart';
+import '../../../speed_reading/presentation/widgets/lexical_warmup_sheet.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 import '../providers/bookshelf_provider.dart';
 import '../widgets/book_spine_widget.dart';
-import '../widgets/streak_header_badge.dart';
 import '../widgets/wooden_shelf_widget.dart';
 
 class BookshelfScreen extends ConsumerStatefulWidget {
@@ -25,6 +30,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
     ('completed', 'Tamamlanan'),
     ('pdf', 'PDF'),
     ('epub', 'EPUB'),
+    ('txt', 'TXT / MD'),
   ];
 
   @override
@@ -37,6 +43,45 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _openBook(BookEntity book) {
+    final notifier = ref.read(bookshelfProvider.notifier);
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
+        )
+        .then((_) => notifier.loadBooks());
+  }
+
+  void _openBookWithWarmup(BookEntity book) {
+    final isPro = ref.read(subscriptionProvider).isPro;
+    final speedState = ref.read(speedReadingProvider);
+    if (!speedState.canStartFreeFasilToday(isPro: isPro)) {
+      TahrirProSheet.show(context);
+      return;
+    }
+
+    final speedNotifier = ref.read(speedReadingProvider.notifier);
+    final bookshelfNotifier = ref.read(bookshelfProvider.notifier);
+    LexicalWarmupSheet.show(
+      context,
+      loadPack: () => speedNotifier.prepareBookWarmupPack(book: book),
+      preset: FasilDurationPreset.spark5,
+      onLaunchFasil: () {
+        if (!mounted) return;
+        Navigator.of(context)
+            .push(
+              MaterialPageRoute(
+                builder: (_) => ReaderScreen(
+                  book: book,
+                  initialGuidedFasilMinutes: 5,
+                ),
+              ),
+            )
+            .then((_) => bookshelfNotifier.loadBooks());
+      },
+    );
   }
 
   void _showBookActionsSheet(BuildContext context, BookEntity book) {
@@ -61,7 +106,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.outline.withOpacity(0.5),
+                    color: theme.colorScheme.outline.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -80,14 +125,14 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                 book.author,
                 style: GoogleFonts.inter(
                   fontSize: 12,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const Divider(height: 24),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Text('📜', style: TextStyle(fontSize: 22)),
-                title: const Text('📜 Okuma Beratını Gör'),
+                leading: Icon(Icons.workspace_premium_outlined, color: theme.colorScheme.primary),
+                title: const Text('Okuma Beratını Gör'),
                 subtitle: const Text('Eserin tahrir mührünü ve okuma beratını görüntüle'),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -104,8 +149,8 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
               if (!book.isCompleted)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Text('✅', style: TextStyle(fontSize: 22)),
-                  title: const Text('✅ Tamamlandı İşaretle'),
+                  leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
+                  title: const Text('Tamamlandı İşaretle'),
                   subtitle: const Text('Eseri bitirildi olarak işaretle ve mührü kazan'),
                   onTap: () async {
                     Navigator.pop(ctx);
@@ -124,9 +169,9 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                 ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Text('🗑️', style: TextStyle(fontSize: 22)),
+                leading: Icon(Icons.delete_outline, color: theme.colorScheme.error),
                 title: Text(
-                  '🗑️ Kitabı Kaldır',
+                  'Kitabı Kaldır',
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
                 subtitle: const Text('Eseri kütüphane rafından kaldır'),
@@ -150,34 +195,42 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
     final notifier = ref.read(bookshelfProvider.notifier);
     final theme = Theme.of(context);
     final filteredBooks = state.filteredBooks;
+    final recentThreeBooks = filteredBooks.take(3).toList();
+    final readingBooks = filteredBooks.where((b) => !b.isCompleted).toList();
+    final completedBooks = filteredBooks.where((b) => b.isCompleted).toList();
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            const Text('📜 ', style: TextStyle(fontSize: 22)),
-            Text(
-              'Tahrir Kütüphanesi',
-              style: GoogleFonts.literata(fontWeight: FontWeight.w800, fontSize: 20),
-            ),
-          ],
+        title: Text(
+          'Tahrir Kütüphanesi',
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.literata(
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+          ),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Kitap Ekle (PDF/EPUB/MD)',
-            icon: const Icon(Icons.add_circle_outline, size: 26),
+          FilledButton.tonalIcon(
             onPressed: () async {
               final newBook = await notifier.importBook();
               if (newBook != null && context.mounted) {
-                Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(builder: (_) => ReaderScreen(book: newBook)),
-                    )
-                    .then((_) => notifier.loadBooks());
+                _openBook(newBook);
               }
             },
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: Text(
+              'Kitap Ekle',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
         ],
       ),
       body: state.isLoading
@@ -186,29 +239,25 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
               onRefresh: () => notifier.loadBooks(),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Streak & Today Goal Header
-                    StreakHeaderBadge(
-                      streakDays: state.habitProfile?.currentStreak ?? 0,
-                      dailyMinutesGoal: state.habitProfile?.dailyGoalMinutes ?? 20,
-                      todayMinutesRead: state.todayMinutesRead,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Search Bar
+                    // 1. Kompakt Arama Çubuğu
                     TextField(
                       controller: _searchController,
                       onChanged: (val) => notifier.setSearchQuery(val),
+                      style: GoogleFonts.inter(fontSize: 13.5),
                       decoration: InputDecoration(
                         hintText: 'Kütüphanede kitap veya yazar ara...',
-                        hintStyle: GoogleFonts.inter(fontSize: 13),
-                        prefixIcon: const Icon(Icons.search, size: 20),
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
                         suffixIcon: state.searchQuery.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
+                                icon: const Icon(Icons.clear_rounded, size: 18),
                                 onPressed: () {
                                   _searchController.clear();
                                   notifier.setSearchQuery('');
@@ -217,21 +266,22 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                             : null,
                         filled: true,
                         fillColor: theme.colorScheme.surface,
+                        isDense: true,
                         contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: theme.colorScheme.outline),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: theme.colorScheme.outline),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
 
-                    // Category Filter Chips
+                    // 2. Kategori Filtre Çipleri
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -241,7 +291,14 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                           return Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: ChoiceChip(
-                              label: Text(label),
+                              visualDensity: VisualDensity.compact,
+                              label: Text(
+                                label,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                ),
+                              ),
                               selected: isSelected,
                               onSelected: (_) => notifier.setFilter(key),
                             ),
@@ -249,63 +306,170 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                         }).toList(),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 14),
 
-                    // Currently Reading Section
-                    if (filteredBooks.isNotEmpty) ...[
+                    if (filteredBooks.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.menu_book_rounded,
+                                size: 48,
+                                color: theme.colorScheme.primary.withValues(alpha: 0.6),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Bu filtrede eser bulunamadı',
+                                style: GoogleFonts.literata(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Sağ üstteki "Kitap Ekle" butonuyla PDF, EPUB, TXT veya Markdown eserlerinizi kütüphaneye ekleyebilirsiniz.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else ...[
+                      // ÜST BÖLÜM: Rafların Üstünde "OKUMAYA DEVAM ET" Kartı
                       Text(
-                        'ŞU AN OKUNAN ESER',
+                        'OKUMAYA DEVAM ET',
                         style: GoogleFonts.inter(
-                          fontSize: 12,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
+                          letterSpacing: 1.1,
                           color: theme.colorScheme.primary,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       _CurrentlyReadingCard(
                         book: filteredBooks.first,
-                        onOpen: () {
-                          Navigator.of(context)
-                              .push(
-                                MaterialPageRoute(
-                                  builder: (_) => ReaderScreen(book: filteredBooks.first),
-                                ),
-                              )
-                              .then((_) => notifier.loadBooks());
-                        },
+                        streakDays: state.habitProfile?.currentStreak ?? 0,
+                        todayMinutesRead: state.todayMinutesRead,
+                        dailyGoalMinutes:
+                            state.habitProfile?.dailyGoalMinutes ?? 20,
+                        onOpen: () => _openBook(filteredBooks.first),
+                        onWarmupAndRead: () =>
+                            _openBookWithWarmup(filteredBooks.first),
                         onShowOptions: () =>
                             _showBookActionsSheet(context, filteredBooks.first),
                       ),
-                      const SizedBox(height: 24),
-                    ],
+                      const SizedBox(height: 18),
 
-                    // Wooden Bookshelf (Visual Spines)
-                    Text(
-                      'KİTAPLIK RAFI',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.2,
-                        color: theme.colorScheme.primary,
+                      // 1. RAF: Son Açılan 3 Kitap (Mevcut Ön Kapak Görüntüsü ile)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '1. RAF • SON AÇILAN ESERLER',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          Text(
+                            'Son ${recentThreeBooks.length} Kitap',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    WoodenShelfWidget(
-                      children: filteredBooks.map((book) {
-                        return BookSpineWidget(
-                          book: book,
-                          onTap: () {
-                            Navigator.of(context)
-                                .push(
-                                  MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
-                                )
-                                .then((_) => notifier.loadBooks());
-                          },
-                          onLongPress: () => _showBookActionsSheet(context, book),
-                        );
-                      }).toList(),
-                    ),
+                      const SizedBox(height: 10),
+                      WoodenShelfWidget(
+                        children: recentThreeBooks.map((book) {
+                          return BookSpineWidget(
+                            book: book,
+                            onTap: () => _openBook(book),
+                            onLongPress: () => _showBookActionsSheet(context, book),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 2. RAF: Kütüphane Rafı (Normal Kitaplıklardaki Gibi Dikey Sırt Dizilimi)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '2. RAF • KÜTÜPHANE RAFI (OKUNANLAR)',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          Text(
+                            '${readingBooks.length} Eser',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClassicalSpineShelfWidget(
+                        books: readingBooks,
+                        onBookTap: _openBook,
+                        onBookLongPress: (book) =>
+                            _showBookActionsSheet(context, book),
+                        emptyMessage:
+                            'Okunmakta olan tüm eserler tamamlandı.',
+                      ),
+                      const SizedBox(height: 20),
+
+                      // 3. RAF: Tamamlanan Kitaplar Rafı (2. Raf Gibi Dikey Sırt Dizilimi)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '3. RAF • TAMAMLANAN KİTAPLAR',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          Text(
+                            '${completedBooks.length} Eser',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClassicalSpineShelfWidget(
+                        books: completedBooks,
+                        onBookTap: _openBook,
+                        onBookLongPress: (book) =>
+                            _showBookActionsSheet(context, book),
+                        isCompletedShelf: true,
+                        emptyMessage:
+                            'Bitirdiğiniz eserler 2. raf gibi dikey sırt dizilimiyle bu rafa yerleşir.',
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -316,84 +480,159 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
 
 class _CurrentlyReadingCard extends StatelessWidget {
   final BookEntity book;
+  final int streakDays;
+  final int todayMinutesRead;
+  final int dailyGoalMinutes;
   final VoidCallback onOpen;
+  final VoidCallback onWarmupAndRead;
   final VoidCallback onShowOptions;
 
   const _CurrentlyReadingCard({
     required this.book,
+    required this.streakDays,
+    required this.todayMinutesRead,
+    required this.dailyGoalMinutes,
     required this.onOpen,
+    required this.onWarmupAndRead,
     required this.onShowOptions,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final progressPct = (book.progressPercentage * 100).round().clamp(0, 100);
 
-    return GestureDetector(
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onOpen,
       onLongPress: onShowOptions,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: theme.colorScheme.outline),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 50,
-              height: 70,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.colorScheme.primary),
-              ),
-              child: const Center(
-                child: Text(
-                  '📖',
-                  style: TextStyle(fontSize: 24),
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.auto_stories_outlined,
+                    color: theme.colorScheme.primary,
+                    size: 22,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.literata(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${book.author} • S. ${book.currentPage}/${book.totalPages > 0 ? book.totalPages : 1} (%$progressPct)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color:
+                              theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      LinearProgressIndicator(
+                        value: book.progressPercentage,
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: 'Eser İşlemleri',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onPressed: onShowOptions,
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 24,
+                ),
+              ],
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    book.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.literata(
-                      fontSize: 16,
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.amberGold.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: AppColors.amberGold.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      '🔥 $streakDays Gün • $todayMinutesRead/$dailyGoalMinutes dk',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: onWarmupAndRead,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.terracotta,
+                    foregroundColor: Colors.white,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    '⚡ Isın & Oku',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Text(
-                    book.author,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: book.progressPercentage,
-                    minHeight: 5,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Eser İşlemleri',
-              icon: const Icon(Icons.more_vert, size: 20),
-              onPressed: onShowOptions,
-            ),
-            IconButton.filled(
-              icon: const Icon(Icons.arrow_forward_ios, size: 18),
-              onPressed: onOpen,
+                ),
+              ],
             ),
           ],
         ),
@@ -401,4 +640,6 @@ class _CurrentlyReadingCard extends StatelessWidget {
     );
   }
 }
+
+
 

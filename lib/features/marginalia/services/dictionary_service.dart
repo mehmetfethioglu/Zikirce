@@ -1212,84 +1212,1137 @@ class DictionaryService {
       meaning: 'İnsanın değerini, onurunu ve klasik edebi-felsefi metinlerin incelenmesini merkeze alan düşünce akımı, insancıllık.',
       example: '"Yunus Emre\'nin yaratılanı Yaratan\'dan ötürü seven irfanı, en derin gönül hümanizmasıdır."',
     ),
+    // ---------------------------------------------------------------------------
+    // KLASİK SİYASETNÂME, İSLAM HUKUKU, TARİH VE EDEBÎ METİN TERİMLERİ
+    // (El-Ahkâmu's-Sultâniyye, Mukaddime, Kutadgu Bilig, Yunan Mezâlimi, Âdâb)
+    // ---------------------------------------------------------------------------
+    'imamet': const DictionaryEntry(
+      word: 'İmâmet',
+      origin: 'Arapça (imāmet - önderlik)',
+      partOfSpeech: 'Kamu Hukuku / Kelâm',
+      meaning: 'Din ve dünya işlerini tedbir etmek, adaleti tesis ve toplumu idare etmek üzere nübüvvete vekâleten kurulan devlet başkanlığı makamı; hilâfet.',
+      example: '"İmâmet, dinin korunması ve dünya işlerinin adaletle yürütülmesi için konulmuş bir müessesedir."',
+    ),
+    'hilafet': const DictionaryEntry(
+      word: 'Hilâfet',
+      origin: 'Arapça (ḫilāfet - vekillik, halef olma)',
+      partOfSpeech: 'Tarih / Kamu Hukuku',
+      meaning: 'Hz. Peygamber\'den sonra İslam toplumunun dinî ve dünyevî idaresini üstlenme makamı; halifelik.',
+      example: '"Hilâfet makamı, emanetin ehline tevdi edilmesi ve adaletin ikamesi esasına dayanır."',
+    ),
+    'halife': const DictionaryEntry(
+      word: 'Halîfe',
+      origin: 'Arapça (ḫalīfe)',
+      partOfSpeech: 'İsim / Tarih',
+      meaning: 'Birinin yerine geçen, vekâlet eden kimse; İslam devletinde kamu düzenini ve hukuku korumakla yükümlü devlet başkanı.',
+      example: '"Adil halife, mazlumun hakkını zalimden alıncaya kadar kendi nefsine rahat yüzü göstermez."',
+    ),
+    'halef': const DictionaryEntry(
+      word: 'Halef',
+      origin: 'Arapça (ḫalef)',
+      partOfSpeech: 'İsim',
+      meaning: 'Bir makam, görev veya ilim halkasında kendisinden öncekinin (selefin) ardından gelip onun yerini alan kimse.',
+      example: '"Selefin tecrübesini halefin gayretiyle birleştiren medeniyetler asırlarca ayakta kalır."',
+    ),
+    'selef': const DictionaryEntry(
+      word: 'Selef',
+      origin: 'Arapça (selef)',
+      partOfSpeech: 'İsim',
+      meaning: 'Bir görev, makam veya zaman diliminde kendisinden sonrakinden (haleften) önce gelip geçmiş olan kimse veya nesil.',
+      example: '"Klasik âlimler, seleflerinin eserlerini şerh ve tahkik ederek ilim mirasını zenginleştirmiştir."',
+    ),
+    'nübüvvet': const DictionaryEntry(
+      word: 'Nübüvvet',
+      origin: 'Arapça (nübüvvet)',
+      partOfSpeech: 'Kelâm / İsim',
+      meaning: 'Peygamberlik makamı ve vazifesi; ilâhî vahyi insanlara tebliğ ve temsil etme görevi.',
+      example: '"Nübüvvet, insanlığa hem ahlâkî kemâli hem de toplumsal adalet ölçülerini öğretmiştir."',
+    ),
+    'müessese': const DictionaryEntry(
+      word: 'Müessese',
+      origin: 'Arapça (müʾessese - tesis edilmiş yapı)',
+      partOfSpeech: 'İsim / Sosyoloji',
+      meaning: 'Toplumsal, hukuki veya idari bir ihtiyacı karşılamak üzere köklü kurallarla kurulmuş kurum, kuruluş.',
+      example: '"Vakıf müessesesi, İslam medeniyetinde sosyal dayanışmanın belkemiğini oluşturmuştur."',
+    ),
+    'ictihad': const DictionaryEntry(
+      word: 'İçtihat',
+      origin: 'Arapça (ictihād - bütün gücünü sarf etme)',
+      partOfSpeech: 'Hukuk / Fıkıh',
+      meaning: 'Usul kurallarına dayanarak kaynaklardan hüküm çıkarma çabası; mahkemelerin ve hukuk âlimlerinin emsal teşkil eden görüşü.',
+      example: '"Zamanın değişmesiyle ahkâmın tatbik keyfiyetinde yeni içtihatlara ihtiyaç duyulur."',
+    ),
+    'vaki': const DictionaryEntry(
+      word: 'Vâki',
+      origin: 'Arapça (vāḳiʿ - düşen, gerçekleşen)',
+      partOfSpeech: 'Sıfat / İsim',
+      meaning: 'Meydana gelen, vuku bulan, gerçekleşmiş olan, var olan hakikat.',
+      example: '"Tarihte vâki olan hadiseleri kendi devrinin şartları içinde değerlendirmek gerekir."',
+    ),
+    'vacip': const DictionaryEntry(
+      word: 'Vâcib',
+      origin: 'Arapça (vācib - gerekli, bağlayıcı)',
+      partOfSpeech: 'Fıkıh / Felsefe',
+      meaning: 'Yapılması kesin ve bağlayıcı bir delille istenen, terk edilmesi caiz olmayan dini ve hukuki yükümlülük; zorunlu olan.',
+      example: '"Toplumsal düzeni ve adaleti sağlayacak bir idarenin kurulması kamu hukuku bakımından vâcibdir."',
+    ),
+    'vacib': const DictionaryEntry(
+      word: 'Vâcib',
+      origin: 'Arapça (vācib)',
+      partOfSpeech: 'Fıkıh / Felsefe',
+      meaning: 'Yerine getirilmesi zorunlu ve bağlayıcı olan hüküm veya görev.',
+      example: '"Emaneti ehline vermek ve adaletle hükmetmek her idareci üzerine vâcibdir."',
+    ),
+    'şeriat': const DictionaryEntry(
+      word: 'Şerîat',
+      origin: 'Arapça (şerīʿat - suya giden ana yol)',
+      partOfSpeech: 'Hukuk / Din',
+      meaning: 'İlahi emir, yasak ve ilkeler bütünü; İslam hukuk düzeni ve adalet yolu.',
+      example: '"Şerîatın temel gayesi; canı, aklı, dini, nesli ve malı muhafaza etmektir."',
+    ),
+    'şeran': const DictionaryEntry(
+      word: 'Şer\'an',
+      origin: 'Arapça (şerʿan)',
+      partOfSpeech: 'Zarf / Hukuk',
+      meaning: 'İslam hukuku (şerîat) kurallarına ve dinî hükümlere göre, hukuk nazarında.',
+      example: '"Bir akdin şer\'an geçerli olması için tarafların serbest irade ve rızası şarttır."',
+    ),
+    'aklen': const DictionaryEntry(
+      word: 'Aklen',
+      origin: 'Arapça (ʿaḳlen)',
+      partOfSpeech: 'Zarf / Felsefe',
+      meaning: 'Akıl yürütme, mantık ilkeleri ve muhakeme bakımından; aklın gereği olarak.',
+      example: '"İnsanların bir arada yaşarken ortak bir düzene muhtaç olduğu aklen de sabittir."',
+    ),
+    'akıl': const DictionaryEntry(
+      word: 'Akıl',
+      origin: 'Arapça (ʿaḳl - bağlama, kavrama)',
+      partOfSpeech: 'İsim / Felsefe',
+      meaning: 'İnsanın eşyanın hakikatini kavrama, düşünme, doğru ile yanlışı ayırt etme ve muhakeme kurma melekesi.',
+      example: '"Akıl, ilmin kandili; tecrübe ise o kandilin yağıdır."',
+    ),
+    'zulüm': const DictionaryEntry(
+      word: 'Zulüm',
+      origin: 'Arapça (ẓulm - bir şeyi yerinden başka yere koyma)',
+      partOfSpeech: 'İsim / Ahlâk',
+      meaning: 'Adaletten sapma, haksızlık etme, başkasının hakkını gasp etme ve sınırı aşma.',
+      example: '"Mülk küfür ile belki durur; lâkin zulüm ile asla payidar olmaz."',
+    ),
+    'zalim': const DictionaryEntry(
+      word: 'Zâlim',
+      origin: 'Arapça (ẓālim)',
+      partOfSpeech: 'Sıfat / İsim',
+      meaning: 'Adaleti terk edip haksızlık ve baskı yapan, hak sahiplerinin hakkını çiğneyen kimse.',
+      example: '"Mazlumun ahı, zalimin tahtını er ya da geç sarsar."',
+    ),
+    'mazlum': const DictionaryEntry(
+      word: 'Mazlum',
+      origin: 'Arapça (maẓlūm)',
+      partOfSpeech: 'Sıfat / İsim',
+      meaning: 'Zulme ve haksızlığa uğramış, hakkı elinden alınmış kimse.',
+      example: '"Adalet divanının ilk vazifesi mazlumun imdadına yetişmektir."',
+    ),
+    'mezalim': const DictionaryEntry(
+      word: 'Mezâlim',
+      origin: 'Arapça (meẓālim - maẓlime\'nin çoğulu)',
+      partOfSpeech: 'İsim / Tarih',
+      meaning: 'Zulümler, haksızlıklar, kıyımlar; klasik İslam devletlerinde üst düzey görevlilerin haksızlıklarını denetleyen yüksek adalet divanı (Dîvân-ı Mezâlim).',
+      example: '"Dîvân-ı Mezâlim, güçlülerin zayıflar üzerindeki tahakkümünü kırmak için kurulmuş en yüksek yargı merciidir."',
+    ),
+    'bertaraf': const DictionaryEntry(
+      word: 'Bertaraf',
+      origin: 'Farsça (ber-ṭaraf - bir yana bırakılmış)',
+      partOfSpeech: 'İsim / Zarf',
+      meaning: 'Ortadan kaldırma, giderme, savuşturma, etkisiz hale getirme.',
+      example: '"Toplumdaki ihtilafları adaletle bertaraf etmek huzurun temel şartıdır."',
+    ),
+    'mani': const DictionaryEntry(
+      word: 'Mâni',
+      origin: 'Arapça (māniʿ - engelleyen)',
+      partOfSpeech: 'İsim / Hukuk',
+      meaning: 'Bir şeyin gerçekleşmesini önleyen engel, حائل; hukukta bir hükmün doğmasına engel olan sebep.',
+      example: '"İlim yolunda sebat eden kimse için hiçbir güçlük aşılmaz bir mâni değildir."',
+    ),
+    'cahiliye': const DictionaryEntry(
+      word: 'Câhiliye',
+      origin: 'Arapça (cāhiliyyet)',
+      partOfSpeech: 'Tarih / Sosyoloji',
+      meaning: 'İslamiyet\'ten önce Arap yarımadasında kabile عصbiyeti, kan davaları ve hukuksuzlukla karakterize edilen dönem; bilgisizlik ve taşkınlık hali.',
+      example: '"Câhiliye devrinin kabile üstünlüğü anlayışı, yerini takva ve hukuk eşitliğine bırakmıştır."',
+    ),
+    'cahiliyet': const DictionaryEntry(
+      word: 'Câhiliyet',
+      origin: 'Arapça (cāhiliyyet)',
+      partOfSpeech: 'Tarih / İsim',
+      meaning: 'Hakikatten, hukuk ve faziletten uzaklaşarak kaba kuvvet ve taassupla hareket etme durumu.',
+      example: '"Adaletin olmadığı yerde câhiliyet adetleri yeniden baş gösterir."',
+    ),
+    'sefih': const DictionaryEntry(
+      word: 'Sefîh',
+      origin: 'Arapça (sefīh - hafif akıllı, savurgan)',
+      partOfSpeech: 'Sıfat / Hukuk',
+      meaning: 'Malını ve imkânlarını akıl ve hikmet ölçülerine aykırı biçimde saçıp savuran, zevk ve eğlenceye düşkün, muhakemesi zayıf kimse.',
+      example: '"Klasik fıkıhta sefîhin kendi malını telef etmesini önlemek için hacir (kısıtlama) hükümleri uygulanır."',
+    ),
+    'sürur': const DictionaryEntry(
+      word: 'Sürûr',
+      origin: 'Arapça (surūr)',
+      partOfSpeech: 'İsim',
+      meaning: 'Kalpte duyulan derin sevinç, neşe, ferahlık ve mutluluk.',
+      example: '"Hakikatin ortaya çıkması, ilim ehlinin gönlüne tarifsiz bir sürûr verir."',
+    ),
+    'beyat': const DictionaryEntry(
+      word: 'Bey\'at (Biat)',
+      origin: 'Arapça (beyʿat - el sıkışarak sözleşme)',
+      partOfSpeech: 'Kamu Hukuku / Tarih',
+      meaning: 'Seçiciler kurulunun (ehl-i hal ve\'l-akd) ve halkın, devlet başkanının hukuka uygun idaresine bağlılık bildirdiği karşılıklı siyasi-hukuki sözleşme.',
+      example: '"Bey\'at, yöneten ile yönetilen arasında adalet ve sadakat şartına bağlı bir kamu akdidir."',
+    ),
+    'biat': const DictionaryEntry(
+      word: 'Biat (Bey\'at)',
+      origin: 'Arapça (beyʿat)',
+      partOfSpeech: 'Kamu Hukuku / Tarih',
+      meaning: 'Devlet başkanının seçimi ve meşruiyetinin onaylanması için yapılan karşılıklı bağlılık ve hukuk sözleşmesi.',
+      example: '"Biat akdi, idareciye adaletle hükmetme mükellefiyeti yükler."',
+    ),
+    'velayet': const DictionaryEntry(
+      word: 'Velâyet',
+      origin: 'Arapça (velāyet - yakınlık, yetki)',
+      partOfSpeech: 'Hukuk / Tasavvuf',
+      meaning: 'Hukukta bir kimsenin veya kamunun işlerini yürütme ve karar alma yetkisi (velâyet-i âmme); tasavvufta Allah\'a dostluk makamı.',
+      example: '"Kamu görevi bir imtiyaz değil, millet adına üstlenilen ağır bir velâyet emanetidir."',
+    ),
+    'ehliyet': const DictionaryEntry(
+      word: 'Ehliyet',
+      origin: 'Arapça (ehliyyet - layık ve yeterli olma)',
+      partOfSpeech: 'Hukuk / İsim',
+      meaning: 'Bir işi hakkıyla yapabilme yetkinliği, uzmanlık; hukukta haklara sahip olma ve borç altına girebilme yeterliliği.',
+      example: '"Makamların tevdiinde akrabalık değil, ilim ve ehliyet esas alınmalıdır."',
+    ),
+    'liyakat': const DictionaryEntry(
+      word: 'Liyâkat',
+      origin: 'Arapça (liyāḳat - layık olma, uygunluk)',
+      partOfSpeech: 'İsim / Kamu Yönetimi',
+      meaning: 'Bir kimsenin kendisine verilen görevi başarıyla yürütebilecek bilgi, ahlak ve yeteneğe sahip olması; layık olma durumu.',
+      example: '"Nizam-ı âlemin sırrı, her vazifeyi liyâkat sahibine teslim etmektir."',
+    ),
+    'maslahat': const DictionaryEntry(
+      word: 'Maslahat',
+      origin: 'Arapça (maṣlaḥat - iyilik, fayda)',
+      partOfSpeech: 'Hukuk / Siyaset',
+      meaning: 'Toplumun ve fertlerin hayrına, huzuruna ve yararına olan iş; kamu yararı (maslahat-ı âmme).',
+      example: '"İdarecilerin tasarrufları şahsi arzulara değil, kamu maslahatına bağlıdır (Mecelle, md. 58)."',
+    ),
+    'müeyyide': const DictionaryEntry(
+      word: 'Müeyyide',
+      origin: 'Arapça (müʾeyyide - sağlamlaştıran güç)',
+      partOfSpeech: 'Hukuk',
+      meaning: 'Hukuk kurallarına uyulmasını temin eden ve ihlal halinde uygulanan yaptırım, kanuni zorlayıcı güç.',
+      example: '"Müeyyidesiz bırakılan kaideler, zamanla sadece temenniden ibaret kalır."',
+    ),
+    'ahkam': const DictionaryEntry(
+      word: 'Ahkâm',
+      origin: 'Arapça (aḥkām - ḥükm\'ün çoğulu)',
+      partOfSpeech: 'Hukuk / İsim',
+      meaning: 'Hükümler, kanunlar, hukuki kaideler ve yargı kararları.',
+      example: '"El-Ahkâmu\'s-Sultâniyye, İslam kamu ve anayasa hukukunun en temel klasik eseridir."',
+    ),
+    'hüküm': const DictionaryEntry(
+      word: 'Hüküm',
+      origin: 'Arapça (ḥükm)',
+      partOfSpeech: 'Hukuk / Mantık',
+      meaning: 'Yargı kararı, kanuni kural, buyruk; mantıkta iki kavram arasında kurulan olumlu veya olumsuz yargı.',
+      example: '"Adil bir hüküm, iki tarafı da dinlemeden ve delilleri tartmadan verilemez."',
+    ),
+    'sultaniyye': const DictionaryEntry(
+      word: 'Sultâniyye',
+      origin: 'Arapça (sulṭāniyye)',
+      partOfSpeech: 'Kamu Hukuku / Tarih',
+      meaning: 'Devlet otoritesine, kamu yönetimine ve hükümdarlık hukukuna ait olan.',
+      example: '"Ahkâm-ı Sultâniyye, devlet teşkilatı, yargı, maliye ve idare hukukunu inceler."',
+    ),
+    'fıkıh': const DictionaryEntry(
+      word: 'Fıkıh',
+      origin: 'Arapça (fiḳh - derinlemesine kavrama)',
+      partOfSpeech: 'İsim / Hukuk',
+      meaning: 'Bir şeyi ince bir kavrayışla derinlemesine bilme; İslam ibadet, muamelat ve kamu hukuku ilmi.',
+      example: '"Fıkıh, insanın lehine ve aleyhine olan hak ve sorumlulukları bilmesidir."',
+    ),
+    'fakih': const DictionaryEntry(
+      word: 'Fakîh',
+      origin: 'Arapça (faḳīh)',
+      partOfSpeech: 'İsim / Hukuk',
+      meaning: 'Fıkıh ilminde derinleşmiş, delillerden hüküm çıkarma kudretine sahip İslam hukukçusu.',
+      example: '"Mâverdî, hem büyük bir Şâfiî fakîhi hem de tecrübeli bir başkadılık (akda\'l-kudât) mensubudur."',
+    ),
+    'kaza': const DictionaryEntry(
+      word: 'Kazâ',
+      origin: 'Arapça (ḳaḍāʾ - hüküm verme, yerine getirme)',
+      partOfSpeech: 'Hukuk / Kelâm',
+      meaning: 'İnsanlar arasındaki anlaşmazlıkları hukuk kurallarına göre çözme yetkisi ve yargı teşkilatı; kelâmda ezelî takdirin gerçekleşmesi.',
+      example: '"Kazâ makamının bağımsızlığı, adaletin mülke temel olmasının ilk şartıdır."',
+    ),
+    'kadı': const DictionaryEntry(
+      word: 'Kadı',
+      origin: 'Arapça (ḳāḍī)',
+      partOfSpeech: 'Hukuk / Tarih',
+      meaning: 'İslam ve Osmanlı hukuk düzeninde davaları dinleyip şer\'î ve örfî hukuka göre karara bağlayan hâkim, yargıç.',
+      example: '"Kadı, mahkeme meclisinde sultan ile sıradan bir raiyyeti eşit tutmakla mükelleftir."',
+    ),
+    'vezir': const DictionaryEntry(
+      word: 'Vezir',
+      origin: 'Arapça (vezīr - yük taşıyan yardımcı)',
+      partOfSpeech: 'Tarih / Kamu Yönetimi',
+      meaning: 'Devlet yönetiminde hükümdarın veya halifenin en üst düzey yürütme yardımcısı, bakan (tefvîz veya tenfîz veziri).',
+      example: '"Tefvîz veziri geniş takdir yetkisiyle icraatta bulunurken, tenfîz veziri alınan kararları uygular."',
+    ),
+    'vezaret': const DictionaryEntry(
+      word: 'Vezâret',
+      origin: 'Arapça (vezāret)',
+      partOfSpeech: 'Kamu Yönetimi / Tarih',
+      meaning: 'Vezirlik makamı ve kurumu; devlet yükünü omuzlayan yürütme organı.',
+      example: '"Mâverdî vezâreti, yetki genişliğine göre tefvîz ve tenfîz vezirliği olarak ikiye ayırır."',
+    ),
+    'emaret': const DictionaryEntry(
+      word: 'Emâret',
+      origin: 'Arapça (emāret)',
+      partOfSpeech: 'Kamu Yönetimi / Tarih',
+      meaning: 'Emirlik, valilik veya ordu komutanlığı makamı; taşra eyaletlerinin ve askeri birliklerin idaresi.',
+      example: '"Eyaletlerin huzuru, emâret makamına atanan valilerin adalet ve dirayetine bağlıdır."',
+    ),
+    'haraç': const DictionaryEntry(
+      word: 'Haraç',
+      origin: 'Arapça (ḫarāc)',
+      partOfSpeech: 'Maliye Hukuku / Tarih',
+      meaning: 'Klasik İslam maliyesinde tarım arazilerinden ve ürünlerinden devlet hazinesi (Beytülmâl) adına alınan toprak vergisi.',
+      example: '"Toprağın verimliliği ve sulama imkânları, haraç miktarının adil biçimde takdirinde esas alınır."',
+    ),
+    'cizye': const DictionaryEntry(
+      word: 'Cizye',
+      origin: 'Arapça (cizye)',
+      partOfSpeech: 'Maliye Hukuku / Tarih',
+      meaning: 'İslam devletinde gayrimüslim vatandaşların (zimmîlerin) can/mal güvenliği ve askerlik muafiyeti karşılığında ödedikleri baş vergisi.',
+      example: '"Kadınlar, çocuklar, yaşlılar ve geçim sıkıntısı çekenler cizye mükellefiyetinden muaftır."',
+    ),
+    'ganimet': const DictionaryEntry(
+      word: 'Ganîmet',
+      origin: 'Arapça (ġanīmet)',
+      partOfSpeech: 'Tarih / Hukuk',
+      meaning: 'Savaşta elde edilen mal ve gelirler; mecazen zahmetsizce kavuşulan değerli imkân veya fırsat.',
+      example: '"Gençlik ve boş vakit, kıymetini bilen için en büyük ganîmettir."',
+    ),
+    'zekat': const DictionaryEntry(
+      word: 'Zekât',
+      origin: 'Arapça (zekāt - arınma, bereketlenme)',
+      partOfSpeech: 'Din / Maliye',
+      meaning: 'Belli bir zenginlik ölçüsüne (nisap) ulaşan malın, her yıl ihtiyaç sahiplerine verilmesi zorunlu olan belirli payı.',
+      example: '"Zekât, servetin yalnızca belirli ellerde toplanmasını önleyen sosyal adalet köprüsüdür."',
+    ),
+    'beytülmal': const DictionaryEntry(
+      word: 'Beytülmâl',
+      origin: 'Arapça (beytu\'l-māl - mal evi)',
+      partOfSpeech: 'Maliye / Tarih',
+      meaning: 'İslam devletinde kamu gelirlerinin toplandığı ve kamu hizmetleri için harcandığı devlet hazinesi.',
+      example: '"Beytülmâl, milletin ortak emaneti olup her kuruşu kamu yararına sarf edilir."',
+    ),
+    'hisbe': const DictionaryEntry(
+      word: 'Hisbe',
+      origin: 'Arapça (ḥisbe)',
+      partOfSpeech: 'Kamu Hukuku / Tarih',
+      meaning: 'Çarşı ve pazarlarda ölçü-tartı doğruluğunu, gıda sağlığını, fiyat dengesini ve kamu ahlakını denetleyen belediye ve teftiş teşkilatı.',
+      example: '"Hisbe teşkilatı ve muhtesipler, esnafın tüketiciyi aldatmasını engelleyen sıkı bir denetim kurmuştur."',
+    ),
+    'asabiyet': const DictionaryEntry(
+      word: 'Asabiyet',
+      origin: 'Arapça (ʿaṣabiyyet)',
+      partOfSpeech: 'Sosyoloji / Tarih',
+      meaning: 'İbn Haldun\'un Mukaddime\'sinde kavramsallaştırdığı; bir topluluğu ortak gaye etrafında kenetleyen toplumsal dayanışma ve aidiyet ruhu.',
+      example: '"İbn Haldun\'a göre devletlerin kuruluşu güçlü bir asabiyet ve ortak ülkü ile mümkün olur."',
+    ),
+    'ümran': const DictionaryEntry(
+      word: 'Ümran',
+      origin: 'Arapça (ʿumrān - bayındırlık, medeniyet)',
+      partOfSpeech: 'Sosyoloji / Felsefe',
+      meaning: 'İnsanların yeryüzünü imar ederek bir arada yaşaması, toplumsal hayat, kültür ve medeniyet birikimi.',
+      example: '"İbn Haldun, insan topluluklarının doğasını inceleyen yeni bilime İlm-i Ümran adını vermiştir."',
+    ),
+    'bedevi': const DictionaryEntry(
+      word: 'Bedevî',
+      origin: 'Arapça (bedevī - kır/çöl hayatına mensup)',
+      partOfSpeech: 'Sosyoloji / Sıfat',
+      meaning: 'Yerleşik şehir hayatından önce kırsalda, yaylak ve çöllerde göçebe veya yarı göçebe yaşayan sade ve dayanıklı topluluk.',
+      example: '"Bedevî toplumlar zorlu tabiat şartları sebebiyle cesaret ve dayanışma bakımından diri kalırlar."',
+    ),
+    'hadari': const DictionaryEntry(
+      word: 'Hadarî',
+      origin: 'Arapça (ḥaḍarī - yerleşik şehirli)',
+      partOfSpeech: 'Sosyoloji / Sıfat',
+      meaning: 'Yerleşik düzene geçmiş, şehirlerde bilim, sanat, zanaat ve ticaretle uğraşan medeni toplum.',
+      example: '"Hadarî hayatta ilim ve sanatlar zirveye ulaşırken, konfor ve rehavet tehlikesi de artar."',
+    ),
+    'husus': const DictionaryEntry(
+      word: 'Husus',
+      origin: 'Arapça (ḫuṣūṣ)',
+      partOfSpeech: 'İsim',
+      meaning: 'Üzerinde durulan konu, mesele, yön, cihet, özellik.',
+      example: '"Bu hususta âlimlerin ortaya koyduğu deliller meselenin her boyutunu aydınlatmaktadır."',
+    ),
+    'ihtilaf': const DictionaryEntry(
+      word: 'İhtilâf',
+      origin: 'Arapça (iḫtilāf)',
+      partOfSpeech: 'İsim',
+      meaning: 'Görüş ayrılığı, uyuşmazlık, farklı düşünme durumu.',
+      example: '"İlmî ihtilâflar, meselelerin farklı cephelerden derinlemesine incelenmesine vesile olur."',
+    ),
+    'ittifak': const DictionaryEntry(
+      word: 'İttifak',
+      origin: 'Arapça (ittifāḳ)',
+      partOfSpeech: 'İsim',
+      meaning: 'Görüş ve düşünce birliği, uyuşma, oybirliği.',
+      example: '"Adaletin mülkün temeli olduğu hakikatinde bütün hikmet ehli ittifak etmiştir."',
+    ),
+    'ümmet': const DictionaryEntry(
+      word: 'Ümmet',
+      origin: 'Arapça (ümmet)',
+      partOfSpeech: 'İsim / Sosyoloji',
+      meaning: 'Bir peygamberin tebliğ ettiği inanç ve değerler etrafında birleşen büyük insan topluluğu.',
+      example: '"İlim ve adalet, ümmetin dirliğini koruyan iki sarsılmaz sütundur."',
+    ),
+    'cemaat': const DictionaryEntry(
+      word: 'Cemaat',
+      origin: 'Arapça (cemāʿat)',
+      partOfSpeech: 'İsim / Sosyoloji',
+      meaning: 'Ortak bir gaye veya ibadet için bir araya gelmiş insan topluluğu, cemiyet.',
+      example: '"Fertlerin şahsi gayreti, cemaat şuuru ve dayanışmayla birleştiğinde kalıcı eserler doğar."',
+    ),
+    'dünyevi': const DictionaryEntry(
+      word: 'Dünyevî',
+      origin: 'Arapça (dünyevī)',
+      partOfSpeech: 'Sıfat',
+      meaning: 'Bu dünyaya, geçici maddi hayata ve toplum düzenine ait olan.',
+      example: '"Klasik düşüncede dinî fazilet ile dünyevî nizam birbirini tamamlayan iki kanattır."',
+    ),
+    'uhrevi': const DictionaryEntry(
+      word: 'Uhrevî',
+      origin: 'Arapça (uḫrevī)',
+      partOfSpeech: 'Sıfat',
+      meaning: 'Ahiret hayatına, ebedî âleme ve manevi sorumluluğa ilişkin olan.',
+      example: '"İnsanın vicdanındaki uhrevî hesap bilinci, kimsenin görmediği yerde dahi adaleti korur."',
+    ),
+    'anarşi': const DictionaryEntry(
+      word: 'Anarşi',
+      origin: 'Fransızca / Yunanca (anarchie - başsızlık)',
+      partOfSpeech: 'Siyaset / Sosyoloji',
+      meaning: 'Devlet otoritesinin, hukukun ve kamu düzeninin ortadan kalkmasıyla oluşan kargaşa ve başsızlık hali (fevzâ).',
+      example: '"Hukukun üstünlüğü zedelendiğinde toplumda güven sarsılır ve anarşi tehlikesi baş gösterir."',
+    ),
+    'istibdat': const DictionaryEntry(
+      word: 'İstibdat',
+      origin: 'Arapça (istibdād)',
+      partOfSpeech: 'Siyaset / Tarih',
+      meaning: 'Hiçbir kanun ve danışma meclisi tanımaksızın tek başına keyfî ve baskıcı yönetim, despotizm.',
+      example: '"Meşveret ve hukuk denetimi, idarenin istibdata dönüşmesini önleyen en sağlam kaledir."',
+    ),
+    'meşveret': const DictionaryEntry(
+      word: 'Meşveret (Şûrâ)',
+      origin: 'Arapça (meşveret)',
+      partOfSpeech: 'Kamu Yönetimi / İsim',
+      meaning: 'Önemli işlerde ehil kimselerle danışma, görüş alışverişinde bulunma, istişare meclisi.',
+      example: '"İstişare ve meşveret, tek kişinin yanılma payını ortak aklın bereketiyle giderir."',
+    ),
+    'şura': const DictionaryEntry(
+      word: 'Şûrâ',
+      origin: 'Arapça (şūrā)',
+      partOfSpeech: 'Kamu Yönetimi / İsim',
+      meaning: 'Kamu işlerinin uzmanlar ve temsilciler arasında tartışılarak karara bağlandığı danışma kurulu.',
+      example: '"Şûrâ prensibi, kamu kararlarının ortak akıl ve ehliyetle alınmasını emreder."',
+    ),
+    'mahiyet': const DictionaryEntry(
+      word: 'Mâhiyet',
+      origin: 'Arapça (māhiyyet - "o nedir?" sorusunun cevabı)',
+      partOfSpeech: 'Felsefe / İsim',
+      meaning: 'Bir şeyin aslı, özü, içyüzü, onu kendisi yapan temel nitelikler bütünü.',
+      example: '"Bir meselenin mâhiyetini kavramadan verilen hükümler yüzeysel kalmaya mahkûmdur."',
+    ),
+    'keyfiyet': const DictionaryEntry(
+      word: 'Keyfiyet',
+      origin: 'Arapça (keyfiyyet - "nasıldır?" sorusunun cevabı)',
+      partOfSpeech: 'Felsefe / İsim',
+      meaning: 'Bir şeyin niteliği, nasıl olduğu, iç durumu ve vasfı (kemiyetin/niceliğin karşıtı).',
+      example: '"Okunan kitapların sayısından (kemiyetinden) ziyade, okumanın derinliği ve keyfiyeti önemlidir."',
+    ),
+    'mülahaza': const DictionaryEntry(
+      word: 'Mülâhaza',
+      origin: 'Arapça (mülāḥaẓa)',
+      partOfSpeech: 'İsim',
+      meaning: 'Dikkatle inceleyerek üzerinde düşünme, değerlendirme, fikir ve görüş.',
+      example: '"Müellif, eserin son bölümünde tarihi vakıalar hakkındaki mülâhazalarını özetlemiştir."',
+    ),
+    'hatime': const DictionaryEntry(
+      word: 'Hâtime',
+      origin: 'Arapça (ḫātime)',
+      partOfSpeech: 'Edebiyat / İsim',
+      meaning: 'Bir kitabın, konuşmanın veya işin sonu, bitiş ve sonuç bölümü.',
+      example: '"Klasik eserler besmele ve hamdele ile başlayıp dua ve hâtime ile tamamlanır."',
+    ),
+    // --- Osmanlıca Terkipler (İzafet & Vasf-ı Terkibî) ---
+    'âdâb-ı muaşeret': const DictionaryEntry(
+      word: 'Âdâb-ı Muaşeret',
+      origin: 'Arapça (ādāb) + Farsça izafet + Arapça (muʿāşeret)',
+      partOfSpeech: 'Osmanlıca Terkip / Ahlâk',
+      meaning: 'Toplumsal yaşayışta, insan ilişkilerinde uyulması gereken nezaket, terbiye ve görgü kuralları bütünü.',
+      example: '"Klasik kültürümüzde âdâb-ı muaşeret, bireyin hem kendine hem de topluma duyduğu hürmetin tezahürüdür."',
+    ),
+    'ehl-i sünnet': const DictionaryEntry(
+      word: 'Ehl-i Sünnet',
+      origin: 'Arapça (ehl + sünnet)',
+      partOfSpeech: 'Osmanlıca Terkip / Kelâm',
+      meaning: 'Hz. Peygamber’in ve sahabenin dinin temel konularında takip ettiği yolu benimseyen ana İslâm topluluğu.',
+      example: '"Ehl-i sünnet âlimleri, itidal ve orta yol çizgisini muhafaza etmeye özen göstermişlerdir."',
+    ),
+    'ehl-i beyt': const DictionaryEntry(
+      word: 'Ehl-i Beyt',
+      origin: 'Arapça (ehl + beyt)',
+      partOfSpeech: 'Osmanlıca Terkip / İslâm Tarihi',
+      meaning: 'Ev halkı; İslâm ıstılahında Hz. Muhammed’in ailesi, evlatları ve torunları.',
+      example: '"Divan edebiyatında Ehl-i Beyt sevgisi sayısız kaside ve naata ilham kaynağı olmuştur."',
+    ),
+    'ehl-i dil': const DictionaryEntry(
+      word: 'Ehl-i Dil',
+      origin: 'Arapça (ehl) + Farsça (dil - gönül)',
+      partOfSpeech: 'Osmanlıca Terkip / Tasavvuf',
+      meaning: 'Gönül ehli; kalp gözü açık, ince ruhlu, halden anlayan ârif kimse.',
+      example: '"Ehl-i dil olanlar, sözün zahirinden ziyade gönüldeki manasına kulak verirler."',
+    ),
+    'ehl-i irfan': const DictionaryEntry(
+      word: 'Ehl-i İrfan',
+      origin: 'Arapça (ehl + ʿirfān)',
+      partOfSpeech: 'Osmanlıca Terkip / Tasavvuf',
+      meaning: 'Sezgi, iç tecrübe ve manevi olgunlukla hakikati kavrayan bilge kimseler.',
+      example: '"Meclisimizde ehl-i irfan sohbetleri gönüllere inşirah verirdi."',
+    ),
+    'hüsn-i zan': const DictionaryEntry(
+      word: 'Hüsn-i Zan',
+      origin: 'Arapça (ḥüsn - güzellik + ẓann - sanı)',
+      partOfSpeech: 'Osmanlıca Terkip / Ahlâk',
+      meaning: 'Bir kimse veya olay hakkında iyi niyetli düşünme, güzel kanaat besleme.',
+      example: '"Mümin, kardeşine karşı daima hüsn-i zan beslemeyi esas alır."',
+    ),
+    'sû-i zan': const DictionaryEntry(
+      word: 'Sû-i Zan',
+      origin: 'Arapça (sūʾ - kötülük + ẓann - sanı)',
+      partOfSpeech: 'Osmanlıca Terkip / Ahlâk',
+      meaning: 'Kesin bilgiye dayanmaksızın bir kimse hakkında kötü niyetli tahminde ve kuşkuda bulunma.',
+      example: '"Sû-i zandan sakınınız; zira zannın bir kısmı ağır bir vebaldir."',
+    ),
+    'sû-i istimal': const DictionaryEntry(
+      word: 'Sû-i İstimal',
+      origin: 'Arapça (sūʾ + istiʿmāl)',
+      partOfSpeech: 'Osmanlıca Terkip / Hukuk',
+      meaning: 'Yetkiyi, iyiliği veya güveni kötüye kullanma, suistimal.',
+      example: '"Kamuemanetinin sû-i istimali, kurumsal meşruiyeti zedeleyen en büyük etkendir."',
+    ),
+    'ilm-i hâl': const DictionaryEntry(
+      word: 'İlm-i Hâl',
+      origin: 'Arapça (ʿilm + ḥāl)',
+      partOfSpeech: 'Osmanlıca Terkip / Fıkıh',
+      meaning: 'Her Müslümanın kendi hal ve durumunda bilmesi gereken temel inanç, ibadet ve ahlâk bilgileri.',
+      example: '"Klasik ilm-i hâl eserleri, günlük hayatın fıkhî ve ahlâkî çerçevesini sade bir dille sunar."',
+    ),
+    'sadaka-i câriye': const DictionaryEntry(
+      word: 'Sadaka-i Câriye',
+      origin: 'Arapça (ṣadaḳa + cāriye - akıp giden)',
+      partOfSpeech: 'Osmanlıca Terkip / İslâm Hukuku',
+      meaning: 'İnsanın ölümünden sonra da sevabı kesilmeyip devam eden çeşme, köprü, okul, ilim eseri gibi hayır işleri.',
+      example: '"Faydalı bir ilim eseri bırakmak, en kalıcı sadaka-i câriye nevilerindendir."',
+    ),
+    'erkân-ı devlet': const DictionaryEntry(
+      word: 'Erkân-ı Devlet',
+      origin: 'Arapça (erkān - direkler + devlet)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: 'Devletin temel direkleri sayılan sadrazam, şeyhülislâm, kazasker, defterdar ve nişancı gibi üst düzey yöneticiler.',
+      example: '"Erkân-ı devlet, mühim memleket meselelerini görüşmek üzere Dîvân-ı Hümâyûn’da toplandı."',
+    ),
+    'nizâm-ı âlem': const DictionaryEntry(
+      word: 'Nizâm-ı Âlem',
+      origin: 'Arapça (niẓām + ʿālem)',
+      partOfSpeech: 'Osmanlıca Terkip / Siyaset Felsefesi',
+      meaning: 'Dünya düzeni; Osmanlı siyaset düşüncesinde adalet, asayiş ve toplumsal dengenin korunması ülküsü.',
+      example: '"Osmanlı kanunnâmelerinde temel gaye, nizâm-ı âlemin adaletle tesis ve idamesidir."',
+    ),
+    'kânûn-ı kadîm': const DictionaryEntry(
+      word: 'Kânûn-ı Kadîm',
+      origin: 'Arapça (ḳānūn + ḳadīm)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: 'Devletin kuruluşundan beri süregelen köklü geleneksel yasalar, kurumsal teamüller ve düzen.',
+      example: '"Islahat لâyihalarında sıklıkla kânûn-ı kadîme riayet edilmesi gerektiği vurgulanmıştır."',
+    ),
+    'kânûn-ı esâsî': const DictionaryEntry(
+      word: 'Kânûn-ı Esâsî',
+      origin: 'Arapça (ḳānūn + esāsī)',
+      partOfSpeech: 'Osmanlıca Terkip / Anayasa Hukuku',
+      meaning: 'Temel yasa, anayasa; 1876 yılında ilan edilen ilk Osmanlı anayasası.',
+      example: '"1876 Kânûn-ı Esâsî’si ile Osmanlı Devleti anayasal meşrutiyet dönemine adım atmıştır."',
+    ),
+    'devlet-i aliyye': const DictionaryEntry(
+      word: 'Devlet-i Aliyye',
+      origin: 'Arapça (devlet + ʿaliyye - yüce)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: 'Yüce Devlet; Osmanlı İmparatorluğu’nun resmî belgelerde ve tarih yazımında kullanılan adı.',
+      example: '"Devlet-i Aliyye, üç kıtada farklı kültür ve cemaatleri asırlarca bir arada yönetmiştir."',
+    ),
+    'arz-ı hâl': const DictionaryEntry(
+      word: 'Arz-ı Hâl',
+      origin: 'Arapça (ʿarż - sunma + ḥāl - durum)',
+      partOfSpeech: 'Osmanlıca Terkip / İdare',
+      meaning: 'Bir isteği veya şikâyeti üst makama bildirmek için yazılan dilekçe, istida.',
+      example: '"Halkın doğrudan divana arz-ı hâl sunabilmesi, klasik adalet mekanizmasının temel taşlarındandı."',
+    ),
+    'tercüme-i hâl': const DictionaryEntry(
+      word: 'Tercüme-i Hâl',
+      origin: 'Arapça (tercüme + ḥāl)',
+      partOfSpeech: 'Osmanlıca Terkip / Edebiyat',
+      meaning: 'Bir kimsenin hayat hikâyesi, özgeçmiş, biyografi.',
+      example: '"Şuara tezkireleri, yüzlerce şairin tercüme-i hâlini ve edebi kişiliğini günümüze taşır."',
+    ),
+    'nokta-i nazar': const DictionaryEntry(
+      word: 'Nokta-i Nazar',
+      origin: 'Arapça (noḳṭa + naẓar - bakış)',
+      partOfSpeech: 'Osmanlıca Terkip / Felsefe',
+      meaning: 'Bakış açısı, görüş noktası, perspektif.',
+      example: '"Tarihî hadiseleri kendi devrinin nokta-i nazarından değerlendirmek metodolojik bir zorunluluktur."',
+    ),
+    'sarf-ı nazar': const DictionaryEntry(
+      word: 'Sarf-ı Nazar',
+      origin: 'Arapça (ṣarf - çevirme + naẓar - bakış)',
+      partOfSpeech: 'Osmanlıca Terkip / İsim',
+      meaning: 'Bir şeyden vazgeçme, üzerinde durmama, hesaba katmama.',
+      example: '"Tali ayrıntılardan sarf-ı nazar edersek, eserin ana fikri son derece berraktır."',
+    ),
+    'efkâr-ı umûmiye': const DictionaryEntry(
+      word: 'Efkâr-ı Umûmiye',
+      origin: 'Arapça (efkār - fikirler + ʿumūmiyye - genel)',
+      partOfSpeech: 'Osmanlıca Terkip / Siyaset',
+      meaning: 'Kamuoyu, halkın genel düşüncesi ve eğilimi.',
+      example: '"Matbuatın gelişmesiyle birlikte efkâr-ı umûmiye siyasal kararlarda belirleyici bir güç haline geldi."',
+    ),
+    'hâl-i hazır': const DictionaryEntry(
+      word: 'Hâl-i Hazır',
+      origin: 'Arapça (ḥāl + ḥāżır)',
+      partOfSpeech: 'Osmanlıca Terkip / İsim',
+      meaning: 'Şimdiki durum, mevcut vaziyet, günümüz.',
+      example: '"Hâl-i hazırda elimizdeki arşiv belgeleri bu hipotezi doğrular niteliktedir."',
+    ),
+    'asr-ı saâdet': const DictionaryEntry(
+      word: 'Asr-ı Saâdet',
+      origin: 'Arapça (ʿaṣr - çağ + saʿādet - mutluluk)',
+      partOfSpeech: 'Osmanlıca Terkip / İslâm Tarihi',
+      meaning: 'Mutluluk çağı; Hz. Muhammed’in hayatta olduğu ve İslâm toplumunu bizzat yönettiği dönem.',
+      example: '"Asr-ı Saâdet, İslâm medeniyetinin kurucu ahlâk ve hukuk ilkelerinin yaşandığı örnek dönemdir."',
+    ),
+    'feth-i mübîn': const DictionaryEntry(
+      word: 'Feth-i Mübîn',
+      origin: 'Arapça (fetḥ + mübīn - apaçık)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: 'Apaçık zafer ve fetih; özellikle Hudeybiye Antlaşması, Mekke’nin ve İstanbul’un fethi için kullanılan tabir.',
+      example: '"İstanbul’un fethi, klasik tarihçiler tarafından feth-i mübîn olarak nitelendirilmiştir."',
+    ),
+    'kelâm-ı kibâr': const DictionaryEntry(
+      word: 'Kelâm-ı Kibâr',
+      origin: 'Arapça (kelām - söz + kibār - büyükler)',
+      partOfSpeech: 'Osmanlıca Terkip / Edebiyat',
+      meaning: 'Din ve tasavvuf büyüklerinin, bilge kişilerin söylediği hikmetli, özlü söz; vecize.',
+      example: '"Eserde yer alan kelâm-ı kibârlar, asırların süzgecinden geçmiş hayat tecrübelerini özetler."',
+    ),
+    'kütüb-i sitte': const DictionaryEntry(
+      word: 'Kütüb-i Sitte',
+      origin: 'Arapça (kütüb - kitaplar + sitte - altı)',
+      partOfSpeech: 'Osmanlıca Terkip / Hadis',
+      meaning: 'Ehl-i sünnet dünyasında en güvenilir kabul edilen altı temel hadis kitabı (Buhârî, Müslim, Ebû Dâvûd, Tirmizî, Nesâî, İbn Mâce).',
+      example: '"Hadis ilminde Kütüb-i Sitte, sahih rivayetlerin temel başvuru kaynağıdır."',
+    ),
+    'dârülfünûn': const DictionaryEntry(
+      word: 'Dârülfünûn',
+      origin: 'Arapça (dār - ev + el-fünūn - fenler, ilimler)',
+      partOfSpeech: 'Osmanlıca Terkip / Eğitim Tarihi',
+      meaning: 'Fenler ve ilimler evi; Osmanlı Devleti’nde modern anlamda kurulan ilk üniversite (İstanbul Üniversitesi’nin öncülü).',
+      example: '"Dârülfünûn, 1933 Üniversite Reformu ile İstanbul Üniversitesi adını almıştır."',
+    ),
+    'şeyhülislâm': const DictionaryEntry(
+      word: 'Şeyhülislâm',
+      origin: 'Arapça (şeyḫ + el-islām)',
+      partOfSpeech: 'Osmanlıca Terkip / Osmanlı Tarihi',
+      meaning: 'Osmanlı Devleti’nde ilmiye sınıfının başı olan, dinî ve hukukî konularda en yüksek fetva makamı.',
+      example: '"Şeyhülislâm, protokolde sadrazamla denk sayılan en yüksek ilmiye mercii idi."',
+    ),
+    'hatt-ı hümâyûn': const DictionaryEntry(
+      word: 'Hatt-ı Hümâyûn',
+      origin: 'Arapça (ḫaṭṭ - yazı) + Farsça (hümāyūn - kutlu, padişaha ait)',
+      partOfSpeech: 'Osmanlıca Terkip / Diplomasi',
+      meaning: 'Osmanlı padişahlarının bizzat kendi el yazılarıyla yazdıkları veya onayladıkları yazılı emir ve ferman.',
+      example: '"Tanzimat Fermanı, Gülhane Parkı’nda okunan bir hatt-ı hümâyûn ile ilan edilmiştir."',
+    ),
+    'dîvân-ı hümâyûn': const DictionaryEntry(
+      word: 'Dîvân-ı Hümâyûn',
+      origin: 'Farsça (dīvān + hümāyūn)',
+      partOfSpeech: 'Osmanlıca Terkip / Osmanlı Tarihi',
+      meaning: 'Osmanlı Devleti’nde siyaset, hukuk, idare ve maliye işlerinin karara bağlandığı en yüksek devlet kurulu.',
+      example: '"Dîvân-ı Hümâyûn, hem bir bakanlar kurulu hem de en üst temyiz mahkemesi işlevi görürdü."',
+    ),
+    'hikmet-i hükümet': const DictionaryEntry(
+      word: 'Hikmet-i Hükümet',
+      origin: 'Arapça (ḥikmet + ḥükūmet)',
+      partOfSpeech: 'Osmanlıca Terkip / Siyaset Bilimi',
+      meaning: 'Devletin bekası ve yüksek menfaatleri için alınan kararların altında yatan siyasi gerekçe (Raison d’État).',
+      example: '"Siyaset teorisinde hikmet-i hükümet kavramı, devlet aklının sınırlarını tartışmaya açar."',
+    ),
+    'sehl-i mümtenî': const DictionaryEntry(
+      word: 'Sehl-i Mümtenî',
+      origin: 'Arapça (sehl - kolay + mümteniʿ - imkânsız)',
+      partOfSpeech: 'Osmanlıca Terkip / Belâgat',
+      meaning: 'İlk bakışta çok sade ve kolay söylenmiş gibi görünen, fakat benzerini söylemek istediğinde taklit edilmesi çok güç olan derin anlamlı söz.',
+      example: '"Yunus Emre’nin ilahileri, Türk edebiyatında sehl-i mümtenî sanatının en zirve örnekleridir."',
+    ),
+    'tecâhül-i ârif': const DictionaryEntry(
+      word: 'Tecâhül-i Ârif',
+      origin: 'Arapça (tecāhül - bilmezlikten gelme + ʿārif - bilen)',
+      partOfSpeech: 'Osmanlıca Terkip / Edebiyat',
+      meaning: 'Çok iyi bilinen bir gerçeği, nükte ve edebi incelik amacıyla bilmiyormuş gibi ifade etme sanatı.',
+      example: '"Şairin ‘Şakaklarıma kar mı yağdı ne var?’ dizesi zarif bir tecâhül-i ârif örneğidir."',
+    ),
+    'hüsn-i tâlil': const DictionaryEntry(
+      word: 'Hüsn-i Tâlil',
+      origin: 'Arapça (ḥüsn - güzellik + taʿlīl - sebep gösterme)',
+      partOfSpeech: 'Osmanlıca Terkip / Edebiyat',
+      meaning: 'Gerçek sebebi bilinen doğal bir olayı, şairane ve hayalî güzel bir nedene bağlama sanatı.',
+      example: '"Güllerin sevgilinin yüzünü görerek utancından kızardığını söylemek klasik bir hüsn-i tâlildir."',
+    ),
+    'sened-i ittifak': const DictionaryEntry(
+      word: 'Sened-i İttifak',
+      origin: 'Arapça (sened + ittifāḳ)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: '1808 yılında II. Mahmud döneminde merkezi hükümet ile âyanlar arasında imzalanan tarihi mutabakat belgesi.',
+      example: '"Sened-i İttifak, Türk anayasa tarihinde padişah otoritesinin ilk kez yazılı bir metinle sınırlandırılması açısından önemlidir."',
+    ),
+    'bâb-ı âlî': const DictionaryEntry(
+      word: 'Bâb-ı Âlî',
+      origin: 'Arapça (bāb - kapı + ʿālī - yüce)',
+      partOfSpeech: 'Osmanlıca Terkip / Tarih',
+      meaning: 'Yüce Kapı; Osmanlı Devleti’nde Sadrazamlık makamı ve hükümet merkezi.',
+      example: '"XIX. yüzyılda devlet idaresinin ağırlık merkezi Saray’dan Bâb-ı Âlî’ye kaymıştır."',
+    ),
+    'gayr-i müslim': const DictionaryEntry(
+      word: 'Gayr-i Müslim',
+      origin: 'Arapça (ġayr - dışındaki + müslim)',
+      partOfSpeech: 'Osmanlıca Terkip / Hukuk',
+      meaning: 'Müslüman olmayan; İslâm devletinde yaşayan diğer din mensubu vatandaşlar.',
+      example: '"Osmanlı millet sisteminde gayr-i müslim cemaatler kendi dinî ve aile hukuklarında özerkliğe sahipti."',
+    ),
+    'âb-ı hayât': const DictionaryEntry(
+      word: 'Âb-ı Hayât',
+      origin: 'Farsça (āb - su) + Arapça (ḥayāt - yaşam)',
+      partOfSpeech: 'Osmanlıca Terkip / Tasavvuf',
+      meaning: 'Dirilik suyu, ölümsüzlük iksiri; tasavvufta insanın gönlünü dirilten ilâhî aşk ve hakikat ilmi.',
+      example: '"Âriflerin sohbeti, susamış gönüller için âb-ı hayât hükmündedir."',
+    ),
+    'şeb-i arûs': const DictionaryEntry(
+      word: 'Şeb-i Arûs',
+      origin: 'Farsça (şeb - gece) + Arapça (ʿarūs - düğün, gelin)',
+      partOfSpeech: 'Osmanlıca Terkip / Tasavvuf',
+      meaning: 'Düğün gecesi; Hz. Mevlânâ’nın vefat gününü sevgiliye (Allah’a) kavuşma gecesi olarak nitelendirdiği kavram.',
+      example: '"Mevlânâ Celâleddîn-i Rûmî, ölüm gününü bir matem değil, Şeb-i Arûs olarak görmüştür."',
+    ),
+    'levh-i mahfûz': const DictionaryEntry(
+      word: 'Levh-i Mahfûz',
+      origin: 'Arapça (levḥ - levha + maḥfūẓ - korunmuş)',
+      partOfSpeech: 'Osmanlıca Terkip / Kelâm',
+      meaning: 'Korunmuş levha; kâinatta olmuş ve olacak her şeyin ilâhî ilimde yazılı olduğu kader kitabı.',
+      example: '"Klasik düşüncede kâinattaki her hadise Levh-i Mahfûz’daki ilâhî takdirin bir tecellisidir."',
+    ),
+
+    // --- Modern Sosyal Bilimler, Siyaset Bilimi, İktisat ve Felsefe (Ulusların Düşüşü vb.) ---
+    'yurttaş': const DictionaryEntry(
+      word: 'Yurttaş',
+      origin: 'Türkçe (yurt + -taş ortaklık eki)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Bir devletin egemenliği altında yaşayan, anayasal hak ve sorumluluklara eşit biçimde sahip olan özgür birey; vatandaş.',
+      example: '"Kapsayıcı siyasal kurumlar, yurttaşların yönetim kararlarına etkin katılımını güvence altına alır."',
+    ),
+    'biçim': const DictionaryEntry(
+      word: 'Biçim',
+      origin: 'Türkçe (biç- fiilinden biçim)',
+      partOfSpeech: 'Felsefe / İsim',
+      meaning: 'Bir şeyin dış görünüşü, şekli, formu; felsefede ve sosyal bilimlerde kurumların veya düşüncenin yapısal düzeni.',
+      example: '"Siyasal kurumların biçimi, bir toplumun ekonomik refah üretme kapasitesini doğrudan belirler."',
+    ),
+    'siyasal': const DictionaryEntry(
+      word: 'Siyasal',
+      origin: 'Arapça (siyāset) + Türkçe (-sal yapım eki)',
+      partOfSpeech: 'Siyaset Bilimi / Sıfat',
+      meaning: 'Devlet yönetimine, kamusal iktidarın paylaşımına ve toplumun yönetim ilkelerine ilişkin olan; siyasi.',
+      example: '"Siyasal dönüşüm, gücün dar bir zümreden geniş toplum kesimlerine yayılmasıyla gerçekleşir."',
+    ),
+    'dönüşüm': const DictionaryEntry(
+      word: 'Dönüşüm',
+      origin: 'Türkçe (dönüş- fiilinden dönüşüm)',
+      partOfSpeech: 'Sosyoloji / İsim',
+      meaning: 'Bir yapının, kurumun veya toplumun olduğundan başka bir biçime, daha ileri veya farklı bir duruma evrilmesi; transformasyon.',
+      example: '"Kalıcı ekonomik büyüme, sömürücü kurumların kapsayıcı kurumlara dönüşümüyle mümkündür."',
+    ),
+    'hakikaten': const DictionaryEntry(
+      word: 'Hakikaten',
+      origin: 'Arapça (ḥaḳīḳaten)',
+      partOfSpeech: 'Zarf',
+      meaning: 'Gerçekten, doğrusu, aslına bakılırsa, sahiden.',
+      example: '"Tarihsel kırılma anlarını anlamak, bugünkü eşitsizlikleri açıklamak için hakikaten elzemdir."',
+    ),
+    'imkânsız': const DictionaryEntry(
+      word: 'İmkânsız',
+      origin: 'Arapça (imkān) + Türkçe (-sız eki)',
+      partOfSpeech: 'Sıfat',
+      meaning: 'Gerçekleşmesi mümkün olmayan, olanaksız, muhal.',
+      example: '"Kurumsal denge ve denetleme mekanizmaları olmadan keyfî iktidarı sınırlamak neredeyse imkânsızdır."',
+    ),
+    'protestocu': const DictionaryEntry(
+      word: 'Protestocu',
+      origin: 'Latince/İtalyanca (protesto) + Türkçe (-cu eki)',
+      partOfSpeech: 'Sosyoloji / İsim',
+      meaning: 'Toplumsal, ekonomik veya siyasal bir uygulamaya karşı kamusal alanda itirazını dile getiren kimse.',
+      example: '"Meydanlarda toplanan protestocular, yalnızca yöneticilerin değil, kurumsal düzenin değişmesini talep ediyordu."',
+    ),
+    'sıklıkla': const DictionaryEntry(
+      word: 'Sıklıkla',
+      origin: 'Türkçe (sık + -lık + -la)',
+      partOfSpeech: 'Zarf',
+      meaning: 'Çoğu kez, sık sık, yaygın bir biçimde, ekseriyetle.',
+      example: '"Tarihte otoriter rejimlerin ekonomik krizlerle sıklıkla sarsıldığı görülür."',
+    ),
+    'kapsayıcı': const DictionaryEntry(
+      word: 'Kapsayıcı',
+      origin: 'Türkçe (kapsa- fiilinden kapsayıcı)',
+      partOfSpeech: 'İktisat / Sıfat',
+      meaning: 'Toplumun geniş kesimlerini sürece dahil eden, mülkiyet haklarını koruyan ve fırsat eşitliği sağlayan (kurum veya düzen).',
+      example: '"Kapsayıcı ekonomik kurumlar, yetenek ve yaratıcılığın özgürce filizlenmesine olanak tanır."',
+    ),
+    'sömürücü': const DictionaryEntry(
+      word: 'Sömürücü',
+      origin: 'Türkçe (sömür- fiilinden sömürücü)',
+      partOfSpeech: 'İktisat / Sıfat',
+      meaning: 'Toplumun çoğunluğunun ürettiği kaynakları ve refahı dar bir seçkin zümrenin çıkarına aktaran (kurum veya rejim); dışlayıcı.',
+      example: '"Sömürücü kurumlar kısa vadede büyüme sağlasa bile uzun vadede yenilikçiliği boğar."',
+    ),
+    'çoğulculuk': const DictionaryEntry(
+      word: 'Çoğulculuk',
+      origin: 'Türkçe (çoğul + -cu + -luk)',
+      partOfSpeech: 'Siyaset Felsefesi / İsim',
+      meaning: 'Siyasal gücün tek elde toplanmayıp toplumdaki farklı görüş, çıkar ve gruplar arasında dengeli biçimde paylaşılması ilkesi; plüralizm.',
+      example: '"Çoğulculuk, kapsayıcı siyasal kurumların en temel yapı taşıdır."',
+    ),
+    'kurumsal': const DictionaryEntry(
+      word: 'Kurumsal',
+      origin: 'Türkçe (kur- fiilinden kurum + -sal)',
+      partOfSpeech: 'Sosyoloji / Sıfat',
+      meaning: 'Kişilere bağlı olmayan, yerleşik kurallara, yasalara ve örgütlü yapılara dayanan.',
+      example: '"Ülkeler arasındaki refah farklarının temelinde coğrafyadan ziyade kurumsal farklılıklar yatar."',
+    ),
+    'meşruiyet': const DictionaryEntry(
+      word: 'Meşruiyet',
+      origin: 'Arapça (meşrūʿiyyet)',
+      partOfSpeech: 'Hukuk / Siyaset Bilimi',
+      meaning: 'Bir iktidarın, yasanın veya eylemin hukuka, toplumsal vicdana ve adalet ilkelerine uygun olma durumu; yasallık ve haklılık.',
+      example: '"Devlet otoritesinin kalıcılığı, zor kullanımından değil toplumsal meşruiyetten beslenir."',
+    ),
+    'hegemonya': const DictionaryEntry(
+      word: 'Hegemonya',
+      origin: 'Yunanca (hēgemonía - önderlik, üstünlük)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Bir devletin, sınıfın veya düşünce biçiminin diğerleri üzerinde kurduğu siyasal, ekonomik ve kültürel üstünlük ve yönlendirme gücü.',
+      example: '"Kültürel hegemonya, mevcut güç ilişkilerinin doğal ve kaçınılmaz olarak algılanmasını sağlar."',
+    ),
+    'toplumsal': const DictionaryEntry(
+      word: 'Toplumsal',
+      origin: 'Türkçe (toplum + -sal)',
+      partOfSpeech: 'Sosyoloji / Sıfat',
+      meaning: 'Toplumla ilgili, bireylerin bir arada yaşamasından doğan ortak yapı, değer ve ilişkilere ait; sosyal, içtimai.',
+      example: '"Toplumsal hareketler, tarihin akışını değiştiren kritik dönüm noktaları yaratabilir."',
+    ),
+    'değerlendirmek': const DictionaryEntry(
+      word: 'Değerlendirmek',
+      origin: 'Türkçe (değer + -len + -dir + -mek)',
+      partOfSpeech: 'Fiil',
+      meaning: 'Bir olgunun, eserin veya düşüncenin niteliğini, önemini ve sonuçlarını ölçüp tartarak hükme varmak; tahlil etmek.',
+      example: '"Tarihsel olayları yalnızca sonuçlarıyla değil, doğdukları kurumsal bağlamla değerlendirmek gerekir."',
+    ),
+    'başarısızlık': const DictionaryEntry(
+      word: 'Başarısızlık',
+      origin: 'Türkçe (başarı + -sız + -lık)',
+      partOfSpeech: 'İsim',
+      meaning: 'Amaçlanan sonuca ulaşamama, akamet, muvaffakiyetsizlik.',
+      example: '"Ulusların ekonomik başarısızlıklarının arkasında çoğu zaman tercih edilen kötü siyasal kurumlar vardır."',
+    ),
+    'görmek': const DictionaryEntry(
+      word: 'Görmek',
+      origin: 'Türkçe (gör-mek)',
+      partOfSpeech: 'Fiil',
+      meaning: 'Göz yardımıyla algılamak; mecazen bir gerçeği kavramak, idrak etmek, müşahede etmek.',
+      example: '"Kitabın ilerleyen bölümlerinde kurumsal tercihlerin ulusların kaderini nasıl belirlediğini göreceğiz."',
+    ),
+    'anlamak': const DictionaryEntry(
+      word: 'Anlamak',
+      origin: 'Türkçe (anla-mak)',
+      partOfSpeech: 'Fiil / Epistemoloji',
+      meaning: 'Bir sözün, olgunun veya tarihsel sürecin nedenlerini, iç bağlantısını ve manasını zihnen kavramak; idrak etmek, fehmetmek.',
+      example: '"Kurumların nasıl biçimlendiğini anlarsak, zenginlik ve yoksulluğun kökenlerini de çözebiliriz."',
+    ),
+    'götürmek': const DictionaryEntry(
+      word: 'Götürmek',
+      origin: 'Türkçe (götür-mek)',
+      partOfSpeech: 'Fiil',
+      meaning: 'Bir şeyi veya süreci bir yerden başka bir yere, bir duruma veya sonuca ulaştırmak, sevk etmek.',
+      example: '"Çoğulcu koalisyonların eksikliği, devrimlerin yeni bir diktatörlüğe götüreceğini sıkça göstermiştir."',
+    ),
+    'demek': const DictionaryEntry(
+      word: 'Demek',
+      origin: 'Türkçe (de-mek)',
+      partOfSpeech: 'Fiil',
+      meaning: 'Düşüncesini sözle ifade etmek, söylemek, beyan etmek; bir kavramı adlandırmak veya anlamına gelmek.',
+      example: '"Düşünür, gerçek özgürlüğün ancak hukukun üstünlüğüyle mümkün olduğunu diyor."',
+    ),
+    'gerekmek': const DictionaryEntry(
+      word: 'Gerekmek',
+      origin: 'Türkçe (gerek-mek)',
+      partOfSpeech: 'Fiil',
+      meaning: 'Bir amaca ulaşmak için zorunlu, lazım veya uygun olmak; iktiza etmek.',
+      example: '"Toplumun refahı için yapılması gereken, ayrıcalıkları değil fırsat eşitliğini kurumsallaştırmaktır."',
+    ),
+    'devrilmek': const DictionaryEntry(
+      word: 'Devrilmek',
+      origin: 'Türkçe (devir- fiilinden devril-mek)',
+      partOfSpeech: 'Fiil / Siyaset',
+      meaning: 'Yıkılmak, düşmek; siyasette bir iktidarın veya diktatörlük rejiminin halk hareketi ya da darbeyle sona ermesi.',
+      example: '"Bir diktatörün devrilmesi, tek başına kapsayıcı demokrasinin kurulacağı anlamına gelmez."',
+    ),
+    'olanak': const DictionaryEntry(
+      word: 'Olanak',
+      origin: 'Türkçe (ol- fiilinden olanak)',
+      partOfSpeech: 'İsim',
+      meaning: 'Bir şeyin gerçekleşmesini mümkün kılan elverişli koşul, fırsat ve güç; imkân.',
+      example: '"Eğitim ve hukuk güvencesi, yurttaşlara kendi yeteneklerini gerçekleştirme olanağı sunar."',
+    ),
+    'mülkiyet': const DictionaryEntry(
+      word: 'Mülkiyet',
+      origin: 'Arapça (mülkiyyet)',
+      partOfSpeech: 'Hukuk / İktisat',
+      meaning: 'Bir taşınır veya taşınmaz mal ya da fikrî eser üzerinde sahibine kullanma, yararlanma ve tasarruf yetkisi veren hukuki hak.',
+      example: '"Özel mülkiyet haklarının güvence altında olması, uzun vadeli yatırım ve yeniliğin ön koşuludur."',
+    ),
+    'refah': const DictionaryEntry(
+      word: 'Refah',
+      origin: 'Arapça (refāh)',
+      partOfSpeech: 'İktisat / İsim',
+      meaning: 'Bolluk, rahatlık ve genişlik içinde yaşama durumu; bir toplumun maddi ve sosyal yaşam standardının yüksekliği.',
+      example: '"Sürdürülebilir refah, teknolojik yenilik ve kurumsal adaletle birlikte yükselir."',
+    ),
+    'iktidar': const DictionaryEntry(
+      word: 'İktidar',
+      origin: 'Arapça (ḳudret kökünden iḳtidār)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Bir işi yapabilme gücü ve kudreti; siyasette devleti yönetme ve bağlayıcı kararlar alma yetkisini elinde bulunduran güç.',
+      example: '"Siyasal iktidarın sınırlandırılması, anayasal devletin en temel ilkesidir."',
+    ),
+    'demokrasi': const DictionaryEntry(
+      word: 'Demokrasi',
+      origin: 'Yunanca (dēmos - halk + krátos - iktidar)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Egemenliğin halka ait olduğu, yöneticilerin özgür ve adil seçimlerle belirlendiği, temel hakların korunduğu yönetim biçimi.',
+      example: '"Gerçek demokrasi, yalnızca sandıktan değil, kuvvetler ayrılığı ve hukukun üstünlüğünden güç alır."',
+    ),
+    'diktatörlük': const DictionaryEntry(
+      word: 'Diktatörlük',
+      origin: 'Latince (dictator) + Türkçe (-lük)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Siyasal iktidarın anayasal sınırlamalar olmaksızın tek bir kişinin veya dar bir grubun elinde toplandığı otoriter rejim.',
+      example: '"Diktatörlük rejimleri, muhalefeti ve bağımsız kurumları baskı altına alarak varlığını sürdürür."',
+    ),
+    'oligarşi': const DictionaryEntry(
+      word: 'Oligarşi',
+      origin: 'Yunanca (olígos - az + arkhḗ - yönetim)',
+      partOfSpeech: 'Siyaset Bilimi / İsim',
+      meaning: 'Siyasal ve ekonomik iktidarın ayrıcalıklı küçük bir zümrenin elinde toplandığı yönetim biçimi.',
+      example: '"Demir oligarşi yasası, devrimlerden sonra bile yeni seçkinlerin eski sömürü düzenini yeniden üretebileceğini açıklar."',
+    ),
+    'bürokrasi': const DictionaryEntry(
+      word: 'Bürokrasi',
+      origin: 'Fransızca (bureaucratie)',
+      partOfSpeech: 'Kamu Yönetimi / İsim',
+      meaning: 'Devlet işlerinin hiyerarşik işbölümü, yazılı kurallar ve uzman memurlar eliyle yürütüldüğü idari örgütlenme sistemi.',
+      example: '"Weber’e göre rasyonel bürokrasi, modern devletin öngörülebilirlik ve süreklilik kazanmasını sağlamıştır."',
+    ),
+    'metodoloji': const DictionaryEntry(
+      word: 'Metodoloji',
+      origin: 'Yunanca (méthodos - yöntem + lógos - bilim)',
+      partOfSpeech: 'Bilim / İsim',
+      meaning: 'Yöntembilim; bir bilim dalında bilgi üretmek ve doğrulamak için izlenen kurallar, ilkeler ve araştırma yolları bütünü.',
+      example: '"İbn Haldûn’un Mukaddime’si, tarih yazımında eleştirel metodolojinin temellerini atmıştır."',
+    ),
   };
 
-  /// Türkçe karakter duyarlı küçük harfe çevirme (`İ -> i`, `I -> ı`).
+  /// Türkçe karakter duyarlı küçük harfe çevirme (`İ -> i`, `I -> ı`, `Â -> â`, `Î -> î`, `Û -> û`).
   static String _toTurkishLower(String input) {
     return input
         .replaceAll('İ', 'i')
         .replaceAll('I', 'ı')
+        .replaceAll('Â', 'â')
+        .replaceAll('Î', 'î')
+        .replaceAll('Û', 'û')
         .toLowerCase();
   }
 
-  /// Şapkalı harfleri (â, î, û) düzleştirerek ikincil eşleşme anahtarı üretir.
+  /// Şapkalı harfleri (â, î, û) ve kesme işaretlerini düzleştirerek ikincil eşleşme anahtarı üretir.
   static String _stripCircumflex(String input) {
     return input
         .replaceAll('â', 'a')
         .replaceAll('î', 'i')
-        .replaceAll('û', 'u');
+        .replaceAll('û', 'u')
+        .replaceAll("'", '')
+        .replaceAll('’', '');
   }
 
-  /// Türkçe çekim eklerini (çoğul, iyelik, hal, bildirme) soyarak ve
-  /// ünsüz yumuşamasını (`b->p`, `c->ç`, `d->t`, `ğ->k`) tersine çevirerek
-  /// olası kelime köklerini döndürür.
+  /// Ünlü düşmesi görülen klasik Türkçe/Arapça kelimelerin çekimli gövdelerini aslına çevirir.
+  static const Map<String, String> _vowelDropStems = {
+    'hükm': 'hüküm',
+    'akl': 'akıl',
+    'fikr': 'fikir',
+    'zikr': 'zikir',
+    'şükr': 'şükür',
+    'sabr': 'sabır',
+    'emr': 'emir',
+    'ömr': 'ömür',
+    'zulm': 'zulüm',
+    'ilm': 'ilim',
+    'kısm': 'kısım',
+    'vakt': 'vakit',
+    'nakt': 'nakit',
+    'nakd': 'nakit',
+    'asr': 'asır',
+    'devr': 'devir',
+    'nehr': 'nehir',
+    'şehr': 'şehir',
+    'keşf': 'keşif',
+    'feth': 'fetih',
+    'kavm': 'kavim',
+    'ism': 'isim',
+    'cism': 'cisim',
+    'resm': 'resim',
+    'halk': 'halk',
+    'nefs': 'nefis',
+    'nesl': 'nesil',
+    'asl': 'asıl',
+    'fasl': 'fasıl',
+    'usl': 'usul',
+  };
+
+  /// Türkçe çekim ve yapım eklerini (isim, fiil, sıfat-fiil, zarf-fiil, nispet) soyarak ve
+  /// ünsüz yumuşaması/sertleşmesini (`b<->p`, `c<->ç`, `d<->t`, `ğ/g<->k`) çift yönlü
+  /// tersine çevirerek olası kelime köklerini döndürür.
   List<String> _extractTurkishStems(String cleanWord) {
     final stems = <String>{};
-    if (cleanWord.isEmpty) return const [];
+    if (cleanWord.isEmpty || cleanWord.length > 48) return const [];
 
-    stems.add(cleanWord);
-    stems.add(_stripCircumflex(cleanWord));
-
-    // Uzun ekten kısa eke doğru sıralanmış Türkçe çekim ve yapım ekleri
+    // Uzun ekten kısa eke doğru sıralanmış kapsamlı Türkçe çekim ve yapım ekleri
     const suffixes = <String>[
-      'larından', 'lerinden', 'larında', 'lerinde', 'larının', 'lerinin',
+      'ulmuştur', 'ülmüştür', 'ılmıştır', 'ilmiştir', 'maktadır', 'mektedir',
+      'malıdır', 'melidir', 'acaktır', 'ecektir', 'dığından', 'diğinden',
+      'duğundan', 'düğünden', 'larından', 'lerinden', 'larında', 'lerinde',
+      'larının', 'lerinin', 'leriyle', 'larıyla', 'larımız', 'lerimiz',
+      'larınız', 'leriniz', 'casına', 'cesine', 'sından', 'sinden',
+      'sının', 'sinin', 'sunun', 'sünün', 'sında', 'sinde', 'sıyla', 'siyle',
+      'mızın', 'mizin', 'muzun', 'müzün', 'ılması', 'ilmesi', 'ulması', 'ülmesi',
+      'leştiğini', 'laştığını', 'leştiği', 'laştığı', 'yeceğini', 'yacağını',
+      'eceğini', 'acağını', 'yeceğiz', 'yacağız', 'eceğiz', 'acağız',
+      'larsak', 'lersek', 'arsak', 'ersek', 'rsak', 'rsek', 'yacak', 'yecek',
       'larına', 'lerine', 'larını', 'lerini', 'lardan', 'lerden',
-      'larımız', 'lerimiz', 'larınız', 'leriniz', 'casına', 'cesine',
+      'dığını', 'diğini', 'duğunu', 'düğünü', 'tığını', 'tiğini',
+      'tuğunu', 'tüğünü', 'eceği', 'acağı', 'yordu', 'yoruz', 'yorlar',
       'ları', 'leri', 'ndan', 'nden', 'mız', 'miz', 'muz', 'müz',
       'nız', 'niz', 'nuz', 'nüz', 'dan', 'den', 'tan', 'ten',
       'nda', 'nde', 'nın', 'nin', 'nun', 'nün', 'ına', 'ine',
       'una', 'üne', 'ını', 'ini', 'unu', 'ünü', 'yla', 'yle',
+      'sına', 'sine', 'sını', 'sini', 'sunu', 'sünü',
       'dır', 'dir', 'dur', 'dür', 'tır', 'tir', 'tur', 'tür',
+      'mış', 'miş', 'muş', 'müş', 'mak', 'mek', 'acak', 'ecek',
+      'ıyor', 'iyor', 'uyor', 'üyor', 'yor', 'sak', 'sek', 'ken',
+      'dık', 'dik', 'duk', 'dük', 'tık', 'tik', 'tuk', 'tük',
+      'dığı', 'diği', 'duğu', 'düğü', 'tığı', 'tiği', 'tuğu', 'tüğü',
+      'ması', 'mesi', 'arak', 'erek', 'iyye', 'iyet', 'iyyet',
       'lık', 'lik', 'luk', 'lük', 'sız', 'siz', 'suz', 'süz',
-      'lar', 'ler', 'ın', 'in', 'un', 'ün', 'ya', 'ye',
+      'leş', 'laş', 'lar', 'ler', 'ın', 'in', 'un', 'ün', 'ya', 'ye',
       'na', 'ne', 'yı', 'yi', 'yu', 'yü', 'da', 'de',
       'ta', 'te', 'la', 'le', 'ca', 'ce', 'ça', 'çe',
+      'sı', 'si', 'su', 'sü', 'an', 'en', 'ıp', 'ip', 'up', 'üp',
       'ım', 'im', 'um', 'üm', 'lı', 'li', 'lu', 'lü',
       'cı', 'ci', 'cu', 'cü', 'çı', 'çi', 'çu', 'çü',
-      'a', 'e', 'ı', 'i', 'u', 'ü',
+      'at', 'ât', 'vi', 'vî',
+      'a', 'e', 'ı', 'i', 'u', 'ü', 'î',
     ];
 
-    void addWithDevoicing(String candidate) {
-      if (candidate.length < 3) return;
+    void addWithConsonantAlternations(String candidate) {
+      if (candidate.length < 2) return;
       stems.add(candidate);
-      stems.add(_stripCircumflex(candidate));
+      final plain = _stripCircumflex(candidate);
+      stems.add(plain);
+      stems.add('${candidate}mak');
+      stems.add('${candidate}mek');
+      stems.add('${plain}mak');
+      stems.add('${plain}mek');
+      if (plain == 'di') {
+        stems.add('demek');
+      } else if (plain == 'yi') {
+        stems.add('yemek');
+      }
 
-      // Ünsüz yumuşaması tersine çevirme (b->p, c->ç, d->t, ğ->k, g->k)
+      if (_vowelDropStems.containsKey(plain)) {
+        stems.add(_vowelDropStems[plain]!);
+      }
+
+      if (candidate.length < 3) return;
+
+      // Ünsüz yumuşaması ve sertleşmesi çift yönlü dönüşüm (b<->p, c<->ç, d<->t, ğ/g<->k)
       final prefix = candidate.substring(0, candidate.length - 1);
       final lastChar = candidate[candidate.length - 1];
-      final devoiced = switch (lastChar) {
-        'b' => '${prefix}p',
-        'c' => '$prefixç',
-        'd' => '${prefix}t',
-        'ğ' => '${prefix}k',
-        'g' => '${prefix}k',
-        _ => null,
+      final alternations = switch (lastChar) {
+        'b' => ['${prefix}p'],
+        'p' => ['${prefix}b'],
+        'c' => ['$prefixç'],
+        'ç' => ['${prefix}c'],
+        'd' => ['${prefix}t'],
+        't' => ['${prefix}d'],
+        'ğ' => ['${prefix}k', '${prefix}g'],
+        'g' => ['${prefix}k'],
+        'k' => ['$prefixğ', '${prefix}g'],
+        _ => const <String>[],
       };
-      if (devoiced != null) {
-        stems.add(devoiced);
-        stems.add(_stripCircumflex(devoiced));
+      for (final alt in alternations) {
+        stems.add(alt);
+        final altPlain = _stripCircumflex(alt);
+        stems.add(altPlain);
+        if (_vowelDropStems.containsKey(altPlain)) {
+          stems.add(_vowelDropStems[altPlain]!);
+        }
       }
     }
 
-    // 1. Aşama ek soyma
-    var currentFrontier = <String>{cleanWord};
-    for (var pass = 0; pass < 2; pass++) {
+    addWithConsonantAlternations(cleanWord);
+
+    // 3 Aşamalı morfolojik ek soyma (ör. "müesseselerimizdendir" -> "müessese")
+    var currentFrontier = <String>{cleanWord, _stripCircumflex(cleanWord)};
+    for (var pass = 0; pass < 3; pass++) {
       final nextFrontier = <String>{};
       for (final word in currentFrontier) {
         for (final suffix in suffixes) {
-          if (word.endsWith(suffix) && word.length - suffix.length >= 3) {
+          if (word.endsWith(suffix) && word.length - suffix.length >= 2) {
             final stripped = word.substring(0, word.length - suffix.length);
-            addWithDevoicing(stripped);
+            addWithConsonantAlternations(stripped);
             nextFrontier.add(stripped);
           }
         }
@@ -1301,25 +2354,56 @@ class DictionaryService {
     return stems.toList();
   }
 
-  /// Looks up a word in the offline dictionary using morphological stemming
-  DictionaryEntry lookup(String rawWord) {
-    final clean = _toTurkishLower(rawWord)
-        .replaceAll(RegExp(r'[^\wçğıöşüâîû]', unicode: true), '')
+  /// Seçilen metindeki kelimeleri temiz birer token listesi olarak ayıklar.
+  static List<String> extractWordsFromSelection(String rawSelection) {
+    final matches = RegExp(
+      r"[a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ']+",
+      unicode: true,
+    ).allMatches(rawSelection);
+    final result = <String>[];
+    for (final m in matches) {
+      final token = m.group(0)?.replaceAll(RegExp(r"^'+|'+$"), '').trim() ?? '';
+      if (token.length >= 2) {
+        result.add(token);
+      }
+    }
+    return result;
+  }
+
+  /// Tek bir temizlenmiş kelime için sözlükte tam veya gövde eşleşmesi arar.
+  DictionaryEntry? _findSingleWordMatch(String rawToken) {
+    if (rawToken.length > 64) return null;
+    final cleanWithApos = _toTurkishLower(rawToken).trim();
+    final clean = cleanWithApos
+        .replaceAll(RegExp(r'[^a-zçğıöşüâîû]', unicode: true), '')
         .trim();
 
-    if (clean.isEmpty) {
-      return _localDictionary['tahrir']!;
-    }
+    if (clean.isEmpty) return null;
 
     // 1. Doğrudan eşleşme
     if (_localDictionary.containsKey(clean)) {
       return _localDictionary[clean]!;
     }
+    final plainClean = _stripCircumflex(clean);
+    if (_localDictionary.containsKey(plainClean)) {
+      return _localDictionary[plainClean]!;
+    }
+
+    // Kesme işaretli kelimelerde kesmeden önceki kök (ör. "Kur'an'ın" -> "kuran", "şer'î" -> "şeri")
+    if (cleanWithApos.contains("'") || cleanWithApos.contains('’')) {
+      final beforeApos = cleanWithApos
+          .split(RegExp(r"['’]"))
+          .first
+          .replaceAll(RegExp(r'[^a-zçğıöşüâîû]', unicode: true), '');
+      if (beforeApos.length >= 3 && _localDictionary.containsKey(beforeApos)) {
+        return _localDictionary[beforeApos]!;
+      }
+    }
 
     // 2. Türkçe morfolojik kök bulucu ile eşleşme
-    final candidateStems = _extractTurkishStems(clean);
+    final candidateStems = _extractTurkishStems(clean).toSet();
     for (final stem in candidateStems) {
-      if (stem.length >= 3 && _localDictionary.containsKey(stem)) {
+      if (stem.length >= 2 && _localDictionary.containsKey(stem)) {
         return _localDictionary[stem]!;
       }
     }
@@ -1332,17 +2416,17 @@ class DictionaryService {
       }
     }
 
-    // 4. Anlamlı kök önek eşleşmesi (yalnızca kök uzunluğu >= 3 ve anlamlıysa)
-    if (clean.length >= 4) {
+    // 4. Uzun kök önek eşleşmesi (yalnızca anahtar uzunluğu >= 5 ve fark <= 4 ise)
+    if (plainClean.length >= 5) {
       DictionaryEntry? bestPrefixMatch;
       var longestKeyLen = 0;
       for (final entry in _localDictionary.entries) {
-        final key = entry.key;
-        if (key.length >= 3 &&
-            (clean.startsWith(key) ||
-                _stripCircumflex(clean).startsWith(_stripCircumflex(key)))) {
-          if (key.length > longestKeyLen) {
-            longestKeyLen = key.length;
+        final keyPlain = _stripCircumflex(entry.key);
+        if (keyPlain.length >= 5 &&
+            plainClean.startsWith(keyPlain) &&
+            plainClean.length - keyPlain.length <= 5) {
+          if (keyPlain.length > longestKeyLen) {
+            longestKeyLen = keyPlain.length;
             bestPrefixMatch = entry.value;
           }
         }
@@ -1352,13 +2436,287 @@ class DictionaryService {
       }
     }
 
+    return null;
+  }
+
+  /// Sözlükte doğrudan madde başı olmayan kelimeler için dinamik morfolojik
+  /// kök, ek, vezin ve yakın kavram analizi üretir (asla sabit şablon döndürmez).
+  DictionaryEntry _buildDynamicMorphologicalEntry(
+    String displayWord,
+    List<String> tokens,
+  ) {
+    final targetToken = tokens.isNotEmpty ? tokens.first : displayWord.trim();
+    final lower = _toTurkishLower(targetToken)
+        .replaceAll(RegExp(r'[^a-zçğıöşüâîû]', unicode: true), '');
+    final stems = _extractTurkishStems(lower);
+
+    // En anlamlı kökü seç (3-6 harf arası en kısa geçerli gövde)
+    var rootCandidate = lower;
+    for (final s in stems) {
+      if (s.length >= 3 && s.length < rootCandidate.length) {
+        rootCandidate = s;
+      }
+    }
+
+    // Soyulan eki ve dilbilgisel görevini tespit et
+    final suffixPart = lower.startsWith(_stripCircumflex(rootCandidate)) &&
+            lower.length > rootCandidate.length
+        ? lower.substring(rootCandidate.length)
+        : '';
+
+    final detectedFunctions = <String>[];
+    if (suffixPart.isNotEmpty) {
+      if (RegExp(r'(lar|ler)').hasMatch(suffixPart)) {
+        detectedFunctions.add('Çoğul (-lar/-ler)');
+      }
+      if (RegExp(r'(mıştır|miştir|muştur|müştür|mış|miş|muş|müş)').hasMatch(suffixPart)) {
+        detectedFunctions.add('Geçmiş Zaman / Sıfat-Fiil (-mış/-miş)');
+      }
+      if (RegExp(r'(maktadır|mektedir|mak|mek|ması|mesi)').hasMatch(suffixPart)) {
+        detectedFunctions.add('İsim-Fiil / Süreklilik (-mak/-mek)');
+      }
+      if (RegExp(r'(dığı|diği|duğu|düğü|tığı|tiği|an|en)').hasMatch(suffixPart)) {
+        detectedFunctions.add('Sıfat-Fiil (Ortaç)');
+      }
+      if (RegExp(r'(dan|den|tan|ten)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Ayrılma Hali (-dan/-den)');
+      } else if (RegExp(r'(da|de|ta|te)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Bulunma Hali (-da/-de)');
+      } else if (RegExp(r'(nın|nin|nun|nün|ın|in|un|ün)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Tamlayan / İlgi Hali (-ın/-in)');
+      } else if (RegExp(r'(ya|ye|na|ne|a|e)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Yönelme Hali (-a/-e)');
+      } else if (RegExp(r'(yı|yi|yu|yü|ı|i|u|ü)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Belirtme / İyelik Eki');
+      } else if (RegExp(r'(dır|dir|dur|dür|tır|tir|tur|tür)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Bildirme / Kesinlik Eki (-dır/-dir)');
+      } else if (RegExp(r'(lık|lik|luk|lük)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Soyut İsim Yapım Eki (-lık/-lik)');
+      } else if (RegExp(r'(lı|li|lu|lü|sız|siz|suz|süz)$').hasMatch(suffixPart)) {
+        detectedFunctions.add('Niteleme Sıfatı Yapım Eki');
+      }
+    }
+
+    // Köken ve vezin tahmini
+    String origin = 'Türkçe';
+    String partOfSpeech = 'İsim / Çekimli Sözcük';
+    String structuralNote = '';
+
+    if (lower.contains('â') ||
+        lower.contains('î') ||
+        lower.contains('û') ||
+        lower.startsWith('mü') ||
+        lower.startsWith('mu') ||
+        lower.startsWith('te') ||
+        lower.startsWith('ta') ||
+        lower.startsWith('ist') ||
+        lower.endsWith('iyet') ||
+        lower.endsWith('iyye') ||
+        lower.endsWith('ât')) {
+      origin = 'Arapça / Klasik Osmanlı Türkçesi';
+      if (lower.startsWith('mü') || lower.startsWith('mu')) {
+        partOfSpeech = 'İsm-i Fâil / İsm-i Mef\'ûl';
+        structuralNote =
+            'Arapça "mü-/mu-" önekiyle türetilmiş, bir eylemi icra eden veya o niteliği taşıyan kavram kalıbıdır. ';
+      } else if (lower.endsWith('iyet') || lower.endsWith('iyye')) {
+        partOfSpeech = 'Soyut Kavram (Masdar-ı Sınâî)';
+        structuralNote =
+            '"-iyet / -iyye" nispet ve soyutluk ekiyle türetilmiş felsefi/hukuki terimdir. ';
+      } else if (lower.startsWith('ist')) {
+        partOfSpeech = 'İstif\'âl Babı (Masdar)';
+        structuralNote =
+            'Arapça "istif\'âl" kalıbında talep, arzu veya bir niteliği aramayı ifade eden terimdir. ';
+      }
+    } else if (detectedFunctions.any((f) => f.contains('Fiil'))) {
+      partOfSpeech = 'Fiil / Fiilimsi Gövdesi';
+    }
+
+    // Kökdaş veya yazılışı en yakın lügat maddelerini bul
+    final rootPlain = _stripCircumflex(rootCandidate);
+    final relatedEntries = <DictionaryEntry>[];
+    for (final entry in _localDictionary.entries) {
+      final keyPlain = _stripCircumflex(entry.key);
+      if (rootPlain.length >= 3 &&
+          (keyPlain.contains(rootPlain) || rootPlain.contains(keyPlain))) {
+        if (!relatedEntries.any((e) => e.word == entry.value.word)) {
+          relatedEntries.add(entry.value);
+        }
+      }
+    }
+
+    final rootDisplay = rootCandidate.isEmpty
+        ? targetToken
+        : '${rootCandidate[0].toUpperCase()}${rootCandidate.substring(1)}';
+    final suffixSummary = suffixPart.isNotEmpty
+        ? ' • Ek: "-$suffixPart"${detectedFunctions.isNotEmpty ? " (${detectedFunctions.join(', ')})" : ""}'
+        : ' • Yalın Gövde';
+
+    final relatedNote = relatedEntries.isNotEmpty
+        ? '\n\nYakın Lügat Maddesi (${relatedEntries.first.word}): ${relatedEntries.first.meaning}'
+        : '';
+
     return DictionaryEntry(
-      word: rawWord.trim().isEmpty ? 'Kelime' : rawWord.trim(),
-      origin: 'Türkçe / Edebi Kavram',
-      partOfSpeech: 'İsim / Kavram',
+      word: targetToken,
+      origin: '$origin (Kök: $rootDisplay$suffixSummary)',
+      partOfSpeech: partOfSpeech,
       meaning:
-          '"$rawWord" ibaresi metin bağlamında özel bir anlam taşımaktadır. Lügat arama çubuğundan kök kelimeyi veya yakın edebi terimleri sorgulayabilirsiniz.',
-      example: '"Her kelime, içinde doğduğu cümlenin ikliminde nefes alır."',
+          '${structuralNote}Seçilen "$targetToken" sözcüğü "$rootDisplay" kök/gövdesinden${suffixPart.isNotEmpty ? ' "-$suffixPart" ekiyle' : ''} türemiştir.${detectedFunctions.isNotEmpty ? ' Cümle içinde ${detectedFunctions.join(" ve ").toLowerCase()} görevinde kullanılmıştır.' : ''}$relatedNote',
+      example: relatedEntries.isNotEmpty
+          ? relatedEntries.first.example
+          : '"$targetToken" ibaresinin kök gövdesi "$rootDisplay" olarak çözümlenmiştir.',
+    );
+  }
+
+  /// Osmanlıca terkip araması (tireli, boşluklu veya bitişik izafet yazımlarını eşleştirir).
+  DictionaryEntry? _findTerkipMatch(String rawInput) {
+    final lower = _toTurkishLower(rawInput)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (lower.isEmpty || (!lower.contains('-') && !lower.contains(' '))) {
+      return null;
+    }
+
+    if (_localDictionary.containsKey(lower)) {
+      return _localDictionary[lower];
+    }
+
+    final plainInput = _stripCircumflex(lower);
+    final compactInput = plainInput.replaceAll(RegExp(r'[^a-zçğıöşü]'), '');
+
+    for (final entry in _localDictionary.entries) {
+      if (!entry.key.contains('-') && !entry.key.contains(' ')) continue;
+      final keyLower = _toTurkishLower(entry.key);
+      final keyPlain = _stripCircumflex(keyLower);
+      final keySpace = keyPlain.replaceAll('-', ' ');
+      final keyCompact = keyPlain.replaceAll(RegExp(r'[^a-zçğıöşü]'), '');
+
+      if (lower == keyLower ||
+          plainInput == keyPlain ||
+          plainInput == keySpace ||
+          (compactInput.length >= 6 && compactInput == keyCompact)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  /// Çevreleyen cümle içinde seçilen kelimenin bir Osmanlıca terkip parçası olup olmadığını denetler.
+  DictionaryEntry? _findContextualTerkipMatch(
+    String targetWord,
+    String surroundingText,
+  ) {
+    final targetPlain = _stripCircumflex(_toTurkishLower(targetWord))
+        .replaceAll(RegExp(r'[^a-zçğıöşü]'), '');
+    if (targetPlain.length < 2) return null;
+
+    final contextPlain = _stripCircumflex(_toTurkishLower(surroundingText))
+        .replaceAll(RegExp(r'[-–—]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    for (final entry in _localDictionary.entries) {
+      if (!entry.key.contains('-')) continue;
+      final keyPlain = _stripCircumflex(_toTurkishLower(entry.key));
+      final parts = keyPlain
+          .split(RegExp(r'[-\s]+'))
+          .where((p) => p.length >= 2)
+          .toList();
+      if (!parts.any((p) => p == targetPlain || targetPlain.startsWith(p))) {
+        continue;
+      }
+      final spaceForm = keyPlain.replaceAll('-', ' ');
+      final joinedIzafetForm = keyPlain.replaceAllMapped(
+        RegExp(r'([a-zçğıöşü]+)-([ıiüu])\s+([a-zçğıöşü]+)'),
+        (m) => '${m.group(1)}${m.group(2)} ${m.group(3)}',
+      );
+      if (contextPlain.contains(spaceForm) ||
+          contextPlain.contains(joinedIzafetForm)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  /// Looks up a word or multi-word selection in the offline dictionary using morphological stemming
+  DictionaryEntry lookup(String rawWord, {String? surroundingText}) {
+    final trimmed = rawWord.trim();
+    if (trimmed.isEmpty) {
+      return _localDictionary['tahrir']!;
+    }
+    final safeSurrounding = surroundingText != null && surroundingText.length > 600
+        ? surroundingText.substring(0, 600)
+        : surroundingText;
+
+    // 0. Önce doğrudan veya çevreleyen metin bağlamında Osmanlıca terkip eşleşmesi dene
+    final terkipMatch = _findTerkipMatch(trimmed);
+    if (terkipMatch != null) {
+      return terkipMatch;
+    }
+    if (safeSurrounding != null && safeSurrounding.trim().isNotEmpty) {
+      final contextualTerkip = _findContextualTerkipMatch(
+        trimmed,
+        safeSurrounding,
+      );
+      if (contextualTerkip != null) {
+        return contextualTerkip;
+      }
+    }
+
+    // 1. Sonra tek parça (veya tamlama) olarak dene
+    if (!trimmed.contains(' ') && trimmed.length <= 48) {
+      final directMatch = _findSingleWordMatch(trimmed);
+      if (directMatch != null) {
+        return directMatch;
+      }
+    }
+
+    // 2. Çok kelimeli seçim yapılmışsa kelimelere ayır ve anlamlı kelimeleri çözümle
+    final tokens = extractWordsFromSelection(trimmed).take(12).toList();
+    if (tokens.isEmpty) {
+      return _localDictionary['tahrir']!;
+    }
+
+    const stopWords = <String>{
+      've', 'ile', 'de', 'da', 'ki', 'bu', 'şu', 'bir', 'için', 'gibi',
+      'kadar', 'olan', 'olarak', 'ise', 'ama', 'fakat', 'ancak', 'hem',
+      'ya', 'veya', 'yahut', 'her', 'hiç', 'çok', 'daha', 'en', 'ne',
+    };
+
+    final matchedEntries = <DictionaryEntry>[];
+    for (final token in tokens) {
+      final tokenLower = _toTurkishLower(token);
+      if (tokens.length > 1 && stopWords.contains(tokenLower)) continue;
+      final match = _findSingleWordMatch(token);
+      if (match != null && !matchedEntries.any((e) => e.word == match.word)) {
+        matchedEntries.add(match);
+      }
+    }
+
+    if (matchedEntries.length == 1) {
+      return matchedEntries.first;
+    }
+
+    if (matchedEntries.length > 1) {
+      final first = matchedEntries.first;
+      final combinedMeaning = matchedEntries
+          .take(3)
+          .map((e) => '• ${e.word} (${e.origin}): ${e.meaning}')
+          .join('\n\n');
+      return DictionaryEntry(
+        word: matchedEntries.take(3).map((e) => e.word).join(' · '),
+        origin: '${matchedEntries.length} Kavram Çözümlendi',
+        partOfSpeech: first.partOfSpeech,
+        meaning: combinedMeaning,
+        example: first.example,
+      );
+    }
+
+    // 3. Madde başı bulunamadıysa sabit mesaj yerine dinamik morfolojik kök/ek analizi üret
+    final primaryTokens = tokens
+        .where((t) => !stopWords.contains(_toTurkishLower(t)))
+        .toList();
+    return _buildDynamicMorphologicalEntry(
+      trimmed,
+      primaryTokens.isNotEmpty ? primaryTokens : tokens,
     );
   }
 
@@ -1375,7 +2733,7 @@ class DictionaryService {
 
     final cleanQuery = _toTurkishLower(query).trim();
     if (cleanQuery.isEmpty) {
-      return uniqueEntries.take(20).toList();
+      return uniqueEntries.take(24).toList();
     }
 
     final plainQuery = _stripCircumflex(cleanQuery);
@@ -1392,7 +2750,7 @@ class DictionaryService {
 
       if (wordLower.startsWith(cleanQuery) ||
           wordPlain.startsWith(plainQuery) ||
-          stems.any((s) => s.length >= 3 && (wordLower == s || wordPlain == s))) {
+          stems.any((s) => s.length >= 2 && (wordLower == s || wordPlain == s))) {
         exactOrPrefixMatches.add(entry);
       } else if (wordLower.contains(cleanQuery) ||
           wordPlain.contains(plainQuery) ||
@@ -1437,3 +2795,4 @@ class DictionaryService {
     ].take(limit).toList();
   }
 }
+

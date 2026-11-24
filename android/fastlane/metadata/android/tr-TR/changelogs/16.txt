@@ -1,0 +1,3 @@
+• Katman 2c Bağlamsal Gerçek-Kelime OCR Çözücüsü: Sözlükte var olsa bile cümlede anlamsızlaşan kelimeleri ("120 dini→120 bini", "ortalama getir→gelir") komşu bağlamıyla onarır.
+• Klasik Terim & Fiil Bağlam Tashihi: "iştikak→iştirak", "mütenasip okur→olur", "Fark Devleti→Fars Devleti" gibi bağlamsal OCR sapmalarını düzeltir.
+• Morfolojik İsim/Fiil Doğrulayıcısı: "bölümdüğü→bölündüğü" gibi sahte morfolojik türetmeleri yakalayıp onarır.

@@ -2,9 +2,9 @@
 class AppConstants {
   const AppConstants._();
 
-  static const String appName = 'Tahrir';
-  static const String appTagline = 'Zarif, Akıcı ve Bilişsel Okuma Ekosistemi';
-  static const String appVersion = '1.0.0';
+  static const String appName = 'Tahrir: Akıllı PDF & Kitap';
+  static const String appTagline = 'Bozuk PDF\'leri Akıcı Okuma Deneyimine Dönüştüren Ekosistem';
+  static const String appVersion = '1.14.0+20';
 
   // Storage Keys
   static const String keyActiveTheme = 'tahrir_active_theme';

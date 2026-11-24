@@ -1,0 +1,4 @@
+• Tek Akışta 21 Kademeli Hızlı Okuma Serüven Yolu: Sekme karmaşası kaldırılarak adım adım ilerleyen serüven haritası ve kompakt "Serbest" pratik çekmecesi eklendi.
+• Kitap Okuma Hızı Koordinasyonu: Gerçek kitap okuma WPM hızınız ile hızlı okuma hedef hızınız canlı koordine edilir.
+• Dinamik Kademe Kalibrasyonu: Seri bozulduğunda veya kitap hızı düştüğünde kademe otomatik dengelenir.
+• Canlı Kitap Kesiti & Değişken Metin Motoru: Kitaplarınızdan canlı pasajlar ve her açılışta taze metinler.

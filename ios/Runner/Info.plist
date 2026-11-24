@@ -24,6 +24,18 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Tahrir, not ve haşiyelerinizi çevrimdışı QR kod ile cihazlar arasında aktarmak için kameranıza erişir.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tahrir, belge ve görsel seçimi için fotoğraf arşivinize erişir.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Tahrir, alıntı kartı ve okuma beratı görsellerini fotoğraf galerinize kaydetmek için izin ister.</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

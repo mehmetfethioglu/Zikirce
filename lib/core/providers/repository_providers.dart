@@ -25,3 +25,7 @@ final habitRepositoryProvider = Provider<HabitRepository>((ref) {
   final dbHelper = ref.watch(databaseHelperProvider);
   return HabitRepositoryImpl(dbHelper: dbHelper);
 });
+
+/// Notlar veya Alıntı Kartları kaydedildiğinde Notlar ekranının anında güncellenmesini sağlayan sayaç.
+final highlightsRevisionProvider = StateProvider<int>((ref) => 0);
+

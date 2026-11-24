@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release Signing & Store Credentials (NEVER commit)
+android/key.properties
+*.jks
+*.keystore
+**/play-store-credentials.json
+play-store-credentials.json
+ios/asc_api_key.json
+/android/build/

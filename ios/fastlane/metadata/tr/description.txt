@@ -1,0 +1,25 @@
+Tahrir; iPhone ve iPad ekranlarında bozuk, çift sütunlu veya taranmış PDF belgelerini, EPUB kitapları ve Markdown dosyalarını sıcak bir okuma deneyimine dönüştüren %100 çevrimdışı akıllı okuma ekosistemidir.
+
+Akıllı PDF Reflow ve Çift Sütunlu Akademik Okuma
+• Çift sütunlu akademik makaleleri ve klasik eserleri sütun sırasına göre doğru paragraf ve başlık yapısıyla yeniden akıtın.
+• Sıcak Parşömen, Mürekkep Gece ve AMOLED siyah okuma temaları, tek dokunuşla kenar boşluğu kırpma ve sayfa yönüne duyarlı kaydırma hizalaması ile göz yorgunluğunu azaltın.
+• Sayfa altı dipnotları okuma akışınızı bölmeden tıklanabilir interaktif baloncuklara dönüşür.
+
+300 DPI Çevrimdışı OCR ve 34.795 Köklü Zemberek Tashih Motoru
+• Taranmış veya bozuk OCR katmanlı PDF sayfalarını cihaz üzerinde 300 DPI ile tarayıp SQLite önbelleğine alın.
+• 34.795 Türkçe/Osmanlıca kök sözlüğü, 3 katmanlı yerel AI düzeltici ve Word tarzı Gözden Geçir paneli ile ligatür kaynaşmalarını ("rı/ri→n"), ünsüz benzeşmelerini ve bağlamsal hataları onarın.
+• "Tüm Kitabı Tara" komutuyla tüm PDF sayfalarını ve EPUB bölümlerini tek dokunuşla temizleyin.
+
+Tek Dokunuşla Popup Lügat & Osmanlıca Terkip Çözümleyici
+• Metindeki herhangi bir kelimeye dokunarak etimolojik kökenini, kök+ek yapısını ve Osmanlıca terkipleri okuma ekranından ayrılmadan inceleyin.
+
+Kıraat & Akıcı Fasıl Okuma Koçu + Göz Atölyesi
+• Açık kitabınızdan 60 saniyelik kavram ısınmasıyla başlayın; sayfa içinde 2–4 kelimelik semantik öbek temposu ve kademeli soluklaşan rehberlikle hızınızı artırın.
+• Cezasız okuma serisi, yoğunluğa uyumlu hedef WPM, Orijinal PDF satır cetveli, fasıl sonu hatırlama ve Göz Atölyesi (Piramit, Takistoskop, Schulte) araçlarını kullanın.
+
+Haşiye, Obsidian Markdown, QR Takas & Alıntı Stüdyosu
+• 4 kategori ve 5 mürekkep rengiyle derkenar notları alın; Obsidian/Notion (.md) dosyası olarak dışa aktarın veya internet olmadan QR Kod (P2P) ile paylaşın.
+• Seçtiğiniz cümleleri 3x PNG Alıntı Stüdyosu kartlarına dönüştürün, biten kitaplar için Okuma Beratı alın.
+
+Sesli Okuma, Prosedürel Ambiyans ve Tam Gizlilik
+• İnternetsiz prosedürel Yağmur, Şömine, Kütüphane ve Ney sesleri eşliğinde TTS karaoke dinleyin; JSON yedekleme ve Dosyalar entegrasyonu ile verileriniz yalnızca cihazınızda kalsın.

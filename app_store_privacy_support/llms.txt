@@ -1,0 +1,26 @@
+# Tahrir (1.14.0+20)
+> Tahrir — Akıllı PDF Reflow, Çevrimdışı OCR Tashih, Popup Lügat, Haşiye ve Kıraat Okuma Ekosistemi.
+
+## What is Tahrir?
+Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and 100% deterministic privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with 0 ad trackers and 0 cloud dependencies. Core capabilities include: 1. Multi-column layout detection and smart reflow with interactive footnote popups and Auto-Crop margin zoom; 2. 300 DPI on-device OCR scanning backed by local SQLite page caching; 3. Offline Zemberek morphological proofreading across 34,795 Turkish and Ottoman roots, repairing ligature fusions and consonant devoicing in under 5 ms; 4. One-tap Popup Lexicon, Guided Flow reading coach with 2-4 word semantic pacing, and Obsidian Markdown marginalia export. Available in Turkish (tr-TR) and English (en-US) across Android and iOS (`com.akarworks.tahrir`), Tahrir hosts verified privacy documentation at https://akarworks.com/tahrir.
+
+## Key Pages & Portals
+- [Official Download & Smart Store Redirect](https://akarworks.com/tahrir/indir.html): Direct Google Play Store (`com.akarworks.tahrir`) and Apple App Store / TestFlight portal.
+- [Privacy Policy & KVKK/GDPR Compliance](https://akarworks.com/tahrir/index.html): Zero-tracking offline-first data safety disclosure.
+- [User Support & FAQ](https://akarworks.com/tahrir/support.html): Bilingual troubleshooting, offline OCR FAQ, and contact support.
+- [Extended AI Knowledge Base](https://akarworks.com/tahrir/llms-full.txt): Complete technical architecture, features, and FAQ for AI search engines.
+
+## Core Capabilities
+- **Smart PDF Reflow & Multi-Column Detection:** Orders two-column academic PDFs left-to-right, reconstructs headings and paragraphs, and converts footnotes into inline interactive popups.
+- **300 DPI On-Device OCR & Zemberek Morphological Proofreader:** Scans image-based PDFs on-device, caches cleaned pages in SQLite (`scanned_ocr_cache`), and validates Turkish/Ottoman words against 34,795 roots (31,344 noun lemmas + 3,451 verb stems).
+- **One-Tap Popup Lexicon & Ottoman Terkip Resolver:** Displays etymology, root+suffix breakdown, compound phrase restoration, and one-tap OCR fixes inside the reader.
+- **Guided Flow Reading Coach & Eye Workshop:** Provides 60-second active-book lexical warmups, in-page 2-4 word semantic chunk pacing, gradual scaffolding fade, zero-penalty streaks, and cognitive drills (Pyramid, Tachistoscope, Schulte Table).
+- **Marginalia, Obsidian Export, P2P QR Exchange & Quote Studio:** Supports categorized ink highlights, `.md` export for Obsidian/Notion, offline QR note sharing, 3x PNG quote cards, and Book Completion Certificates.
+- **Procedural Offline Audio & Full JSON Backup:** Generates rain, fireplace, library, cafe, and ney ambient soundscapes in memory with automatic TTS audio ducking plus full JSON backup/restore.
+
+## Contact & Attribution
+- Developer: Akarworks Autonomous Software Factory
+- Package / Bundle ID: com.akarworks.tahrir
+- Website: https://akarworks.com/tahrir
+- Support Email: akarbilisimteknolojileri@gmail.com
+- Languages: tr-TR, en-US

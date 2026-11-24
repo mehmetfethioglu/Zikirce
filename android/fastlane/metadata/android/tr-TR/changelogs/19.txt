@@ -1,0 +1,3 @@
+• Kusursuz Okuma Tashihi: Biçimbilim (-laş/-leş, ek-fiil), ünsüz benzeşmesi ("kitapda→kitapta", "gitdi→gitti") ve kesme işaretli ek ("Osmanlı'nm→Osmanlı'nın", "1923'de→1923'te") onarımları.
+• Bağlamsal & Tire Onarımı: Gerçek-kelime ("olanak→olarak", "üzen→üzere", "dolay→dolayı"), kırık tire ve dipnot içi otomatik tashih.
+• Tüm Kitabı Tara: Tüm sayfa ve EPUB bölümlerini tarayıp tek dokunuşla kalıcı olarak onarır.

@@ -1,0 +1,3 @@
+• Genişletilmiş OCR Tashih Veritabanı: 350+ boşluklu hece bölünmesi ("bi çimini→biçimini") ve 1.500+ Türkçe/Osmanlıca kök sözlüğü.
+• Osmanlıca Terkip & İzafet Onarımı: Tireleri düşen 2-3 kelimelik terkipler ("devlet-i aliyye", "âdâb-ı muaşeret") otomatik onarılır.
+• Tek Dokunuş Popup Lügat: Okurken herhangi bir kelimeye dokunarak anlamını, kökenini, kök+ek yapısını ve OCR tashihini anında görün.

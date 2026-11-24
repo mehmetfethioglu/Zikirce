@@ -114,7 +114,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
       await _loadHighlights();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✍️ Şerh notu güncellendi.')),
+          const SnackBar(content: Text('✍️ Not güncellendi.')),
         );
       }
     }
@@ -122,6 +122,9 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(highlightsRevisionProvider, (_, _) {
+      _loadHighlights();
+    });
     final theme = Theme.of(context);
     final highlightRepo = ref.read(highlightRepositoryProvider);
     final qrService = QrP2pSyncService(highlightRepo);
@@ -130,7 +133,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Şerh & Not Defteri',
+          'Notlar & Alıntılar',
           style: GoogleFonts.literata(fontWeight: FontWeight.w800),
         ),
         actions: [
@@ -140,7 +143,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
             onPressed: () => DictionarySheet.show(context),
           ),
           IconButton(
-            tooltip: 'Çevrimdışı QR Not Takası',
+            tooltip: 'Çevrimdışı QR Not Paylaşımı',
             icon: const Icon(Icons.qr_code_2),
             onPressed: () async {
               final imported = await QrSyncModal.show(context, qrService);
@@ -155,7 +158,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
             onPressed: () async {
               final mdRes = await highlightRepo.exportHighlightsToMarkdown();
               if (mdRes.isSuccess && mdRes.dataOrNull != null) {
-                Share.share(mdRes.dataOrNull!, subject: 'Tahrir Şerh Arşivi.md');
+                Share.share(mdRes.dataOrNull!, subject: 'Tahrir Not Arşivi.md');
               }
             },
           ),
@@ -174,7 +177,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
                   onChanged: (val) => setState(() => _searchQuery = val),
                   style: GoogleFonts.inter(fontSize: 13.5),
                   decoration: InputDecoration(
-                    hintText: 'Şerhlerde, alıntılarda veya kitap adında ara...',
+                    hintText: 'Notlarda, alıntılarda veya kitap adında ara...',
                     hintStyle: GoogleFonts.inter(
                       fontSize: 13,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
@@ -250,7 +253,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
             ),
           ),
 
-          // Şerh Listesi
+          // Not Listesi
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -265,8 +268,8 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
                               const SizedBox(height: 12),
                               Text(
                                 _highlights.isEmpty
-                                    ? 'Henüz bir şerh veya not kaydedilmedi.'
-                                    : 'Arama veya filtreyle eşleşen şerh bulunamadı.',
+                                    ? 'Henüz bir not veya alıntı kaydedilmedi.'
+                                    : 'Arama veya filtreyle eşleşen not bulunamadı.',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.literata(
                                   fontSize: 16,
@@ -275,7 +278,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Okuma ekranında metni seçip "Şerh Düş" eylemini kullanabilirsiniz.',
+                                'Okuma ekranında metni seçip "Not & Vurgu" eylemini kullanabilirsiniz.',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
@@ -390,7 +393,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
                                         onPressed: () => _showEditNoteDialog(h),
                                       ),
                                       IconButton(
-                                        tooltip: 'Şerhi Sil',
+                                        tooltip: 'Notu Sil',
                                         icon: const Icon(
                                           Icons.delete_outline,
                                           size: 20,
@@ -469,7 +472,7 @@ class _EditHighlightNoteDialogState extends State<_EditHighlightNoteDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'Şerh Notunu Düzenle',
+        'Notu Düzenle',
         style: GoogleFonts.literata(
           fontSize: 17,
           fontWeight: FontWeight.w800,
@@ -481,7 +484,7 @@ class _EditHighlightNoteDialogState extends State<_EditHighlightNoteDialog> {
         autofocus: true,
         style: GoogleFonts.inter(fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Kenar notunuzu veya şerhinizi yazın...',
+          hintText: 'Notunuzu buraya yazın...',
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
           ),

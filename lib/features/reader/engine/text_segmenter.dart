@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../domain/content_block.dart';
 import '../services/islamic_hadith_corpus.dart';
+import 'ocr_text_healer.dart';
 
 export '../domain/content_block.dart' show FootnoteAnchor;
 
@@ -52,13 +53,13 @@ class ExtractedPageResult {
 class TextSegmenter {
   const TextSegmenter._();
 
-  /// Removes hyphenation at line breaks (e.g., "ge- \n çiş" -> "geçiş")
+  /// Removes hyphenation at line breaks (e.g., "ge- \n çiş" -> "geçiş", "te=\n mâs" -> "temâs")
   static String deHyphenate(String input) {
     var text = input.replaceAll('\u00AD', ''); // remove soft hyphens
     text = text.replaceAll('\u200B', ''); // remove zero-width space
 
     return text.replaceAllMapped(
-      RegExp(r'([a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ]+)-\s*\n\s*([a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ]+)', unicode: true),
+      RegExp(r"([a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ]+)\s*(?:[-—–=¬~]+|-\.+)\s*\r?\n\s*['’‘!1|]?([a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ]+)", unicode: true),
       (match) => '${match.group(1)}${match.group(2)}',
     );
   }
@@ -271,6 +272,9 @@ class TextSegmenter {
     // 7. Clean spaces before punctuation
     text = text.replaceAllMapped(RegExp(r'\s+([,\.!?:;])'), (m) => m.group(1)!);
 
+    // 8. Run Universal Scanned Text & OCR Healer
+    text = OcrTextHealer.heal(text);
+
     return text;
   }
 
@@ -283,7 +287,7 @@ class TextSegmenter {
     int letterCount = 0;
     for (int rune in trimmed.runes) {
       final char = String.fromCharCode(rune);
-      if (RegExp(r'[<>;:_~^\\|!*+=.,"\u0027\-\/\[\]\{\}\(\)]').hasMatch(char)) {
+      if (RegExp(r'[<>;:_~^\\|!*+=.,"\u0027\-\/\[\]\{\}\(\)©®€¥§]').hasMatch(char)) {
         symbolCount++;
       } else if (RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(char)) {
         letterCount++;
@@ -309,19 +313,10 @@ class TextSegmenter {
     return false;
   }
 
-  /// Checks if a text block contains Arabic Unicode characters as its dominant script
+  /// Checks if a text block contains valid Arabic Unicode characters as its dominant script
+  /// (rejects OCR hallucinations like "أأأأسأ©ء" or single isolated letters like "ك").
   static bool isArabicText(String text) {
-    final trimmed = text.trim();
-    if (trimmed.isEmpty) return false;
-
-    final arabicLetters = RegExp(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]').allMatches(trimmed).length;
-    final latinLetters = RegExp(r'[a-zA-ZçğıöşüÇĞİÖŞÜâîûÂÎÛ]').allMatches(trimmed).length;
-
-    if (arabicLetters == 0) return false;
-    if (latinLetters == 0) return arabicLetters >= 3;
-
-    final totalLetters = arabicLetters + latinLetters;
-    return arabicLetters >= 6 && (arabicLetters / totalLetters) >= 0.40;
+    return OcrTextHealer.isValidArabicSegment(text);
   }
 
   /// Isolates Arabic Unicode text sequences into distinct paragraph blocks
@@ -760,12 +755,13 @@ class TextSegmenter {
               text.startsWith('Bölüm') ||
               text.startsWith('FASIL') ||
               text.startsWith('BAB') ||
-              RegExp(r'^[A-ZÇĞİÖŞÜ][\p{L}\s,\-’\x27]+(?:Önemi|Hakkında|Gereği|Bölümü|Adabı|Edebleri|Kuralları)$', unicode: true).hasMatch(text));
+              RegExp(r'^[A-ZÇĞİÖŞÜ][\p{L}\s,\-’\x27]+(?:Önemi|Hakkında|Gereği|Bölümü|Adabı|Edebleri|Kuralları|Durumu)$', unicode: true).hasMatch(text));
 
       // Re-flow intra-paragraph newlines for non-heading paragraphs to provide smooth fluid reading
-      final reflowedText = isHeading
+      final rawReflowed = isHeading
           ? text
           : text.replaceAll(RegExp(r'(?<!\n)\n(?!\n)'), ' ').replaceAll(RegExp(r'[ \t]{2,}'), ' ');
+      final reflowedText = OcrTextHealer.heal(rawReflowed);
 
       final anchors = <FootnoteAnchor>[];
       for (final match in footnoteAnchorRegex.allMatches(reflowedText)) {

@@ -185,6 +185,51 @@ class _DictionarySheetState extends State<DictionarySheet> {
                 ),
               ),
 
+              // Çok kelimeli seçim yapılmışsa her kelimeye tek tıkla geçiş çipleri
+              if (!_isSearchingList)
+                Builder(
+                  builder: (context) {
+                    final tokens = DictionaryService.extractWordsFromSelection(
+                      widget.initialWord,
+                    );
+                    if (tokens.length <= 1) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Seçimdeki Kelimeler:',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: tokens.take(8).map((token) {
+                              return ActionChip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(
+                                  token,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                onPressed: () => _selectWord(token),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+
               // Anlık Arama Önerileri
               if (_isSearchingList && _searchResults.length > 1) ...[
                 const SizedBox(height: 10),

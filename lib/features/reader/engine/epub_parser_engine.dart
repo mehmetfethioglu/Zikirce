@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:epubx/epubx.dart';
+import 'encoding_normalizer.dart';
 import 'text_segmenter.dart';
 
 class EpubParsedChapter {
@@ -17,14 +18,30 @@ class EpubParsedChapter {
 class EpubParserEngine {
   const EpubParserEngine();
 
+  List<EpubParsedChapter> _buildEpubWarningChapters() {
+    const warningTitle = 'EPUB Okuma Uyarısı';
+    const warningContent =
+        'Bu EPUB dosyası okunamadı veya DRM korumalı. Lütfen dosyanın bozuk olmadığından emin olun.';
+    return [
+      EpubParsedChapter(
+        title: warningTitle,
+        content: warningContent,
+        paragraphs: [
+          ParagraphSegment(rawText: warningTitle, isHeading: true),
+          ParagraphSegment(rawText: warningContent),
+        ],
+      ),
+    ];
+  }
+
   Future<List<EpubParsedChapter>> parseEpub(String filePath) async {
     if (filePath.startsWith('sample://')) {
-      return _generateSampleChapters();
+      return _generateSampleChapters(filePath);
     }
 
     final file = File(filePath);
     if (!await file.exists()) {
-      return _generateSampleChapters();
+      return _buildEpubWarningChapters();
     }
 
     try {
@@ -73,7 +90,9 @@ class EpubParserEngine {
         final existingKeys = mergedFootnotes.map((f) => f.key).toSet();
         for (final entry in globalFootnoteMap.entries) {
           if (!existingKeys.contains(entry.key) && entry.value.trim().isNotEmpty) {
-            mergedFootnotes.add(PageFootnote(key: entry.key, content: entry.value.trim()));
+            mergedFootnotes.add(
+              PageFootnote(key: entry.key, content: entry.value.trim()),
+            );
             existingKeys.add(entry.key);
           }
         }
@@ -93,9 +112,9 @@ class EpubParserEngine {
         ));
       }
 
-      return chapters.isNotEmpty ? chapters : _generateSampleChapters();
+      return chapters.isNotEmpty ? chapters : _buildEpubWarningChapters();
     } catch (e) {
-      return _generateSampleChapters();
+      return _buildEpubWarningChapters();
     }
   }
 
@@ -109,7 +128,12 @@ class EpubParserEngine {
     for (final m in idBlockRegex.allMatches(rawHtml)) {
       final key = m.group(1)!.trim();
       var content = _stripHtml(m.group(2)!);
-      content = content.replaceFirst(RegExp(r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}[.):\-—]?)\s*'), '').trim();
+      content = content
+          .replaceFirst(
+            RegExp(r'^\s*(\[\d{1,4}\]|\(\d{1,4}\)|\d{1,4}[.):\-—]?)\s*'),
+            '',
+          )
+          .trim();
       if (key.isNotEmpty && content.length >= 4) {
         targetMap.putIfAbsent(key, () => content);
       }
@@ -145,24 +169,25 @@ class EpubParserEngine {
 
   Future<List<EpubParsedChapter>> parseMarkdownOrTxt(String filePath) async {
     if (filePath.startsWith('sample://')) {
-      return _generateSampleChapters();
+      return _generateSampleChapters(filePath);
     }
 
     final file = File(filePath);
     if (!await file.exists()) {
-      final sample = _generateSampleChapters();
-      return [sample.first];
+      return _buildEpubWarningChapters();
     }
 
     try {
       final rawContent = await file.readAsString();
       if (rawContent.trim().isEmpty) {
-        final sample = _generateSampleChapters();
-        return [sample.first];
+        return _buildEpubWarningChapters();
       }
 
-      final normalized = rawContent.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-      final globalFootnoteMap = TextSegmenter.extractFootnoteMapFromRawText(normalized);
+      final normalized = EncodingNormalizer.normalizeEncodings(
+        rawContent.replaceAll('\r\n', '\n').replaceAll('\r', '\n'),
+      );
+      final globalFootnoteMap =
+          TextSegmenter.extractFootnoteMapFromRawText(normalized);
       final headingRegex = RegExp(r'^(#{1,2})\s+(.+)$', multiLine: true);
       final chapters = <EpubParsedChapter>[];
 
@@ -171,7 +196,9 @@ class EpubParserEngine {
         final keys = merged.map((f) => f.key).toSet();
         for (final entry in globalFootnoteMap.entries) {
           if (!keys.contains(entry.key) && entry.value.trim().isNotEmpty) {
-            merged.add(PageFootnote(key: entry.key, content: entry.value.trim()));
+            merged.add(
+              PageFootnote(key: entry.key, content: entry.value.trim()),
+            );
             keys.add(entry.key);
           }
         }
@@ -253,9 +280,11 @@ class EpubParserEngine {
         }
 
         for (final para in rawParagraphs) {
-          final paraWords = para.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+          final paraWords =
+              para.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
           if (currentCharCount > 0 &&
-              (currentCharCount + para.length > 1800 || currentWordCount + paraWords > 250)) {
+              (currentCharCount + para.length > 1800 ||
+                  currentWordCount + paraWords > 250)) {
             flushChunk();
           }
           if (chunkBuffer.isNotEmpty) {
@@ -271,11 +300,9 @@ class EpubParserEngine {
       if (chapters.isNotEmpty) {
         return chapters;
       }
-      final sample = _generateSampleChapters();
-      return [sample.first];
+      return _buildEpubWarningChapters();
     } catch (_) {
-      final sample = _generateSampleChapters();
-      return [sample.first];
+      return _buildEpubWarningChapters();
     }
   }
 
@@ -326,55 +353,238 @@ class EpubParserEngine {
         .replaceAll(RegExp(r'\n{3,}'), '\n\n')
         .trim();
 
-    return text;
+    return EncodingNormalizer.normalizeEncodings(text);
   }
 
-  List<EpubParsedChapter> _generateSampleChapters() {
-    const text1 = '''
+  List<EpubParsedChapter> _generateSampleChapters([String identifier = 'sample://seyahatname']) {
+    if (identifier.contains('kutadgu_bilig')) {
+      final kutadguSections = <({String title, String content, List<PageFootnote> notes})>[
+        (
+          title: 'Bölüm 1: Kut ve Adalet Üzerine',
+          content: '''
+BÖLÜM 1: KUT VE ADALET ÜZERİNE
+
+Bayat atı birle sözüg başladım,
+Törütgen igidgen keçürgen idim. [1]
+
+Kişi gönlünü akıl ile süsler, aklı ise bilgi ile aydınlatır. Söz söyleyen insan akıllı olmalı, dinleyen insan ise anlayan ve tartan olmalı. Dünya mülkü geçicidir; kalıcı olan ise adalet ve doğruluk üzerine kurulmuş nizâmdır.
+
+Beylik makamına oturan kişi gözünü adalet terazisinden ayırmamalıdır. Güneş gibi herkese eşit ışık vermeli, gece gibi kusurları örtmelidir. [2]
+''',
+          notes: const [
+            PageFootnote(
+              key: '1',
+              content:
+                  'Kutadgu Bilig 1. Beyit: "Tanrı adıyla söze başladım; O yaratan, besleyen ve bağışlayan Rabbimdir."',
+            ),
+            PageFootnote(
+              key: '2',
+              content:
+                  'Kutadgu Bilig Adalet Temsili: Hükümdar Kün-Toğdı (Güneş Doğdu) adaleti ve kanunu simgeler.',
+            ),
+          ],
+        ),
+        (
+          title: 'Bölüm 2: Bilgi ve Aklın Fazileti',
+          content: '''
+BÖLÜM 2: BİLGİ VE AKLIN FAZİLETİ
+
+Anlayış ve bilgi çok iyi şeydir; eğer bulursan onları kullan ve uçup göğe çık. [1]
+
+Bilgisiz insan meyvesiz ağaca benzer; meyvesiz ağaca aç insan göz ucuyla bile bakmaz. Akıl karanlık gecede yanan bir meşaledir, bilgi ise insanı yükselten kanattır. [2]
+''',
+          notes: const [
+            PageFootnote(
+              key: '1',
+              content: 'Yusuf Has Hacib, Kutadgu Bilig, Beyit 152.',
+            ),
+            PageFootnote(
+              key: '2',
+              content:
+                  'Ögdülmiş (Övülmüş): Eserde aklı ve ilmi temsil eden vezir karakteridir.',
+            ),
+          ],
+        ),
+        (
+          title: 'Bölüm 3: Dilin Edebi ve Sözün Kıymeti',
+          content: '''
+BÖLÜM 3: DİLİN EDEBİ VE SÖZÜN KIYMETİ
+
+Anlayış ve bilgiye tercüman olan dildir; insanı aydınlatan açık dilin kıymetini bil. [1]
+
+İnsanı dil kıymetlendirir ve insan onunla saadet bulur; sözünü bilerek söyle, az söyle ama öz söyle; bin kelimeyi bir nükteli sözde topla. [2]
+''',
+          notes: const [
+            PageFootnote(
+              key: '1',
+              content: 'Kutadgu Bilig, 7. Bab: Dilin fazileti ve söz söylemenin adabı.',
+            ),
+            PageFootnote(
+              key: '2',
+              content: 'Söz ağızdan çıkana kadar senin esirindir; çıktıktan sonra sen onun esiri olursun.',
+            ),
+          ],
+        ),
+        (
+          title: 'Bölüm 4: Saadet (Ay-Toldı) ve Devlet Nizamı',
+          content: '''
+BÖLÜM 4: SAADET (AY-TOLDI) VE DEVLET NİZAMI
+
+Saadet (Kut) doğan ay gibidir; önce küçüktür, günden güne büyür, dolunay olunca tekrar eksilmeye yüz tutar. [1]
+
+Zulüm yanan ateştir, yaklaşanı yakar; kanun ise su gibidir, aktığı yerde hayat yeşertir. [2]
+''',
+          notes: const [
+            PageFootnote(
+              key: '1',
+              content: 'Ay-Toldı (Dolunay): İkbali ve devlet nimetini temsil eder.',
+            ),
+            PageFootnote(
+              key: '2',
+              content: 'Beyit 2032: Töre ve adaletin su ile mukayesesi.',
+            ),
+          ],
+        ),
+        (
+          title: 'Bölüm 5: Akıbet (Odgurmış) ve Kanaat Hikmeti',
+          content: '''
+BÖLÜM 5: AKIBET (ODGURMIŞ) VE KANAAT HİKMETİ
+
+Dünya bir kervansaraydır; gelen konar, konan göçer. Akıllı insan bu konakta ebedî kalacakmış gibi hırsa kapılmaz, yarın göçecekmiş gibi hazırlıklı yaşar. [1]
+
+Kanaat tükenmez bir hazinedir. İyilik et, iyilik bul; güzel ad bırak ki senden sonra hayırla yâd edilesin. [2]
+''',
+          notes: const [
+            PageFootnote(
+              key: '1',
+              content: 'Odgurmış (Uyanmış): Kanaat ve tefekkürü temsil eden zahid.',
+            ),
+            PageFootnote(
+              key: '2',
+              content: 'Kutadgu Bilig Hatimesi: Baki kubbede hoş bir sada bırakmak.',
+            ),
+          ],
+        ),
+      ];
+
+      return kutadguSections
+          .map(
+            (s) => EpubParsedChapter(
+              title: s.title,
+              content: s.content,
+              paragraphs: TextSegmenter.segmentIntoParagraphs(
+                s.content,
+                pageFootnotes: s.notes,
+              ),
+            ),
+          )
+          .toList();
+    }
+
+    final seyahatSections = <({String title, String content, List<PageFootnote> notes})>[
+      (
+        title: 'Diyar-ı Rûm\'a Seyahat',
+        content: '''
 BÖLÜM 1: DİYAR-I RÛM'A SEYAHAT
 
 1040 senesinde İstanbul'dan hareket edip Anadolu ve Rumeli diyarına revan olduk. Şehirler gördük ki her biri birer inci misali parıldar. [1]
 
 Çarşıları mamur, kervansarayları nakış nakış işlenmiş, insanları ise misafirperver ve ilim ehlidir. Çeşmelerinden buz gibi sular akar, bağlarında bülbüller ötüşür. [*]
-''';
-
-    const text2 = '''
+''',
+        notes: const [
+          PageFootnote(
+            key: '1',
+            content:
+                'Evliyâ Çelebi, Seyahatnâme, 1. Cilt: Dersaadet\'ten Anadolu\'ya ilk çıkış menzilleri (H. 1040 / M. 1630).',
+          ),
+          PageFootnote(
+            key: '*',
+            content:
+                'Klasik Osmanlı şehirciliğinde külliye, bedesten ve su yolları vakıf nizamıyla idare olunurdu.',
+          ),
+        ],
+      ),
+      (
+        title: 'Kaleler ve Nakşiler',
+        content: '''
 BÖLÜM 2: KALELER VE NAKŞİLER
 
 Şehrin kalesi yedi burç üzerine bina olunmuş olup, surları göklere ser çekmiştir. İçerisinde sultanın sarayı ve ulemanın meclisleri yer alır. [2]
 
 Akşam olduğunda kandiller yanar, şairler ve edipler toplanıp tahrir ve nazım meclisleri kurarlar.
-''';
-
-    const sampleFootnotes1 = [
-      PageFootnote(
-        key: '1',
-        content: 'Evliyâ Çelebi, Seyahatnâme, 1. Cilt: Dersaadet\'ten Anadolu\'ya ilk çıkış menzilleri (H. 1040 / M. 1630).',
+''',
+        notes: const [
+          PageFootnote(
+            key: '2',
+            content:
+                'Yedikule ve İç Kale tahkimatı; devrin tarihçileri tarafından "Sedd-i İskender" teşbihiyle tavsif edilmiştir.',
+          ),
+        ],
       ),
-      PageFootnote(
-        key: '*',
-        content: 'Klasik Osmanlı şehirciliğinde külliye, bedesten ve su yolları vakıf nizamıyla idare olunurdu.',
+      (
+        title: 'Bursa ve Uludağ\'ın Pınarları',
+        content: '''
+BÖLÜM 3: BURSA VE ULUDAĞ'IN PINARLARI
+
+Bursa ruhaniyetli bir belde-i tayyibedir ki Ulu Camii'nin yirmi kubbesi altında kırk çeşmeli şadırvanı gece gündüz çağlar. [1]
+
+Keşiş Dağı'ndan inen pınarlar şehrin mahallelerine hayat bahşeder, çarşılarında ipek dokuyan esnaf dua ile kepenk açar.
+''',
+        notes: const [
+          PageFootnote(
+            key: '1',
+            content:
+                'Seyahatnâme, 2. Cilt: Bursa Ulu Camii\'nin hat levhaları ve mimari letafeti.',
+          ),
+        ],
+      ),
+      (
+        title: 'Edirne ve Selimiye Külliyesi',
+        content: '''
+BÖLÜM 4: EDİRNE VE SELİMİYE KÜLLİYESİ
+
+Edirne'ye vardığımızda uzaktan Selimiye'nin dört zarif minaresi gökyüzüne yükselen birer kalem gibi göründü. [1]
+
+Koca Mimar Sinan kubbeyi öyle bir hendese ile kurmuştur ki altında duran insanın gönlüne ferahlık ve huşû dolar.
+''',
+        notes: const [
+          PageFootnote(
+            key: '1',
+            content:
+                'Seyahatnâme, 3. Cilt: Mimar Sinan\'ın ustalık eseri Selimiye Camii\'nin tavsifi.',
+          ),
+        ],
+      ),
+      (
+        title: 'Mostar Köprüsü ve Balkan Menzilleri',
+        content: '''
+BÖLÜM 5: MOSTAR KÖPRÜSÜ VE BALKAN MENZİLLERİ
+
+Neretva Nehri üzerinde yükselen Mostar Köprüsü, sanki gökyüzündeki samanyolu kuşağı gibi iki yakayı tek bir taş kemerle birleştirir. [1]
+
+Gezdiğimiz her beldede gördük ki insanı yaşatan adalet, şehri yaşatan ise vakıf ve irfandır.
+''',
+        notes: const [
+          PageFootnote(
+            key: '1',
+            content:
+                'Seyahatnâme, 6. Cilt: Mimar Hayreddin tarafından 1566\'da inşa edilen Mostar Köprüsü.',
+          ),
+        ],
       ),
     ];
 
-    const sampleFootnotes2 = [
-      PageFootnote(
-        key: '2',
-        content: 'Yedikule ve İç Kale tahkimatı; devrin tarihçileri tarafından "Sedd-i İskender" teşbihiyle tavsif edilmiştir.',
-      ),
-    ];
-
-    return [
-      EpubParsedChapter(
-        title: 'Diyar-ı Rûm\'a Seyahat',
-        content: text1,
-        paragraphs: TextSegmenter.segmentIntoParagraphs(text1, pageFootnotes: sampleFootnotes1),
-      ),
-      EpubParsedChapter(
-        title: 'Kaleler ve Nakşiler',
-        content: text2,
-        paragraphs: TextSegmenter.segmentIntoParagraphs(text2, pageFootnotes: sampleFootnotes2),
-      ),
-    ];
+    return seyahatSections
+        .map(
+          (s) => EpubParsedChapter(
+            title: s.title,
+            content: s.content,
+            paragraphs: TextSegmenter.segmentIntoParagraphs(
+              s.content,
+              pageFootnotes: s.notes,
+            ),
+          ),
+        )
+        .toList();
   }
 }

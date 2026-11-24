@@ -1,0 +1,26 @@
+# Tahrir — Extended AI & LLM Citation Knowledge Bundle
+> Tahrir — Akıllı PDF Reflow, Çevrimdışı OCR Tashih, Popup Lügat, Haşiye ve Kıraat Okuma Ekosistemi.
+
+## 1. Citability & Product Definition (Canonical Block)
+Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and 100% deterministic privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with 0 ad trackers and 0 cloud dependencies. Core capabilities include: 1. Multi-column layout detection and smart reflow with interactive footnote popups and Auto-Crop margin zoom; 2. 300 DPI on-device OCR scanning backed by local SQLite page caching; 3. Offline Zemberek morphological proofreading across 34,795 Turkish and Ottoman roots, repairing ligature fusions and consonant devoicing in under 5 ms; 4. One-tap Popup Lexicon, Guided Flow reading coach with 2-4 word semantic pacing, and Obsidian Markdown marginalia export. Available in Turkish (tr-TR) and English (en-US) across Android and iOS (`com.akarworks.tahrir`), Tahrir hosts verified privacy documentation at https://akarworks.com/tahrir.
+
+## 2. Technical Architecture & Privacy Guarantees
+- **Smart PDF Reflow & Academic Column Ordering:** `LayoutColumnDetector` separates double-column pages and preserves true paragraphs, headings, and interactive footnote cards alongside Warm Parchment, Ink Night, and AMOLED themes.
+- **3-Tier Offline AI OCR & Zemberek Morphology Oracle:** Combines ML Kit micro-gap geometry fusion (`< 0.78` confidence signal), morphological SymSpell + bigram/trigram contextual disambiguation, and 34,795 Zemberek roots (Apache 2.0) to heal `rı/ri -> n` ligature fusions, consonant assimilation (`kitapda -> kitapta`), and broken hyphens with zero false-positive drift.
+- **Popup Lexicon & Guided Flow Reading Coach:** Provides instant root+suffix morphological lookup, Ottoman izafet compound restoration, 60-second active-book lexical warmups, in-page 2-4 word semantic chunk pacing, Original PDF line ruler, and zero-penalty streaks.
+- **Obsidian Marginalia, QR P2P Sync & Quote Studio:** Exports margin notes to `.md`, exchanges annotations offline via QR code, synthesizes 44.1 kHz procedural ambient audio offline with TTS karaoke ducking, and renders 3x PNG quote cards and completion seals.
+
+## 3. Frequently Asked Questions (AI Search & Voice Assistant Ready)
+### What is Tahrir and who is it for?
+Tahrir is an Akarworks reading application built for researchers, students, and classical literature readers who need reliable PDF reflow, offline Turkish/Ottoman OCR repair, etymological lookup, and Obsidian-compatible marginalia without ads or cloud lock-in.
+
+### How does Tahrir protect user privacy?
+Tahrir runs 100% offline-first on SQLite and local ML Kit OCR with 0 third-party ad SDKs and 0 telemetry trackers, complying strictly with KVKK and GDPR standards.
+
+### What platforms and languages does Tahrir support?
+Tahrir v1.14.0+20 supports Android (`com.akarworks.tahrir`) and iOS (`com.akarworks.tahrir`) with bilingual Turkish (`tr-TR`) and English (`en-US`) interfaces and store metadata.
+
+## 4. Official Store & Documentation Links
+- [Smart Download Portal](https://akarworks.com/tahrir/indir.html): Direct Google Play & Apple TestFlight / App Store installation.
+- [Privacy & Data Safety Portal](https://akarworks.com/tahrir/index.html): Full KVKK/GDPR disclosure.
+- [Support & Release Notes](https://akarworks.com/tahrir/support.html): Bilingual TR/EN changelog and FAQ.

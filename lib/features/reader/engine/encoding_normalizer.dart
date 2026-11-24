@@ -1,4 +1,6 @@
 import 'dart:collection';
+import 'ocr_lexicon_database.dart';
+import 'ocr_text_healer.dart';
 
 /// Eski ve sorunlu Türkçe PDF'lerdeki karakter kodlama hatalarını,
 /// ligatür bozulmalarını ve mizanpaj kalıntılarını onaran saf ve deterministik normalizasyon motoru.
@@ -51,7 +53,20 @@ class EncodingNormalizer {
       text = text.replaceAll(faulty, correct);
     });
 
-    // 2. Özel font sembolleri ve soft hyphens temizliği
+    // 2. Soft-hyphen (\u00AD) satır sonu veya boşluklu bölünmeleri silmeden önce birleştir
+    text = text.replaceAllMapped(
+      RegExp(
+        r"([\p{L}]+)\s*\u00AD\s*\r?\n\s*['’‘!1|]?([\p{L}]+)",
+        unicode: true,
+      ),
+      (match) => '${match.group(1)}${match.group(2)}',
+    );
+    text = text.replaceAllMapped(
+      RegExp(r'([\p{L}]+)\s*\u00AD\s+([\p{L}]+)', unicode: true),
+      (match) => '${match.group(1)}${match.group(2)}',
+    );
+
+    // 3. Özel font sembolleri ve kalan soft hyphens temizliği
     text = text.replaceAll('\u00AD', ''); // Soft hyphen
     text = text.replaceAll('\u200B', ''); // Zero-width space
     text = text.replaceAll('\u200C', ''); // Zero-width non-joiner
@@ -63,16 +78,35 @@ class EncodingNormalizer {
   }
 
   /// Satır sonu tirelerini (de-hyphenation) kusursuz şekilde birleştirir.
-  /// Örnek: "müste-\n şar" -> "müsteşar", "yapıl-\n ması" -> "yapılması"
+  /// Örnek: "müste-\n şar" -> "müsteşar", "yapıl-\n ması" -> "yapılması", "te=\n mâs" -> "temâs"
   static String deHyphenate(String input) {
     if (input.isEmpty) return input;
     var text = normalizeEncodings(input);
 
-    // Satır sonu tirelerini birleştir
-    // (\b\p{L}+) - \s*\n\s* (\p{L}+\b)
+    // Satır sonu tirelerini ve çift tireleri (-, —, –, =, ¬, ~, \u00AD, -.) birleştir
     text = text.replaceAllMapped(
-      RegExp(r'([\p{L}]+)[-—–]\s*\r?\n\s*([\p{L}]+)', unicode: true),
+      RegExp(
+        r"([\p{L}]+)\s*(?:[-—–=¬~\u00AD]+|-\.+)\s*\r?\n\s*['’‘!1|]?([\p{L}]+)",
+        unicode: true,
+      ),
       (match) => '${match.group(1)}${match.group(2)}',
+    );
+
+    // Satır sonunda tire karakteri tamamen düşmüş bölünmüş kelimeleri birleştir
+    // Örn: "yurt\ntaşlar" -> "yurttaşlar", "bi\nçimini" -> "biçimini"
+    text = text.replaceAllMapped(
+      RegExp(r'([\p{L}]+)[ \t]*\r?\n[ \t]*([\p{L}]+)', unicode: true),
+      (match) {
+        final first = match.group(1)!;
+        final second = match.group(2)!;
+        final key =
+            '${_toLowerTurkish(first)} ${_toLowerTurkish(second)}';
+        final repaired = OcrLexiconDatabase.spaceSplitBigramRepairs[key];
+        if (repaired != null) {
+          return _preserveLeadingCase(first, repaired);
+        }
+        return match.group(0)!;
+      },
     );
 
     // Kelime içi pipe (|) harf tarama bozulmalarını onar (Ör: "binek|eriniz" -> "binekleriniz")
@@ -135,11 +169,16 @@ class EncodingNormalizer {
       // "Sayfa 45" veya "45 / 300"
       final isRunningPageHeader = RegExp(r'^\s*Sayfa\s+\d+(\s*/\s*\d+)?\s*$', caseSensitive: false).hasMatch(line);
       final isFractionNumber = RegExp(r'^\s*\d+\s*/\s*\d+\s*$').hasMatch(line);
-      // Kısa altbilgi / üstbilgi tekrarı (< 60 karakter)
+      // Kısa altbilgi / üstbilgi tekrarı (< 80 karakter, ör: "YUNAN MEZÂLİMİ 7", "YUNAN MEZÂLİMİ 39", "38 YUNAN MEZÂLİMİ")
+      final isChapterTitleWithNum = RegExp(
+        r'^(?:BÖLÜM|Bölüm|FASIL|Fasıl|BAB|Bab|KISIM|Kısım|CİLT|Cilt|MADDE|Madde)\s+\d+',
+      ).hasMatch(line);
       final isShortRunningHeader = line.length < 80 &&
+          !isChapterTitleWithNum &&
           (RegExp(r'^(Bölüm|Fasıl|BAB|Kısım|Sayfa|Sahife)\s*\d*$', caseSensitive: false).hasMatch(line) ||
-           RegExp(r'^(?:İsl[aâ]m[\x27\x22’]?da\s+.*Görgü\s+Kuralları|Mukaddime|Bölüm\s+\d+|Fasıl\s+\d+)', caseSensitive: false).hasMatch(line) ||
-           RegExp(r'^\d+\s+[A-ZÇĞİÖŞÜ\s]+$').hasMatch(line));
+           RegExp(r'^(?:İsl[aâ]m[\x27\x22’]?da\s+.*Görgü\s+Kuralları|Mukaddime)', caseSensitive: false).hasMatch(line) ||
+           RegExp(r'^\d{1,4}\s+[A-ZÇĞİÖŞÜÂÎÛ\s\-’\x27]{3,}$').hasMatch(line) ||
+           RegExp(r'^[A-ZÇĞİÖŞÜÂÎÛ\s\-’\x27]{3,}\s+\d{1,4}$').hasMatch(line));
 
       if ((isTop || isBottom) && (isOnlyPageNumber || isRunningPageHeader || isFractionNumber || isShortRunningHeader)) {
         continue;
@@ -156,9 +195,9 @@ class EncodingNormalizer {
     return filtered.join('\n').trim();
   }
 
-  /// Noktalama, tırnak ve apostrof boşluklarını düzeltir
+  /// Noktalama, tırnak, apostrof boşluklarını ve taranmış OCR bozulmalarını düzeltir
   static String cleanPunctuationSpacing(String input) {
-    var text = input;
+    var text = OcrTextHealer.heal(input);
 
     // Kesme işaretleri bitişikliği: "Allah' a" -> "Allah'a"
     text = text.replaceAllMapped(
@@ -173,5 +212,23 @@ class EncodingNormalizer {
     text = text.replaceAll(RegExp(r'[ \t]{2,}'), ' ');
 
     return text;
+  }
+
+  static String _toLowerTurkish(String input) {
+    return input.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+  }
+
+  static String _preserveLeadingCase(String originalFirst, String replacement) {
+    if (originalFirst.isEmpty || replacement.isEmpty) return replacement;
+    final firstChar = originalFirst[0];
+    if (firstChar.toUpperCase() == firstChar &&
+        firstChar.toLowerCase() != firstChar) {
+      final repFirst = replacement[0];
+      final upper = repFirst == 'i'
+          ? 'İ'
+          : (repFirst == 'ı' ? 'I' : repFirst.toUpperCase());
+      return '$upper${replacement.substring(1)}';
+    }
+    return replacement;
   }
 }

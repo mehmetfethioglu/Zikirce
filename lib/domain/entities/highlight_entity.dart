@@ -7,10 +7,10 @@ enum HighlightCategory {
 
 extension HighlightCategoryX on HighlightCategory {
   String get displayName => switch (this) {
-        HighlightCategory.thought => 'Düşünce & Şerh',
+        HighlightCategory.thought => 'Düşünce & Not',
         HighlightCategory.quote => 'Alıntı',
-        HighlightCategory.question => 'Soru & Şüphe',
-        HighlightCategory.critical => 'Eleştiri / Tahrir',
+        HighlightCategory.question => 'Soru & Araştırma',
+        HighlightCategory.critical => 'Eleştiri',
       };
 }
 

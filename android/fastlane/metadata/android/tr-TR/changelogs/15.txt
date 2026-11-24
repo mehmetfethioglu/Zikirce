@@ -1,0 +1,3 @@
+• 3 Katmanlı Yerel AI OCR Tashih Motoru: ML Kit mikro-boşluk geometrisi, Türkçe morfolojik SymSpell + N-Gram bağlam modeli ve Beam Search çözücüsü.
+• Çoklu Bozulma Onarımı: Hem hece bölünmesi hem harf kayması içeren kelimeleri ("basarısız ilkle→başarısızlıkla") < 5 ms içinde onarır.
+• Yön Duyarlı Sayfa Hizalaması: İleri geçerken sayfa başına, geri dönerken kaldığınız sayfa sonuna otomatik hizalanır.

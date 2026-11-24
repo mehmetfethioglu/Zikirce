@@ -1,0 +1,3 @@
+• Tier 2c Contextual Real-Word OCR Disambiguator: Repairs valid dictionary words that break sentence meaning ("120 dini→120 bini", "ortalama getir→gelir") using neighbor context.
+• Classical Term & Verb Disambiguation: Heals contextual OCR slips like "iştikak→iştirak", "mütenasip okur→olur", and "Fark Devleti→Fars Devleti".
+• Morphological POS Validator: Blocks pseudo-valid noun+participle forms ("bölümdüğü→bölündüğü").

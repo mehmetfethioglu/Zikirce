@@ -1,0 +1,1 @@
+Smart PDF reflow, offline OCR, EPUB reader, marginalia notes & guided reading.

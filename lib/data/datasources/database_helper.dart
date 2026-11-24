@@ -19,7 +19,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _onUpgradeDB,
     );
@@ -39,6 +39,19 @@ class DatabaseHelper {
           UNIQUE(file_path, page_index)
         )
       ''');
+    }
+    if (oldVersion < 3) {
+      await db.execute(
+        "UPDATE books SET total_pages = 5, current_page = 1 WHERE file_path LIKE 'sample://%' AND total_pages > 6",
+      );
+    }
+    if (oldVersion < 4) {
+      await db.execute('DELETE FROM scanned_ocr_cache');
+    }
+    if (oldVersion < 5) {
+      await db.execute(
+        "UPDATE books SET total_pages = 5, current_page = 1, progress_percentage = 0.0 WHERE file_path LIKE 'sample://%' AND total_pages > 6",
+      );
     }
   }
 
@@ -145,11 +158,11 @@ class DatabaseHelper {
       'file_path': 'sample://kutadgu_bilig',
       'cover_image_path': null,
       'format': 'markdown',
-      'total_pages': 42,
+      'total_pages': 5,
       'current_page': 1,
       'progress_percentage': 0.0,
-      'total_reading_time_seconds': 120,
-      'estimated_remaining_minutes': 35,
+      'total_reading_time_seconds': 0,
+      'estimated_remaining_minutes': 8,
       'added_date': now,
       'last_read_date': now,
       'is_completed': 0,
@@ -163,24 +176,42 @@ class DatabaseHelper {
       'file_path': 'sample://seyahatname',
       'cover_image_path': null,
       'format': 'epub',
-      'total_pages': 88,
-      'current_page': 14,
-      'progress_percentage': 0.16,
-      'total_reading_time_seconds': 950,
-      'estimated_remaining_minutes': 80,
+      'total_pages': 5,
+      'current_page': 1,
+      'progress_percentage': 0.0,
+      'total_reading_time_seconds': 0,
+      'estimated_remaining_minutes': 10,
       'added_date': now,
       'last_read_date': now,
       'is_completed': 0,
       'completed_date': null,
     });
 
-    // Sample Habit profile
+    // Sample Book 3: PDF Hat & Dipnot Dönüşüm Numunesi
+    await db.insert('books', {
+      'title': 'İslam Âdâb-ı Muaşereti (PDF Numunesi)',
+      'author': 'Abdülfettah Ebû Gudde',
+      'file_path': 'sample://adab_muaseret',
+      'cover_image_path': null,
+      'format': 'pdf',
+      'total_pages': 5,
+      'current_page': 1,
+      'progress_percentage': 0.0,
+      'total_reading_time_seconds': 0,
+      'estimated_remaining_minutes': 8,
+      'added_date': now,
+      'last_read_date': now,
+      'is_completed': 0,
+      'completed_date': null,
+    });
+
+    // Sample Habit profile (dürüst sıfır başlangıç)
     await db.insert('habit_profiles', {
       'last_active_date': now,
-      'current_streak': 3,
-      'longest_streak': 7,
+      'current_streak': 0,
+      'longest_streak': 0,
       'daily_goal_minutes': 20,
-      'earned_seals': 'seal_first_book,seal_night_owl',
+      'earned_seals': '',
     });
   }
 

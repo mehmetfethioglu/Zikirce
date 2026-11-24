@@ -169,4 +169,211 @@ class OfflineAiService {
       studyQuestions: studyQuestions,
     );
   }
+
+  /// Türkçe çekim eklerini soyarak kavram araması için morfolojik kök/gövde döndürür.
+  static String extractConceptStem(String word) {
+    var clean = word
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
+        .toLowerCase()
+        .trim();
+    if (clean.length <= 4) return clean;
+
+    const suffixes = [
+      'larından', 'lerinden', 'larımız', 'lerimiz', 'larının', 'lerinin',
+      'lardan', 'lerden', 'maları', 'meleri', 'dkları', 'dikleri',
+      'ության', 'larını', 'lerini', 'larıyla', 'leriyle',
+      'ından', 'inden', 'undan', 'ünden', '적인', 'larıyla',
+      'ları', 'leri', 'ndan', 'nden', 'mız', 'miz', 'nız', 'niz',
+      'dan', 'den', 'tan', 'ten', 'nin', 'nın', 'nun', 'nün',
+      'da', 'de', 'ta', 'te', 'yi', 'yı', 'yu', 'yü', 'ya', 'ye',
+      'in', 'ın', 'un', 'ün', 'le', 'la', 'ki', 'i', 'ı', 'u', 'ü', 'a', 'e',
+    ];
+
+    for (final s in suffixes) {
+      if (clean.length - s.length >= 4 && clean.endsWith(s)) {
+        clean = clean.substring(0, clean.length - s.length);
+        break;
+      }
+    }
+
+    // Ünsüz yumuşaması geri dönüşümü (örn. kitabı -> kitap, ahlakı -> ahlak, kalbi -> kalp)
+    if (clean.length >= 4) {
+      if (clean.endsWith('b')) {
+        clean = '${clean.substring(0, clean.length - 1)}p';
+      } else if (clean.endsWith('c')) {
+        clean = '${clean.substring(0, clean.length - 1)}ç';
+      } else if (clean.endsWith('d')) {
+        clean = '${clean.substring(0, clean.length - 1)}t';
+      } else if (clean.endsWith('ğ')) {
+        clean = '${clean.substring(0, clean.length - 1)}k';
+      }
+    }
+    return clean;
+  }
+
+  /// Kitabın taranmış/indekslenmiş sayfaları üzerinde gerçek Çapraz İndeks (Concordance)
+  /// ve Kavram İlişki Ağı (Co-occurring Concepts) analizi yapar.
+  ConceptRadarResult buildConcordance({
+    required String concept,
+    required Map<int, String> pageTexts,
+  }) {
+    final cleanQuery = concept.trim();
+    if (cleanQuery.isEmpty || pageTexts.isEmpty) {
+      return ConceptRadarResult(
+        queryConcept: cleanQuery,
+        stemUsed: cleanQuery.toLowerCase(),
+        totalOccurrences: 0,
+        firstSeenPage: 1,
+        peakPage: 1,
+        pageFrequencyMap: const {},
+        relatedConcepts: const [],
+        matches: const [],
+      );
+    }
+
+    final targetStem = extractConceptStem(cleanQuery);
+    final searchPrefix = targetStem.length >= 4 ? targetStem : cleanQuery.toLowerCase();
+
+    final matches = <ConcordanceMatch>[];
+    final pageCounts = <int, int>{};
+    final coOccurringFreq = <String, int>{};
+    int totalCount = 0;
+
+    final sortedPages = pageTexts.keys.toList()..sort();
+
+    for (final pageNum in sortedPages) {
+      final rawPage = pageTexts[pageNum] ?? '';
+      if (rawPage.trim().isEmpty) continue;
+
+      final sentences = rawPage
+          .split(RegExp(r'(?<=[.!?…])\s+|\n+'))
+          .map((s) => s.trim())
+          .where((s) => s.length >= 12)
+          .toList();
+
+      int pageMatchCount = 0;
+
+      for (final sentence in sentences) {
+        final words = sentence.split(RegExp(r'\s+'));
+        String? matchedSurfaceWord;
+        int sentenceHits = 0;
+
+        for (final w in words) {
+          final wClean = w
+              .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
+              .toLowerCase();
+          if (wClean.isEmpty) continue;
+          final wStem = extractConceptStem(wClean);
+          if (wClean.startsWith(searchPrefix) ||
+              (searchPrefix.length >= 4 && wStem == searchPrefix)) {
+            sentenceHits++;
+            matchedSurfaceWord ??= w.replaceAll(
+              RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
+              '',
+            );
+          }
+        }
+
+        if (sentenceHits > 0 && matchedSurfaceWord != null) {
+          pageMatchCount += sentenceHits;
+          totalCount += sentenceHits;
+
+          if (matches.length < 30) {
+            matches.add(
+              ConcordanceMatch(
+                pageNumber: pageNum,
+                snippet: sentence,
+                matchedTerm: matchedSurfaceWord,
+              ),
+            );
+          }
+
+          // Aynı cümlede geçen ilişkili kavramları topla
+          for (final w in words) {
+            final cleanCo = w
+                .replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '')
+                .toLowerCase();
+            if (cleanCo.length >= 4 &&
+                !_stopWords.contains(cleanCo) &&
+                !cleanCo.startsWith(searchPrefix) &&
+                extractConceptStem(cleanCo) != searchPrefix) {
+              coOccurringFreq[cleanCo] = (coOccurringFreq[cleanCo] ?? 0) + 1;
+            }
+          }
+        }
+      }
+
+      if (pageMatchCount > 0) {
+        pageCounts[pageNum] = pageMatchCount;
+      }
+    }
+
+    int firstSeen = sortedPages.isNotEmpty ? sortedPages.first : 1;
+    int peakPage = firstSeen;
+    int maxCount = 0;
+
+    if (pageCounts.isNotEmpty) {
+      final matchedPages = pageCounts.keys.toList()..sort();
+      firstSeen = matchedPages.first;
+      for (final entry in pageCounts.entries) {
+        if (entry.value > maxCount) {
+          maxCount = entry.value;
+          peakPage = entry.key;
+        }
+      }
+    }
+
+    final sortedRelated = coOccurringFreq.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final relatedConcepts = sortedRelated
+        .take(6)
+        .map((e) => e.key[0].toUpperCase() + e.key.substring(1))
+        .toList();
+
+    return ConceptRadarResult(
+      queryConcept: cleanQuery,
+      stemUsed: searchPrefix,
+      totalOccurrences: totalCount,
+      firstSeenPage: firstSeen,
+      peakPage: peakPage,
+      pageFrequencyMap: pageCounts,
+      relatedConcepts: relatedConcepts,
+      matches: matches,
+    );
+  }
 }
+
+class ConcordanceMatch {
+  final int pageNumber;
+  final String snippet;
+  final String matchedTerm;
+
+  const ConcordanceMatch({
+    required this.pageNumber,
+    required this.snippet,
+    required this.matchedTerm,
+  });
+}
+
+class ConceptRadarResult {
+  final String queryConcept;
+  final String stemUsed;
+  final int totalOccurrences;
+  final int firstSeenPage;
+  final int peakPage;
+  final Map<int, int> pageFrequencyMap;
+  final List<String> relatedConcepts;
+  final List<ConcordanceMatch> matches;
+
+  const ConceptRadarResult({
+    required this.queryConcept,
+    required this.stemUsed,
+    required this.totalOccurrences,
+    required this.firstSeenPage,
+    required this.peakPage,
+    required this.pageFrequencyMap,
+    required this.relatedConcepts,
+    required this.matches,
+  });
+}
+

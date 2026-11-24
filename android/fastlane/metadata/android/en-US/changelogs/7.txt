@@ -1,0 +1,4 @@
+• Single-Flow 21-Stage Speed Reading Adventure Path: Unified step-by-step adventure map with a compact "Free Practice" drawer.
+• Book Reading Speed Coordination: Live synchronization between your actual book reading WPM and your Speed Reading Academy target WPM.
+• Dynamic Stage Calibration: Automatically recalibrates your stage and target WPM when streaks break or book speed drops.
+• Live Book Excerpts & Dynamic Passage Engine: Fresh passages and live book drills on every run.

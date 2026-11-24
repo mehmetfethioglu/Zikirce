@@ -1,0 +1,1 @@
+Turn scanned & two-column PDFs into crisp reflow text. Offline OCR proofreader, Guided Flow reading coach, Obsidian Markdown marginalia & ambient TTS.

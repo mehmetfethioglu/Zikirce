@@ -1,0 +1,1 @@
+ebook,book,scanned,proofread,marginalia,highlight,markdown,obsidian,tts,speed,dictionary,offline

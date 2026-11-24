@@ -1,0 +1,3 @@
+• Expanded OCR Lexicon Database: 350+ space-split syllable repairs, never-merge guards, and 1,500+ Turkish/Ottoman root stems.
+• Ottoman Terkip & Izafet Restoration: Automatically restores 2- and 3-word Persian/Arabic izafet compounds dropped by OCR.
+• One-Tap Popup Lexicon: Tap any word while reading to view its definition, etymology, stem+suffix analysis, and 1-tap OCR fixes.

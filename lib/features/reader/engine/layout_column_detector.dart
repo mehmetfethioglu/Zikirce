@@ -113,17 +113,83 @@ class LayoutColumnDetector {
     return ordered;
   }
 
-  /// Satırları dikey konuma (Y) göre ve aynı satır hizasındakileri yatay konuma (X) göre sıralar
+  /// Satırları dikey merkeze (Y) göre geçişli (transitive) sıralar ve aynı görsel satırdaki
+  /// parçalanmış yatay kutuları soldan sağa birleştirerek tek satır haline getirir.
   static List<PositionedTextLine> _sortLinesTopToBottom(List<PositionedTextLine> lines) {
-    final sorted = List<PositionedTextLine>.from(lines);
-    sorted.sort((a, b) {
-      final diffY = a.bounds.top - b.bounds.top;
-      if (diffY.abs() < 4.0) {
+    if (lines.length <= 1) return List<PositionedTextLine>.from(lines);
+
+    // 1. Kesin geçişli (transitive) sıralama: Önce dikey merkez (center.dy), eşitse yatay sol (left)
+    final sorted = List<PositionedTextLine>.from(lines)
+      ..sort((a, b) {
+        final cmpY = a.bounds.center.dy.compareTo(b.bounds.center.dy);
+        if (cmpY != 0) return cmpY;
         return a.bounds.left.compareTo(b.bounds.left);
+      });
+
+    // 2. Aynı görsel satıra düşen parçalı OCR/PDF kutularını kümeler halinde topla
+    final rows = <List<PositionedTextLine>>[];
+    for (final line in sorted) {
+      if (rows.isEmpty) {
+        rows.add([line]);
+        continue;
       }
-      return diffY.compareTo(0);
-    });
-    return sorted;
+
+      final currentRow = rows.last;
+      final firstInRow = currentRow.first;
+      final refHeight = firstInRow.bounds.height > 0 ? firstInRow.bounds.height : 14.0;
+      final tolerance = (refHeight * 0.45).clamp(4.0, 10.0);
+
+      if ((line.bounds.center.dy - firstInRow.bounds.center.dy).abs() <= tolerance) {
+        currentRow.add(line);
+      } else {
+        rows.add([line]);
+      }
+    }
+
+    // 3. Her satır kümesini kendi içinde soldan sağa sırala ve yatay parçaları birleştir
+    final result = <PositionedTextLine>[];
+    for (final row in rows) {
+      if (row.length == 1) {
+        result.add(row.first);
+        continue;
+      }
+
+      row.sort((a, b) => a.bounds.left.compareTo(b.bounds.left));
+
+      // Aynı satırdaki yatay parçaları tek bir PositionedTextLine olarak birleştir
+      var mergedText = row.first.text.trimRight();
+      var minLeft = row.first.bounds.left;
+      var minTop = row.first.bounds.top;
+      var maxRight = row.first.bounds.right;
+      var maxBottom = row.first.bounds.bottom;
+      var maxFontSize = row.first.fontSize;
+
+      for (int i = 1; i < row.length; i++) {
+        final frag = row[i];
+        final fragText = frag.text.trimLeft();
+        if (fragText.isEmpty) continue;
+
+        if (mergedText.endsWith('-') || mergedText.endsWith('=')) {
+          mergedText = '$mergedText$fragText';
+        } else {
+          mergedText = '$mergedText $fragText';
+        }
+
+        if (frag.bounds.left < minLeft) minLeft = frag.bounds.left;
+        if (frag.bounds.top < minTop) minTop = frag.bounds.top;
+        if (frag.bounds.right > maxRight) maxRight = frag.bounds.right;
+        if (frag.bounds.bottom > maxBottom) maxBottom = frag.bounds.bottom;
+        if (frag.fontSize > maxFontSize) maxFontSize = frag.fontSize;
+      }
+
+      result.add(PositionedTextLine(
+        text: mergedText,
+        bounds: Rect.fromLTRB(minLeft, minTop, maxRight, maxBottom),
+        fontSize: maxFontSize,
+      ));
+    }
+
+    return result;
   }
 
   /// Sayfanın tek sütun mu yoksa çift sütun mu olduğunu istatistiksel ve oluk (gutter) analizinden tespit eder
@@ -147,7 +213,7 @@ class LayoutColumnDetector {
         spanningMidpointCount++;
       } else if (b.right <= midX * 0.98) {
         strictLeftCount++;
-      } else if (b.left >= midX * 1.02) {
+      } else if (b.left >= midX * 0.02 + midX) {
         strictRightCount++;
       }
     }
