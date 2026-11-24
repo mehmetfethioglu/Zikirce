@@ -9,8 +9,8 @@
       "applicationCategory": "BookApplication",
       "softwareVersion": "1.14.0",
       "description": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and 100% deterministic privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with 0 ad trackers and 0 cloud dependencies, featuring 300 DPI on-device OCR, 34,795-root Zemberek proofreading, Popup Lexicon, Guided Flow reading coach, and Obsidian Markdown marginalia export.",
-      "url": "https://akarworks.com/tahrir",
-      "downloadUrl": "https://akarworks.com/tahrir/indir.html",
+      "url": "https://mehmetfethioglu.github.io/tahrir-indir/",
+      "downloadUrl": "https://mehmetfethioglu.github.io/tahrir-indir/indir.html",
       "inLanguage": [
         "tr-TR",
         "en-US"
@@ -18,7 +18,7 @@
       "author": {
         "@type": "Organization",
         "name": "Akarworks",
-        "url": "https://akarworks.com"
+        "url": "https://mehmetfethioglu.github.io/tahrir-indir/"
       },
       "offers": {
         "@type": "Offer",

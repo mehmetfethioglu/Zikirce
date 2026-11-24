@@ -260,9 +260,9 @@ jobs:
 
           BASE = "https://api.appstoreconnect.apple.com/v1"
           BUNDLE_ID = "com.akarworks.tahrir"
-          PRIVACY_URL = "https://akarworks.com/tahrir/index.html"
-          SUPPORT_URL = "https://akarworks.com/tahrir/support.html"
-          MARKETING_URL = "https://akarworks.com/tahrir/indir.html"
+          PRIVACY_URL = "https://mehmetfethioglu.github.io/tahrir-indir/privacy.html"
+          SUPPORT_URL = "https://mehmetfethioglu.github.io/tahrir-indir/support.html"
+          MARKETING_URL = "https://mehmetfethioglu.github.io/tahrir-indir/"
           CONTACT_EMAIL = "akarbilisimteknolojileri@gmail.com"
 
           pubspec_txt = pathlib.Path("pubspec.yaml").read_text(encoding="utf-8")

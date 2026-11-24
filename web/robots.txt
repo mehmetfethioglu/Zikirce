@@ -26,5 +26,5 @@ Allow: /
 User-agent: Applebot-Extended
 Allow: /
 
-Sitemap: https://akarworks.com/tahrir/sitemap.xml
-# AI Knowledge Discovery: https://akarworks.com/tahrir/llms.txt
+Sitemap: https://mehmetfethioglu.github.io/tahrir-indir/sitemap.xml
+# AI Knowledge Discovery: https://mehmetfethioglu.github.io/tahrir-indir/llms.txt
