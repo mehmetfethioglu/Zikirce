@@ -445,28 +445,12 @@ jobs:
                       )
                       print(f"POST appStoreVersionLocalization ({loc_key}): {resp.status_code}")
 
-          # 5. Sync Zikirce TestFlight Testers + TestFlight metadata & build
+          # 5. Ensure Tahrir TestFlight Group ('Tahrir Beta'), TestFlight Metadata & Build
           tahrir_beta_group_id = None
-          zr = requests.get(f"{BASE}/apps?filter[bundleId]=com.akarworks.zikirce", headers=make_headers(), timeout=30)
-          zikirce_apps = zr.json().get("data", []) if zr.status_code == 200 else []
-          tester_ids = set()
-          if zikirce_apps:
-              zikirce_id = zikirce_apps[0]["id"]
-              next_url = f"{BASE}/betaTesters?filter[apps]={zikirce_id}&limit=200"
-              while next_url:
-                  tr_resp = requests.get(next_url, headers=make_headers(), timeout=30)
-                  if tr_resp.status_code != 200:
-                      break
-                  tr_json = tr_resp.json()
-                  for t in tr_json.get("data", []):
-                      tester_ids.add(t["id"])
-                  next_url = tr_json.get("links", {}).get("next")
-              print(f"Collected {len(tester_ids)} unique Zikirce TestFlight tester(s).")
-
           z_groups_r = requests.get(f"{BASE}/apps/{app_id}/betaGroups?limit=50", headers=make_headers(), timeout=30)
           if z_groups_r.status_code == 200:
               for grp in z_groups_r.json().get("data", []):
-                  if grp["attributes"].get("name") == "Zikirce Testers":
+                  if grp["attributes"].get("name") == "Tahrir Beta":
                       tahrir_beta_group_id = grp["id"]
                       break
           if not tahrir_beta_group_id:
@@ -477,7 +461,7 @@ jobs:
                       "data": {
                           "type": "betaGroups",
                           "attributes": {
-                              "name": "Zikirce Testers",
+                              "name": "Tahrir Beta",
                               "isInternalGroup": False,
                               "publicLinkEnabled": True,
                               "feedbackEnabled": True,
@@ -489,19 +473,7 @@ jobs:
               )
               if cr_grp.status_code in (200, 201):
                   tahrir_beta_group_id = cr_grp.json()["data"]["id"]
-                  print(f"Created TestFlight external group 'Zikirce Testers' ({tahrir_beta_group_id})")
-
-          if tahrir_beta_group_id and tester_ids:
-              tid_list = sorted(tester_ids)
-              for i in range(0, len(tid_list), 50):
-                  chunk = tid_list[i:i + 50]
-                  requests.post(
-                      f"{BASE}/betaGroups/{tahrir_beta_group_id}/relationships/betaTesters",
-                      headers=make_headers(),
-                      json={"data": [{"type": "betaTesters", "id": tid} for tid in chunk]},
-                      timeout=30,
-                  )
-              print(f"Synced {len(tid_list)} Zikirce testers into 'Zikirce Testers'.")
+                  print(f"Created TestFlight external group 'Tahrir Beta' ({tahrir_beta_group_id})")
 
           bal_r = requests.get(f"{BASE}/apps/{app_id}/betaAppLocalizations", headers=make_headers(), timeout=30)
           existing_bal = {loc["attributes"]["locale"]: loc["id"] for loc in bal_r.json().get("data", [])} if bal_r.status_code == 200 else {}
@@ -556,28 +528,6 @@ jobs:
               build_id = b["id"]
               proc_state = b["attributes"].get("processingState")
               print(f"Build {TARGET_BUILD} found: id={build_id} processingState={proc_state}")
-              if proc_state == "VALID":
-                  requests.patch(
-                      f"{BASE}/builds/{build_id}",
-                      headers=make_headers(),
-                      json={"data": {"type": "builds", "id": build_id, "attributes": {"usesNonExemptEncryption": False}}},
-                      timeout=30,
-                  )
-                  if tahrir_beta_group_id:
-                      grp_build_r = requests.post(
-                          f"{BASE}/betaGroups/{tahrir_beta_group_id}/relationships/builds",
-                          headers=make_headers(),
-                          json={"data": [{"type": "builds", "id": build_id}]},
-                          timeout=30,
-                      )
-                      print(f"Assigned Build {TARGET_BUILD} to 'Zikirce Testers': {grp_build_r.status_code}")
-                      beta_sub_r = requests.post(
-                          f"{BASE}/betaAppReviewSubmissions",
-                          headers=make_headers(),
-                          json={"data": {"type": "betaAppReviewSubmissions", "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
-                          timeout=30,
-                      )
-                      print(f"TestFlight Beta App Review submission: {beta_sub_r.status_code}")
 
               bloc_r = requests.get(f"{BASE}/builds/{build_id}/betaBuildLocalizations", headers=make_headers(), timeout=30)
               existing_bloc = {x["attributes"]["locale"]: x["id"] for x in bloc_r.json().get("data", [])} if bloc_r.status_code == 200 else {}
@@ -596,6 +546,29 @@ jobs:
                           json={"data": {"type": "betaBuildLocalizations", "attributes": {"locale": loc_code, "whatsNew": loc_text}, "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
                           timeout=30,
                       )
+
+              if proc_state == "VALID":
+                  requests.patch(
+                      f"{BASE}/builds/{build_id}",
+                      headers=make_headers(),
+                      json={"data": {"type": "builds", "id": build_id, "attributes": {"usesNonExemptEncryption": False}}},
+                      timeout=30,
+                  )
+                  if tahrir_beta_group_id:
+                      grp_build_r = requests.post(
+                          f"{BASE}/betaGroups/{tahrir_beta_group_id}/relationships/builds",
+                          headers=make_headers(),
+                          json={"data": [{"type": "builds", "id": build_id}]},
+                          timeout=30,
+                      )
+                      print(f"Assigned Build {TARGET_BUILD} to 'Tahrir Beta': {grp_build_r.status_code}")
+                      beta_sub_r = requests.post(
+                          f"{BASE}/betaAppReviewSubmissions",
+                          headers=make_headers(),
+                          json={"data": {"type": "betaAppReviewSubmissions", "relationships": {"build": {"data": {"type": "builds", "id": build_id}}}}},
+                          timeout=30,
+                      )
+                      print(f"TestFlight Beta App Review submission: {beta_sub_r.status_code}")
           else:
               print(f"Build {TARGET_BUILD} not yet visible in /v1/builds.")
 
