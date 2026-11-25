@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/pdks_models.dart';
+import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'employee_directory_picker.dart';
+import 'hasibu_print_preview_dialog.dart';
 import 'hasibu_settings_view.dart';
 
 /// İzinli ve Raporlu Personel Bilgilerini Girme / Yönetme Ekranı.
@@ -525,6 +527,35 @@ class _LeavesAndReportsSettingsViewState
                       selected: _showAllEmployeesRecords,
                       onSelected: (_) =>
                           setState(() => _showAllEmployeesRecords = true),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('leaves_print_button'),
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        final doc =
+                            HasibuPrintBuilders.buildLeaveRecordsReportDocument(
+                          companySettings: state.companySettings,
+                          scopeTitle: _showAllEmployeesRecords
+                              ? 'Tüm Personel İzin & Sağlık Raporları'
+                              : '${selectedEmp.fullName} (#${selectedEmp.cardNo})',
+                          records: visibleRecords,
+                          statusByEmployeeId: statusById,
+                          singleEmployeeStatus:
+                              _showAllEmployeesRecords ? null : currentStatus,
+                        );
+                        showHasibuPrintPreviewDialog(
+                          context,
+                          ref,
+                          document: doc,
+                        );
+                      },
+                      icon: const Icon(Icons.print_outlined, size: 16),
+                      label: const Text(
+                        'Yazdır',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
                     ),
                   ],
                 ),

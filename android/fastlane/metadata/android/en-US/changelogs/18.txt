@@ -1,0 +1,5 @@
+What's new in v1.0.17:
+• A4 Printing: Preview and print personnel cards, staff lists, live attendance, period attendance, and leave reports across devices.
+• Live Search Fix: Clearing the search box immediately restores the full list with a clear button and Turkish character normalization.
+• Company Logo & First Setup: Fixed file-based logo selection and added company name/logo setup to the first admin login.
+• Cloud & Bridge: Improved Google Drive branch inbox listing and session feedback.

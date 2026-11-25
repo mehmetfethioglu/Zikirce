@@ -266,6 +266,23 @@ internal static class Program
                 ? "Görev Zamanlayıcı (uyarısız)"
                 : "Başlangıç kayıt defteri";
             Console.WriteLine($"✓ Windows başlangıcına eklendi [{modeLabel}]: {installRes.EntryName} -> {installRes.TargetExecutablePath}");
+            var startRes = WindowsStartupManager.StartBackgroundAgent(installRes.TargetExecutablePath, config.DeviceSlug);
+            Console.WriteLine(startRes.Started
+                ? $"✓ {startRes.Message}"
+                : $"⚠️ {startRes.Message}");
+        }
+        else
+        {
+            Console.Write("Şube köprüsü şimdi arka planda başlatılsın mı? [E/h]: ");
+            var runNowAns = (Console.ReadLine() ?? "E").Trim();
+            if (!runNowAns.StartsWith("h", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetExe = Environment.ProcessPath ?? AppContext.BaseDirectory;
+                var startRes = WindowsStartupManager.StartBackgroundAgent(targetExe, config.DeviceSlug);
+                Console.WriteLine(startRes.Started
+                    ? $"✓ {startRes.Message}"
+                    : $"⚠️ {startRes.Message}");
+            }
         }
 
         Console.WriteLine();
@@ -303,6 +320,15 @@ internal static class Program
             ? "Görev Zamanlayıcı (uyarısız)"
             : "Başlangıç kayıt defteri";
         logger.Info($"Windows başlangıcına kaydedildi [{modeLabel}]: {installRes.EntryName} -> {installRes.TargetExecutablePath}");
+        var startRes = WindowsStartupManager.StartBackgroundAgent(installRes.TargetExecutablePath, slug);
+        if (startRes.Started)
+        {
+            logger.Info(startRes.Message);
+        }
+        else
+        {
+            logger.Warn(startRes.Message);
+        }
         return 0;
     }
 
@@ -326,7 +352,7 @@ internal static class Program
             return 78;
         }
 
-        var mutexName = $@"Local\HasibuBranchBridge_{GoogleDriveInboxUploader.NormalizeDeviceSlug(config.DeviceSlug)}";
+        var mutexName = WindowsStartupManager.GetInstanceMutexName(config.DeviceSlug);
         using var instanceMutex = new Mutex(initiallyOwned: true, mutexName, out var createdNew);
         if (!createdNew)
         {

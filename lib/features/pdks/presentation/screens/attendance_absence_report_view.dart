@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/pdks_models.dart';
+import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_print_preview_dialog.dart';
 import 'hasibu_settings_view.dart';
 
 /// Çok Günlü Personel Devam / Devamsızlık, Geç Kalma ve İzin Analiz Raporu Ekranı.
@@ -451,6 +453,59 @@ class _AttendanceAbsenceReportViewState
                                 ),
                                 label: const Text('Excel / CSV'),
                               ),
+                              OutlinedButton.icon(
+                                key: const ValueKey('report_print_button'),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () {
+                                  final branchName = effectiveBranchId == null
+                                      ? 'Tüm Yetkili Şubeler'
+                                      : (branches
+                                              .where((b) =>
+                                                  b.id == effectiveBranchId)
+                                              .map((b) => b.name)
+                                              .firstOrNull ??
+                                          'Şube #$effectiveBranchId');
+                                  final deptName = effectiveDepartmentId == null
+                                      ? 'Tüm Bölümler'
+                                      : (departments
+                                              .where((d) =>
+                                                  d.id == effectiveDepartmentId)
+                                              .map((d) => d.name)
+                                              .firstOrNull ??
+                                          'Bölüm #$effectiveDepartmentId');
+                                  final filterParts = <String>[
+                                    branchName,
+                                    deptName,
+                                    if (_onlyWithAbsences) 'Sadece Devamsızlar',
+                                    if (_onlyWithLates) 'Sadece Geç Kalanlar',
+                                    if (_excludeSundays) 'Pazar Hariç',
+                                    if (_searchCtrl.text.trim().isNotEmpty)
+                                      'Arama: "${_searchCtrl.text.trim()}"',
+                                  ];
+                                  final doc = HasibuPrintBuilders
+                                      .buildAttendancePeriodReportDocument(
+                                    companySettings: ref
+                                        .read(pdksDashboardProvider)
+                                        .companySettings,
+                                    startDateKey: startKey,
+                                    endDateKey: endKey,
+                                    filterDescription: filterParts.join(' • '),
+                                    rows: rows,
+                                  );
+                                  showHasibuPrintPreviewDialog(
+                                    context,
+                                    ref,
+                                    document: doc,
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.print_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text('Yazdır'),
+                              ),
                             ],
                           ),
                         ],
@@ -470,6 +525,22 @@ class _AttendanceAbsenceReportViewState
                                 Icons.search_rounded,
                                 size: 18,
                               ),
+                              suffixIcon: _searchCtrl.text.isNotEmpty
+                                  ? IconButton(
+                                      key: const ValueKey(
+                                        'report_clear_search_button',
+                                      ),
+                                      tooltip: 'Aramayı Temizle',
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        size: 18,
+                                      ),
+                                      onPressed: () {
+                                        _searchCtrl.clear();
+                                        setState(() {});
+                                      },
+                                    )
+                                  : null,
                               fillColor: pal.subtle,
                             ),
                           );

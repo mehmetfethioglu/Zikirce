@@ -1,0 +1,5 @@
+v1.0.17 Yenilikleri:
+• A4 Yazdırma: Personel kartları, listeler, canlı yoklama, devam/devamsızlık ve izin raporları için önizlemeli çıktı alma.
+• Canlı Arama Düzeltmesi: Arama metni silinince listenin anında güncellenmesi, temizle butonu ve Türkçe karakter (İ/ı/ğ/ü/ş/ö/ç) uyumu.
+• Logo & İlk Kurulum: Dosyadan logo seçme/uygulama düzeltildi; ilk yönetici girişinde işletme adı ve logo ekleme eklendi.
+• Bulut & Köprü: Google Drive şube kutusu ve oturum şeffaflığı iyileştirildi.

@@ -205,7 +205,7 @@ Future<CloudRestoreSummary?> showCloudRestoreDialog(
   );
   final keyCtrl = TextEditingController();
   CloudRestoreMode selectedMode = CloudRestoreMode.merge;
-  bool cloudOnly = false;
+  bool cloudOnly = Platform.isAndroid || Platform.isIOS;
   bool confirmedReplace = false;
   bool isRunning = false;
   String? errorMsg;
@@ -488,11 +488,27 @@ Future<void> showCloudBackupCenterDialog(
   CloudEncryptionKeyMode encryptionMode = CloudEncryptionKeyMode.accountAuto;
   String? statusFeedback;
   bool isFeedbackSuccess = false;
+  bool dialogDisposed = false;
   StateSetter? activeSetDialogState;
+
+  void disposeControllers() {
+    if (dialogDisposed) return;
+    dialogDisposed = true;
+    gmailCtrl.dispose();
+    folderCtrl.dispose();
+    tokenCtrl.dispose();
+    clientIdCtrl.dispose();
+    clientSecretCtrl.dispose();
+    profileIdCtrl.dispose();
+    profileLabelCtrl.dispose();
+    workspaceKeyCtrl.dispose();
+    passphraseCtrl.dispose();
+  }
 
   final syncSvc = ref.read(googleDriveSyncServiceProvider);
   final isNativeGoogleAuth = ref.read(googleAuthAdapterProvider).isNativePlatform;
   syncSvc.getSavedOAuthClientId().then((val) {
+    if (dialogDisposed) return;
     if (val.isNotEmpty && clientIdCtrl.text.isEmpty) {
       clientIdCtrl.text = val;
     }
@@ -500,6 +516,7 @@ Future<void> showCloudBackupCenterDialog(
     debugPrint('CloudBackupCenterDialog: getSavedOAuthClientId hata: $e');
   });
   syncSvc.getSavedOAuthClientSecret().then((val) {
+    if (dialogDisposed) return;
     if (val.isNotEmpty && clientSecretCtrl.text.isEmpty) {
       clientSecretCtrl.text = val;
     }
@@ -507,6 +524,7 @@ Future<void> showCloudBackupCenterDialog(
     debugPrint('CloudBackupCenterDialog: getSavedOAuthClientSecret hata: $e');
   });
   syncSvc.getWorkspaceKey().then((val) {
+    if (dialogDisposed) return;
     if (val.isNotEmpty && workspaceKeyCtrl.text.isEmpty) {
       workspaceKeyCtrl.text = val;
     }
@@ -514,6 +532,7 @@ Future<void> showCloudBackupCenterDialog(
     debugPrint('CloudBackupCenterDialog: getWorkspaceKey hata: $e');
   });
   syncSvc.getCloudEncryptionKeyMode().then((mode) {
+    if (dialogDisposed) return;
     encryptionMode = mode;
     if (context.mounted) {
       activeSetDialogState?.call(() {});
@@ -524,8 +543,10 @@ Future<void> showCloudBackupCenterDialog(
 
   await showDialog<void>(
     context: context,
-    builder: (dialogCtx) => Consumer(
-      builder: (consumerCtx, dialogRef, _) => StatefulBuilder(
+    builder: (dialogCtx) => _DisposablesScope(
+      onDispose: disposeControllers,
+      child: Consumer(
+        builder: (consumerCtx, dialogRef, _) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           activeSetDialogState = setDialogState;
           final pal = _CloudDialogPalette.of(ctx);
@@ -552,35 +573,55 @@ Future<void> showCloudBackupCenterDialog(
                   : 'Edge tarayıcısında Google OAuth 2.0 giriş sayfası açıldı. Lütfen tarayıcıda Google hesabınızla yetkilendirmeyi tamamlayın...';
               isFeedbackSuccess = false;
             });
-            final browserResult = await dialogRef
-                .read(pdksDashboardProvider.notifier)
-                .signInWithGoogleViaBrowser(
-                  emailHint: gmailCtrl.text.trim(),
-                  customClientId: clientIdCtrl.text.trim(),
-                  customClientSecret: clientSecretCtrl.text.trim(),
-                  syncFolderPath: folderCtrl.text.trim(),
-                );
-            if (dialogCtx.mounted) {
-              final latestSync = dialogRef.read(pdksDashboardProvider).syncStatus;
-              final latestEmail = dialogRef
-                  .read(pdksDashboardProvider)
-                  .companySettings
-                  .syncGmailAccount;
-              if (latestEmail.isNotEmpty) {
-                gmailCtrl.text = latestEmail;
+            try {
+              final browserResult = await dialogRef
+                  .read(pdksDashboardProvider.notifier)
+                  .signInWithGoogleViaBrowser(
+                    emailHint: gmailCtrl.text.trim(),
+                    customClientId: clientIdCtrl.text.trim(),
+                    customClientSecret: clientSecretCtrl.text.trim(),
+                    syncFolderPath: folderCtrl.text.trim(),
+                  );
+              if (dialogCtx.mounted) {
+                final latestSync =
+                    dialogRef.read(pdksDashboardProvider).syncStatus;
+                final latestEmail = dialogRef
+                    .read(pdksDashboardProvider)
+                    .companySettings
+                    .syncGmailAccount;
+                if (latestEmail.isNotEmpty) {
+                  gmailCtrl.text = latestEmail;
+                }
+                setDialogState(() {
+                  isFeedbackSuccess =
+                      browserResult.success && latestSync.isTrulySynced;
+                  statusFeedback = browserResult.success
+                      ? '✓ ${browserResult.message} • ${latestSync.message}'
+                      : '⚠️ ${browserResult.message}';
+                });
               }
-              setDialogState(() {
-                isConnecting = false;
-                isFeedbackSuccess =
-                    browserResult.success && latestSync.isTrulySynced;
-                statusFeedback = browserResult.success
-                    ? '✓ ${browserResult.message} • ${latestSync.message}'
-                    : '⚠️ ${browserResult.message}';
-              });
+            } catch (e) {
+              debugPrint(
+                'CloudBackupCenterDialog: startBrowserOAuthFlow hatası: $e',
+              );
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  isFeedbackSuccess = false;
+                  statusFeedback = '❌ Google OAuth giriş hatası: $e';
+                });
+              }
+            } finally {
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  isConnecting = false;
+                });
+              }
             }
           }
 
-          Future<void> verifyAndSaveSettings() async {
+          Future<void> verifyAndSaveSettings({
+            bool syncAfterVerify = false,
+          }) async {
             final targetEmail = gmailCtrl.text.trim();
             final resolvedEmail = targetEmail.isEmpty
                 ? ''
@@ -594,40 +635,60 @@ Future<void> showCloudBackupCenterDialog(
               isConnecting = true;
               statusFeedback = null;
             });
-            final resultStatus = await dialogRef
-                .read(pdksDashboardProvider.notifier)
-                .saveGmailSyncAccount(
-                  gmailAccount: resolvedEmail,
-                  syncFolderPath: folderCtrl.text.trim(),
-                  accessToken: tokenCtrl.text.trim().isEmpty
-                      ? null
-                      : tokenCtrl.text.trim(),
-                );
-            if (dialogCtx.mounted) {
-              final updatedEmail = dialogRef
-                  .read(pdksDashboardProvider)
-                  .companySettings
-                  .syncGmailAccount;
-              if (updatedEmail.isNotEmpty) {
-                gmailCtrl.text = updatedEmail;
-              }
-              setDialogState(() {
-                isConnecting = false;
-                if (resultStatus.isTrulySynced) {
-                  isFeedbackSuccess = true;
-                  statusFeedback =
-                      '✓ Doğrulandı ve Eşitlendi: ${resultStatus.message}';
-                } else if (resultStatus.stage == DriveSyncStage.error) {
-                  isFeedbackSuccess = false;
-                  statusFeedback = '❌ Doğrulama Hatası: ${resultStatus.message}';
-                } else {
-                  isFeedbackSuccess = false;
-                  statusFeedback =
-                      '⚠️ Tek başına e-posta yazmak Google hesabına giriş yapmaz! '
-                      '${resultStatus.message} '
-                      'Gerçek bulut eşitlemesi için yukarıdaki "Tarayıcıda Google ile Giriş Yap (OAuth 2.0)" butonunu kullanın veya Google Drive klasör yolunu seçin.';
+            try {
+              final resultStatus = await dialogRef
+                  .read(pdksDashboardProvider.notifier)
+                  .saveGmailSyncAccount(
+                    gmailAccount: resolvedEmail,
+                    syncFolderPath: folderCtrl.text.trim(),
+                    accessToken: tokenCtrl.text.trim().isEmpty
+                        ? null
+                        : tokenCtrl.text.trim(),
+                    syncAfterVerify: syncAfterVerify,
+                  );
+              if (dialogCtx.mounted) {
+                final updatedEmail = dialogRef
+                    .read(pdksDashboardProvider)
+                    .companySettings
+                    .syncGmailAccount;
+                if (updatedEmail.isNotEmpty) {
+                  gmailCtrl.text = updatedEmail;
                 }
-              });
+                setDialogState(() {
+                  if (resultStatus.isTrulySynced) {
+                    isFeedbackSuccess = true;
+                    statusFeedback = syncAfterVerify
+                        ? '✓ Doğrulandı ve Eşitlendi: ${resultStatus.message}'
+                        : '✓ Doğrulandı ve Kaydedildi: ${resultStatus.message}';
+                  } else if (resultStatus.stage == DriveSyncStage.error) {
+                    isFeedbackSuccess = false;
+                    statusFeedback =
+                        '❌ Doğrulama Hatası: ${resultStatus.message}';
+                  } else {
+                    isFeedbackSuccess = false;
+                    statusFeedback =
+                        '⚠️ Tek başına e-posta yazmak Google hesabına giriş yapmaz! '
+                        '${resultStatus.message} '
+                        'Gerçek bulut eşitlemesi için yukarıdaki "Tarayıcıda Google ile Giriş Yap (OAuth 2.0)" butonunu kullanın veya Google Drive klasör yolunu seçin.';
+                  }
+                });
+              }
+            } catch (e) {
+              debugPrint(
+                'CloudBackupCenterDialog: verifyAndSaveSettings hatası: $e',
+              );
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  isFeedbackSuccess = false;
+                  statusFeedback = '❌ Doğrulama Hatası: $e';
+                });
+              }
+            } finally {
+              if (dialogCtx.mounted) {
+                setDialogState(() {
+                  isConnecting = false;
+                });
+              }
             }
           }
 
@@ -663,11 +724,14 @@ Future<void> showCloudBackupCenterDialog(
             }
           }
 
-          final Color statusBorderColor = isTrulySynced
-              ? const Color(0xFF10B981)
-              : (syncStatus.stage == DriveSyncStage.error
-                  ? const Color(0xFFEF4444)
-                  : const Color(0xFFF59E0B));
+          final bool isSyncingStage = syncStatus.stage == DriveSyncStage.syncing;
+          final Color statusBorderColor = isSyncingStage
+              ? const Color(0xFF0284C7)
+              : (isTrulySynced
+                  ? const Color(0xFF10B981)
+                  : (syncStatus.stage == DriveSyncStage.error
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFFF59E0B)));
 
           return AlertDialog(
             insetPadding:
@@ -713,25 +777,39 @@ Future<void> showCloudBackupCenterDialog(
                         children: [
                           Row(
                             children: [
-                              Icon(
-                                isTrulySynced
-                                    ? Icons.verified_rounded
-                                    : (syncStatus.stage == DriveSyncStage.error
-                                        ? Icons.error_outline_rounded
-                                        : Icons.warning_amber_rounded),
-                                color: statusBorderColor,
-                                size: 20,
-                              ),
+                              if (isSyncingStage)
+                                SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: statusBorderColor,
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  isTrulySynced
+                                      ? Icons.verified_rounded
+                                      : (syncStatus.stage == DriveSyncStage.error
+                                          ? Icons.error_outline_rounded
+                                          : Icons.warning_amber_rounded),
+                                  color: statusBorderColor,
+                                  size: 20,
+                                ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  isTrulySynced
-                                      ? (syncStatus.isCloudApiVerified
-                                          ? 'Doğrulanmış Google OAuth 2.0 Hesabı: ${connectedEmail.isEmpty ? "Aktif" : connectedEmail}'
-                                          : 'Google Drive Masaüstü Klasörü Aktif: ${connectedEmail.isEmpty ? "Yerel Drive" : connectedEmail}')
-                                      : (connectedEmail.isNotEmpty
-                                          ? 'E-Posta Kayıtlı ($connectedEmail) • OAuth 2.0 / Drive Doğrulanmadı'
-                                          : 'Henüz Doğrulanmış Google Bağlantısı Yok'),
+                                  isSyncingStage
+                                      ? (connectedEmail.isNotEmpty
+                                          ? 'Doğrulanıyor / Eşitleniyor ($connectedEmail)...'
+                                          : 'Google OAuth 2.0 & Drive Doğrulanıyor / Eşitleniyor...')
+                                      : (isTrulySynced
+                                          ? (syncStatus.isCloudApiVerified
+                                              ? 'Doğrulanmış Google OAuth 2.0 Hesabı: ${connectedEmail.isEmpty ? "Aktif" : connectedEmail}'
+                                              : 'Google Drive Masaüstü Klasörü Aktif: ${connectedEmail.isEmpty ? "Yerel Drive" : connectedEmail}')
+                                          : (connectedEmail.isNotEmpty
+                                              ? 'E-Posta Kayıtlı ($connectedEmail) • OAuth 2.0 / Drive Doğrulanmadı'
+                                              : 'Henüz Doğrulanmış Google Bağlantısı Yok')),
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13.5,
@@ -1836,7 +1914,9 @@ Future<void> showCloudBackupCenterDialog(
                       width: double.infinity,
                       child: FilledButton.tonal(
                         key: const ValueKey('google_quick_connect_button'),
-                        onPressed: isBusy ? null : verifyAndSaveSettings,
+                        onPressed: isBusy
+                            ? null
+                            : () => verifyAndSaveSettings(syncAfterVerify: true),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -1909,10 +1989,11 @@ Future<void> showCloudBackupCenterDialog(
                 child: const Text('Kapat'),
               ),
               FilledButton.icon(
+                key: const ValueKey('btn_verify_and_save_cloud'),
                 onPressed: isBusy
                     ? null
                     : () async {
-                        await verifyAndSaveSettings();
+                        await verifyAndSaveSettings(syncAfterVerify: false);
                         if (dialogCtx.mounted &&
                             dialogRef
                                 .read(pdksDashboardProvider)
@@ -1928,18 +2009,33 @@ Future<void> showCloudBackupCenterDialog(
           );
         },
       ),
+      ),
     ),
   );
+}
 
-  gmailCtrl.dispose();
-  folderCtrl.dispose();
-  tokenCtrl.dispose();
-  clientIdCtrl.dispose();
-  clientSecretCtrl.dispose();
-  profileIdCtrl.dispose();
-  profileLabelCtrl.dispose();
-  workspaceKeyCtrl.dispose();
-  passphraseCtrl.dispose();
+class _DisposablesScope extends StatefulWidget {
+  final VoidCallback onDispose;
+  final Widget child;
+
+  const _DisposablesScope({
+    required this.onDispose,
+    required this.child,
+  });
+
+  @override
+  State<_DisposablesScope> createState() => _DisposablesScopeState();
+}
+
+class _DisposablesScopeState extends State<_DisposablesScope> {
+  @override
+  void dispose() {
+    widget.onDispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _BranchInboxSyncSection extends StatelessWidget {

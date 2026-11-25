@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uygulamanın güncel sürüm sabitleri (`pubspec.yaml` ile eşgüdümlü).
-const String hasibuAppVersion = '1.0.14';
-const int hasibuAppBuildNumber = 15;
-const String hasibuFullVersionLabel = 'v1.0.14 (Build 15)';
+const String hasibuAppVersion = '1.0.17';
+const int hasibuAppBuildNumber = 18;
+const String hasibuFullVersionLabel = 'v1.0.17 (Build 18)';
 
 /// Tekil sürüm notu kaydı.
 @immutable
@@ -30,6 +30,44 @@ class HasibuReleaseNoteEntry {
 
 /// Kronolojik olarak güncelden eskiye Hasibu sürüm notları listesi.
 const List<HasibuReleaseNoteEntry> hasibuReleaseNotesRegistry = [
+  HasibuReleaseNoteEntry(
+    version: '1.0.17',
+    buildNumber: 18,
+    releaseDate: '25.11.2026',
+    title: 'A4 Yazdırma, Canlı Arama Düzeltmesi, Şirket Logosu & İlk Kurulum',
+    categoryTag: 'Kullanılabilirlik & Çıktı',
+    highlights: [
+      'A4 Yazdırma ve Önizleme: Personel kartları, personel listeleri, canlı yoklama, devam/devamsızlık ve izin raporları için çapraz platform çıktı alma desteği eklendi.',
+      'Canlı Yoklama Arama Düzeltmesi: Arama kutusundaki metin silindiğinde listenin anında yenilenmesi, temizle butonu ve Türkçe karakter (İ/I/ı/i/ğ/ü/ş/ö/ç) uyumu sağlandı.',
+      'Dosyadan Şirket Logosu Düzeltmesi: Türkçe ve boşluklu dosya yolu desteği, PNG/JPG/WEBP/GIF/BMP doğrulama, anlık önizleme, kalıcı kopyalama ve mobil yerel görsel seçici eklendi.',
+      'İlk Oturumda İşletme Adı & Logo Kurulumu: İlk yönetici parolası güncelleme ekranında işletme adı ve şirket logosunu doğrudan tanımlama özelliği sunuldu.',
+    ],
+  ),
+  HasibuReleaseNoteEntry(
+    version: '1.0.16',
+    buildNumber: 17,
+    releaseDate: '25.11.2026',
+    title: 'Google Drive Listeleme Düzeltmesi, Şeffaf Bulut Kaynağı & Köprü Güncellemesi',
+    categoryTag: 'Bulut & Köprü',
+    highlights: [
+      'Google Drive Şube Kutusu Listeleme Düzeltmesi: Drive API sorgularında alt-çizgi (_) içeren dosya adlarının boş dönmesine yol açan filtre kaldırılarak telefon ve masaüstünde şube kutularının (hasibu_branch_inbox_*.enc) eksiksiz bulunması sağlandı.',
+      'Mobil Buluttan Yükle & OAuth 401 Şeffaflığı: Mobilde buluttan yükleme varsayılan olarak doğrudan bulut öncelikli hale getirildi; süresi dolmuş 401 oturumunda sessizce boş yerel önbelleğe düşmek yerine açık uyarı ve veri kaynağı bilgisi gösteriliyor.',
+      'Şube Köprüsü Güncelleme Kilidi Çözümü: 3_Baslangica_Ekle.bat (--install-startup) çalıştırıldığında eski arka plan süreci otomatik durdurularak yeni HasibuBranchBridge.exe kopyalanıp anında başlatılıyor.',
+    ],
+  ),
+  HasibuReleaseNoteEntry(
+    version: '1.0.15',
+    buildNumber: 16,
+    releaseDate: '25.11.2026',
+    title: 'Doğrula & Kaydet, Hesap İzolasyonu, Şube Köprüsü & Mobil Bulut Aktarımı',
+    categoryTag: 'Bulut & Köprü',
+    highlights: [
+      'Doğrula & Kaydet İyileştirmesi: Hafif bulut bağlantı doğrulaması eklendi; işlem sürerken yanlış "Doğrulanmadı" uyarısı yerine mavi doğrulama/eşitleme durum göstergesi sunuluyor.',
+      'Google Hesap Değişimi İzolasyonu: Farklı bir Google hesabına geçildiğinde önceki hesaba ait yerel veritabanı, yönetici parolası ve şifreleme anahtarı izole edilerek yeni hesap verilerinin üzerine yazılması engellendi.',
+      'Şube Yüz Okutma Köprüsü Güncellemesi: Kurulum ve başlangıca ekleme sonrası köprü arka planda anında başlatılıyor ve bilinmeyen kart/yüz kaydında personel adları otomatik senkronize ediliyor.',
+      'Mobil Bulut Geri Yükleme: Buluttan yükleme sırasında şube kutusu (branch inbox) kayıtları birleştirme ve değiştirme modlarının ikisinde de eksiksiz aktarılıyor.',
+    ],
+  ),
   HasibuReleaseNoteEntry(
     version: '1.0.14',
     buildNumber: 15,

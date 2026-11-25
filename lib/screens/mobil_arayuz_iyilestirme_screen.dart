@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/security/hasibu_security_service.dart';
 import '../features/pdks/domain/pdks_models.dart';
+import '../features/pdks/domain/pdks_print_builders.dart';
 import '../features/pdks/presentation/providers/pdks_providers.dart';
+import '../features/pdks/presentation/screens/hasibu_print_preview_dialog.dart';
 import '../features/pdks/presentation/screens/hasibu_settings_view.dart';
 import '../providers/mobil_arayuz_iyilestirme_provider.dart';
 
@@ -87,6 +89,29 @@ class MobilArayuzIyilestirmeScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            key: const ValueKey('mobile_print_list_button'),
+            tooltip: 'Listeyi Yazdır',
+            icon: const Icon(Icons.print_outlined, size: 20),
+            onPressed: () {
+              final s = ref.read(pdksDashboardProvider);
+              final doc = HasibuPrintBuilders.buildLiveAttendanceListDocument(
+                companySettings: s.companySettings,
+                selectedDateKey: s.selectedDate,
+                filterDescription: s.searchQuery.trim().isNotEmpty
+                    ? 'Mobil Görünüm • Arama: "${s.searchQuery.trim()}"'
+                    : 'Mobil Görünüm',
+                items: s.visibleStatuses,
+                totalCount: s.totalCount,
+                presentCount: s.presentCount,
+                lateCount: s.lateCount,
+                absentCount: s.absentCount,
+                onLeaveCount: s.onLeaveCount,
+                sickReportCount: s.sickReportCount,
+              );
+              showHasibuPrintPreviewDialog(context, ref, document: doc);
+            },
+          ),
           // Görünüm yoğunluğu değiştirici (Ferah / Kompakt)
           IconButton(
             tooltip: isCompact ? 'Ferah Kart Görünümü' : 'Kompakt Liste',
@@ -714,13 +739,63 @@ class _MobileKpiTile extends StatelessWidget {
 }
 
 /// Arama ve Şube Filtreleme
-class _MobileFilterAndSearchSection extends ConsumerWidget {
+class _MobileFilterAndSearchSection extends ConsumerStatefulWidget {
   const _MobileFilterAndSearchSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MobileFilterAndSearchSection> createState() =>
+      _MobileFilterAndSearchSectionState();
+}
+
+class _MobileFilterAndSearchSectionState
+    extends ConsumerState<_MobileFilterAndSearchSection> {
+  late final TextEditingController _searchController;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = ref.read(pdksDashboardProvider).searchQuery;
+    _searchController = TextEditingController(text: initial);
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    if (!mounted) return;
+    final text = _searchController.text;
+    final normalized = text.trim().isEmpty ? '' : text;
+    if (ref.read(pdksDashboardProvider).searchQuery != normalized) {
+      ref.read(pdksDashboardProvider.notifier).setSearchQuery(text);
+    }
+    if (ref.read(mobileUiProvider).quickSearchQuery != normalized) {
+      ref.read(mobileUiProvider.notifier).setQuickSearchQuery(normalized);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<String>(
+      pdksDashboardProvider.select((s) => s.searchQuery),
+      (prev, next) {
+        if (_searchController.text != next) {
+          _searchController.value = TextEditingValue(
+            text: next,
+            selection: TextSelection.collapsed(offset: next.length),
+          );
+        }
+      },
+    );
+
     final pal = HasibuPalette.of(context);
     final branches = ref.watch(pdksDashboardProvider.select((s) => s.branches));
+    final activeQuery =
+        ref.watch(pdksDashboardProvider.select((s) => s.searchQuery));
     final isBranchScoped =
         ref.watch(pdksDashboardProvider.select((s) => s.isBranchScoped));
     final isSingleBranchScoped = ref.watch(
@@ -795,6 +870,8 @@ class _MobileFilterAndSearchSection extends ConsumerWidget {
           const SizedBox(height: 8),
           // Hızlı Arama
           TextField(
+            key: const ValueKey('mobile_pdks_search_field'),
+            controller: _searchController,
             onChanged: (val) {
               ref.read(pdksDashboardProvider.notifier).setSearchQuery(val);
               ref.read(mobileUiProvider.notifier).setQuickSearchQuery(val);
@@ -803,6 +880,20 @@ class _MobileFilterAndSearchSection extends ConsumerWidget {
               hintText: 'Personel adı, kart no veya bölüm ara...',
               hintStyle: TextStyle(fontSize: 12.5, color: pal.textMuted),
               prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              suffixIcon: activeQuery.isNotEmpty
+                  ? IconButton(
+                      key: const ValueKey('mobile_pdks_clear_search_button'),
+                      tooltip: 'Aramayı Temizle',
+                      icon: const Icon(Icons.clear_rounded, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        ref
+                            .read(pdksDashboardProvider.notifier)
+                            .clearSearchQuery();
+                        ref.read(mobileUiProvider.notifier).clearSearch();
+                      },
+                    )
+                  : null,
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               fillColor: pal.card,

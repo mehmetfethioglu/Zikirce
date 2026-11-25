@@ -1,17 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/security/hasibu_security_service.dart';
+import '../../../../core/services/company_logo_service.dart';
+import '../../../../core/services/google_drive_sync_service.dart';
+import '../../../../core/utils/turkish_search.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../domain/pdks_models.dart';
+import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'app_users_management_card.dart';
 import 'cloud_backup_center_dialog.dart';
 import 'employee_dossier_panel.dart';
+import 'hasibu_print_preview_dialog.dart';
 import 'hasibu_release_notes_dialog.dart';
 
 export 'leaves_and_reports_view.dart' show LeavesAndReportsSettingsView;
@@ -194,9 +200,11 @@ class CompanyLogoBadge extends StatelessWidget {
         context,
         Image.memory(
           bytes,
+          key: ValueKey('logo_mem_${encoded.hashCode}_${encoded.length}'),
           width: size,
           height: size,
           fit: BoxFit.contain,
+          gaplessPlayback: true,
           filterQuality: FilterQuality.high,
           isAntiAlias: true,
           errorBuilder: (ctx, error, stackTrace) =>
@@ -213,7 +221,7 @@ class CompanyLogoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final raw = settings.logoPath?.trim() ?? '';
+    final raw = CompanyLogoService.normalizeInputPath(settings.logoPath ?? '');
     final bool isPreset = raw.startsWith('logo:');
     final int presetIdx = isPreset
         ? ((int.tryParse(raw.replaceFirst('logo:', '')) ?? 1) - 1)
@@ -244,9 +252,11 @@ class CompanyLogoBadge extends StatelessWidget {
           context,
           Image.file(
             file,
+            key: ValueKey('logo_file_${file.path}'),
             width: size,
             height: size,
             fit: BoxFit.contain,
+            gaplessPlayback: true,
             filterQuality: FilterQuality.high,
             isAntiAlias: true,
             errorBuilder: (ctx, error, stackTrace) =>
@@ -309,25 +319,8 @@ class CompanyLogoBadge extends StatelessWidget {
     );
   }
 
-  static const String _winDialogHost = 'power' 'shell.exe';
-
-  static Future<String?> pickLogoFromDesktop() async {
-    if (!Platform.isWindows) return null;
-    try {
-      final result = await Process.run(_winDialogHost, <String>[
-        '-NoProfile',
-        '-Command',
-        "Add-Type -AssemblyName System.Windows.Forms; "
-            "\$f = New-Object System.Windows.Forms.OpenFileDialog; "
-            "\$f.Title = 'Şirket Logosu Seçin'; "
-            "\$f.Filter = 'Logo Görselleri (*.png;*.jpg;*.jpeg;*.webp;*.bmp)|*.png;*.jpg;*.jpeg;*.webp;*.bmp'; "
-            "if (\$f.ShowDialog() -eq 'OK') { Write-Output \$f.FileName }",
-      ]);
-      final path = result.stdout.toString().trim();
-      return path.isNotEmpty ? path : null;
-    } catch (_) {
-      return null;
-    }
+  static Future<String?> pickLogoFromDesktop() {
+    return PlatformCompanyLogoPickerGateway().pickLogoImagePath();
   }
 }
 
@@ -335,238 +328,363 @@ Future<void> showCompanyLogoDialog(
   BuildContext context,
   WidgetRef ref,
 ) async {
-  final settings = ref.read(pdksDashboardProvider).companySettings;
-  final pathCtrl = TextEditingController(text: settings.logoPath ?? 'logo:1');
-  final nameCtrl = TextEditingController(text: settings.companyName);
-
-  await showDialog<void>(
+  final feedback = await showDialog<String>(
     context: context,
-    builder: (dialogCtx) => StatefulBuilder(
-      builder: (ctx, setDialogState) {
-        final previewPath = pathCtrl.text.trim();
-        final previewIsPreset = previewPath.startsWith('logo:');
-        final previewSettings = settings.copyWith(
-          companyName: nameCtrl.text.trim().isEmpty
-              ? settings.companyName
-              : nameCtrl.text.trim(),
-          logoPath: () => previewPath.isEmpty ? null : previewPath,
-          logoDataBase64: () => (previewIsPreset || previewPath.isEmpty)
-              ? null
-              : settings.logoDataBase64,
-        );
-        final pal = HasibuPalette.of(ctx);
+    builder: (_) => const _CompanyLogoSettingsDialog(),
+  );
+  if (feedback != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(feedback),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
 
-        return AlertDialog(
-          title: const Row(
+class _CompanyLogoSettingsDialog extends ConsumerStatefulWidget {
+  const _CompanyLogoSettingsDialog();
+
+  @override
+  ConsumerState<_CompanyLogoSettingsDialog> createState() =>
+      _CompanyLogoSettingsDialogState();
+}
+
+class _CompanyLogoSettingsDialogState
+    extends ConsumerState<_CompanyLogoSettingsDialog> {
+  late final TextEditingController _pathCtrl;
+  late final TextEditingController _nameCtrl;
+  Uint8List? _pickedPreviewBytes;
+  String? _validationError;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = ref.read(pdksDashboardProvider).companySettings;
+    _pathCtrl = TextEditingController(text: settings.logoPath ?? 'logo:1');
+    _nameCtrl = TextEditingController(text: settings.companyName);
+  }
+
+  @override
+  void dispose() {
+    _pathCtrl.dispose();
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickLogoFile(CompanySettings settings) async {
+    final picked =
+        await ref.read(companyLogoPickerGatewayProvider).pickLogoImagePath();
+    if (picked == null || !mounted) return;
+    final inspected = CompanyLogoService.inspectLogoFile(
+      rawInput: picked,
+      currentSettings: settings,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pathCtrl.text = picked;
+      if (inspected.isValid) {
+        _pickedPreviewBytes = inspected.previewBytes;
+        _validationError = null;
+      } else {
+        _pickedPreviewBytes = null;
+        _validationError = inspected.errorMessage;
+      }
+    });
+  }
+
+  Future<void> _save(CompanySettings settings) async {
+    setState(() {
+      _isSaving = true;
+      _validationError = null;
+    });
+    final prepared = await CompanyLogoService.prepareLogoForSave(
+      rawInput: _pathCtrl.text,
+      currentSettings: settings,
+    );
+    if (!prepared.isValid) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _validationError = prepared.errorMessage;
+        });
+      }
+      return;
+    }
+    if (prepared.storedPath != null &&
+        !prepared.storedPath!.startsWith('logo:')) {
+      try {
+        PaintingBinding.instance.imageCache.evict(
+          FileImage(File(prepared.storedPath!)),
+        );
+      } catch (e) {
+        debugPrint('showCompanyLogoDialog: cache temizlenemedi ($e)');
+      }
+    }
+    final notifier = ref.read(pdksDashboardProvider.notifier);
+    await notifier.updateCompanySettings(
+      settings.copyWith(
+        companyName: _nameCtrl.text.trim().isEmpty
+            ? settings.companyName
+            : _nameCtrl.text.trim(),
+        logoPath: () => prepared.storedPath,
+        logoDataBase64: () => prepared.base64Data,
+      ),
+    );
+    if (mounted) {
+      Navigator.of(context).pop(
+        prepared.warningMessage ?? '✓ İşletme adı ve şirket logosu kaydedildi.',
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.read(pdksDashboardProvider).companySettings;
+    final previewPath = CompanyLogoService.normalizeInputPath(_pathCtrl.text);
+    final previewIsPreset = previewPath.startsWith('logo:');
+    final previewSettings = settings.copyWith(
+      companyName: _nameCtrl.text.trim().isEmpty
+          ? settings.companyName
+          : _nameCtrl.text.trim(),
+      logoPath: () => previewPath.isEmpty ? null : previewPath,
+      logoDataBase64: () => (previewIsPreset || previewPath.isEmpty)
+          ? null
+          : settings.logoDataBase64,
+    );
+    final pal = HasibuPalette.of(context);
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.verified_rounded, color: Color(0xFF0284C7)),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Şirket Logosu & Kurumsal Kimlik Ayarı',
+              style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.verified_rounded, color: Color(0xFF0284C7)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Şirket Logosu & Kurumsal Kimlik Ayarı',
-                  style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: pal.subtle,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: pal.border),
+                ),
+                child: Row(
+                  children: [
+                    if (_pickedPreviewBytes != null && !previewIsPreset)
+                      Container(
+                        width: 58,
+                        height: 58,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: pal.card,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: pal.border),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            _pickedPreviewBytes!,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                            filterQuality: FilterQuality.high,
+                          ),
+                        ),
+                      )
+                    else
+                      CompanyLogoBadge(
+                        settings: previewSettings,
+                        size: 58,
+                        borderRadius: 14,
+                      ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            previewSettings.companyName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: pal.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Seçtiğiniz logo hem Oturum Açma (Login) ekranında hem de uygulama üst barında gösterilir.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: pal.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 14),
+              TextField(
+                key: const ValueKey('company_logo_name_field'),
+                controller: _nameCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Şirket / İşletme Adı',
+                  prefixIcon: Icon(Icons.apartment_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: pal.subtle,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: pal.border),
-                    ),
-                    child: Row(
-                      children: [
-                        CompanyLogoBadge(
-                          settings: previewSettings,
-                          size: 58,
-                          borderRadius: 14,
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                previewSettings.companyName,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 15,
-                                  color: pal.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Seçtiğiniz logo hem Oturum Açma (Login) ekranında hem de uygulama üst barında gösterilir.',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: pal.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('company_logo_path_field'),
+                      controller: _pathCtrl,
+                      onChanged: (_) => setState(() {
+                        _pickedPreviewBytes = null;
+                        _validationError = null;
+                      }),
+                      decoration: const InputDecoration(
+                        labelText: 'Logo Dosya Yolu veya Stil Kodu',
+                        hintText: r'C:\Logo\sirket_logo.png veya logo:1',
+                        prefixIcon: Icon(Icons.image_outlined),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: nameCtrl,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Şirket / İşletme Adı',
-                      prefixIcon: Icon(Icons.apartment_rounded),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: const ValueKey('company_logo_path_field'),
-                          controller: pathCtrl,
-                          onChanged: (_) => setDialogState(() {}),
-                          decoration: const InputDecoration(
-                            labelText: 'Logo Dosya Yolu veya Stil Kodu',
-                            hintText: r'C:\Logo\sirket_logo.png veya logo:1',
-                            prefixIcon: Icon(Icons.image_outlined),
-                          ),
-                        ),
-                      ),
-                      if (Platform.isWindows) ...[
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final picked =
-                                await CompanyLogoBadge.pickLogoFromDesktop();
-                            if (picked != null) {
-                              setDialogState(() => pathCtrl.text = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.folder_open_rounded, size: 18),
-                          label: const Text('Dosya Seç'),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Hazır Kurumsal Amblem Stilleri:',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: pal.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ChoiceChip(
-                        avatar: const Icon(Icons.auto_awesome_rounded, size: 15),
-                        label: const Text('Hasibu Mizan & Defter'),
-                        selected: pathCtrl.text.trim().isEmpty ||
-                            pathCtrl.text.trim() == 'logo:1' ||
-                            pathCtrl.text.trim() == 'logo:hasibu',
-                        onSelected: (_) =>
-                            setDialogState(() => pathCtrl.text = 'logo:hasibu'),
-                      ),
-                      ChoiceChip(
-                        avatar: const Icon(Icons.architecture_rounded, size: 15),
-                        label: const Text('Hasibu Monolitik H'),
-                        selected: pathCtrl.text.trim() == 'logo:hasibu_alt',
-                        onSelected: (_) => setDialogState(
-                          () => pathCtrl.text = 'logo:hasibu_alt',
-                        ),
-                      ),
-                      ChoiceChip(
-                        label: const Text('Harf Amblemi'),
-                        selected: pathCtrl.text.trim() == 'logo:initials',
-                        onSelected: (_) =>
-                            setDialogState(() => pathCtrl.text = 'logo:initials'),
-                      ),
-                      for (int i = 0;
-                          i < CompanyLogoBadge.presets.length;
-                          i++)
-                        ChoiceChip(
-                          avatar: Icon(
-                            CompanyLogoBadge.presets[i].icon,
-                            size: 15,
-                          ),
-                          label: Text(CompanyLogoBadge.presets[i].label),
-                          selected: pathCtrl.text.trim() == 'logo:${i + 1}',
-                          onSelected: (_) => setDialogState(
-                            () => pathCtrl.text = 'logo:${i + 1}',
-                          ),
-                        ),
-                    ],
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    key: const ValueKey('company_logo_pick_file_button'),
+                    onPressed: _isSaving ? null : () => _pickLogoFile(settings),
+                    icon: const Icon(Icons.folder_open_rounded, size: 18),
+                    label: const Text('Dosya Seç'),
                   ),
                 ],
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('İptal'),
-            ),
-            FilledButton.icon(
-              key: const ValueKey('save_company_logo_button'),
-              onPressed: () async {
-                final notifier = ref.read(pdksDashboardProvider.notifier);
-                final cleanLogo = pathCtrl.text.trim();
-                String? encodedBase64;
-                if (cleanLogo.isNotEmpty && !cleanLogo.startsWith('logo:')) {
-                  try {
-                    final file = File(cleanLogo);
-                    if (await file.exists()) {
-                      final length = await file.length();
-                      if (length <= 512 * 1024) {
-                        final bytes = await file.readAsBytes();
-                        if (bytes.isNotEmpty) {
-                          encodedBase64 = base64Encode(bytes);
-                        }
-                      }
-                    } else if (cleanLogo == settings.logoPath?.trim()) {
-                      encodedBase64 = settings.logoDataBase64;
-                    }
-                  } catch (e) {
-                    debugPrint('showCompanyLogoDialog: logo base64 hatası: $e');
-                  }
-                }
-                await notifier.updateCompanySettings(
-                  settings.copyWith(
-                    companyName: nameCtrl.text.trim().isEmpty
-                        ? settings.companyName
-                        : nameCtrl.text.trim(),
-                    logoPath: () => cleanLogo.isEmpty ? null : cleanLogo,
-                    logoDataBase64: () => encodedBase64,
+              if (_validationError != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  key: const ValueKey('company_logo_error_banner'),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDC2626).withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFFDC2626).withValues(alpha: 0.35),
+                    ),
                   ),
-                );
-                if (dialogCtx.mounted) {
-                  Navigator.of(dialogCtx).pop();
-                }
-              },
-              icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Logoyu & Kimliği Kaydet'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
-
-  pathCtrl.dispose();
-  nameCtrl.dispose();
+                  child: Text(
+                    _validationError!,
+                    style: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Text(
+                'Hazır Kurumsal Amblem Stilleri:',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: pal.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ChoiceChip(
+                    avatar: const Icon(Icons.auto_awesome_rounded, size: 15),
+                    label: const Text('Hasibu Mizan & Defter'),
+                    selected: previewPath.isEmpty ||
+                        previewPath == 'logo:1' ||
+                        previewPath == 'logo:hasibu',
+                    onSelected: (_) => setState(() {
+                      _pathCtrl.text = 'logo:hasibu';
+                      _pickedPreviewBytes = null;
+                      _validationError = null;
+                    }),
+                  ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.architecture_rounded, size: 15),
+                    label: const Text('Hasibu Monolitik H'),
+                    selected: previewPath == 'logo:hasibu_alt',
+                    onSelected: (_) => setState(() {
+                      _pathCtrl.text = 'logo:hasibu_alt';
+                      _pickedPreviewBytes = null;
+                      _validationError = null;
+                    }),
+                  ),
+                  ChoiceChip(
+                    label: const Text('Harf Amblemi'),
+                    selected: previewPath == 'logo:initials',
+                    onSelected: (_) => setState(() {
+                      _pathCtrl.text = 'logo:initials';
+                      _pickedPreviewBytes = null;
+                      _validationError = null;
+                    }),
+                  ),
+                  for (int i = 0; i < CompanyLogoBadge.presets.length; i++)
+                    ChoiceChip(
+                      avatar: Icon(
+                        CompanyLogoBadge.presets[i].icon,
+                        size: 15,
+                      ),
+                      label: Text(CompanyLogoBadge.presets[i].label),
+                      selected: previewPath == 'logo:${i + 1}',
+                      onSelected: (_) => setState(() {
+                        _pathCtrl.text = 'logo:${i + 1}';
+                        _pickedPreviewBytes = null;
+                        _validationError = null;
+                      }),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+          child: const Text('İptal'),
+        ),
+        FilledButton.icon(
+          key: const ValueKey('save_company_logo_button'),
+          onPressed: _isSaving ? null : () => _save(settings),
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.check_rounded, size: 18),
+          label: const Text('Logoyu & Kimliği Kaydet'),
+        ),
+      ],
+    );
+  }
 }
 
 // ============================================================================
@@ -844,71 +962,41 @@ class EmployeeProfileAvatar extends StatelessWidget {
   }
 
   /// Windows masaüstünde yerel dosya seçici penceresini açar.
-  static Future<String?> pickPhotoFromDesktop() async {
-    if (!Platform.isWindows) return null;
-    try {
-      final result = await Process.run(
-        'power' 'shell.exe',
-        <String>[
-          '-NoProfile',
-          '-Command',
-          "Add-Type -AssemblyName System.Windows.Forms; "
-              "\$f = New-Object System.Windows.Forms.OpenFileDialog; "
-              "\$f.Title = 'Personel Profil Fotoğrafı Seçin'; "
-              "\$f.Filter = 'Görsel Dosyaları (*.jpg;*.jpeg;*.png;*.webp)|*.jpg;*.jpeg;*.png;*.webp'; "
-              "if (\$f.ShowDialog() -eq 'OK') { Write-Output \$f.FileName }",
-        ],
-      );
-      final path = result.stdout.toString().trim();
-      return path.isNotEmpty ? path : null;
-    } catch (_) {
-      return null;
-    }
+  static Future<String?> pickPhotoFromDesktop() {
+    return pickWindowsPathWithPowerShell(r'''
+$f = New-Object System.Windows.Forms.OpenFileDialog
+$f.Title = 'Personel Profil Fotoğrafı Seçin'
+$f.Filter = 'Görsel Dosyaları (*.jpg;*.jpeg;*.png;*.webp)|*.jpg;*.jpeg;*.png;*.webp'
+$selectedPath = ''
+if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+  $selectedPath = $f.FileName
+}
+''');
   }
 
   /// Windows masaüstünde yerel klasör seçici penceresini açar.
-  static Future<String?> pickFolderFromDesktop() async {
-    if (!Platform.isWindows) return null;
-    try {
-      final result = await Process.run(
-        'power' 'shell.exe',
-        <String>[
-          '-NoProfile',
-          '-Command',
-          "Add-Type -AssemblyName System.Windows.Forms; "
-              "\$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
-              "\$d.Description = 'Google Drive Senkronizasyon Klasörünü Seçin'; "
-              "if (\$d.ShowDialog() -eq 'OK') { Write-Output \$d.SelectedPath }",
-        ],
-      );
-      final path = result.stdout.toString().trim();
-      return path.isNotEmpty ? path : null;
-    } catch (_) {
-      return null;
-    }
+  static Future<String?> pickFolderFromDesktop() {
+    return pickWindowsPathWithPowerShell(r'''
+$d = New-Object System.Windows.Forms.FolderBrowserDialog
+$d.Description = 'Google Drive Senkronizasyon Klasörünü Seçin'
+$selectedPath = ''
+if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+  $selectedPath = $d.SelectedPath
+}
+''');
   }
 
   /// Windows masaüstünde resmi özlük evrakı dijital kopyası (.pdf, .jpg, .png, .docx) seçiciyi açar.
-  static Future<String?> pickDocumentFromDesktop() async {
-    if (!Platform.isWindows) return null;
-    try {
-      final result = await Process.run(
-        'power' 'shell.exe',
-        <String>[
-          '-NoProfile',
-          '-Command',
-          "Add-Type -AssemblyName System.Windows.Forms; "
-              "\$f = New-Object System.Windows.Forms.OpenFileDialog; "
-              "\$f.Title = 'Personel Özlük Dosyası Resmi Evrak Dijital Kopyasını Seçin'; "
-              "\$f.Filter = 'Resmi Evrak & Görsel (*.pdf;*.jpg;*.jpeg;*.png;*.webp;*.doc;*.docx)|*.pdf;*.jpg;*.jpeg;*.png;*.webp;*.doc;*.docx|Tüm Dosyalar (*.*)|*.*'; "
-              "if (\$f.ShowDialog() -eq 'OK') { Write-Output \$f.FileName }",
-        ],
-      );
-      final path = result.stdout.toString().trim();
-      return path.isNotEmpty ? path : null;
-    } catch (_) {
-      return null;
-    }
+  static Future<String?> pickDocumentFromDesktop() {
+    return pickWindowsPathWithPowerShell(r'''
+$f = New-Object System.Windows.Forms.OpenFileDialog
+$f.Title = 'Personel Özlük Dosyası Resmi Evrak Dijital Kopyasını Seçin'
+$f.Filter = 'Resmi Evrak & Görsel (*.pdf;*.jpg;*.jpeg;*.png;*.webp;*.doc;*.docx)|*.pdf;*.jpg;*.jpeg;*.png;*.webp;*.doc;*.docx|Tüm Dosyalar (*.*)|*.*'
+$selectedPath = ''
+if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+  $selectedPath = $f.FileName
+}
+''');
   }
 
   /// Dijital evrak dosyasını varsayılan görüntüleyicide veya Gezgin'de açar.
@@ -1989,6 +2077,21 @@ Future<void> showEmployeeHistoryAndDossierDialog(
                 : EmployeeDossierPanel(employee: emp),
           ),
           actions: [
+            OutlinedButton.icon(
+              key: const ValueKey('print_dossier_dialog_button'),
+              onPressed: () {
+                final doc = HasibuPrintBuilders.buildEmployeeCardDocument(
+                  companySettings: state.companySettings,
+                  status: currentStatus,
+                  selectedDateKey: state.selectedDate,
+                  documents: empDocs,
+                  historyEntries: historyEntries,
+                );
+                showHasibuPrintPreviewDialog(ctx, dialogRef, document: doc);
+              },
+              icon: const Icon(Icons.print_outlined, size: 17),
+              label: const Text('Yazdır'),
+            ),
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(),
               child: const Text('Kapat'),
@@ -2445,7 +2548,17 @@ class _CompanyAndBranchesSettingsViewState
                           settings: settings,
                           size: 52,
                           borderRadius: 12,
-                          onTap: () => showCompanyLogoDialog(context, ref),
+                          onTap: () async {
+                            await showCompanyLogoDialog(context, ref);
+                            if (!mounted) return;
+                            final updatedName = ref
+                                .read(pdksDashboardProvider)
+                                .companySettings
+                                .companyName;
+                            if (_companyNameCtrl.text != updatedName) {
+                              _companyNameCtrl.text = updatedName;
+                            }
+                          },
                         ),
                         const SizedBox(width: 14),
                         Flexible(
@@ -2475,7 +2588,17 @@ class _CompanyAndBranchesSettingsViewState
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('settings_company_logo_button'),
-                      onPressed: () => showCompanyLogoDialog(context, ref),
+                      onPressed: () async {
+                        await showCompanyLogoDialog(context, ref);
+                        if (!mounted) return;
+                        final updatedName = ref
+                            .read(pdksDashboardProvider)
+                            .companySettings
+                            .companyName;
+                        if (_companyNameCtrl.text != updatedName) {
+                          _companyNameCtrl.text = updatedName;
+                        }
+                      },
                       icon: const Icon(Icons.image_outlined, size: 17),
                       label: const Text('Şirket Logosunu Değiştir / Ekle'),
                     ),
@@ -2581,21 +2704,26 @@ class _CompanyAndBranchesSettingsViewState
               ),
               const SizedBox(height: 6),
               Text(
-                syncStatus.isTrulySynced
-                    ? '✓ Doğrulanmış Google Bulut/Drive Eşitlemesi Aktif (${settings.syncGmailAccount.isEmpty ? "Google Drive" : settings.syncGmailAccount} • ${syncStatus.message})'
-                    : (settings.syncGmailAccount.trim().isNotEmpty
-                        ? '⚠️ E-posta kayıtlı (${settings.syncGmailAccount}) ancak Google OAuth 2.0 girişi veya Drive klasörü doğrulanmadı • ${syncStatus.message}'
-                        : 'Cihazlar arası gerçek bulut eşitleme için "Google OAuth 2.0 & Drive Doğrulama Merkezi" butonunu kullanarak Google hesabınızla giriş yapın.'),
+                syncStatus.stage == DriveSyncStage.syncing
+                    ? '↻ Doğrulanıyor / Eşitleniyor (${settings.syncGmailAccount.isEmpty ? "Google Drive" : settings.syncGmailAccount}) • ${syncStatus.message}'
+                    : (syncStatus.isTrulySynced
+                        ? '✓ Doğrulanmış Google Bulut/Drive Eşitlemesi Aktif (${settings.syncGmailAccount.isEmpty ? "Google Drive" : settings.syncGmailAccount} • ${syncStatus.message})'
+                        : (settings.syncGmailAccount.trim().isNotEmpty
+                            ? '⚠️ E-posta kayıtlı (${settings.syncGmailAccount}) ancak Google OAuth 2.0 girişi veya Drive klasörü doğrulanmadı • ${syncStatus.message}'
+                            : 'Cihazlar arası gerçek bulut eşitleme için "Google OAuth 2.0 & Drive Doğrulama Merkezi" butonunu kullanarak Google hesabınızla giriş yapın.')),
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: syncStatus.isTrulySynced
+                  fontWeight: syncStatus.stage == DriveSyncStage.syncing ||
+                          syncStatus.isTrulySynced
                       ? FontWeight.w700
                       : FontWeight.w600,
-                  color: syncStatus.isTrulySynced
-                      ? const Color(0xFF10B981)
-                      : (settings.syncGmailAccount.trim().isNotEmpty
-                          ? const Color(0xFFD97706)
-                          : pal.textSecondary),
+                  color: syncStatus.stage == DriveSyncStage.syncing
+                      ? const Color(0xFF0284C7)
+                      : (syncStatus.isTrulySynced
+                          ? const Color(0xFF10B981)
+                          : (settings.syncGmailAccount.trim().isNotEmpty
+                              ? const Color(0xFFD97706)
+                              : pal.textSecondary)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2641,9 +2769,11 @@ class _CompanyAndBranchesSettingsViewState
                     },
                     icon: const Icon(Icons.cloud_sync_rounded, size: 18),
                     label: Text(
-                      syncStatus.isTrulySynced
-                          ? 'Google OAuth / Drive Doğrulandı (${settings.syncGmailAccount.isEmpty ? "Drive" : settings.syncGmailAccount})'
-                          : 'Google OAuth 2.0 & Drive Doğrulama Merkezi',
+                      syncStatus.stage == DriveSyncStage.syncing
+                          ? 'Google OAuth / Drive Doğrulanıyor...'
+                          : (syncStatus.isTrulySynced
+                              ? 'Google OAuth / Drive Doğrulandı (${settings.syncGmailAccount.isEmpty ? "Drive" : settings.syncGmailAccount})'
+                              : 'Google OAuth 2.0 & Drive Doğrulama Merkezi'),
                     ),
                   ),
                   FilledButton.icon(
@@ -2699,7 +2829,7 @@ class _CompanyAndBranchesSettingsViewState
                           SnackBar(
                             content: Text(
                               syncRes.isTrulySynced
-                                  ? '✓ Ayarlar kaydedildi ve Google Drive bulut yedeği eşitlendi.'
+                                  ? '✓ Ayarlar kaydedildi ve Google Bulut/Drive bağlantısı doğrulandı.'
                                   : 'Ayarlar ve yerel yedek kaydedildi. Bulut eşitlemesi için Google OAuth 2.0 girişi veya Drive klasörü gereklidir.',
                             ),
                           ),
@@ -4089,7 +4219,7 @@ class _EmployeesManagementSettingsViewState
   Widget build(BuildContext context) {
     final state = ref.watch(pdksDashboardProvider);
     final pal = HasibuPalette.of(context);
-    final q = _searchCtrl.text.trim().toUpperCase();
+    final q = normalizeTurkishSearch(_searchCtrl.text);
 
     final int totalStaff = state.dailyStatuses.length;
     final int terminatedStaff = state.dailyStatuses
@@ -4106,9 +4236,10 @@ class _EmployeesManagementSettingsViewState
         return false;
       }
       if (q.isEmpty) return true;
-      return s.employee.fullName.toUpperCase().contains(q) ||
-          s.employee.cardNo.contains(q) ||
-          s.department.name.toUpperCase().contains(q);
+      return matchesTurkishSearch(s.employee.fullName, q) ||
+          matchesTurkishSearch(s.employee.cardNo, q) ||
+          matchesTurkishSearch(s.department.name, q) ||
+          matchesTurkishSearch(s.employee.title, q);
     }).toList(growable: false)
       ..sort((a, b) {
         final sepCmp = (a.employee.isSeparatedNow ? 1 : 0)
@@ -4116,6 +4247,12 @@ class _EmployeesManagementSettingsViewState
         if (sepCmp != 0) return sepCmp;
         return a.employee.fullName.compareTo(b.employee.fullName);
       });
+
+    final statusFilterLabel = switch (_statusFilter) {
+      _EmployeeListFilter.all => 'Tüm Kadro',
+      _EmployeeListFilter.active => 'Aktif Personel',
+      _EmployeeListFilter.terminated => 'İşten Ayrılanlar',
+    };
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -4129,11 +4266,23 @@ class _EmployeesManagementSettingsViewState
             SizedBox(
               width: 360,
               child: TextField(
+                key: const ValueKey('employees_search_field'),
                 controller: _searchCtrl,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Personel Adı, Kart No veya Bölüm Ara',
-                  prefixIcon: Icon(Icons.search_rounded),
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          key: const ValueKey('employees_clear_search_button'),
+                          tooltip: 'Aramayı Temizle',
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
                 ),
               ),
             ),
@@ -4141,6 +4290,28 @@ class _EmployeesManagementSettingsViewState
               spacing: 8,
               runSpacing: 8,
               children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('employees_print_list_button'),
+                  onPressed: () {
+                    final docCounts = <int, int>{
+                      for (final item in filtered)
+                        item.employee.id:
+                            state.documentsForEmployee(item.employee.id).length,
+                    };
+                    final filterDesc = _searchCtrl.text.trim().isNotEmpty
+                        ? '$statusFilterLabel • Arama: "${_searchCtrl.text.trim()}"'
+                        : statusFilterLabel;
+                    final doc = HasibuPrintBuilders.buildEmployeeDirectoryListDocument(
+                      companySettings: state.companySettings,
+                      items: filtered,
+                      documentCountsByEmployeeId: docCounts,
+                      filterDescription: filterDesc,
+                    );
+                    showHasibuPrintPreviewDialog(context, ref, document: doc);
+                  },
+                  icon: const Icon(Icons.print_outlined, size: 18),
+                  label: const Text('Listeyi Yazdır'),
+                ),
                 OutlinedButton.icon(
                   onPressed: () => _showAddDepartmentDialog(context),
                   icon: const Icon(Icons.category_rounded, size: 18),
@@ -4215,6 +4386,17 @@ class _EmployeesManagementSettingsViewState
               item.employee,
               initialTabIndex: 1,
             ),
+            onPrintCard: () {
+              final notifier = ref.read(pdksDashboardProvider.notifier);
+              final doc = HasibuPrintBuilders.buildEmployeeCardDocument(
+                companySettings: state.companySettings,
+                status: item,
+                selectedDateKey: state.selectedDate,
+                documents: state.documentsForEmployee(item.employee.id),
+                historyEntries: notifier.getEmployeeHistory(item.employee),
+              );
+              showHasibuPrintPreviewDialog(context, ref, document: doc);
+            },
             onEdit: () => _showEmployeeDialog(context, item.employee),
             onQuickExit: () => _showQuickExitDialog(context, item.employee),
             onQuickRehire: () => _showQuickRehireDialog(context, item.employee),
@@ -5305,6 +5487,7 @@ class _EmployeeManagementCard extends StatelessWidget {
   final int docCount;
   final VoidCallback onOpenDossier;
   final VoidCallback onOpenDocuments;
+  final VoidCallback onPrintCard;
   final VoidCallback onEdit;
   final VoidCallback onQuickExit;
   final VoidCallback onQuickRehire;
@@ -5315,6 +5498,7 @@ class _EmployeeManagementCard extends StatelessWidget {
     required this.docCount,
     required this.onOpenDossier,
     required this.onOpenDocuments,
+    required this.onPrintCard,
     required this.onEdit,
     required this.onQuickExit,
     required this.onQuickRehire,
@@ -5546,6 +5730,12 @@ class _EmployeeManagementCard extends StatelessWidget {
                       onPressed: onEdit,
                       icon: const Icon(Icons.manage_accounts_rounded, size: 16),
                       label: const Text('Kartı Düzenle'),
+                    ),
+                    OutlinedButton.icon(
+                      key: ValueKey('print_employee_card_${emp.cardNo}'),
+                      onPressed: onPrintCard,
+                      icon: const Icon(Icons.print_outlined, size: 16),
+                      label: const Text('Kartı Yazdır'),
                     ),
                     IconButton(
                       color: const Color(0xFFDC2626),

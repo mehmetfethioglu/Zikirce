@@ -10,11 +10,13 @@ import '../../../../core/release/hasibu_release_notes.dart';
 import '../../../../core/security/hasibu_security_service.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
 import '../../domain/pdks_models.dart';
+import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'attendance_absence_report_view.dart';
 import 'cloud_backup_center_dialog.dart';
 import 'employee_portal_view.dart';
 import 'hasibu_login_screen.dart';
+import 'hasibu_print_preview_dialog.dart';
 import 'hasibu_release_notes_dialog.dart';
 import 'hasibu_settings_view.dart';
 
@@ -1142,19 +1144,81 @@ class _LiveAttendanceDashboardViewState
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController();
+    final initialQuery = ref.read(pdksDashboardProvider).searchQuery;
+    _searchController = TextEditingController(text: initialQuery);
+    _searchController.addListener(_onSearchControllerChanged);
+  }
+
+  void _onSearchControllerChanged() {
+    if (!mounted) return;
+    final notifier = ref.read(pdksDashboardProvider.notifier);
+    final current = ref.read(pdksDashboardProvider).searchQuery;
+    final text = _searchController.text;
+    final normalized = text.trim().isEmpty ? '' : text;
+    if (current != normalized) {
+      notifier.setSearchQuery(text);
+    }
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchControllerChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  Future<void> _openLiveAttendancePrintDialog(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final s = ref.read(pdksDashboardProvider);
+    final branchName = s.effectiveSelectedBranchId == null
+        ? 'Tüm Yetkili Şubeler'
+        : (s.branches
+                .where((b) => b.id == s.effectiveSelectedBranchId)
+                .map((b) => b.name)
+                .firstOrNull ??
+            'Şube #${s.effectiveSelectedBranchId}');
+    final parts = <String>[
+      branchName,
+      if (s.selectedStateFilter != null) s.selectedStateFilter!.label,
+      if (s.selectedAnomalyFilter != PdksAnomalyFilter.all)
+        s.selectedAnomalyFilter.label,
+      if (s.searchQuery.trim().isNotEmpty) 'Arama: "${s.searchQuery.trim()}"',
+    ];
+    final doc = HasibuPrintBuilders.buildLiveAttendanceListDocument(
+      companySettings: s.companySettings,
+      selectedDateKey: s.selectedDate,
+      filterDescription: parts.join(' • '),
+      items: s.visibleStatuses,
+      totalCount: s.totalCount,
+      presentCount: s.presentCount,
+      lateCount: s.lateCount,
+      absentCount: s.absentCount,
+      onLeaveCount: s.onLeaveCount,
+      sickReportCount: s.sickReportCount,
+    );
+    await showHasibuPrintPreviewDialog(context, ref, document: doc);
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<String>(
+      pdksDashboardProvider.select((s) => s.searchQuery),
+      (prev, next) {
+        if (_searchController.text != next) {
+          _searchController.value = TextEditingValue(
+            text: next,
+            selection: TextSelection.collapsed(offset: next.length),
+          );
+        }
+      },
+    );
+
     final selectedDate =
         ref.watch(pdksDashboardProvider.select((s) => s.selectedDate));
+    final activeSearchQuery =
+        ref.watch(pdksDashboardProvider.select((s) => s.searchQuery));
     final pendingReqCount = ref.watch(
       pdksDashboardProvider.select((s) => s.pendingHrRequestsCount),
     );
@@ -1197,6 +1261,7 @@ class _LiveAttendanceDashboardViewState
                         children: [
                           Expanded(
                             child: TextField(
+                              key: const ValueKey('live_pdks_search_field'),
                               controller: _searchController,
                               onChanged: (val) => ref
                                   .read(pdksDashboardProvider.notifier)
@@ -1206,6 +1271,26 @@ class _LiveAttendanceDashboardViewState
                                     'Personel adı, sicil/kart no veya bölüm ara...',
                                 prefixIcon:
                                     const Icon(Icons.search_rounded, size: 18),
+                                suffixIcon: activeSearchQuery.isNotEmpty
+                                    ? IconButton(
+                                        key: const ValueKey(
+                                          'live_pdks_clear_search_button',
+                                        ),
+                                        tooltip: 'Aramayı Temizle',
+                                        icon: const Icon(
+                                          Icons.clear_rounded,
+                                          size: 18,
+                                        ),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          ref
+                                              .read(
+                                                pdksDashboardProvider.notifier,
+                                              )
+                                              .clearSearchQuery();
+                                        },
+                                      )
+                                    : null,
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 8,
@@ -1214,6 +1299,18 @@ class _LiveAttendanceDashboardViewState
                               ),
                             ),
                           ),
+                          if (isMobile) ...[
+                            const SizedBox(width: 6),
+                            IconButton.outlined(
+                              key: const ValueKey(
+                                'live_pdks_mobile_print_button',
+                              ),
+                              tooltip: 'Yoklama Listesini Yazdır',
+                              onPressed: () =>
+                                  _openLiveAttendancePrintDialog(context, ref),
+                              icon: const Icon(Icons.print_outlined, size: 18),
+                            ),
+                          ],
                           if (!isMobile) ...[
                             const SizedBox(width: 10),
                             OutlinedButton.icon(
@@ -1261,6 +1358,25 @@ class _LiveAttendanceDashboardViewState
                               ),
                               label: const Text(
                                 'Excel / CSV',
+                                style: TextStyle(fontSize: 11.5),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            OutlinedButton.icon(
+                              key: const ValueKey(
+                                'live_pdks_print_list_button',
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () =>
+                                  _openLiveAttendancePrintDialog(context, ref),
+                              icon: const Icon(
+                                Icons.print_outlined,
+                                size: 15,
+                              ),
+                              label: const Text(
+                                'Yazdır',
                                 style: TextStyle(fontSize: 11.5),
                               ),
                             ),
@@ -1367,6 +1483,37 @@ class _LiveAttendanceDashboardViewState
                               color: pal.border,
                             ),
                             const _PdksAnomalyFilterRibbon(),
+                            if (activeSearchQuery.trim().isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              InputChip(
+                                key: const ValueKey(
+                                  'live_pdks_active_search_chip',
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                avatar: const Icon(
+                                  Icons.search_rounded,
+                                  size: 14,
+                                  color: Color(0xFF0284C7),
+                                ),
+                                label: Text(
+                                  'Arama: "${activeSearchQuery.trim()}"',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                deleteIcon: const Tooltip(
+                                  message: 'Aramayı Kaldır',
+                                  child: Icon(Icons.close_rounded, size: 15),
+                                ),
+                                onDeleted: () {
+                                  _searchController.clear();
+                                  ref
+                                      .read(pdksDashboardProvider.notifier)
+                                      .clearSearchQuery();
+                                },
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1896,14 +2043,38 @@ class _EmployeeDailyStatusSliverList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items =
         ref.watch(pdksDashboardProvider.select((s) => s.visibleStatuses));
+    final hasActiveFilters = ref.watch(
+      pdksDashboardProvider.select(
+        (s) =>
+            s.searchQuery.trim().isNotEmpty ||
+            s.selectedStateFilter != null ||
+            s.selectedAnomalyFilter != PdksAnomalyFilter.all,
+      ),
+    );
     final isMobile = MediaQuery.sizeOf(context).width < 700;
 
     if (items.isEmpty) {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Center(
-            child: Text('Seçili filtreye uygun personel kaydı bulunamadı.'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Seçili filtreye uygun personel kaydı bulunamadı.'),
+                if (hasActiveFilters) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    key: const ValueKey('live_pdks_reset_empty_filters_button'),
+                    onPressed: () => ref
+                        .read(pdksDashboardProvider.notifier)
+                        .clearAllAttendanceFilters(),
+                    icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                    label: const Text('Arama ve Filtreleri Temizle'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );
@@ -1921,7 +2092,10 @@ class _EmployeeDailyStatusSliverList extends ConsumerWidget {
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final item = items[index];
-          return _EmployeeStatusRowCard(item: item);
+          return _EmployeeStatusRowCard(
+            key: ValueKey('employee_status_row_${item.employee.id}'),
+            item: item,
+          );
         },
       ),
     );
@@ -1934,7 +2108,7 @@ class _EmployeeDailyStatusSliverList extends ConsumerWidget {
 class _EmployeeStatusRowCard extends ConsumerWidget {
   final EmployeeDailyStatus item;
 
-  const _EmployeeStatusRowCard({required this.item});
+  const _EmployeeStatusRowCard({super.key, required this.item});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

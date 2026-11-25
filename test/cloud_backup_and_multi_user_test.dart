@@ -86,7 +86,9 @@ class _InMemoryFakeDrive {
       final path = options.uri.path;
       if (path.endsWith('/drive/v3/files') && options.method == 'GET') {
         final q = (options.queryParameters['q'] ?? '').toString();
-        if (q.contains("name contains 'hasibu_sync'")) {
+        final nameMatch = RegExp(r"name = '([^']+)'").firstMatch(q);
+        if (q.contains("name contains 'hasibu_sync'") ||
+            (nameMatch == null && q == 'trashed = false')) {
           listCalls++;
           final items = files.entries
               .where((e) => e.key.contains('hasibu_sync'))
@@ -107,7 +109,6 @@ class _InMemoryFakeDrive {
             },
           );
         }
-        final nameMatch = RegExp(r"name = '([^']+)'").firstMatch(q);
         final targetName = nameMatch?.group(1) ?? '';
         final hit = files[targetName];
         return ResponseBody.fromString(

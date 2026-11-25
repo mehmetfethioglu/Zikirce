@@ -6,14 +6,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Hasibu Release Notes Registry & Tracker', () {
-    test('latest release entry aligns with version 1.0.14 build 15', () {
+    test('latest release entry aligns with version 1.0.17 build 18', () {
       expect(hasibuReleaseNotesRegistry, isNotEmpty);
 
       final latest = hasibuReleaseNotesRegistry.first;
       expect(latest.version, equals(hasibuAppVersion));
-      expect(latest.version, equals('1.0.14'));
+      expect(latest.version, equals('1.0.17'));
       expect(latest.buildNumber, equals(hasibuAppBuildNumber));
-      expect(latest.buildNumber, equals(15));
+      expect(latest.buildNumber, equals(18));
       expect(latest.versionLabel, equals(hasibuFullVersionLabel));
 
       for (final entry in hasibuReleaseNotesRegistry) {

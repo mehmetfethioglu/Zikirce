@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/company_logo_service.dart';
 import '../../../../core/services/password_recovery_service.dart';
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
@@ -84,7 +87,7 @@ class LoginInitialSetupCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'İlk yönetici girişinde yeni parola belirlemeniz zorunludur; güncellendikten sonra bu bilgi bir daha gösterilmez.',
+            'İlk yönetici girişinde işletme adı, logo ve yeni yönetici parolanızı belirleyebilirsiniz; güncellendikten sonra bu bilgi bir daha gösterilmez.',
             style: TextStyle(
               fontSize: 11,
               height: 1.35,
@@ -164,8 +167,12 @@ class ForceAdminPasswordUpdateDialog extends ConsumerStatefulWidget {
 
 class _ForceAdminPasswordUpdateDialogState
     extends ConsumerState<ForceAdminPasswordUpdateDialog> {
+  late final TextEditingController _companyNameCtrl;
+  late final TextEditingController _logoPathCtrl;
   late final TextEditingController _newPassCtrl;
   late final TextEditingController _confirmPassCtrl;
+  Uint8List? _logoPreviewBytes;
+  bool _logoTouched = false;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
   bool _isSaving = false;
@@ -174,15 +181,44 @@ class _ForceAdminPasswordUpdateDialogState
   @override
   void initState() {
     super.initState();
+    final settings = ref.read(pdksDashboardProvider).companySettings;
+    _companyNameCtrl = TextEditingController(
+      text: settings.hasCustomCompanyName ? settings.companyName : '',
+    );
+    _logoPathCtrl = TextEditingController(text: settings.logoPath ?? '');
     _newPassCtrl = TextEditingController();
     _confirmPassCtrl = TextEditingController();
   }
 
   @override
   void dispose() {
+    _companyNameCtrl.dispose();
+    _logoPathCtrl.dispose();
     _newPassCtrl.dispose();
     _confirmPassCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickLogoForFirstLogin() async {
+    final picked =
+        await ref.read(companyLogoPickerGatewayProvider).pickLogoImagePath();
+    if (picked == null || !mounted) return;
+    final currentSettings = ref.read(pdksDashboardProvider).companySettings;
+    final inspected = CompanyLogoService.inspectLogoFile(
+      rawInput: picked,
+      currentSettings: currentSettings,
+    );
+    if (!mounted) return;
+    setState(() {
+      if (inspected.isValid) {
+        _logoPathCtrl.text = picked;
+        _logoPreviewBytes = inspected.previewBytes;
+        _logoTouched = true;
+        _errorText = null;
+      } else {
+        _errorText = inspected.errorMessage;
+      }
+    });
   }
 
   Future<void> _submitUpdate() async {
@@ -219,12 +255,34 @@ class _ForceAdminPasswordUpdateDialogState
     });
 
     try {
+      final currentSettings = ref.read(pdksDashboardProvider).companySettings;
+      PreparedCompanyLogo? preparedLogo;
+      if (_logoTouched) {
+        preparedLogo = await CompanyLogoService.prepareLogoForSave(
+          rawInput: _logoPathCtrl.text,
+          currentSettings: currentSettings,
+        );
+        if (!mounted) return;
+        if (!preparedLogo.isValid) {
+          setState(() {
+            _errorText = preparedLogo!.errorMessage;
+            _isSaving = false;
+          });
+          return;
+        }
+      }
+
+      final cleanCompanyName = _companyNameCtrl.text.trim();
       final err = await ref
           .read(pdksDashboardProvider.notifier)
           .completeInitialAdminPasswordUpdateAndLogin(
             username: widget.username,
             currentPassword: widget.currentPassword,
             newPassword: next,
+            companyName: cleanCompanyName.isEmpty ? null : cleanCompanyName,
+            logoPath: _logoTouched ? (preparedLogo?.storedPath ?? '') : null,
+            logoDataBase64:
+                _logoTouched ? (preparedLogo?.base64Data ?? '') : null,
           );
       if (!mounted) return;
       if (err != null) {
@@ -238,7 +296,7 @@ class _ForceAdminPasswordUpdateDialogState
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorText = 'Parola güncellenemedi: $e';
+          _errorText = 'İlk kurulum kaydedilemedi: $e';
           _isSaving = false;
         });
       }
@@ -248,24 +306,38 @@ class _ForceAdminPasswordUpdateDialogState
   @override
   Widget build(BuildContext context) {
     final pal = HasibuPalette.of(context);
+    final currentSettings = ref.watch(
+      pdksDashboardProvider.select((s) => s.companySettings),
+    );
+    final previewSettings = currentSettings.copyWith(
+      companyName: _companyNameCtrl.text.trim().isEmpty
+          ? currentSettings.companyName
+          : _companyNameCtrl.text.trim(),
+      logoPath: () => _logoPathCtrl.text.trim().isEmpty
+          ? null
+          : _logoPathCtrl.text.trim(),
+    );
+
     return PopScope(
       canPop: false,
       child: AlertDialog(
         key: const ValueKey('force_admin_password_dialog'),
+        titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        contentPadding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
         title: const Row(
           children: [
             Icon(Icons.security_update_good_rounded, color: Color(0xFF0284C7)),
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'İlk Kurulum Parola Güncellemesi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                'İlk Kurulum: İşletme & Yönetici Parolası',
+                style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800),
               ),
             ),
           ],
         ),
         content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
+          constraints: const BoxConstraints(maxWidth: 420),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -273,14 +345,114 @@ class _ForceAdminPasswordUpdateDialogState
               children: [
                 Text(
                   'İlk kez yönetici (${widget.username}) olarak giriş yapıyorsunuz. '
-                  'Güvenliğiniz için devam etmeden önce yeni bir yönetici parolası belirlemelisiniz.',
+                  'İşletme adınızı, logonuzu ve yeni parolanızı belirleyin.',
                   style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.4,
+                    fontSize: 12,
+                    height: 1.35,
                     color: pal.textSecondary,
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: pal.subtle,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: pal.border),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          if (_logoPreviewBytes != null)
+                            Container(
+                              width: 40,
+                              height: 40,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: pal.card,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: pal.border),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.memory(
+                                  _logoPreviewBytes!,
+                                  fit: BoxFit.contain,
+                                  gaplessPlayback: true,
+                                ),
+                              ),
+                            )
+                          else
+                            CompanyLogoBadge(
+                              settings: previewSettings,
+                              size: 40,
+                              borderRadius: 10,
+                              preferCompanyMonogramWhenDefault: true,
+                            ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              key: const ValueKey(
+                                'force_admin_company_name_field',
+                              ),
+                              controller: _companyNameCtrl,
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                labelText: 'İşletme / Şirket Adı',
+                                hintText: 'Örn: Akar Gıda A.Ş.',
+                                contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          OutlinedButton.icon(
+                            key: const ValueKey('force_admin_pick_logo_button'),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                            ),
+                            onPressed: _isSaving ? null : _pickLogoForFirstLogin,
+                            icon: const Icon(Icons.image_outlined, size: 16),
+                            label: const Text(
+                              'Logo Seç',
+                              style: TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                          if (_logoPreviewBytes != null ||
+                              _logoPathCtrl.text.trim().isNotEmpty)
+                            IconButton(
+                              key: const ValueKey(
+                                'force_admin_clear_logo_button',
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Logoyu Kaldır',
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => setState(() {
+                                        _logoPathCtrl.clear();
+                                        _logoPreviewBytes = null;
+                                        _logoTouched = true;
+                                      }),
+                              icon: const Icon(Icons.close_rounded, size: 16),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextField(
                   key: const ValueKey('force_admin_new_password_field'),
                   controller: _newPassCtrl,
@@ -303,7 +475,7 @@ class _ForceAdminPasswordUpdateDialogState
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 TextField(
                   key: const ValueKey('force_admin_confirm_password_field'),
                   controller: _confirmPassCtrl,

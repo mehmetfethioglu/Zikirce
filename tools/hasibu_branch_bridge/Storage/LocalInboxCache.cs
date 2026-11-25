@@ -27,6 +27,22 @@ public sealed class LocalInboxCache
         get { lock (_sync) return _state.PendingUpload; }
     }
 
+    public string? LastEncryptionKeyMode
+    {
+        get { lock (_sync) return _state.LastEncryptionKeyMode; }
+    }
+
+    public bool HasCachedData
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _state.AttendanceLogs.Count > 0 || _state.DeviceUsers.Count > 0;
+            }
+        }
+    }
+
     public (int addedOrUpdated, int totalCount) MergeLogs(IEnumerable<AttendanceRecord> incoming)
     {
         lock (_sync)
@@ -132,6 +148,31 @@ public sealed class LocalInboxCache
         }
     }
 
+    public bool HasKnownRealUser(string cardNo)
+    {
+        var raw = (cardNo ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(raw)) return false;
+        var normalized = raw.PadLeft(5, '0');
+        lock (_sync)
+        {
+            foreach (var user in _state.DeviceUsers)
+            {
+                var userCard = (user.CardNo ?? string.Empty).Trim().PadLeft(5, '0');
+                if (!string.Equals(userCard, normalized, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var name = (user.FullName ?? string.Empty).Trim();
+                if (!string.IsNullOrEmpty(name) &&
+                    !name.StartsWith("PERSONEL #", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     public BranchInboxPayload BuildPayload(BridgeConfig config)
     {
         lock (_sync)
@@ -163,14 +204,18 @@ public sealed class LocalInboxCache
         }
     }
 
-    public void MarkUploaded(DateTime utcNow)
+    public void MarkUploaded(DateTime utcNow, string? keyMode = null)
     {
         lock (_sync)
         {
+            var resolvedMode = string.IsNullOrWhiteSpace(keyMode)
+                ? (_state.LastEncryptionKeyMode ?? "workspace_key")
+                : keyMode.Trim();
             _state = _state with
             {
                 PendingUpload = false,
                 LastUploadedAtUtc = utcNow.ToString("O"),
+                LastEncryptionKeyMode = resolvedMode,
             };
             SaveToDiskCore(_state);
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using HasibuBranchBridge.Cloud;
 using HasibuBranchBridge.Storage;
 using Microsoft.Win32;
 
@@ -29,6 +30,62 @@ public static class WindowsStartupManager
 
     public static string GetRegistryValueName(string deviceSlug) =>
         $"HasibuBranchBridge_{deviceSlug}";
+
+    public static string GetInstanceMutexName(string deviceSlug) =>
+        $@"Local\HasibuBranchBridge_{GoogleDriveInboxUploader.NormalizeDeviceSlug(deviceSlug)}";
+
+    /// <summary>
+    /// Arka plan köprü ajanı (<c>--run</c>) zaten çalışmıyorsa görünmez pencereyle hemen başlatır.
+    /// </summary>
+    public static (bool Started, bool AlreadyRunning, string Message) StartBackgroundAgent(
+        string executablePath,
+        string deviceSlug)
+    {
+        var mutexName = GetInstanceMutexName(deviceSlug);
+        try
+        {
+            if (Mutex.TryOpenExisting(mutexName, out var existing))
+            {
+                existing.Dispose();
+                return (true, true, "Arka plan köprüsü zaten çalışıyor.");
+            }
+        }
+        catch (Exception ex) when (ex is WaitHandleCannotBeOpenedException || ex is UnauthorizedAccessException)
+        {
+            // Mutex henüz yoksa veya erişilemiyorsa başlatmayı dene
+        }
+        catch
+        {
+            // Denetim hatasında başlatmayı dene
+        }
+
+        if (string.IsNullOrWhiteSpace(executablePath) || !File.Exists(executablePath))
+        {
+            return (false, false, $"Arka plan köprüsü çalıştırılabilir dosyası bulunamadı: {executablePath}");
+        }
+
+        try
+        {
+            RemoveMarkOfTheWeb(executablePath);
+            using var proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = executablePath,
+                Arguments = "--run",
+                WorkingDirectory = Path.GetDirectoryName(executablePath) ?? AppContext.BaseDirectory,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (proc == null)
+            {
+                return (false, false, "Arka plan köprüsü süreci başlatılamadı.");
+            }
+            return (true, false, $"Arka plan köprüsü başlatıldı (PID: {proc.Id}).");
+        }
+        catch (Exception ex)
+        {
+            return (false, false, $"Arka plan köprüsü başlatma hatası: {ex.Message}");
+        }
+    }
 
     /// <summary>
     /// Dosya üzerindeki NTFS `Zone.Identifier` (Mark of the Web) akışını temizleyerek
@@ -100,7 +157,90 @@ public static class WindowsStartupManager
         }
     }
 
-    public static string StageLocalExecutable(string sourceExePath, string? targetDirectory = null)
+    /// <summary>
+    /// Hedef çalıştırılabilir dosya yolundan çalışmakta olan arka plan köprü süreçlerini durdurur.
+    /// Böylece güncelleme sırasında kilitli EXE dosyası temiz şekilde yenilenebilir.
+    /// </summary>
+    internal static int StopRunningAgentsAtPath(string targetExecutablePath)
+    {
+        if (string.IsNullOrWhiteSpace(targetExecutablePath))
+        {
+            return 0;
+        }
+
+        string fullTargetPath;
+        try
+        {
+            fullTargetPath = Path.GetFullPath(targetExecutablePath);
+        }
+        catch
+        {
+            return 0;
+        }
+
+        var procName = Path.GetFileNameWithoutExtension(fullTargetPath);
+        if (string.IsNullOrWhiteSpace(procName))
+        {
+            return 0;
+        }
+
+        var stopped = 0;
+        Process[] candidates;
+        try
+        {
+            candidates = Process.GetProcessesByName(procName);
+        }
+        catch
+        {
+            return 0;
+        }
+
+        foreach (var proc in candidates)
+        {
+            try
+            {
+                if (proc.Id == Environment.ProcessId)
+                {
+                    continue;
+                }
+                string? modulePath = null;
+                try
+                {
+                    modulePath = proc.MainModule?.FileName;
+                }
+                catch
+                {
+                    // Erişilemeyen sistem/yetkili süreçleri atla
+                }
+                if (string.IsNullOrWhiteSpace(modulePath))
+                {
+                    continue;
+                }
+                var fullModulePath = Path.GetFullPath(modulePath);
+                if (!string.Equals(fullModulePath, fullTargetPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                proc.Kill(entireProcessTree: false);
+                proc.WaitForExit(3000);
+                stopped++;
+            }
+            catch
+            {
+                // Süreç zaten kapanmış veya sonlandırılamıyor
+            }
+            finally
+            {
+                proc.Dispose();
+            }
+        }
+        return stopped;
+    }
+
+    public static string StageLocalExecutable(
+        string sourceExePath,
+        string? targetDirectory = null,
+        bool stopRunningTarget = false)
     {
         var destDir = string.IsNullOrWhiteSpace(targetDirectory)
             ? Path.Combine(BridgePaths.GetAppDataDirectory(), "bin")
@@ -114,6 +254,14 @@ public static class WindowsStartupManager
                 Path.GetFullPath(targetExe),
                 StringComparison.OrdinalIgnoreCase))
         {
+            if (stopRunningTarget && File.Exists(targetExe))
+            {
+                var stopped = StopRunningAgentsAtPath(targetExe);
+                if (stopped > 0)
+                {
+                    Thread.Sleep(250);
+                }
+            }
             try
             {
                 File.Copy(sourceExePath, targetExe, overwrite: true);
@@ -200,7 +348,7 @@ public static class WindowsStartupManager
         var targetExe = (stageToLocalAppData &&
             File.Exists(sourceExe) &&
             sourceExe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            ? StageLocalExecutable(sourceExe)
+            ? StageLocalExecutable(sourceExe, stopRunningTarget: true)
             : sourceExe;
 
         // Explorer'ın ShellExecute üzerinden güvenlik uyarısı tetiklediği eski HKCU\Run kaydını temizle

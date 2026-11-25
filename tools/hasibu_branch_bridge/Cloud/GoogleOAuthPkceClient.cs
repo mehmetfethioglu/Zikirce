@@ -270,6 +270,31 @@ public sealed class GoogleOAuthPkceClient : IDisposable
             : (true, access, refresh, string.Empty);
     }
 
+    /// <summary>
+    /// Kayıtlı bağlı Google e-postasını döner; yoksa mevcut <paramref name="accessToken"/> ile
+    /// Google userinfo uç noktasından e-postayı alıp DPAPI kasasına kaydeder.
+    /// </summary>
+    public async Task<string> ResolveAndCacheConnectedEmailAsync(
+        string accessToken,
+        CancellationToken ct = default)
+    {
+        var secrets = _secretStore.Load();
+        if (!string.IsNullOrWhiteSpace(secrets.ConnectedEmail))
+        {
+            return secrets.ConnectedEmail.Trim();
+        }
+        if (string.IsNullOrWhiteSpace(accessToken))
+        {
+            return string.Empty;
+        }
+        var fetched = (await FetchUserEmailAsync(accessToken.Trim(), ct).ConfigureAwait(false)).Trim();
+        if (!string.IsNullOrEmpty(fetched))
+        {
+            _secretStore.Update(s => s with { ConnectedEmail = fetched });
+        }
+        return fetched;
+    }
+
     private async Task<string> FetchUserEmailAsync(string accessToken, CancellationToken ct)
     {
         try

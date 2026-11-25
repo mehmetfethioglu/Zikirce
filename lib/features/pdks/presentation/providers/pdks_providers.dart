@@ -8,10 +8,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/database/hasibu_database.dart';
 import '../../../../core/security/hasibu_security_service.dart';
 import '../../../../core/security/license_guard_service.dart';
+import '../../../../core/services/company_logo_service.dart';
 import '../../../../core/services/google_auth_adapter.dart';
 import '../../../../core/services/google_drive_sync_service.dart';
+import '../../../../core/services/hasibu_print_service.dart';
 import '../../../../core/services/login_preferences_service.dart';
 import '../../../../core/services/password_recovery_service.dart';
+import '../../../../core/utils/turkish_search.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../data/workplace_seed_data.dart';
 import '../../domain/pdks_models.dart';
@@ -20,6 +23,16 @@ final hasibuDatabaseProvider = Provider<HasibuDatabase>((ref) {
   final db = HasibuDatabase.inMemory();
   ref.onDispose(db.dispose);
   return db;
+});
+
+final hasibuPrintGatewayProvider = Provider<HasibuPrintGateway>((ref) {
+  return PlatformHasibuPrintGateway();
+});
+
+final companyLogoPickerGatewayProvider = Provider<CompanyLogoPickerGateway>((
+  ref,
+) {
+  return PlatformCompanyLogoPickerGateway();
 });
 
 final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
@@ -311,11 +324,12 @@ class PdksDashboardState {
         case PdksAnomalyFilter.missingDocs:
           if (!hasMissingMandatoryDocuments(item.employee.id)) return false;
       }
-      if (searchQuery.isNotEmpty) {
-        final q = searchQuery.toUpperCase();
-        return item.employee.fullName.toUpperCase().contains(q) ||
-            item.employee.cardNo.contains(q) ||
-            item.department.name.toUpperCase().contains(q);
+      final q = normalizeTurkishSearch(searchQuery);
+      if (q.isNotEmpty) {
+        return matchesTurkishSearch(item.employee.fullName, q) ||
+            matchesTurkishSearch(item.employee.cardNo, q) ||
+            matchesTurkishSearch(item.department.name, q) ||
+            matchesTurkishSearch(item.employee.title, q);
       }
       return true;
     }).toList(growable: false);
@@ -593,11 +607,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   /// İlk kurulumdaki varsayılan yönetici parolasını güvenli PBKDF2 hash ile günceller,
-  /// ilk kurulum bilgisini kapatır ve yönetici oturumunu açar.
+  /// opsiyonel işletme adı ve logosunu kaydeder, ilk kurulum bilgisini kapatır ve yönetici oturumunu açar.
   Future<String?> completeInitialAdminPasswordUpdateAndLogin({
     required String username,
     required String currentPassword,
     required String newPassword,
+    String? companyName,
+    String? logoPath,
+    String? logoDataBase64,
   }) async {
     final u = username.trim().toLowerCase();
     final current = currentPassword.trim();
@@ -620,7 +637,24 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
 
     final hashed = HasibuSecurityService.hashPassword(next);
+    final cleanCompanyName = companyName?.trim();
+    final hasLogoUpdate = logoPath != null || logoDataBase64 != null;
+    final cleanLogoPath = logoPath?.trim();
+    final cleanLogoBase64 = logoDataBase64?.trim();
     final updated = state.companySettings.copyWith(
+      companyName: (cleanCompanyName != null && cleanCompanyName.isNotEmpty)
+          ? cleanCompanyName
+          : state.companySettings.companyName,
+      logoPath: hasLogoUpdate
+          ? () => (cleanLogoPath != null && cleanLogoPath.isNotEmpty)
+              ? cleanLogoPath
+              : null
+          : null,
+      logoDataBase64: hasLogoUpdate
+          ? () => (cleanLogoBase64 != null && cleanLogoBase64.isNotEmpty)
+              ? cleanLogoBase64
+              : null
+          : null,
       adminPassword: hashed,
       adminPasswordUpdated: true,
     );
@@ -1787,7 +1821,22 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   }
 
   void setSearchQuery(String query) {
-    state = state.copyWith(searchQuery: query);
+    final normalized = query.trim().isEmpty ? '' : query;
+    if (state.searchQuery == normalized) return;
+    state = state.copyWith(searchQuery: normalized);
+  }
+
+  void clearSearchQuery() {
+    if (state.searchQuery.isEmpty) return;
+    state = state.copyWith(searchQuery: '');
+  }
+
+  void clearAllAttendanceFilters() {
+    state = state.copyWith(
+      selectedStateFilter: () => null,
+      selectedAnomalyFilter: PdksAnomalyFilter.all,
+      searchQuery: '',
+    );
   }
 
   void setSelfServiceEmployee(String cardNo) {
@@ -2512,6 +2561,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required String gmailAccount,
     required String syncFolderPath,
     String? accessToken,
+    bool syncAfterVerify = false,
   }) async {
     String cleanGmail = gmailAccount.trim();
     if (cleanGmail.isNotEmpty && !cleanGmail.contains('@')) {
@@ -2522,60 +2572,130 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       cleanFolder = GoogleDriveSyncService.detectDefaultGoogleDrivePath();
     }
 
-    if (accessToken != null) {
-      final cleanToken = accessToken.trim();
-      if (cleanToken.isEmpty) {
-        try {
-          await _syncService.clearTokens();
-        } catch (e) {
-          debugPrint('PdksProviders: clearTokens uyarısı: $e');
-          state = state.copyWith(
-            syncStatus: state.syncStatus.copyWith(message: 'Token temizleme uyarısı: $e'),
-          );
-        }
-      } else {
-        state = state.copyWith(
-          syncStatus: state.syncStatus.copyWith(
-            stage: DriveSyncStage.syncing,
-            message: 'Google OAuth 2.0 erişim anahtarı doğrulanıyor...',
-          ),
-        );
-        final verification =
-            await _syncService.verifyGoogleAccessToken(cleanToken);
-        if (!verification.isValid) {
-          final errStatus = DriveSyncStatus(
-            stage: DriveSyncStage.error,
-            lastSyncTime: DateTime.now(),
-            connectedGmail: cleanGmail,
-            isCloudApiVerified: false,
-            isDriveFolderMirrored: false,
-            message: verification.errorMessage,
-          );
-          state = state.copyWith(syncStatus: errStatus);
-          return errStatus;
-        }
-        if (verification.email.isNotEmpty) {
-          cleanGmail = verification.email;
-        }
-        try {
-          await _syncService.saveOAuthTokens(accessToken: cleanToken);
-        } catch (e) {
-          debugPrint('PdksProviders: saveOAuthTokens uyarısı: $e');
-          state = state.copyWith(
-            syncStatus: state.syncStatus.copyWith(message: 'Token saklama uyarısı: $e'),
-          );
+    state = state.copyWith(
+      isCloudBusy: true,
+      syncStatus: state.syncStatus.copyWith(
+        stage: DriveSyncStage.syncing,
+        message: 'Google OAuth 2.0 & Drive bağlantısı doğrulanıyor...',
+      ),
+    );
+
+    try {
+      bool tokenPreVerified = false;
+      if (accessToken != null) {
+        final cleanToken = accessToken.trim();
+        if (cleanToken.isEmpty) {
+          try {
+            await _syncService.clearTokens();
+          } catch (e) {
+            debugPrint('PdksProviders: clearTokens uyarısı: $e');
+            if (mounted) {
+              state = state.copyWith(
+                syncStatus: state.syncStatus.copyWith(
+                  message: 'Token temizleme uyarısı: $e',
+                ),
+              );
+            }
+          }
+        } else {
+          if (mounted) {
+            state = state.copyWith(
+              syncStatus: state.syncStatus.copyWith(
+                stage: DriveSyncStage.syncing,
+                message: 'Google OAuth 2.0 erişim anahtarı doğrulanıyor...',
+              ),
+            );
+          }
+          final verification =
+              await _syncService.verifyGoogleAccessToken(cleanToken);
+          if (!verification.isValid) {
+            final errStatus = DriveSyncStatus(
+              stage: DriveSyncStage.error,
+              lastSyncTime: DateTime.now(),
+              connectedGmail: cleanGmail,
+              isCloudApiVerified: false,
+              isDriveFolderMirrored: false,
+              message: verification.errorMessage,
+            );
+            if (mounted) {
+              state = state.copyWith(syncStatus: errStatus);
+            }
+            return errStatus;
+          }
+          tokenPreVerified = true;
+          if (verification.email.isNotEmpty) {
+            cleanGmail = verification.email;
+          }
+          try {
+            await _syncService.saveOAuthTokens(accessToken: cleanToken);
+          } catch (e) {
+            debugPrint('PdksProviders: saveOAuthTokens uyarısı: $e');
+            if (mounted) {
+              state = state.copyWith(
+                syncStatus: state.syncStatus.copyWith(
+                  message: 'Token saklama uyarısı: $e',
+                ),
+              );
+            }
+          }
         }
       }
-    }
 
-    final updated = state.companySettings.copyWith(
-      syncGmailAccount: cleanGmail,
-      syncFolderPath: cleanFolder,
-    );
-    _db.saveCompanySettings(updated);
-    refreshDashboard();
-    await syncWithGoogleDriveNow();
-    return state.syncStatus;
+      if (!mounted) return state.syncStatus;
+      final updated = state.companySettings.copyWith(
+        syncGmailAccount: cleanGmail,
+        syncFolderPath: cleanFolder,
+      );
+      _db.saveCompanySettings(updated);
+      if (cleanGmail.isNotEmpty) {
+        await _syncService.setLastSyncedGmailAccount(cleanGmail);
+      }
+      refreshDashboard();
+
+      if (syncAfterVerify) {
+        await syncWithGoogleDriveNow();
+        return state.syncStatus;
+      }
+
+      final verifiedStatus = await _syncService.verifyCloudConnection(
+        previousStatus: state.syncStatus,
+        tokenAlreadyVerified: tokenPreVerified,
+      );
+      if (!mounted) return verifiedStatus;
+
+      final resolvedEmail = verifiedStatus.connectedGmail.trim();
+      if (resolvedEmail.isNotEmpty) {
+        await _syncService.setLastSyncedGmailAccount(resolvedEmail);
+        if (resolvedEmail != state.companySettings.syncGmailAccount.trim()) {
+          _db.saveCompanySettings(
+            state.companySettings.copyWith(syncGmailAccount: resolvedEmail),
+          );
+          refreshDashboard();
+        }
+      }
+      if (mounted) {
+        state = state.copyWith(syncStatus: verifiedStatus);
+      }
+      return verifiedStatus;
+    } catch (e) {
+      debugPrint('PdksProviders: saveGmailSyncAccount hatası: $e');
+      final errStatus = DriveSyncStatus(
+        stage: DriveSyncStage.error,
+        lastSyncTime: DateTime.now(),
+        connectedGmail: cleanGmail,
+        isCloudApiVerified: false,
+        isDriveFolderMirrored: false,
+        message: 'Google bağlantı doğrulama hatası: $e',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: errStatus);
+      }
+      return errStatus;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(isCloudBusy: false);
+      }
+    }
   }
 
   /// Platforma uygun Google OAuth 2.0 akışını (Masaüstünde Edge PKCE, Mobilde Google Sign-In) başlatır.
@@ -2644,20 +2764,66 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
             ? state.companySettings.syncFolderPath
             : GoogleDriveSyncService.detectDefaultGoogleDrivePath());
 
-    final updated = state.companySettings.copyWith(
-      syncGmailAccount: resolvedGmail,
-      syncFolderPath: resolvedFolder,
-    );
-    _db.saveCompanySettings(updated);
-    refreshDashboard();
+    final prevSettingsGmail =
+        state.companySettings.syncGmailAccount.trim().toLowerCase();
+    final prevStoredGmail =
+        (await _syncService.getLastSyncedGmailAccount()).trim().toLowerCase();
+    final effectivePrevGmail =
+        prevSettingsGmail.isNotEmpty ? prevSettingsGmail : prevStoredGmail;
+    final normalizedNewGmail = resolvedGmail.trim().toLowerCase();
+    final bool isSwitchingToDifferentAccount = effectivePrevGmail.isNotEmpty &&
+        normalizedNewGmail.isNotEmpty &&
+        effectivePrevGmail != normalizedNewGmail;
+
+    if (isSwitchingToDifferentAccount) {
+      await _syncService.resetWorkspaceEncryptionToAccountAuto();
+      await _syncService.clearLocalAppSupportMirrors();
+      _syncService.clearRuntimeSyncCaches();
+      _db.resetForCloudAccountSwitch(
+        newGmailAccount: resolvedGmail,
+        syncFolderPath: resolvedFolder,
+        previousGmailAccount: effectivePrevGmail,
+      );
+      if (!mounted) return result;
+      state = state.copyWith(
+        branchInboxStatuses: const <BranchInboxDeviceStatus>[],
+        lastRestoreSummary: () => null,
+        authSession: authenticateAppSession
+            ? const AuthSession()
+            : state.authSession,
+      );
+      refreshDashboard();
+    } else {
+      final updated = state.companySettings.copyWith(
+        syncGmailAccount: resolvedGmail,
+        syncFolderPath: resolvedFolder,
+      );
+      _db.saveCompanySettings(updated);
+      refreshDashboard();
+    }
+
+    if (resolvedGmail.trim().isNotEmpty) {
+      await _syncService.setLastSyncedGmailAccount(resolvedGmail);
+    }
 
     final pullRes = await _syncService.restoreFromCloud(
       mode: CloudRestoreMode.merge,
       isEmployeePortalOnly: false,
+      cloudOnly: isSwitchingToDifferentAccount,
+      skipDriveFolderFallback: isSwitchingToDifferentAccount &&
+          (syncFolderPath == null || syncFolderPath.trim().isEmpty),
     );
+    if (!mounted) return result;
     refreshDashboard();
 
-    if (pullRes.status.stage == DriveSyncStage.error) {
+    final bool isMissingRemoteOnSwitch = isSwitchingToDifferentAccount &&
+        pullRes.summary == null &&
+        !pullRes.status.isDecryptionKeyMismatch &&
+        pullRes.status.stage == DriveSyncStage.error &&
+        pullRes.status.message.contains('bulunamadı');
+
+    if (pullRes.status.stage == DriveSyncStage.error &&
+        !isMissingRemoteOnSwitch) {
       if (mounted) {
         state = state.copyWith(syncStatus: pullRes.status);
       }
@@ -2692,11 +2858,25 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     DriveSyncStatus finalSyncStatus = pullRes.status;
     if (pullRes.summary == null) {
-      finalSyncStatus = await _syncService.pushToCloud(
-        deviceName: 'Hasibu İlk Bulut Eşitleme',
-        force: true,
-        operationLabel: 'sync',
-      );
+      if (isSwitchingToDifferentAccount) {
+        finalSyncStatus = DriveSyncStatus(
+          stage: DriveSyncStage.synced,
+          lastSyncTime: DateTime.now(),
+          connectedGmail: resolvedGmail,
+          isCloudApiVerified: result.accessToken.trim().isNotEmpty,
+          isDriveFolderMirrored: false,
+          cloudProfileId: state.companySettings.cloudProfileId,
+          lastOperation: 'account_switch',
+          message:
+              'Google bulut oturumu açıldı ($resolvedGmail). Bulutta henüz yedek bulunamadı; temiz çalışma alanı hazır.',
+        );
+      } else {
+        finalSyncStatus = await _syncService.pushToCloud(
+          deviceName: 'Hasibu İlk Bulut Eşitleme',
+          force: true,
+          operationLabel: 'sync',
+        );
+      }
     }
     if (finalSyncStatus.connectedGmail.trim().isEmpty &&
         resolvedGmail.isNotEmpty) {
@@ -2769,6 +2949,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
   /// Bağlı Google (Gmail) hesabının bağlantısını keser.
   Future<void> disconnectGmailSyncAccount() async {
+    final previousGmail = state.companySettings.syncGmailAccount.trim();
+    if (previousGmail.isNotEmpty) {
+      await _syncService.setLastSyncedGmailAccount(previousGmail);
+    }
     final updated = state.companySettings.copyWith(
       syncGmailAccount: '',
     );
@@ -2782,12 +2966,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       await _syncService.clearTokens();
     } catch (e) {
       debugPrint('PdksProviders: disconnect clearTokens uyarısı: $e');
-      state = state.copyWith(
-        syncStatus: state.syncStatus.copyWith(message: 'Token silme uyarısı: $e'),
-      );
+      if (mounted) {
+        state = state.copyWith(
+          syncStatus: state.syncStatus.copyWith(message: 'Token silme uyarısı: $e'),
+        );
+      }
     }
+    _syncService.clearRuntimeSyncCaches();
+    if (!mounted) return;
     refreshDashboard();
     state = state.copyWith(
+      branchInboxStatuses: const <BranchInboxDeviceStatus>[],
       syncStatus: const DriveSyncStatus(
         stage: DriveSyncStage.idle,
         connectedGmail: '',
@@ -3358,7 +3547,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         (branchId != null && _isBranchAllowed(branchId))
             ? branchId
             : (_scopedBranchIds.length == 1 ? _scopedBranchIds.first : null);
-    final q = searchQuery.trim().toUpperCase();
+    final q = normalizeTurkishSearch(searchQuery);
     final results = <EmployeeAttendancePeriodSummary>[];
 
     for (final emp in employees) {
@@ -3379,9 +3568,9 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           (shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first);
 
       if (q.isNotEmpty) {
-        final matched = emp.fullName.toUpperCase().contains(q) ||
-            emp.cardNo.toUpperCase().contains(q) ||
-            dept.name.toUpperCase().contains(q);
+        final matched = matchesTurkishSearch(emp.fullName, q) ||
+            matchesTurkishSearch(emp.cardNo, q) ||
+            matchesTurkishSearch(dept.name, q);
         if (!matched) continue;
       }
 
@@ -3639,6 +3828,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       final pullStatus = await _syncService.pullAndReconcile(
         isEmployeePortalOnly: isEmployeePortal,
       );
+      if (!mounted) return;
       if (pullStatus.stage == DriveSyncStage.error) {
         refreshDashboard();
         if (mounted) {
@@ -3653,9 +3843,21 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         employeeCardNo: state.authSession.employeeCardNo,
         operationLabel: 'sync',
       );
+      if (!mounted) return;
       refreshDashboard();
       if (mounted) {
         state = state.copyWith(syncStatus: pushStatus);
+      }
+    } catch (e) {
+      debugPrint('PdksProviders: syncWithGoogleDriveNow hatası: $e');
+      if (mounted) {
+        state = state.copyWith(
+          syncStatus: state.syncStatus.copyWith(
+            stage: DriveSyncStage.error,
+            lastSyncTime: DateTime.now(),
+            message: 'Google Drive eşitleme hatası: $e',
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -3696,10 +3898,21 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       if (mounted) {
         state = state.copyWith(syncStatus: status);
       }
-      if (status.isTrulySynced) {
+      if (mounted && status.isTrulySynced) {
         await refreshAvailableCloudBackups();
       }
       return status;
+    } catch (e) {
+      debugPrint('PdksProviders: backupToCloudNow hatası: $e');
+      final errStatus = state.syncStatus.copyWith(
+        stage: DriveSyncStage.error,
+        lastSyncTime: DateTime.now(),
+        message: 'Buluta yedekleme hatası: $e',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: errStatus);
+      }
+      return errStatus;
     } finally {
       if (mounted) {
         state = state.copyWith(isCloudBusy: false);
@@ -3741,7 +3954,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         cloudOnly: cloudOnly,
         overrideWorkspaceKey: overrideWorkspaceKey,
       );
-      if (res.summary != null) {
+      if (!mounted) return res;
+      if (res.summary != null || res.status.isTrulySynced) {
         refreshDashboard();
         _configureAutoPollTimer();
         _configureAutoCloudBackupTimer();
@@ -3753,6 +3967,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         );
       }
       return res;
+    } catch (e) {
+      debugPrint('PdksProviders: restoreFromCloudNow hatası: $e');
+      final errStatus = state.syncStatus.copyWith(
+        stage: DriveSyncStage.error,
+        lastSyncTime: DateTime.now(),
+        message: 'Buluttan yükleme hatası: $e',
+      );
+      if (mounted) {
+        state = state.copyWith(syncStatus: errStatus);
+      }
+      return (status: errStatus, summary: null);
     } finally {
       if (mounted) {
         state = state.copyWith(isCloudBusy: false);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/utils/turkish_search.dart';
 import '../../domain/pdks_models.dart';
 import 'hasibu_settings_view.dart';
 
@@ -16,7 +17,7 @@ List<EmployeeDailyStatus> filterEmployeeDirectory(
   required int? branchFilterId,
   required String query,
 }) {
-  final q = query.trim().toUpperCase();
+  final q = normalizeTurkishSearch(query);
   final filtered = statuses.where((s) {
     final isSeparated = s.employee.isSeparatedNow;
     if (employmentFilter == EmployeeDirectoryFilter.active && isSeparated) {
@@ -29,10 +30,10 @@ List<EmployeeDailyStatus> filterEmployeeDirectory(
       return false;
     }
     if (q.isEmpty) return true;
-    return s.employee.fullName.toUpperCase().contains(q) ||
-        s.employee.cardNo.toUpperCase().contains(q) ||
-        s.department.name.toUpperCase().contains(q) ||
-        s.employee.title.toUpperCase().contains(q);
+    return matchesTurkishSearch(s.employee.fullName, q) ||
+        matchesTurkishSearch(s.employee.cardNo, q) ||
+        matchesTurkishSearch(s.department.name, q) ||
+        matchesTurkishSearch(s.employee.title, q);
   }).toList(growable: false);
 
   final sorted = List<EmployeeDailyStatus>.from(filtered);

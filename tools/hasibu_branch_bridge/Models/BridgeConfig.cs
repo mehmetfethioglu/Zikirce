@@ -22,6 +22,10 @@ public sealed record BridgeConfig
     public int KeepAliveSeconds { get; init; } = 30;
     public string LocalMirrorFolder { get; init; } = "auto";
     /// <summary>
+    /// true ise bağlı Google hesabından türetilen <c>account_auto</c> yerine DPAPI kasasındaki özel <c>WorkspaceKey</c> kullanılır.
+    /// </summary>
+    public bool UseCustomWorkspaceKey { get; init; } = false;
+    /// <summary>
     /// Yalnızca --import-config içe aktarımında okunur; sonrasında config.json'dan temizlenip DPAPI'ye taşınır.
     /// </summary>
     public string? WorkspaceKey { get; init; }
@@ -78,6 +82,7 @@ public sealed record BranchInboxEnvelope
 {
     public string Format { get; init; } = "hasibu_aes256_gcm_v1";
     public string VaultRole { get; init; } = "branch_inbox";
+    public string? KeyMode { get; init; }
     public string EncryptedAt { get; init; } = string.Empty;
     public string Iv { get; init; } = string.Empty;
     public string Tag { get; init; } = string.Empty;
@@ -88,6 +93,7 @@ public sealed record LocalInboxCacheState
 {
     public bool PendingUpload { get; init; }
     public string? LastUploadedAtUtc { get; init; }
+    public string? LastEncryptionKeyMode { get; init; }
     public List<AttendanceRecord> AttendanceLogs { get; init; } = new();
     public List<DeviceUserRecord> DeviceUsers { get; init; } = new();
 }

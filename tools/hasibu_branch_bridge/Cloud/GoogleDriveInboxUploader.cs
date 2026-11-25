@@ -88,15 +88,58 @@ public sealed partial class GoogleDriveInboxUploader : ICloudInboxUploader
         return string.Empty;
     }
 
+    internal static (string WorkspaceKey, string KeyMode) ResolveEffectiveEncryptionKey(
+        BridgeConfig config,
+        BridgeSecrets secrets,
+        string? resolvedEmail = null)
+    {
+        var profileId = NormalizeCloudProfileId(config.CloudProfileId);
+        var email = (resolvedEmail ?? secrets.ConnectedEmail ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (!config.UseCustomWorkspaceKey && !string.IsNullOrEmpty(email))
+        {
+            return (HasibuSyncCrypto.DeriveAccountWorkspaceKey(email, profileId), "account_auto");
+        }
+        if (!string.IsNullOrWhiteSpace(secrets.WorkspaceKey))
+        {
+            return (secrets.WorkspaceKey.Trim(), "workspace_key");
+        }
+        if (!string.IsNullOrEmpty(email))
+        {
+            return (HasibuSyncCrypto.DeriveAccountWorkspaceKey(email, profileId), "account_auto");
+        }
+        return (string.Empty, string.Empty);
+    }
+
     public async Task<InboxUploadResult> UploadBranchInboxAsync(
         BridgeConfig config,
         BranchInboxPayload payload,
         CancellationToken ct = default)
     {
         var secrets = _secretStore.Load();
-        if (string.IsNullOrWhiteSpace(secrets.WorkspaceKey))
+        var accessToken = secrets.AccessToken.Trim();
+        if (string.IsNullOrWhiteSpace(accessToken) && !string.IsNullOrWhiteSpace(secrets.RefreshToken))
         {
-            return new InboxUploadResult(false, false, false, string.Empty, "Workspace Key DPAPI kasasında bulunamadı.");
+            accessToken = await _oauthClient.RefreshAccessTokenAsync(ct).ConfigureAwait(false) ?? string.Empty;
+        }
+
+        var resolvedEmail = secrets.ConnectedEmail;
+        if (!config.UseCustomWorkspaceKey &&
+            string.IsNullOrWhiteSpace(resolvedEmail) &&
+            !string.IsNullOrWhiteSpace(accessToken))
+        {
+            resolvedEmail = await _oauthClient.ResolveAndCacheConnectedEmailAsync(accessToken, ct).ConfigureAwait(false);
+        }
+
+        var (effectiveKey, keyMode) = ResolveEffectiveEncryptionKey(config, secrets, resolvedEmail);
+        if (string.IsNullOrWhiteSpace(effectiveKey))
+        {
+            return new InboxUploadResult(
+                false,
+                false,
+                false,
+                string.Empty,
+                "Şifreleme anahtarı (account_auto veya Workspace Key) DPAPI kasasında bulunamadı (--setup çalıştırın).");
         }
 
         var fileName = GetBranchInboxFileName(config.DeviceSlug, config.CloudProfileId);
@@ -105,15 +148,9 @@ public sealed partial class GoogleDriveInboxUploader : ICloudInboxUploader
             CloudProfileId = NormalizeCloudProfileId(config.CloudProfileId),
             DeviceSlug = NormalizeDeviceSlug(config.DeviceSlug),
         };
-        var encryptedPayload = HasibuSyncCrypto.EncryptBranchInbox(normalizedPayload, secrets.WorkspaceKey);
+        var encryptedPayload = HasibuSyncCrypto.EncryptBranchInbox(normalizedPayload, effectiveKey, keyMode);
 
         var mirrorWritten = WriteLocalMirrorIfAvailable(config.LocalMirrorFolder, fileName, encryptedPayload);
-
-        var accessToken = secrets.AccessToken.Trim();
-        if (string.IsNullOrWhiteSpace(accessToken) && !string.IsNullOrWhiteSpace(secrets.RefreshToken))
-        {
-            accessToken = await _oauthClient.RefreshAccessTokenAsync(ct).ConfigureAwait(false) ?? string.Empty;
-        }
 
         if (string.IsNullOrWhiteSpace(accessToken))
         {
@@ -124,7 +161,8 @@ public sealed partial class GoogleDriveInboxUploader : ICloudInboxUploader
                 fileName,
                 mirrorWritten
                     ? $"OAuth belirteci yok; yalnızca yerel Drive klasörüne yazıldı ({fileName})."
-                    : "Google Drive OAuth oturumu bulunamadı (--setup çalıştırın).");
+                    : "Google Drive OAuth oturumu bulunamadı (--setup çalıştırın).",
+                keyMode);
         }
 
         try
@@ -135,7 +173,8 @@ public sealed partial class GoogleDriveInboxUploader : ICloudInboxUploader
                 true,
                 mirrorWritten,
                 fileName,
-                $"Google Drive'a yüklendi ({fileName} • {normalizedPayload.AttendanceLogs.Count} hareket).");
+                $"Google Drive'a yüklendi ({fileName} • {normalizedPayload.AttendanceLogs.Count} hareket • {keyMode}).",
+                keyMode);
         }
         catch (Exception ex)
         {
@@ -146,7 +185,8 @@ public sealed partial class GoogleDriveInboxUploader : ICloudInboxUploader
                 fileName,
                 mirrorWritten
                     ? $"Bulut API hatası ({ex.Message}); yerel Drive klasörüne yazıldı."
-                    : $"Google Drive yükleme hatası: {ex.Message}");
+                    : $"Google Drive yükleme hatası: {ex.Message}",
+                keyMode);
         }
     }
 

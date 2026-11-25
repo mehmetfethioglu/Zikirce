@@ -2268,14 +2268,87 @@ class HasibuDatabase {
         .totalAppliedRecords;
   }
 
+  /// Farklı bir Google (Gmail) hesabına geçildiğinde önceki hesabın yerel verilerini,
+  /// yetkili kullanıcılarını ve yönetici parolasını yeni hesaptan izole etmek için
+  /// tüm yerel çalışma tablolarını sıfırlar (denetim izi logları `[AUD-01]` korunur).
+  void resetForCloudAccountSwitch({
+    required String newGmailAccount,
+    required String syncFolderPath,
+    String previousGmailAccount = '',
+  }) {
+    final existing = getCompanySettings();
+    _db.execute('BEGIN TRANSACTION;');
+    try {
+      for (final table in const <String>[
+        'attendance_logs',
+        'leave_records',
+        'employee_documents',
+        'hr_requests',
+        'employees',
+        'departments',
+        'shifts',
+        'branches',
+        'app_users',
+        'accounting_accounts',
+        'accounting_transactions',
+        'container_movements',
+        'stock_burn_items',
+        'checks_and_notes',
+      ]) {
+        _db.execute('DELETE FROM $table;');
+      }
+      _db.execute('COMMIT;');
+    } catch (_) {
+      _db.execute('ROLLBACK;');
+      rethrow;
+    }
+
+    saveCompanySettings(
+      const CompanySettings().copyWith(
+        hardwareFingerprint: existing.hardwareFingerprint,
+        licenseToken: existing.licenseToken,
+        lastVerifiedTimestamp: existing.lastVerifiedTimestamp,
+        adminThemeMode: existing.adminThemeMode,
+        syncGmailAccount: newGmailAccount.trim(),
+        syncFolderPath: syncFolderPath.trim(),
+      ),
+    );
+
+    appendAuditLog(
+      actorEmployeeId: 'CLOUD_SYNC',
+      actionType: 'CLOUD_ACCOUNT_SWITCH_RESET',
+      targetRecordId: newGmailAccount.trim(),
+      oldValue: previousGmailAccount.trim(),
+      newValue: newGmailAccount.trim(),
+    );
+  }
+
   /// Tek bir şube/cihaz gelen kutusu (`hasibu_branch_inbox_<slug>.enc`) paketini
   /// mevcut şirket ayarları, kullanıcılar veya diğer şubeleri ezmeden atomik olarak birleştirir.
   ({int newLogs, int totalLogs, int syncedUsers}) mergeBranchInboxSnapshot(
     Map<String, dynamic> payload,
   ) {
     final int branchId = (payload['branchId'] as num?)?.toInt() ?? 1;
+    final String branchCode = (payload['branchCode'] as String? ?? '').trim();
+    final String branchName = (payload['branchName'] as String? ?? '').trim();
     final rawLogs = payload['attendanceLogs'] as List<dynamic>? ?? const [];
     final rawUsers = payload['deviceUsers'] as List<dynamic>? ?? const [];
+
+    if (branchName.isNotEmpty && !getBranches().any((b) => b.id == branchId)) {
+      upsertBranch(
+        Branch(
+          id: branchId,
+          code: branchCode.isNotEmpty ? branchCode : 'SUBE_$branchId',
+          name: branchName,
+          hasTerminal: true,
+          latitude: 0.0,
+          longitude: 0.0,
+        ),
+      );
+    }
+    if (getShifts().isEmpty) {
+      upsertShift(WorkplaceSeedData.shifts.first);
+    }
 
     int totalLogs = 0;
     int newLogs = 0;

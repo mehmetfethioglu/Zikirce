@@ -93,4 +93,48 @@ public class HasibuSyncCryptoTests
             "hasibu_branch_inbox_gaziantep__karakopru_d35.enc",
             GoogleDriveInboxUploader.GetBranchInboxFileName("Karaköprü D35", "Gaziantep"));
     }
+
+    [Fact]
+    public void DeriveAccountWorkspaceKey_MatchesDartAccountAutoVector()
+    {
+        const string expectedVector = "2b3e6cf0b5444cd7850e7eeca6c5bdab3ec5a7a232efe721bfa3bb09c69102c7";
+        var derived = HasibuSyncCrypto.DeriveAccountWorkspaceKey("  Merkez@Example.com  ", "default");
+        Assert.Equal(expectedVector, derived);
+        Assert.Equal(derived, HasibuSyncCrypto.DeriveAccountWorkspaceKey("merkez@example.com", "  DEFAULT  "));
+    }
+
+    [Fact]
+    public void ResolveEffectiveEncryptionKey_PrefersAccountAutoAndHonorsCustomFlag()
+    {
+        var secrets = new BridgeSecrets
+        {
+            ConnectedEmail = "baklavacisemsettinmerkez@gmail.com",
+            WorkspaceKey = "legacy-random-workspace-key",
+        };
+        var autoConfig = new BridgeConfig { CloudProfileId = "default", UseCustomWorkspaceKey = false };
+        var (autoKey, autoMode) = GoogleDriveInboxUploader.ResolveEffectiveEncryptionKey(autoConfig, secrets);
+        Assert.Equal("account_auto", autoMode);
+        Assert.Equal(
+            HasibuSyncCrypto.DeriveAccountWorkspaceKey("baklavacisemsettinmerkez@gmail.com", "default"),
+            autoKey);
+
+        var customConfig = new BridgeConfig { CloudProfileId = "default", UseCustomWorkspaceKey = true };
+        var (customKey, customMode) = GoogleDriveInboxUploader.ResolveEffectiveEncryptionKey(customConfig, secrets);
+        Assert.Equal("workspace_key", customMode);
+        Assert.Equal("legacy-random-workspace-key", customKey);
+    }
+
+    [Fact]
+    public void EncryptBranchInbox_WritesAccountAutoKeyModeAndRoundTrips()
+    {
+        var key = HasibuSyncCrypto.DeriveAccountWorkspaceKey("baklavacisemsettinmerkez@gmail.com", "default");
+        var payload = new BranchInboxPayload { BranchId = 1, DeviceSlug = "merkez_d35" };
+        var encrypted = HasibuSyncCrypto.EncryptBranchInbox(payload, key, "account_auto");
+        var envelope = JsonSerializer.Deserialize<BranchInboxEnvelope>(encrypted, BridgeJsonContext.Default.BranchInboxEnvelope);
+        Assert.NotNull(envelope);
+        Assert.Equal("account_auto", envelope!.KeyMode);
+
+        var decrypted = HasibuSyncCrypto.DecryptBranchInbox(encrypted, key);
+        Assert.Equal("merkez_d35", decrypted.DeviceSlug);
+    }
 }

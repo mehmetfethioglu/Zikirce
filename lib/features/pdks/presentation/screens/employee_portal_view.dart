@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/pdks_models.dart';
+import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
+import 'hasibu_print_preview_dialog.dart';
 import 'hasibu_settings_view.dart';
 
 enum _PortalEmploymentFilter { active, terminated, all }
@@ -1561,6 +1563,27 @@ class _PortalQuickActionHub extends ConsumerWidget {
             ),
             icon: const Icon(Icons.folder_shared_outlined, size: 17),
             label: const Text('Özlük & Evraklar'),
+          ),
+          OutlinedButton.icon(
+            key: const ValueKey('portal_print_employee_card_button'),
+            onPressed: () {
+              final s = ref.read(pdksDashboardProvider);
+              final notifier = ref.read(pdksDashboardProvider.notifier);
+              final status = s.dailyStatuses
+                  .where((st) => st.employee.id == employee.id)
+                  .firstOrNull;
+              if (status == null) return;
+              final doc = HasibuPrintBuilders.buildEmployeeCardDocument(
+                companySettings: s.companySettings,
+                status: status,
+                selectedDateKey: s.selectedDate,
+                documents: s.documentsForEmployee(employee.id),
+                historyEntries: notifier.getEmployeeHistory(employee),
+              );
+              showHasibuPrintPreviewDialog(context, ref, document: doc);
+            },
+            icon: const Icon(Icons.print_outlined, size: 17),
+            label: const Text('Bilgilerimi Yazdır'),
           ),
         ],
       ),

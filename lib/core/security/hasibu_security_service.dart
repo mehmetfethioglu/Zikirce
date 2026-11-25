@@ -210,10 +210,14 @@ class HasibuSecurityService {
     final trimmed = workspaceKey.trim();
     _memoryKeyCache[workspaceKeyStorageSlot] = trimmed;
     try {
-      await _secureStorage.write(
-        key: workspaceKeyStorageSlot,
-        value: trimmed,
-      );
+      if (trimmed.isEmpty) {
+        await _secureStorage.delete(key: workspaceKeyStorageSlot);
+      } else {
+        await _secureStorage.write(
+          key: workspaceKeyStorageSlot,
+          value: trimmed,
+        );
+      }
     } catch (e) {
       lastSecurityWarning = e.toString();
       debugPrint('HasibuSecurityService: saveWorkspaceSyncKey warning: $e');

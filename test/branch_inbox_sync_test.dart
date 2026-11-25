@@ -76,14 +76,28 @@ class _FakeGoogleAuthAdapter implements GoogleAuthAdapter {
 class _InMemoryBranchDrive {
   final Map<String, ({String id, String content, DateTime modified})> files =
       <String, ({String id, String content, DateTime modified})>{};
+  final List<String> listQueries = <String>[];
   int downloadCalls = 0;
+  bool force401OnRequests = false;
 
   Dio buildDio() {
     final dio = Dio();
     dio.httpClientAdapter = _StubHttpClientAdapter((options, bodyText) async {
+      if (force401OnRequests) {
+        return ResponseBody.fromString(
+          jsonEncode({
+            'error': {'code': 401, 'message': 'Invalid Credentials'},
+          }),
+          401,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      }
       final path = options.uri.path;
       if (path.endsWith('/drive/v3/files') && options.method == 'GET') {
         final q = (options.queryParameters['q'] ?? '').toString();
+        listQueries.add(q);
         final containsMatch = RegExp(r"name contains '([^']+)'").firstMatch(q);
         if (containsMatch != null) {
           final needle = containsMatch.group(1)!;
@@ -108,6 +122,25 @@ class _InMemoryBranchDrive {
         }
 
         final nameMatch = RegExp(r"name = '([^']+)'").firstMatch(q);
+        if (nameMatch == null && q == 'trashed = false') {
+          final items = files.entries
+              .map(
+                (e) => <String, dynamic>{
+                  'id': e.value.id,
+                  'name': e.key,
+                  'modifiedTime': e.value.modified.toUtc().toIso8601String(),
+                  'size': utf8.encode(e.value.content).length.toString(),
+                },
+              )
+              .toList(growable: false);
+          return ResponseBody.fromString(
+            jsonEncode({'files': items}),
+            200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
         final targetName = nameMatch?.group(1) ?? '';
         final hit = files[targetName];
         return ResponseBody.fromString(
@@ -613,6 +646,105 @@ void main() {
         expect(db.upsertAttendanceLog(rtLog), isTrue);
         expect(db.upsertAttendanceLog(batchLogs.first), isFalse);
         expect(db.getAttendanceLogsForDate('2026-11-22').length, equals(1));
+      },
+    );
+
+    test(
+      'pullAndMergeBranchInboxes uses broad trashed=false query (avoids underscore prefix bug) & surfaces 401 session error',
+      () async {
+        final drive = _InMemoryBranchDrive();
+        final isolatedDir =
+            await Directory.systemTemp.createTemp('hasibu_drive_query_test_');
+        addTearDown(() => isolatedDir.delete(recursive: true));
+
+        final db = HasibuDatabase.inMemory();
+        addTearDown(db.dispose);
+        db.saveCompanySettings(
+          db.getCompanySettings().copyWith(
+                syncGmailAccount: 'baklavacisemsettinmerkez@gmail.com',
+                syncFolderPath: isolatedDir.path,
+              ),
+        );
+        final sync = GoogleDriveSyncService(
+          db: db,
+          secureStorage: const FlutterSecureStorage(),
+          dio: drive.buildDio(),
+        );
+        await sync.saveOAuthTokens(accessToken: 'ya29.mobile-test');
+
+        final autoKey = HasibuSecurityService.deriveAccountWorkspaceKey(
+          googleEmail: 'baklavacisemsettinmerkez@gmail.com',
+          cloudProfileId: 'default',
+        );
+        final inboxPayload = await HasibuSecurityService.encryptSyncJsonPayload(
+          {
+            'schemaVersion': 1,
+            'vaultRole': 'branch_inbox',
+            'cloudProfileId': 'default',
+            'deviceSlug': 'merkez_d35',
+            'branchId': 1,
+            'branchCode': 'MERKEZ',
+            'branchName': 'Merkez Fabrika & Üretim',
+            'deviceName': 'Merkez Köprü',
+            'exportedAt': '2026-11-25T07:34:45.000Z',
+            'attendanceLogs': const <dynamic>[],
+            'deviceUsers': const <Map<String, dynamic>>[
+              {'cardNo': '00777', 'fullName': 'MEHMET FETHIOGLU'},
+            ],
+          },
+          workspaceKey: autoKey,
+          vaultRole: 'branch_inbox',
+          keyMode: 'account_auto',
+        );
+        drive.files['hasibu_branch_inbox_merkez_d35.enc'] = (
+          id: 'drv-merkez-1',
+          content: inboxPayload,
+          modified: DateTime.now(),
+        );
+        // Alakasız başka bir Drive dosyası yoksayılmalı
+        drive.files['unrelated_report.pdf'] = (
+          id: 'drv-other-1',
+          content: 'pdf-bytes',
+          modified: DateTime.now(),
+        );
+
+        final pullRes = await sync.pullAndMergeBranchInboxes(
+          force: true,
+          cloudApiOnly: true,
+        );
+        expect(pullRes.warnings, isEmpty);
+        expect(pullRes.devices.length, equals(1));
+        expect(pullRes.devices.first.deviceSlug, equals('merkez_d35'));
+        expect(drive.listQueries, contains('trashed = false'));
+        expect(
+          drive.listQueries.any((q) => q.contains('name contains')),
+          isFalse,
+        );
+
+        // Süresi dolmuş OAuth token (401) durumunda hata yutulmamalı, açık uyarı dönmeli
+        drive.force401OnRequests = true;
+        final expiredRestore = await sync.restoreFromCloud(
+          cloudOnly: true,
+          skipDriveFolderFallback: true,
+        );
+        expect(expiredRestore.summary, isNull);
+        expect(expiredRestore.status.stage, equals(DriveSyncStage.error));
+        expect(expiredRestore.status.message, contains('401'));
+      },
+    );
+
+    test(
+      'C# account_auto PBKDF2-HMAC-SHA256 vector matches Dart deriveAccountWorkspaceKey bit-for-bit',
+      () {
+        const expectedVector =
+            '2b3e6cf0b5444cd7850e7eeca6c5bdab3ec5a7a232efe721bfa3bb09c69102c7';
+        expect(
+          HasibuSecurityService.deriveAccountWorkspaceKey(
+            googleEmail: '  Merkez@Example.com  ',
+            cloudProfileId: 'default',
+          ),
+          equals(expectedVector),
+        );
       },
     );
   });

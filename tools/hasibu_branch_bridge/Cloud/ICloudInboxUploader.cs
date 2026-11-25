@@ -7,7 +7,8 @@ public sealed record InboxUploadResult(
     bool CloudApiVerified,
     bool LocalMirrorWritten,
     string FileName,
-    string Detail);
+    string Detail,
+    string KeyMode = "");
 
 /// <summary>
 /// Şifreli şube cihaz gelen kutusu yükleme soyutlaması (DIP).

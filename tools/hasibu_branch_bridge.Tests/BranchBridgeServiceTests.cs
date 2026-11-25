@@ -230,4 +230,119 @@ public class BranchBridgeServiceTests
             try { Directory.Delete(tempRoot, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task RealtimeScan_ForUnknownCard_FetchesUserDirectoryBeforeUploading()
+    {
+        var (dir, cfg, cache, logger) = CreateHarness("merkez_d35");
+        try
+        {
+            var terminal = new FakeTerminalClient();
+            var uploader = new FakeCloudUploader();
+            await using var service = new BranchBridgeService(
+                cfg,
+                terminal,
+                uploader,
+                cache,
+                logger,
+                debounceDelay: TimeSpan.FromMilliseconds(60),
+                keepAliveInterval: TimeSpan.FromSeconds(5),
+                catchUpInterval: TimeSpan.FromMinutes(10),
+                offlineRetryInterval: TimeSpan.FromSeconds(10),
+                reconnectBackoffs: new[] { TimeSpan.FromMilliseconds(30) });
+
+            using var cts = new CancellationTokenSource();
+            var loopTask = service.RunLoopAsync(cts.Token);
+
+            await WaitUntilAsync(() => terminal.IsConnected, TimeSpan.FromSeconds(2));
+
+            // İlk bağlantıdan sonra yeni kayıtlı kişi yüz okutma cihazına eklendi
+            terminal.UsersToReturn.Add(new DeviceUserRecord
+            {
+                CardNo = "00777",
+                FullName = "MEHMET FETHIOGLU",
+            });
+            terminal.EmitRealtimeScan(new AttendanceRecord
+            {
+                Id = "38_00777_20261124_0845",
+                CardNo = "00777",
+                BranchId = 38,
+                Timestamp = "2026-11-24T08:45:00.000",
+                IsCheckIn = true,
+            });
+
+            await WaitUntilAsync(() => uploader.UploadedPayloads.Count >= 1, TimeSpan.FromSeconds(3));
+            Assert.Single(uploader.UploadedPayloads);
+            var uploaded = uploader.UploadedPayloads[0];
+            Assert.Contains(uploaded.AttendanceLogs, l => l.CardNo == "00777");
+            Assert.Contains(uploaded.DeviceUsers, u => u.CardNo == "00777" && u.FullName == "MEHMET FETHIOGLU");
+
+            cts.Cancel();
+            await loopTask;
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void LocalInboxCache_HasKnownRealUser_IgnoresPlaceholders()
+    {
+        var (dir, _, cache, _) = CreateHarness("cache_user_test");
+        try
+        {
+            Assert.False(cache.HasKnownRealUser("00101"));
+
+            cache.MergeUsers(new[]
+            {
+                new DeviceUserRecord { CardNo = "101", FullName = "PERSONEL #00101" },
+                new DeviceUserRecord { CardNo = "102", FullName = "AYŞE YILMAZ" },
+            });
+
+            Assert.False(cache.HasKnownRealUser("101"));
+            Assert.False(cache.HasKnownRealUser("00101"));
+            Assert.True(cache.HasKnownRealUser("102"));
+            Assert.True(cache.HasKnownRealUser("00102"));
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void WindowsStartupManager_GetInstanceMutexName_NormalizesSlug()
+    {
+        var mutexA = WindowsStartupManager.GetInstanceMutexName("Şube Devteyşti / D35");
+        var mutexB = WindowsStartupManager.GetInstanceMutexName("sube_devteysti_d35");
+        Assert.Equal(mutexB, mutexA);
+        Assert.StartsWith(@"Local\HasibuBranchBridge_", mutexA, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsStartupManager_StageLocalExecutable_OverwritesExistingBinaryWhenStopRunningTargetEnabled()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"hasibu_stage_overwrite_{Guid.NewGuid():N}");
+        var srcDir = Path.Combine(tempRoot, "src");
+        var dstDir = Path.Combine(tempRoot, "dst");
+        Directory.CreateDirectory(srcDir);
+        Directory.CreateDirectory(dstDir);
+        try
+        {
+            var srcExe = Path.Combine(srcDir, "HasibuBranchBridge.exe");
+            var existingTarget = Path.Combine(dstDir, "HasibuBranchBridge.exe");
+            File.WriteAllBytes(existingTarget, new byte[] { 0x01, 0x02 });
+            File.WriteAllBytes(srcExe, new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0xFF });
+
+            var staged = WindowsStartupManager.StageLocalExecutable(srcExe, dstDir, stopRunningTarget: true);
+
+            Assert.Equal(Path.GetFullPath(existingTarget), Path.GetFullPath(staged));
+            Assert.Equal(new byte[] { 0x4D, 0x5A, 0x90, 0x00, 0xFF }, File.ReadAllBytes(staged));
+        }
+        finally
+        {
+            try { Directory.Delete(tempRoot, recursive: true); } catch { }
+        }
+    }
 }

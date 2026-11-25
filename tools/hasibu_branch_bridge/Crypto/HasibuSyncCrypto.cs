@@ -17,6 +17,28 @@ public static class HasibuSyncCrypto
     private static readonly byte[] AadBytes = Encoding.UTF8.GetBytes($"hasibu-sync-v1:{VaultRole}");
 
     /// <summary>
+    /// Aynı Google hesabında çalışan cihazların (mobil, masaüstü ve şube köprüsü) anahtar
+    /// kopyalamadan otomatik çözümleyebilmesi için Dart <c>HasibuSecurityService.deriveAccountWorkspaceKey</c>
+    /// ile bit-düzeyinde uyumlu PBKDF2-HMAC-SHA256 hesap anahtarı türetir.
+    /// </summary>
+    public static string DeriveAccountWorkspaceKey(string googleEmail, string? cloudProfileId = "default")
+    {
+        var cleanEmail = (googleEmail ?? string.Empty).Trim().ToLowerInvariant();
+        var rawProfile = (cloudProfileId ?? string.Empty).Trim().ToLowerInvariant();
+        var cleanProfile = string.IsNullOrEmpty(rawProfile) ? "default" : rawProfile;
+
+        var passwordBytes = Encoding.UTF8.GetBytes($"{cleanEmail}|{cleanProfile}");
+        var saltBytes = Encoding.UTF8.GetBytes($"hasibu-cloud-account-vault-v1:{cleanProfile}");
+        var derived = Rfc2898DeriveBytes.Pbkdf2(
+            passwordBytes,
+            saltBytes,
+            10_000,
+            HashAlgorithmName.SHA256,
+            32);
+        return Convert.ToHexStringLower(derived);
+    }
+
+    /// <summary>
     /// Workspace anahtarından HMAC-SHA256 ile 256-bit AES anahtarı türetir.
     /// </summary>
     public static byte[] Derive256BitKey(string workspaceKey)
@@ -34,7 +56,10 @@ public static class HasibuSyncCrypto
     /// <summary>
     /// Şube gelen kutusu verisini AES-256-GCM (<c>hasibu_aes256_gcm_v1</c>) zarfı olarak şifreler.
     /// </summary>
-    public static string EncryptBranchInbox(BranchInboxPayload payload, string workspaceKey)
+    public static string EncryptBranchInbox(
+        BranchInboxPayload payload,
+        string workspaceKey,
+        string keyMode = "workspace_key")
     {
         var keyBytes = Derive256BitKey(workspaceKey);
         var normalizedPayload = payload with { VaultRole = VaultRole };
@@ -54,6 +79,7 @@ public static class HasibuSyncCrypto
         {
             Format = EnvelopeFormat,
             VaultRole = VaultRole,
+            KeyMode = string.IsNullOrWhiteSpace(keyMode) ? "workspace_key" : keyMode.Trim(),
             EncryptedAt = DateTime.UtcNow.ToString("O"),
             Iv = Convert.ToBase64String(nonce),
             Tag = Convert.ToBase64String(tag),

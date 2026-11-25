@@ -31,6 +31,7 @@ public sealed class BranchBridgeService : IAsyncDisposable
     private Task? _debounceTask;
     private TaskCompletionSource<bool>? _disconnectSignal;
     private readonly object _signalSync = new();
+    private volatile bool _needsUserDirectoryRefresh;
 
     public BranchBridgeService(
         BridgeConfig config,
@@ -109,6 +110,10 @@ public sealed class BranchBridgeService : IAsyncDisposable
             {
                 var (added, total) = _cache.MergeLogs(new[] { record });
                 _logger.Info($"Anlık okutma yakalandı: kart={record.CardNo}, saat={record.Timestamp}, yeni={added}, toplam={total}");
+                if (!_cache.HasKnownRealUser(record.CardNo))
+                {
+                    _needsUserDirectoryRefresh = true;
+                }
                 _cache.MarkPendingUpload();
                 ScheduleDebouncedUpload(ct);
             }
@@ -276,10 +281,13 @@ public sealed class BranchBridgeService : IAsyncDisposable
 
             var mergedLogs = _cache.MergeLogs(logs);
             var mergedUsers = _cache.MergeUsers(users);
-            if (mergedLogs.addedOrUpdated > 0 || mergedUsers > 0 || _cache.PendingUpload)
+            var needsEncryptionUpgrade = !_config.UseCustomWorkspaceKey &&
+                string.IsNullOrEmpty(_cache.LastEncryptionKeyMode) &&
+                _cache.HasCachedData;
+            if (mergedLogs.addedOrUpdated > 0 || mergedUsers > 0 || _cache.PendingUpload || needsEncryptionUpgrade)
             {
                 _logger.Info($"Tamamlayıcı tarama: +{mergedLogs.addedOrUpdated} hareket, +{mergedUsers} kişi.");
-                await FlushPendingUploadAsync(force: false, ct).ConfigureAwait(false);
+                await FlushPendingUploadAsync(force: needsEncryptionUpgrade, ct).ConfigureAwait(false);
             }
         }
         finally
@@ -302,7 +310,7 @@ public sealed class BranchBridgeService : IAsyncDisposable
             var result = await _uploader.UploadBranchInboxAsync(_config, payload, ct).ConfigureAwait(false);
             if (result.Success)
             {
-                _cache.MarkUploaded(DateTime.UtcNow);
+                _cache.MarkUploaded(DateTime.UtcNow, result.KeyMode);
                 _logger.Info($"Bulut aktarımı başarılı: {result.Detail}");
             }
             else
@@ -331,6 +339,10 @@ public sealed class BranchBridgeService : IAsyncDisposable
                 try
                 {
                     await Task.Delay(_debounceDelay, token).ConfigureAwait(false);
+                    if (_needsUserDirectoryRefresh && _terminal.IsConnected)
+                    {
+                        await RefreshUsersForUnknownRealtimeCardAsync(token).ConfigureAwait(false);
+                    }
                     await FlushPendingUploadAsync(force: false, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
@@ -342,6 +354,39 @@ public sealed class BranchBridgeService : IAsyncDisposable
                     _logger.Warn($"Anlık yükleme hatası (yeniden denenecek): {ex.Message}");
                 }
             }, CancellationToken.None);
+        }
+    }
+
+    private async Task RefreshUsersForUnknownRealtimeCardAsync(CancellationToken ct)
+    {
+        await _pullLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!_terminal.IsConnected) return;
+            var users = await _terminal.FetchDeviceUsersAsync(ct).ConfigureAwait(false);
+            var mergedUsers = _cache.MergeUsers(users);
+            _needsUserDirectoryRefresh = false;
+            if (_terminal.IsConnected)
+            {
+                await _terminal.EnableRealtimeEventsAsync(ct).ConfigureAwait(false);
+            }
+            if (mergedUsers > 0)
+            {
+                _logger.Info($"Yeni personel adı cihazdan çekildi: +{mergedUsers} kişi.");
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _needsUserDirectoryRefresh = false;
+            _logger.Warn($"Anlık personel listesi çekilemedi (hareket yüklemesi devam edecek): {ex.Message}");
+        }
+        finally
+        {
+            _pullLock.Release();
         }
     }
 
