@@ -18,6 +18,7 @@ import '../../../speed_reading/presentation/widgets/lexical_warmup_sheet.dart';
 import '../../../subscription/presentation/providers/subscription_provider.dart';
 import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 import '../../domain/content_block.dart';
+import '../../domain/reading_mode_hysteresis.dart';
 import '../../engine/ocr_proofreader_engine.dart';
 import '../../engine/text_segmenter.dart';
 import '../../services/offline_ai_service.dart';
@@ -34,9 +35,11 @@ import '../widgets/interactive_snippet_badge_widget.dart';
 import '../widgets/line_focus_overlay.dart';
 import '../widgets/non_latin_warning_banner.dart';
 import '../widgets/ocr_review_sheet.dart';
+import '../widgets/optical_reflow_view.dart';
 import '../widgets/popup_lugat_card.dart';
 import '../widgets/reading_settings_sheet.dart';
 import '../widgets/text_block_widget.dart';
+import '../widgets/word_peek_sheet.dart';
 import '../widgets/xray_split_view_widget.dart';
 
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -67,11 +70,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _pdfViewerController = PdfViewerController();
     _reflowScrollController = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await ref.read(readerProvider.notifier).openBook(widget.book);
-      if (widget.autoStartRitual && mounted) {
+      final isPro = ref.read(subscriptionProvider).isPro;
+      await ref.read(readerProvider.notifier).openBook(
+            widget.book,
+            forceOriginalPdfView:
+                !isPro && widget.book.format == BookFormat.pdf,
+          );
+      if (widget.autoStartRitual && isPro && mounted) {
         await ref.read(readerProvider.notifier).startMutalaaRitual();
       }
-      if (widget.initialGuidedFasilMinutes != null && mounted) {
+      if (widget.initialGuidedFasilMinutes != null && isPro && mounted) {
         _startGuidedFasil(durationMinutes: widget.initialGuidedFasilMinutes!);
       }
     });
@@ -295,13 +303,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         if (!mounted) return;
         final activeBook = readerState.currentBook ?? widget.book;
         ref.read(readerProvider.notifier).clearCompletionCelebration();
-        CompletionSealDialog.show(
-          context,
-          bookTitle: activeBook.title,
-          author: activeBook.author,
-          totalPages: activeBook.totalPages > 0 ? activeBook.totalPages : 1,
-          readingMinutes: (activeBook.totalReadingTimeSeconds / 60).round().clamp(1, 99999),
-        );
+        if (ref.read(subscriptionProvider).isPro) {
+          CompletionSealDialog.show(
+            context,
+            bookTitle: activeBook.title,
+            author: activeBook.author,
+            totalPages: activeBook.totalPages > 0 ? activeBook.totalPages : 1,
+            readingMinutes:
+                (activeBook.totalReadingTimeSeconds / 60).round().clamp(1, 99999),
+          );
+        }
       });
     }
 
@@ -381,14 +392,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           onExitXRay: () =>
                               ref.read(readerProvider.notifier).toggleXRaySplitMode(),
                         )
-                      : (readerState.isOriginalPdfView
+                      : (readerState.displayMode == ReaderDisplayMode.originalPdf
                           ? _buildOriginalPdfView(readerState, themeState, theme)
-                          : _buildSmartReflowContent(
-                              readerState,
-                              themeState,
-                              theme,
-                              guidedFlow,
-                            )),
+                          : (readerState.displayMode ==
+                                  ReaderDisplayMode.opticalReflow
+                              ? _buildOpticalReflowContent(
+                                  readerState,
+                                  themeState,
+                                  theme,
+                                )
+                              : _buildSmartReflowContent(
+                                  readerState,
+                                  themeState,
+                                  theme,
+                                  guidedFlow,
+                                ))),
                 ),
               ),
 
@@ -498,7 +516,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                   ),
                               ],
                             ),
-                            onPressed: () => OcrReviewSheet.show(context),
+                            onPressed: () {
+                              if (!ref.read(subscriptionProvider).isPro) {
+                                TahrirProSheet.show(context);
+                                return;
+                              }
+                              OcrReviewSheet.show(context);
+                            },
                           ),
                         IconButton(
                           visualDensity: VisualDensity.compact,
@@ -639,7 +663,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               icon: Icons.text_fields_rounded,
                               label: 'Görünüm',
                               isActive: false,
-                              onTap: () => ReadingSettingsSheet.show(context),
+                              onTap: () {
+                                if (!ref.read(subscriptionProvider).isPro) {
+                                  TahrirProSheet.show(context);
+                                  return;
+                                }
+                                ReadingSettingsSheet.show(context);
+                              },
                             ),
                             _buildBottomQuickAction(
                               theme: theme,
@@ -649,11 +679,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               label: 'Ses & Ambiyans',
                               isActive:
                                   readerState.isTtsPlaying || readerState.isRitualActive,
-                              onTap: () => _showAudioAndAmbientSheet(
-                                context,
-                                readerState,
-                                theme,
-                              ),
+                              onTap: () {
+                                if (!ref.read(subscriptionProvider).isPro) {
+                                  TahrirProSheet.show(context);
+                                  return;
+                                }
+                                _showAudioAndAmbientSheet(
+                                  context,
+                                  readerState,
+                                  theme,
+                                );
+                              },
                             ),
                             _buildBottomQuickAction(
                               theme: theme,
@@ -661,7 +697,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               label: 'Hızlı Oku',
                               isActive: false,
                               accentColor: AppColors.amberGold,
-                              onTap: () => _openLiveSpeedReadingCoach(readerState),
+                              onTap: () {
+                                if (!ref.read(subscriptionProvider).isPro) {
+                                  TahrirProSheet.show(context);
+                                  return;
+                                }
+                                _openLiveSpeedReadingCoach(readerState);
+                              },
                             ),
                             _buildBottomQuickAction(
                               theme: theme,
@@ -694,29 +736,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   bool _isPageGatedBySmartReflowPro(ReaderState readerState) {
-    final isSampleBook = widget.book.filePath.startsWith('sample://');
     final isPro = ref.read(subscriptionProvider).isPro;
-    return !isSampleBook &&
-        widget.book.format == BookFormat.pdf &&
-        !readerState.isOriginalPdfView &&
-        readerState.currentPage > 15 &&
-        !isPro;
+    return !isPro && !readerState.isOriginalPdfView;
   }
 
   void _startGuidedFasil({required int durationMinutes}) {
-    final readerState = ref.read(readerProvider);
-    if (_isPageGatedBySmartReflowPro(readerState)) {
+    final isPro = ref.read(subscriptionProvider).isPro;
+    if (!isPro) {
       TahrirProSheet.show(context);
       return;
     }
 
-    final isPro = ref.read(subscriptionProvider).isPro;
+    final readerState = ref.read(readerProvider);
     final speedState = ref.read(speedReadingProvider);
-    if (!speedState.canStartFreeFasilToday(isPro: isPro) ||
-        (durationMinutes > 5 && !isPro)) {
-      TahrirProSheet.show(context);
-      return;
-    }
 
     final readerNotifier = ref.read(readerProvider.notifier);
     final plainText = readerNotifier.getCurrentPagePlainText();
@@ -770,7 +802,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   void _openLiveSpeedReadingCoach(ReaderState readerState) {
     ref.read(guidedFlowProvider.notifier).pauseForInteraction();
-    if (_isPageGatedBySmartReflowPro(readerState)) {
+    if (!ref.read(subscriptionProvider).isPro) {
       TahrirProSheet.show(context);
       return;
     }
@@ -1041,43 +1073,61 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   Widget _buildCompactViewSelector(ReaderState readerState, ThemeData theme) {
-    final activeMode = readerState.isXRaySplitMode
-        ? 'xray'
-        : (readerState.isOriginalPdfView ? 'pdf' : 'reflow');
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
+    final activeMode = readerState.displayMode == ReaderDisplayMode.originalPdf
+        ? 'pdf'
+        : (readerState.displayMode == ReaderDisplayMode.opticalReflow
+            ? 'optical'
+            : 'reflow');
 
-    Widget buildChip(String modeKey, String label) {
+    Widget buildChip(String modeKey, String label, {bool locked = false}) {
       final isSelected = activeMode == modeKey;
       return InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () {
+          if (locked) {
+            TahrirProSheet.show(context);
+            return;
+          }
           final notifier = ref.read(readerProvider.notifier);
           if (modeKey == 'reflow') {
-            notifier.setOriginalPdfView(false);
+            notifier.setDisplayMode(ReaderDisplayMode.textReflow);
+          } else if (modeKey == 'optical') {
+            notifier.setDisplayMode(ReaderDisplayMode.opticalReflow);
           } else if (modeKey == 'pdf') {
-            notifier.setOriginalPdfView(true);
-          } else if (modeKey == 'xray') {
-            if (!readerState.isXRaySplitMode) {
-              notifier.toggleXRaySplitMode();
-            }
+            notifier.setDisplayMode(ReaderDisplayMode.originalPdf);
           }
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
           decoration: BoxDecoration(
             color: isSelected
                 ? theme.colorScheme.primary.withValues(alpha: 0.16)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(7),
           ),
-          child: Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 10.5,
-              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.72),
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.72),
+                ),
+              ),
+              if (locked) ...[
+                const SizedBox(width: 2),
+                const Icon(
+                  Icons.lock_outline_rounded,
+                  size: 11,
+                  color: AppColors.amberGold,
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -1095,9 +1145,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          buildChip('reflow', 'Akış'),
+          buildChip('reflow', 'Akış', locked: !isPro),
+          buildChip('optical', 'Baskı', locked: !isPro),
           buildChip('pdf', 'PDF'),
-          buildChip('xray', 'X-Ray'),
         ],
       ),
     );
@@ -1297,6 +1347,30 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   _showTableOfContentsSheet(context, readerState);
                 },
               ),
+              if (widget.book.format == BookFormat.pdf)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.compare_rounded,
+                    color: AppColors.amberGold,
+                  ),
+                  title: Text(
+                    readerState.isXRaySplitMode
+                        ? '📐 X-Ray Karşılaştırmayı Kapat'
+                        : '📐 X-Ray Karşılaştırma (Orijinal + Akış)',
+                  ),
+                  subtitle: const Text(
+                    'Orijinal PDF ve Metin Akışını üst üste kıyasla',
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
+                    ref.read(readerProvider.notifier).toggleXRaySplitMode();
+                  },
+                ),
               Builder(
                 builder: (_) {
                   final report = readerState.currentReflowData?.ocrReviewReport ??
@@ -1314,6 +1388,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     ),
                     onTap: () {
                       Navigator.pop(ctx);
+                      if (!isPro) {
+                        TahrirProSheet.show(context);
+                        return;
+                      }
                       OcrReviewSheet.show(context);
                     },
                   );
@@ -1331,6 +1409,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
+                  if (!isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
                   _openLiveSpeedReadingCoach(readerState);
                 },
               ),
@@ -1385,6 +1467,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 subtitle: const Text('Pomodoro sayacı ve odak ritüeli'),
                 onTap: () {
                   Navigator.pop(ctx);
+                  if (!isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
                   final notifier = ref.read(readerProvider.notifier);
                   if (readerState.isRitualActive) {
                     notifier.stopMutalaaRitual();
@@ -1400,7 +1486,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 subtitle: const Text('3 maddelik özet ve Sokratik sorular'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  if (_isPageGatedBySmartReflowPro(readerState)) {
+                  if (!isPro) {
                     TahrirProSheet.show(context);
                     return;
                   }
@@ -1421,6 +1507,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
+                  if (!isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
                   ref.read(readerProvider.notifier).toggleLineFocus();
                 },
               ),
@@ -1435,6 +1525,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
                     final nextCrop = !readerState.isPdfAutoCrop;
                     ref.read(readerProvider.notifier).togglePdfAutoCrop();
                     _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;
@@ -1450,6 +1544,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
+                  if (!isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
                   ref.read(readerProvider.notifier).toggleZenMode();
                 },
               ),
@@ -1547,7 +1645,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
               const SizedBox(height: 14),
               Text(
-                'İlk 15 Sayfa Akıllı Dönüşüm Denemesi Tamamlandı',
+                'Akıllı Reflow, OCR & EPUB/MD — Tahrir Pro',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.literata(
                   fontSize: 18,
@@ -1557,7 +1655,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'PDF kitaplarınızın ilk 15 sayfasında Cihaz İçi 300 DPI OCR, Otomatik Tashih ve Akıllı Parşömen Akışını ücretsiz deneyimlediniz. 16. sayfadan itibaren akıllı dönüşüme devam etmek için Tahrir Pro\'ya geçebilir veya kitabınızı Orijinal PDF görünümünde tamamen ücretsiz okumaya devam edebilirsiniz.',
+                'Temel kullanımda kitaplarınızı Orijinal PDF görünümünde ücretsiz okuyabilir ve günlük serinizi takip edebilirsiniz. Akıllı Parşömen Akışı, 300 DPI OCR, Zemberek tashih ve X-Ray modu için Tahrir Pro\'ya geçebilir veya 3 ödüllü reklamla 24 saat ücretsiz Pro açabilirsiniz.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 12.5,
@@ -1578,33 +1676,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 onPressed: () => TahrirProSheet.show(context),
                 icon: const Icon(Icons.workspace_premium_rounded, size: 19),
                 label: Text(
-                  '✨ Tahrir Pro ile Sınırsız Sayfa Aç',
+                  '✨ Pro Aç • veya 3 Reklamla 24s Pro',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              if (widget.book.format == BookFormat.pdf) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () =>
+                      ref.read(readerProvider.notifier).setOriginalPdfView(true),
+                  icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                  label: Text(
+                    '📄 Orijinal PDF Görünümünde Ücretsiz Okumaya Devam Et',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-                onPressed: () =>
-                    ref.read(readerProvider.notifier).setOriginalPdfView(true),
-                icon: const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                label: Text(
-                  '📄 Orijinal PDF Görünümünde Ücretsiz Okumaya Devam Et',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
+              ],
             ],
           ),
         ),
@@ -1619,6 +1719,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     OcrPageReviewReport ocrReport,
     int pageNumber,
   ) {
+    if (!ref.read(subscriptionProvider).isPro) {
+      TahrirProSheet.show(context);
+      return;
+    }
     final cleanLower = OcrProofreaderEngine.toTurkishLower(
       tappedWord.replaceAll(
         RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
@@ -1680,6 +1784,71 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  void _openWordPeekSheet(
+    BuildContext context,
+    String targetWord,
+    OcrPageReviewReport ocrReport,
+    ReaderState readerState,
+  ) {
+    final cleanLower = OcrProofreaderEngine.toTurkishLower(
+      targetWord.replaceAll(
+        RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
+        '',
+      ),
+    );
+    OcrCorrectionItem? matchedCorrection;
+    for (final c in ocrReport.autoCorrections) {
+      if (OcrProofreaderEngine.toTurkishLower(c.correctedWord) == cleanLower ||
+          OcrProofreaderEngine.toTurkishLower(c.originalWord) == cleanLower) {
+        matchedCorrection = c;
+        break;
+      }
+    }
+    WordPeekSheet.show(
+      context,
+      word: targetWord,
+      bookFilePath: widget.book.filePath,
+      pageNumber: readerState.currentPage,
+      wordBoxes: readerState.currentReflowData?.wordBoxes ?? const [],
+      correction: matchedCorrection,
+      onCorrectWord: () => OcrReviewSheet.showQuickWordCorrectionDialog(
+        context,
+        ref,
+        targetWord,
+      ),
+    );
+  }
+
+  Widget _buildOpticalReflowContent(
+    ReaderState readerState,
+    ReaderThemeState themeState,
+    ThemeData theme,
+  ) {
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
+    if (!isPro) {
+      return _buildSmartReflowProShieldCard(readerState, theme);
+    }
+
+    final reflowData = readerState.currentReflowData;
+    return OpticalReflowView(
+      alphaMaskPath: reflowData?.opticalAlphaMaskPath,
+      wordBlobs: reflowData?.opticalWordBlobs ?? const [],
+      imageWidth: reflowData?.opticalImageWidth ?? 0,
+      imageHeight: reflowData?.opticalImageHeight ?? 0,
+      themeState: themeState,
+      scrollController: _reflowScrollController,
+      padding: EdgeInsets.fromLTRB(
+        themeState.sideMargin,
+        _showControls ? 86 : 24,
+        themeState.sideMargin,
+        _showControls ? 136 : 40,
+      ),
+      onSwitchToOriginalPdf: () => ref
+          .read(readerProvider.notifier)
+          .setDisplayMode(ReaderDisplayMode.originalPdf),
+    );
+  }
+
   Widget _buildSmartReflowContent(
     ReaderState readerState,
     ReaderThemeState themeState,
@@ -1687,12 +1856,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     GuidedFlowState guidedFlow,
   ) {
     final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
-    final isSampleBook = widget.book.filePath.startsWith('sample://');
-    if (!isSampleBook &&
-        widget.book.format == BookFormat.pdf &&
-        !readerState.isOriginalPdfView &&
-        readerState.currentPage > 15 &&
-        !isPro) {
+    if (!isPro) {
       return _buildSmartReflowProShieldCard(readerState, theme);
     }
 
@@ -1790,6 +1954,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     ocrReport,
                     readerState.currentPage,
                   ),
+                  onLongPressWord: (peekWord, _) => _openWordPeekSheet(
+                    context,
+                    peekWord,
+                    ocrReport,
+                    readerState,
+                  ),
                   onCorrectWord: (selected) =>
                       OcrReviewSheet.showQuickWordCorrectionDialog(
                     context,
@@ -1820,6 +1990,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     pageNumber: readerState.currentPage,
                   ),
                 );
+              case OpticalInkBlock():
+                return OpticalInkBlockWidget(block: block);
               case InteractiveSnippetBlock():
                 return InteractiveSnippetBadgeWidget(snippet: block);
             }
@@ -1878,6 +2050,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               paragraphText,
               ocrReport,
               readerState.currentPage,
+            ),
+            onLongPressWord: (peekWord, _) => _openWordPeekSheet(
+              context,
+              peekWord,
+              ocrReport,
+              readerState,
             ),
             onCorrectWord: (selected) =>
                 OcrReviewSheet.showQuickWordCorrectionDialog(
@@ -2202,6 +2380,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(24),
                   onTap: () {
+                    if (!ref.read(subscriptionProvider).isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
                     final nextCrop = !readerState.isPdfAutoCrop;
                     ref.read(readerProvider.notifier).togglePdfAutoCrop();
                     _pdfViewerController.zoomLevel = nextCrop ? 1.18 : 1.0;

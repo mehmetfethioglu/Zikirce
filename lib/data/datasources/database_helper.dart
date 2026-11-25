@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
@@ -19,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _onUpgradeDB,
     );
@@ -35,6 +36,9 @@ class DatabaseHelper {
           raw_text TEXT NOT NULL,
           structured_json TEXT NOT NULL,
           has_non_latin INTEGER NOT NULL DEFAULT 0,
+          word_boxes_json TEXT NOT NULL DEFAULT '[]',
+          ocr_confidence REAL NOT NULL DEFAULT 1.0,
+          recommended_mode TEXT NOT NULL DEFAULT 'textReflow',
           created_at TEXT NOT NULL,
           UNIQUE(file_path, page_index)
         )
@@ -52,6 +56,19 @@ class DatabaseHelper {
       await db.execute(
         "UPDATE books SET total_pages = 5, current_page = 1, progress_percentage = 0.0 WHERE file_path LIKE 'sample://%' AND total_pages > 6",
       );
+    }
+    if (oldVersion < 6 && oldVersion >= 2) {
+      for (final colDef in const [
+        "ALTER TABLE scanned_ocr_cache ADD COLUMN word_boxes_json TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE scanned_ocr_cache ADD COLUMN ocr_confidence REAL NOT NULL DEFAULT 1.0",
+        "ALTER TABLE scanned_ocr_cache ADD COLUMN recommended_mode TEXT NOT NULL DEFAULT 'textReflow'",
+      ]) {
+        try {
+          await db.execute(colDef);
+        } catch (e) {
+          debugPrint('DatabaseHelper v6 migration note: $e');
+        }
+      }
     }
   }
 
@@ -139,6 +156,9 @@ class DatabaseHelper {
         raw_text TEXT NOT NULL,
         structured_json TEXT NOT NULL,
         has_non_latin INTEGER NOT NULL DEFAULT 0,
+        word_boxes_json TEXT NOT NULL DEFAULT '[]',
+        ocr_confidence REAL NOT NULL DEFAULT 1.0,
+        recommended_mode TEXT NOT NULL DEFAULT 'textReflow',
         created_at TEXT NOT NULL,
         UNIQUE(file_path, page_index)
       )
@@ -230,13 +250,16 @@ class DatabaseHelper {
     return null;
   }
 
-  /// Taranmış PDF OCR sayfasını kalıcı olarak SQLite'a kaydeder
+  /// Taranmış PDF OCR sayfasını ve kelime koordinatlarını kalıcı olarak SQLite'a kaydeder
   Future<void> saveScannedOcrPage({
     required String filePath,
     required int pageIndex,
     required String rawText,
     required String structuredJson,
     required bool hasNonLatin,
+    String wordBoxesJson = '[]',
+    double ocrConfidence = 1.0,
+    String recommendedMode = 'textReflow',
   }) async {
     final db = await database;
     await db.insert(
@@ -247,6 +270,9 @@ class DatabaseHelper {
         'raw_text': rawText,
         'structured_json': structuredJson,
         'has_non_latin': hasNonLatin ? 1 : 0,
+        'word_boxes_json': wordBoxesJson,
+        'ocr_confidence': ocrConfidence,
+        'recommended_mode': recommendedMode,
         'created_at': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,

@@ -128,15 +128,15 @@ platform :ios do
     end
 
     changelog_text = <<~CHANGELOG
-      Tahrir v1.14.0 (Build 20) TestFlight Sürümü:
-      • Kıraat & Akıcı Fasıl Okuma Koçu: Açık kitabınızdan 60 sn kavram ısınması ve sayfa içi 2–4 kelimelik semantik öbek temposu.
-      • Soluklaşan Destek, Orijinal PDF Satır Cetveli & Haşiye Köprüsü: Yardımsız akışa geçiş, aktif hatırlama ve tek dokunuşla not kaydı.
-      • Cezasız Süreklilik & Göz Atölyesi: Gerilemesiz seri, yoğunluğa uyumlu WPM ve Piramit/Takistoskop/Schulte egzersizleri.
+      Tahrir v1.15.0 (Build 21) TestFlight Sürümü:
+      • Çift Modlu Eski PDF Restorasyonu (Akış / Baskı / PDF): C++ Sauvola, ±5° Deskew, şeffaf Baskı Akışı ve 300 DPI uzun-basma Büyüteç.
+      • Cihaz İçi Hibrit OCR: iOS Apple Vision (TR/AR/EN) ve Zemberek ile yüksek doğruluklu satır & Arapça çözümlemesi.
+      • Tahrir Pro & Banner'sız Esnek Erişim: Kurulumda 24 saat Pro denemesi, kapatılabilir karşılama, ücretsiz PDF + Günlük Seri ve 3 ödüllü reklamla 24 saat Pro.
 
-      Tahrir v1.14.0 (Build 20) TestFlight:
-      • Guided Flow Reading Coach: 60s active-book lexical warmup and in-page 2–4 word semantic chunk pacing.
-      • Scaffolding Fade, Original PDF Line Ruler & Marginalia Bridge: Gradual fade, active recall reflection, and one-tap note saving.
-      • Zero-Penalty Continuity & Eye Workshop: Unified streaks, density-adaptive WPM, and refreshed Eye Workshop drills.
+      Tahrir v1.15.0 (Build 21) TestFlight:
+      • Dual-Mode Old PDF Restoration (Flow / Print / PDF): C++ Sauvola, ±5° Deskew, theme-tinted Optical Reflow, and 300 DPI long-press peek.
+      • On-Device Hybrid OCR: iOS Apple Vision (TR/AR/EN) + Zemberek for high-accuracy Turkish & Arabic line recovery.
+      • Tahrir Pro & Banner-Free Access: 24h Pro trial on install, dismissible prompt, free PDF + Streak basics, and 3 rewarded ads for 24h Pro.
     CHANGELOG
 
     if ENV["APP_EXISTS"].to_s.strip == "false"

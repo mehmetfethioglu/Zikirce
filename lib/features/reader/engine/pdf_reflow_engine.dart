@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../domain/content_block.dart';
+import '../domain/reading_mode_hysteresis.dart';
+import '../services/native_document_restorer.dart';
 import 'ocr_proofreader_engine.dart';
 import 'smart_reflow_pipeline.dart';
 import 'text_segmenter.dart';
@@ -18,6 +20,13 @@ class ReflowPageData {
   final bool isOcrEnhanced;
   final bool hasNonLatinOrVisualWarning;
   final OcrPageReviewReport ocrReviewReport;
+  final double ocrConfidence;
+  final List<OcrWordBox> wordBoxes;
+  final String? opticalAlphaMaskPath;
+  final List<OpticalWordBlob> opticalWordBlobs;
+  final int opticalImageWidth;
+  final int opticalImageHeight;
+  final double detectedSkewDeg;
 
   ReflowPageData({
     required this.pageNumber,
@@ -32,6 +41,13 @@ class ReflowPageData {
     this.isOcrEnhanced = false,
     this.hasNonLatinOrVisualWarning = false,
     this.ocrReviewReport = const OcrPageReviewReport.empty(),
+    this.ocrConfidence = 1.0,
+    this.wordBoxes = const [],
+    this.opticalAlphaMaskPath,
+    this.opticalWordBlobs = const [],
+    this.opticalImageWidth = 0,
+    this.opticalImageHeight = 0,
+    this.detectedSkewDeg = 0.0,
   });
 
   ReflowPageData copyWith({
@@ -47,6 +63,13 @@ class ReflowPageData {
     bool? isOcrEnhanced,
     bool? hasNonLatinOrVisualWarning,
     OcrPageReviewReport? ocrReviewReport,
+    double? ocrConfidence,
+    List<OcrWordBox>? wordBoxes,
+    String? opticalAlphaMaskPath,
+    List<OpticalWordBlob>? opticalWordBlobs,
+    int? opticalImageWidth,
+    int? opticalImageHeight,
+    double? detectedSkewDeg,
   }) {
     return ReflowPageData(
       pageNumber: pageNumber ?? this.pageNumber,
@@ -62,6 +85,13 @@ class ReflowPageData {
       hasNonLatinOrVisualWarning:
           hasNonLatinOrVisualWarning ?? this.hasNonLatinOrVisualWarning,
       ocrReviewReport: ocrReviewReport ?? this.ocrReviewReport,
+      ocrConfidence: ocrConfidence ?? this.ocrConfidence,
+      wordBoxes: wordBoxes ?? this.wordBoxes,
+      opticalAlphaMaskPath: opticalAlphaMaskPath ?? this.opticalAlphaMaskPath,
+      opticalWordBlobs: opticalWordBlobs ?? this.opticalWordBlobs,
+      opticalImageWidth: opticalImageWidth ?? this.opticalImageWidth,
+      opticalImageHeight: opticalImageHeight ?? this.opticalImageHeight,
+      detectedSkewDeg: detectedSkewDeg ?? this.detectedSkewDeg,
     );
   }
 }
@@ -141,6 +171,14 @@ class PdfReflowEngine {
               imagePath: block.croppedImagePath,
               imageBytes: block.rawBytes,
             ));
+          case OpticalInkBlock():
+            paragraphs.add(ParagraphSegment(
+              rawText: block.fallbackText ?? block.title,
+              isCalligraphyFallback: block.isArabic,
+              isImagePlaceholder: true,
+              imagePath: block.alphaMaskPath,
+              imageBytes: block.rawAlphaMaskBytes,
+            ));
         }
       }
 
@@ -166,6 +204,13 @@ class PdfReflowEngine {
         isOcrEnhanced: true,
         hasNonLatinOrVisualWarning: hasNonLatinWarning,
         ocrReviewReport: pipelineResult.ocrReviewReport,
+        ocrConfidence: pipelineResult.ocrConfidence,
+        wordBoxes: pipelineResult.wordBoxes,
+        opticalAlphaMaskPath: pipelineResult.opticalAlphaMaskPath,
+        opticalWordBlobs: pipelineResult.opticalWordBlobs,
+        opticalImageWidth: pipelineResult.opticalImageWidth,
+        opticalImageHeight: pipelineResult.opticalImageHeight,
+        detectedSkewDeg: pipelineResult.detectedSkewDeg,
       );
     } catch (e) {
       debugPrint('PdfReflowEngine extraction exception: $e');

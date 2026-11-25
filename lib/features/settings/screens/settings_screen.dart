@@ -112,6 +112,7 @@ class SettingsScreen extends ConsumerWidget {
     );
     final subBadgeLabel =
         ref.watch(subscriptionProvider.select((s) => s.activeBadgeLabel));
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
     final notifState = ref.watch(readingNotificationProvider.select((s) => s));
     final notifNotifier = ref.read(readingNotificationProvider.notifier);
     final themeNotifier = ref.read(readerThemeProvider.notifier);
@@ -178,40 +179,65 @@ class SettingsScreen extends ConsumerWidget {
                           bg: AppColors.parchmentBg,
                           border: AppColors.parchmentBorder,
                           isSelected: preset == TahrirThemePreset.parchment,
-                          onTap: () =>
-                              themeNotifier.setPreset(TahrirThemePreset.parchment),
+                          onTap: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setPreset(TahrirThemePreset.parchment);
+                          },
                         ),
                         _ThemeSwatchOption(
                           label: 'Kağıt',
                           bg: AppColors.paperBg,
                           border: AppColors.paperBorder,
                           isSelected: preset == TahrirThemePreset.paperWhite,
-                          onTap: () =>
-                              themeNotifier.setPreset(TahrirThemePreset.paperWhite),
+                          onTap: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setPreset(TahrirThemePreset.paperWhite);
+                          },
                         ),
                         _ThemeSwatchOption(
                           label: 'AMOLED',
                           bg: AppColors.amoledBg,
                           border: AppColors.amoledBorder,
                           isSelected: preset == TahrirThemePreset.amoled,
-                          onTap: () =>
-                              themeNotifier.setPreset(TahrirThemePreset.amoled),
+                          onTap: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setPreset(TahrirThemePreset.amoled);
+                          },
                         ),
                         _ThemeSwatchOption(
                           label: 'Safir',
                           bg: AppColors.sapphireBg,
                           border: AppColors.sapphireBorder,
                           isSelected: preset == TahrirThemePreset.sapphire,
-                          onTap: () =>
-                              themeNotifier.setPreset(TahrirThemePreset.sapphire),
+                          onTap: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setPreset(TahrirThemePreset.sapphire);
+                          },
                         ),
                         _ThemeSwatchOption(
                           label: 'Zeytin',
                           bg: AppColors.forestBg,
                           border: AppColors.forestBorder,
                           isSelected: preset == TahrirThemePreset.forest,
-                          onTap: () =>
-                              themeNotifier.setPreset(TahrirThemePreset.forest),
+                          onTap: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setPreset(TahrirThemePreset.forest);
+                          },
                         ),
                       ],
                     ),
@@ -244,6 +270,10 @@ class SettingsScreen extends ConsumerWidget {
                         );
                       }).toList(),
                       onChanged: (f) {
+                        if (!isPro) {
+                          TahrirProSheet.show(context);
+                          return;
+                        }
                         if (f != null) themeNotifier.setFontFamily(f);
                       },
                     ),
@@ -267,7 +297,13 @@ class SettingsScreen extends ConsumerWidget {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.remove_circle_outline, size: 20),
-                          onPressed: () => themeNotifier.setFontSize(fontSize - 1),
+                          onPressed: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setFontSize(fontSize - 1);
+                          },
                         ),
                         Text(
                           '${fontSize.toInt()} pt',
@@ -280,7 +316,13 @@ class SettingsScreen extends ConsumerWidget {
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           icon: const Icon(Icons.add_circle_outline, size: 20),
-                          onPressed: () => themeNotifier.setFontSize(fontSize + 1),
+                          onPressed: () {
+                            if (!isPro) {
+                              TahrirProSheet.show(context);
+                              return;
+                            }
+                            themeNotifier.setFontSize(fontSize + 1);
+                          },
                         ),
                       ],
                     ),
@@ -303,7 +345,13 @@ class SettingsScreen extends ConsumerWidget {
                       style: GoogleFonts.inter(fontSize: 12),
                     ),
                     value: bionicEnabled,
-                    onChanged: (_) => themeNotifier.toggleBionicReading(),
+                    onChanged: (_) {
+                      if (!isPro) {
+                        TahrirProSheet.show(context);
+                        return;
+                      }
+                      themeNotifier.toggleBionicReading();
+                    },
                   ),
                 ],
               ),
@@ -395,6 +443,10 @@ class SettingsScreen extends ConsumerWidget {
                     color: theme.colorScheme.primary,
                   ),
                   onTap: () async {
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
                     final pinned = await notifNotifier.requestPinHomeScreenWidget();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -435,8 +487,14 @@ class SettingsScreen extends ConsumerWidget {
                     'Kitap ilerlemelerinizi, notlarınızı ve seri geçmişinizi dışa aktarın',
                     style: GoogleFonts.inter(fontSize: 12),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: Icon(
+                    isPro ? Icons.chevron_right_rounded : Icons.lock_outline_rounded,
+                  ),
                   onTap: () async {
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
                     final res = await ref
                         .read(backupRestoreServiceProvider)
                         .exportBackupJson(shareFile: true);
@@ -470,8 +528,14 @@ class SettingsScreen extends ConsumerWidget {
                     'Daha önce aldığınız JSON yedeğini seçerek verilerinizi geri yükleyin',
                     style: GoogleFonts.inter(fontSize: 12),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
+                  trailing: Icon(
+                    isPro ? Icons.chevron_right_rounded : Icons.lock_outline_rounded,
+                  ),
                   onTap: () async {
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
                     final res = await ref
                         .read(backupRestoreServiceProvider)
                         .importBackupJson();
@@ -527,8 +591,16 @@ class SettingsScreen extends ConsumerWidget {
                     'Akademik, edebi ve klasik Türkçe kavramlar sözlüğü',
                     style: GoogleFonts.inter(fontSize: 12),
                   ),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => DictionarySheet.show(context),
+                  trailing: Icon(
+                    isPro ? Icons.chevron_right_rounded : Icons.lock_outline_rounded,
+                  ),
+                  onTap: () {
+                    if (!isPro) {
+                      TahrirProSheet.show(context);
+                      return;
+                    }
+                    DictionarySheet.show(context);
+                  },
                 ),
                 const Divider(height: 1),
                 ListTile(

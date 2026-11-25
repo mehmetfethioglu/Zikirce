@@ -1,3 +1,3 @@
-• Kıraat & Akıcı Fasıl Koçu: Açık kitabınızdan 60 sn kavram ısınması ve sayfa içi 2–4 kelimelik semantik öbek vurgusuyla akıcı okuma.
-• Soluklaşan Destek & Haşiye Köprüsü: Yardımsız göz akışı için soluklaşan rehberlik, Orijinal PDF ritmik satır cetveli ve fasıl sonu Haşiye notu.
-• Cezasız Süreklilik & Göz Atölyesi: Gerilemesiz seri, metin yoğunluğuna uyumlu WPM ve yenilenen Göz Atölyesi.
+• Çift Modlu Eski PDF & Hibrit OCR: Sararmış/eğik taramalar için C++ Sauvola restorasyonu, temalı Baskı Akışı ve uzun-basma Büyüteç.
+• Cihaz İçi Tesseract 5 + Apple Vision: Şüpheli/Arapça satırlarda çevrimdışı LSTM doğrulaması (~19 MB ilk açılışta arka planda).
+• Tahrir Pro & Esnek Erişim: Kurulumda 24 saat Pro, kapatılabilir karşılama, temel PDF/Seri ve 3 ödüllü reklamla 24 saat Pro.

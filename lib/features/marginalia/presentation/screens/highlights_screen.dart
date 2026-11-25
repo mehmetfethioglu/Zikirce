@@ -6,6 +6,9 @@ import '../../../../core/providers/repository_providers.dart';
 import '../../../../domain/entities/book_entity.dart';
 import '../../../../domain/entities/highlight_entity.dart';
 import '../../services/qr_p2p_sync_service.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/pro_feature_lock_card.dart';
+import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 import '../widgets/dictionary_sheet.dart';
 import '../widgets/qr_sync_modal.dart';
 import '../widgets/quote_studio_sheet.dart';
@@ -126,6 +129,7 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
       _loadHighlights();
     });
     final theme = Theme.of(context);
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
     final highlightRepo = ref.read(highlightRepositoryProvider);
     final qrService = QrP2pSyncService(highlightRepo);
     final filtered = _filteredHighlights;
@@ -140,12 +144,22 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
           IconButton(
             tooltip: '📖 Klasik Lügat',
             icon: const Icon(Icons.menu_book_rounded),
-            onPressed: () => DictionarySheet.show(context),
+            onPressed: () {
+              if (!isPro) {
+                TahrirProSheet.show(context);
+                return;
+              }
+              DictionarySheet.show(context);
+            },
           ),
           IconButton(
             tooltip: 'Çevrimdışı QR Not Paylaşımı',
             icon: const Icon(Icons.qr_code_2),
             onPressed: () async {
+              if (!isPro) {
+                TahrirProSheet.show(context);
+                return;
+              }
               final imported = await QrSyncModal.show(context, qrService);
               if (imported == true && mounted) {
                 _loadHighlights();
@@ -156,6 +170,10 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
             tooltip: 'Markdown Dışa Aktar (Obsidian/Notion)',
             icon: const Icon(Icons.download),
             onPressed: () async {
+              if (!isPro) {
+                TahrirProSheet.show(context);
+                return;
+              }
               final mdRes = await highlightRepo.exportHighlightsToMarkdown();
               if (mdRes.isSuccess && mdRes.dataOrNull != null) {
                 Share.share(mdRes.dataOrNull!, subject: 'Tahrir Not Arşivi.md');
@@ -164,7 +182,19 @@ class _HighlightsScreenState extends ConsumerState<HighlightsScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: !isPro
+          ? const Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.all(20),
+                child: ProFeatureLockCard(
+                  icon: Icons.edit_note_rounded,
+                  title: 'Notlar, Haşiye, Lügat & İhraç — Tahrir Pro',
+                  description:
+                      'Temel kullanımda sadece Orijinal PDF okuma ve Günlük Seri ücretsizdir. Haşiye notları, Klasik Lügat, 3x Alıntı Stüdyosu, QR Not Paylaşımı ve Obsidian Markdown ihracını açmak için Pro\'ya geçebilir veya 3 reklam izleyebilirsiniz.',
+                ),
+              ),
+            )
+          : Column(
         children: [
           // Üst Arama ve Kategori Filtre Alanı
           Padding(

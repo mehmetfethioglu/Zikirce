@@ -7,6 +7,7 @@ import '../../../../domain/entities/book_entity.dart';
 import '../../../bookshelf/presentation/providers/bookshelf_provider.dart';
 import '../../../reader/presentation/screens/reader_screen.dart';
 import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/pro_feature_lock_card.dart';
 import '../../../subscription/presentation/widgets/tahrir_pro_sheet.dart';
 import '../../domain/speed_reading_models.dart';
 import '../providers/speed_reading_provider.dart';
@@ -40,7 +41,7 @@ class _SpeedReadingAcademyScreenState
     required bool isPro,
     required bool canStartFreeToday,
   }) async {
-    if ((_selectedPreset.requiresPro && !isPro) || !canStartFreeToday) {
+    if (!isPro) {
       TahrirProSheet.show(context);
       return;
     }
@@ -96,6 +97,10 @@ class _SpeedReadingAcademyScreenState
     required bool isPro,
     required bool canStartFreeToday,
   }) async {
+    if (!isPro) {
+      TahrirProSheet.show(context);
+      return;
+    }
     final notifier = ref.read(bookshelfProvider.notifier);
     final showcase = await notifier.openOrCreateShowcaseBook(
       filePath: 'sample://kutadgu_bilig',
@@ -221,7 +226,7 @@ class _SpeedReadingAcademyScreenState
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // a) Birleşik Süreklilik Üst Çubuğu
+                // a) Birleşik Süreklilik Üst Çubuğu (Temel Modda Ücretsiz)
                 _ContinuityTopBar(
                   streakDays: streakDays,
                   todayMinutesRead: todayMinutesRead,
@@ -231,105 +236,123 @@ class _SpeedReadingAcademyScreenState
                   rankInfo: rankInfo,
                 ),
 
-                // b) Sıcak Karşılama Kartı
-                if (welcomeBackMessage != null &&
-                    welcomeBackMessage.trim().isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _WelcomeBackCard(
-                    message: welcomeBackMessage.trim(),
-                    onDismiss: () => ref
-                        .read(speedReadingProvider.notifier)
-                        .dismissWelcomeBackMessage(),
+                if (!isPro) ...[
+                  const SizedBox(height: 16),
+                  const ProFeatureLockCard(
+                    icon: Icons.bolt_rounded,
+                    title: 'Akıcı Mütalaa & Hızlı Okuma — Tahrir Pro',
+                    description:
+                        'Temel kullanımda Orijinal PDF okuma ve Günlük Seri ücretsizdir. 60 sn kavram ısınması, sayfa içi akıcı fasıl, Göz Atölyesi ve E-WPM kalibrasyonu Pro ile açılır.',
                   ),
-                ],
+                ] else ...[
+                  // b) Sıcak Karşılama Kartı
+                  if (welcomeBackMessage != null &&
+                      welcomeBackMessage.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _WelcomeBackCard(
+                      message: welcomeBackMessage.trim(),
+                      onDismiss: () => ref
+                          .read(speedReadingProvider.notifier)
+                          .dismissWelcomeBackMessage(),
+                    ),
+                  ],
 
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
 
-                // c) Hero "Bugünkü Akıcı Fasıl" Kartı
-                _HeroFasilCard(
-                  activeBook: activeBook,
-                  densityTier: densityTier,
-                  targetWpm: targetWpm,
-                  selectedPreset: effectivePreset,
-                  isPro: isPro,
-                  canStartFreeToday: canStartFreeToday,
-                  onSelectPreset: (preset) => _onSelectPreset(preset, isPro),
-                  onStartWarmupAndFasil: activeBook == null
-                      ? null
-                      : () => _launchGuidedFasil(
-                            book: activeBook,
-                            withWarmup: true,
-                            isPro: isPro,
-                            canStartFreeToday: canStartFreeToday,
-                          ),
-                  onStartDirectFasil: activeBook == null
-                      ? null
-                      : () => _launchGuidedFasil(
-                            book: activeBook,
-                            withWarmup: false,
-                            isPro: isPro,
-                            canStartFreeToday: canStartFreeToday,
-                          ),
-                  onImportBook: _importAndOpenBook,
-                  onStartShowcaseBook: () => _startWithShowcaseBook(
+                  // c) Hero "Bugünkü Akıcı Fasıl" Kartı
+                  _HeroFasilCard(
+                    activeBook: activeBook,
+                    densityTier: densityTier,
+                    targetWpm: targetWpm,
+                    selectedPreset: effectivePreset,
                     isPro: isPro,
                     canStartFreeToday: canStartFreeToday,
+                    onSelectPreset: (preset) => _onSelectPreset(preset, isPro),
+                    onStartWarmupAndFasil: activeBook == null
+                        ? null
+                        : () => _launchGuidedFasil(
+                              book: activeBook,
+                              withWarmup: true,
+                              isPro: isPro,
+                              canStartFreeToday: canStartFreeToday,
+                            ),
+                    onStartDirectFasil: activeBook == null
+                        ? null
+                        : () => _launchGuidedFasil(
+                              book: activeBook,
+                              withWarmup: false,
+                              isPro: isPro,
+                              canStartFreeToday: canStartFreeToday,
+                            ),
+                    onImportBook: _importAndOpenBook,
+                    onStartShowcaseBook: () => _startWithShowcaseBook(
+                      isPro: isPro,
+                      canStartFreeToday: canStartFreeToday,
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 14),
+                  const SizedBox(height: 14),
 
-                // d) Gelişim & Odak Dayanıklılığı Kartı
-                _GrowthStaminaCard(
-                  baselineWpm: baselineWpm,
-                  lastBookReadingWpm: lastBookReadingWpm,
-                  currentWpm: currentWpm,
-                  longestFasilMinutes: longestFasilMinutes,
-                  totalFasilsCompleted: totalFasilsCompleted,
-                  todayFasilsCount: todayFasilsCount,
-                  isPro: isPro,
-                  canStartFreeToday: canStartFreeToday,
-                  onUpgradeTap: () => TahrirProSheet.show(context),
-                ),
-
-                const SizedBox(height: 18),
-
-                // e) İkincil Araç Kartları
-                Text(
-                  'İkincil Odak & Ölçüm Araçları',
-                  style: GoogleFonts.literata(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w800,
+                  // d) Gelişim & Odak Dayanıklılığı Kartı
+                  _GrowthStaminaCard(
+                    baselineWpm: baselineWpm,
+                    lastBookReadingWpm: lastBookReadingWpm,
+                    currentWpm: currentWpm,
+                    longestFasilMinutes: longestFasilMinutes,
+                    totalFasilsCompleted: totalFasilsCompleted,
+                    todayFasilsCount: todayFasilsCount,
+                    isPro: isPro,
+                    canStartFreeToday: canStartFreeToday,
+                    onUpgradeTap: () => TahrirProSheet.show(context),
                   ),
-                ),
-                const SizedBox(height: 10),
-                _SecondaryToolTile(
-                  emoji: '👁️',
-                  title: 'Göz Atölyesi',
-                  subtitle:
-                      'Çevresel görüş piramidi, takistoskop ve Schulte dikkat matrisi',
-                  accentColor: AppColors.amberGold,
-                  trailingBadge: isPro ? null : 'PRO',
-                  onTap: () {
-                    if (!isPro) {
-                      TahrirProSheet.show(context);
-                    } else {
-                      EyeWorkshopSheet.show(context);
-                    }
-                  },
-                ),
-                const SizedBox(height: 10),
-                _SecondaryToolTile(
-                  emoji: '🎯',
-                  title: 'E-WPM Kalibrasyon Ölçümü',
-                  subtitle:
-                      'Seçkin pasaj ve anlama sorularıyla gerçek okuma hızını kalibre et',
-                  accentColor: AppColors.terracotta,
-                  onTap: () => EyeWorkshopSheet.show(
-                    context,
-                    initialExercise: SpeedReadingExerciseType.wpmComprehensionTest,
+
+                  const SizedBox(height: 18),
+
+                  // e) İkincil Araç Kartları
+                  Text(
+                    'İkincil Odak & Ölçüm Araçları',
+                    style: GoogleFonts.literata(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 10),
+                  _SecondaryToolTile(
+                    emoji: '👁️',
+                    title: 'Göz Atölyesi',
+                    subtitle:
+                        'Çevresel görüş piramidi, takistoskop ve Schulte dikkat matrisi',
+                    accentColor: AppColors.amberGold,
+                    trailingBadge: isPro ? null : 'PRO',
+                    onTap: () {
+                      if (!isPro) {
+                        TahrirProSheet.show(context);
+                      } else {
+                        EyeWorkshopSheet.show(context);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _SecondaryToolTile(
+                    emoji: '🎯',
+                    title: 'E-WPM Kalibrasyon Ölçümü',
+                    subtitle:
+                        'Seçkin pasaj ve anlama sorularıyla gerçek okuma hızını kalibre et',
+                    accentColor: AppColors.terracotta,
+                    trailingBadge: isPro ? null : 'PRO',
+                    onTap: () {
+                      if (!isPro) {
+                        TahrirProSheet.show(context);
+                        return;
+                      }
+                      EyeWorkshopSheet.show(
+                        context,
+                        initialExercise:
+                            SpeedReadingExerciseType.wpmComprehensionTest,
+                      );
+                    },
+                  ),
+                ],
               ]),
             ),
           ),

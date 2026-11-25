@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +15,8 @@ import 'features/onboarding/presentation/widgets/tahrir_onboarding_dialog.dart';
 import 'features/reader/presentation/screens/reader_screen.dart';
 import 'features/settings/screens/settings_screen.dart';
 import 'features/speed_reading/presentation/screens/speed_reading_academy_screen.dart';
+import 'features/subscription/presentation/providers/subscription_provider.dart';
+import 'features/subscription/presentation/widgets/tahrir_pro_sheet.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +83,8 @@ class MainNavigationShell extends ConsumerStatefulWidget {
 class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
     with WidgetsBindingObserver {
   int _currentIndex = 0;
+  bool _isEntryPaywallOpen = false;
+  bool _hasShownEntryPaywallThisSession = false;
 
   final List<Widget> _screens = const [
     BookshelfScreen(),
@@ -95,6 +101,9 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       await TahrirOnboardingDialog.checkAndShow(context, ref);
+      if (!mounted) return;
+      await ref.read(subscriptionProvider.notifier).ensureLoaded();
+      await _showEntryPaywallIfRequired();
       await _checkIncomingFile();
     });
   }
@@ -108,7 +117,27 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      ref.read(subscriptionProvider.notifier).refreshEntitlementClock();
+      unawaited(_showEntryPaywallIfRequired());
       _checkIncomingFile();
+    }
+  }
+
+  Future<void> _showEntryPaywallIfRequired() async {
+    if (!mounted ||
+        _isEntryPaywallOpen ||
+        _hasShownEntryPaywallThisSession) {
+      return;
+    }
+    final subState = ref.read(subscriptionProvider);
+    if (!subState.shouldShowEntryPaywall) return;
+
+    _isEntryPaywallOpen = true;
+    _hasShownEntryPaywallThisSession = true;
+    try {
+      await TahrirProSheet.show(context, isEntryPrompt: true);
+    } finally {
+      _isEntryPaywallOpen = false;
     }
   }
 
@@ -122,6 +151,11 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
         .read(bookshelfProvider.notifier)
         .importBookFromPath(incomingPath);
     if (importedBook != null && mounted) {
+      final isPro = ref.read(subscriptionProvider).isPro;
+      if (!isPro && importedBook.format.name != 'pdf') {
+        await TahrirProSheet.show(context);
+        return;
+      }
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ReaderScreen(book: importedBook),
@@ -132,6 +166,23 @@ class _MainNavigationShellState extends ConsumerState<MainNavigationShell>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(
+      subscriptionProvider.select((s) => s.shouldShowEntryPaywall),
+      (previous, next) {
+        if (!next) {
+          _hasShownEntryPaywallThisSession = false;
+          return;
+        }
+        if (!_hasShownEntryPaywallThisSession &&
+            !_isEntryPaywallOpen &&
+            mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            unawaited(_showEntryPaywallIfRequired());
+          });
+        }
+      },
+    );
+
     final theme = Theme.of(context);
 
     return Scaffold(

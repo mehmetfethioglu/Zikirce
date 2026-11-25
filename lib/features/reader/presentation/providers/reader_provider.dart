@@ -8,12 +8,14 @@ import '../../../../domain/entities/footnote_entity.dart';
 import '../../../../domain/entities/highlight_entity.dart';
 import '../../../../domain/entities/reading_session_entity.dart';
 import '../../domain/content_block.dart';
+import '../../domain/reading_mode_hysteresis.dart';
 import '../../engine/epub_parser_engine.dart';
 import '../../engine/ocr_proofreader_engine.dart';
 import '../../engine/pdf_reflow_engine.dart';
 import '../../engine/text_segmenter.dart';
 import '../../services/ambient_audio_service.dart';
 import '../../services/offline_ai_service.dart';
+import '../../services/reader_prefetch_queue.dart';
 import '../../services/scanned_pdf_ocr_service.dart';
 import '../../services/tts_service.dart';
 import '../../../speed_reading/presentation/providers/speed_reading_provider.dart';
@@ -98,6 +100,8 @@ class ReaderState {
   final bool showCompletionCelebration;
   final bool isOcrReviewHighlightEnabled;
   final BookOcrScanState bookOcrScan;
+  final ReaderDisplayMode displayMode;
+  final bool userLockedDisplayMode;
 
   const ReaderState({
     this.currentBook,
@@ -122,6 +126,8 @@ class ReaderState {
     this.showCompletionCelebration = false,
     this.isOcrReviewHighlightEnabled = false,
     this.bookOcrScan = const BookOcrScanState(),
+    this.displayMode = ReaderDisplayMode.textReflow,
+    this.userLockedDisplayMode = false,
   });
 
   ReaderState copyWith({
@@ -147,6 +153,8 @@ class ReaderState {
     bool? showCompletionCelebration,
     bool? isOcrReviewHighlightEnabled,
     BookOcrScanState? bookOcrScan,
+    ReaderDisplayMode? displayMode,
+    bool? userLockedDisplayMode,
   }) {
     return ReaderState(
       currentBook: currentBook ?? this.currentBook,
@@ -172,6 +180,9 @@ class ReaderState {
       isOcrReviewHighlightEnabled:
           isOcrReviewHighlightEnabled ?? this.isOcrReviewHighlightEnabled,
       bookOcrScan: bookOcrScan ?? this.bookOcrScan,
+      displayMode: displayMode ?? this.displayMode,
+      userLockedDisplayMode:
+          userLockedDisplayMode ?? this.userLockedDisplayMode,
     );
   }
 }
@@ -184,6 +195,8 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   final TtsService ttsService = TtsService();
   final AmbientAudioService ambientService = AmbientAudioService();
   final Map<int, String> _bookPageTextIndex = {};
+  final List<double> _openingPageConfidences = [];
+  late final ReaderPrefetchQueue _prefetchQueue;
 
   Timer? _sessionTimer;
   int _sessionSeconds = 0;
@@ -192,6 +205,7 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   bool _cancelBookScanRequested = false;
 
   ReaderNotifier(this._ref) : super(const ReaderState()) {
+    _prefetchQueue = ReaderPrefetchQueue(loadPage: _prefetchBackgroundPdfPage);
     ttsService.onWordProgress = (progress) {
       state = state.copyWith(
         activeTtsWord: progress.currentWord,
@@ -323,14 +337,25 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     return _buildReflowDataFromChapter(chapter, pageNumber);
   }
 
-  Future<void> openBook(BookEntity book) async {
+  Future<void> openBook(
+    BookEntity book, {
+    bool forceOriginalPdfView = false,
+  }) async {
     _startSessionTimer();
     _bookPageTextIndex.clear();
+    _openingPageConfidences.clear();
     _cancelBookScanRequested = true;
     await OcrProofreaderEngine.ensureInitialized();
+    final initialMode = (forceOriginalPdfView && book.format == BookFormat.pdf)
+        ? ReaderDisplayMode.originalPdf
+        : ReaderDisplayMode.textReflow;
     state = state.copyWith(
       currentBook: book,
       currentPage: book.currentPage,
+      isOriginalPdfView: initialMode == ReaderDisplayMode.originalPdf,
+      displayMode: initialMode,
+      userLockedDisplayMode: forceOriginalPdfView,
+      isXRaySplitMode: false,
       isLoading: true,
       showCompletionCelebration: false,
       bookOcrScan: const BookOcrScanState(),
@@ -384,43 +409,101 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     final total = state.currentBook?.totalPages ?? 1;
     final validPage = pageNumber.clamp(1, total > 0 ? total : 1);
     final pageIndex = validPage - 1;
-    final reflow = await _pdfEngine.extractPage(state.currentBook?.filePath ?? '', pageIndex);
+    var reflow = await _pdfEngine.extractPage(
+      state.currentBook?.filePath ?? '',
+      pageIndex,
+    );
 
     if (reflow.rawText.trim().isNotEmpty) {
       _bookPageTextIndex[validPage] = reflow.rawText;
     }
 
+    var effectiveMode = state.displayMode;
+    if (state.currentBook?.format == BookFormat.pdf &&
+        !state.isOriginalPdfView &&
+        !state.userLockedDisplayMode) {
+      if (_openingPageConfidences.length < 3) {
+        _openingPageConfidences.add(reflow.ocrConfidence);
+      }
+      final bookDefault = ReadingModeHysteresis.decideBookDefaultMode(
+        initialPageConfidences: _openingPageConfidences,
+        hasDenseNonLatin: reflow.hasNonLatinOrVisualWarning,
+      );
+      effectiveMode = ReadingModeHysteresis.resolveEffectiveModeForPage(
+        activeBookMode: bookDefault,
+        userExplicitlySelectedMode: false,
+        pageConfidence: reflow.ocrConfidence,
+        hasOpticalData: reflow.opticalWordBlobs.isNotEmpty,
+      );
+    }
+
     state = state.copyWith(
       currentPage: validPage,
       currentReflowData: reflow,
+      displayMode: effectiveMode,
       isLoading: false,
     );
+
+    if (effectiveMode == ReaderDisplayMode.opticalReflow &&
+        reflow.opticalWordBlobs.isEmpty) {
+      unawaited(ensureOpticalDataForCurrentPage());
+    }
 
     await loadCurrentPageHighlights();
     unawaited(_saveProgress());
 
-    // Arka Planda Sonraki 1 Sayfayı Prefetch Et (JIT + 0ms Sayfa Geçişi)
-    _prefetchNextPage(validPage, total);
+    // İptal Edilebilir Akıllı Prefetch (P+1, P+2, P+3, P-1)
+    unawaited(
+      _prefetchQueue.prioritizeNeighbors(
+        activePage: validPage,
+        totalPages: total,
+      ),
+    );
   }
 
-  void _prefetchNextPage(int currentPage, int totalPages) {
-    if (currentPage >= totalPages) return;
-    final nextPageIndex = currentPage; // (currentPage + 1) - 1
+  Future<void> _prefetchBackgroundPdfPage(int pageNumber) async {
     final filePath = state.currentBook?.filePath;
-    if (filePath == null) return;
+    if (filePath == null || filePath.isEmpty) return;
+    final pageIndex = pageNumber - 1;
+    if (pageIndex < 0) return;
 
-    // Sessizce arka planda çalıştır ve Kavram Radarı indeksine kaydet
-    unawaited(
-      _pdfEngine
-          .extractPage(filePath, nextPageIndex)
-          .then((prefetched) {
-            if (prefetched.rawText.trim().isNotEmpty) {
-              _bookPageTextIndex[nextPageIndex + 1] = prefetched.rawText;
-            }
-          })
-          .catchError((Object e) {
-            debugPrint('ReaderNotifier prefetch notice: $e');
-          }),
+    final prefetched = await _pdfEngine.extractPage(filePath, pageIndex);
+    if (prefetched.rawText.trim().isNotEmpty) {
+      _bookPageTextIndex[pageNumber] = prefetched.rawText;
+    }
+  }
+
+  /// Ensures transparent Sauvola alpha mask & word blobs exist for the active PDF page.
+  Future<void> ensureOpticalDataForCurrentPage() async {
+    final book = state.currentBook;
+    final currentReflow = state.currentReflowData;
+    if (book == null ||
+        currentReflow == null ||
+        book.format != BookFormat.pdf ||
+        book.filePath.startsWith('sample://')) {
+      return;
+    }
+    if (currentReflow.opticalWordBlobs.isNotEmpty &&
+        currentReflow.opticalAlphaMaskPath != null &&
+        currentReflow.opticalAlphaMaskPath!.isNotEmpty) {
+      return;
+    }
+
+    final maskEntry = await const ScannedPdfOcrService().generateOpticalMaskOnly(
+      filePath: book.filePath,
+      pageIndex: (state.currentPage - 1).clamp(0, 999999),
+    );
+    if (maskEntry == null || !mounted) return;
+    if (state.currentPage != currentReflow.pageNumber) return;
+
+    state = state.copyWith(
+      currentReflowData: currentReflow.copyWith(
+        opticalAlphaMaskPath: maskEntry.maskImagePath,
+        opticalWordBlobs: maskEntry.wordBlobs,
+        opticalImageWidth: maskEntry.imageWidth,
+        opticalImageHeight: maskEntry.imageHeight,
+        detectedSkewDeg: maskEntry.detectedSkewDeg,
+      ),
     );
   }
 
@@ -524,11 +607,26 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
     }
   }
 
-  void toggleDualView() {
+  void setDisplayMode(
+    ReaderDisplayMode mode, {
+    bool userInitiated = true,
+  }) {
     state = state.copyWith(
-      isOriginalPdfView: !state.isOriginalPdfView,
+      displayMode: mode,
+      isOriginalPdfView: mode == ReaderDisplayMode.originalPdf,
       isXRaySplitMode: false,
+      userLockedDisplayMode: userInitiated,
     );
+    if (mode == ReaderDisplayMode.opticalReflow) {
+      unawaited(ensureOpticalDataForCurrentPage());
+    }
+  }
+
+  void toggleDualView() {
+    final nextMode = state.isOriginalPdfView
+        ? ReaderDisplayMode.textReflow
+        : ReaderDisplayMode.originalPdf;
+    setDisplayMode(nextMode, userInitiated: true);
   }
 
   void toggleXRaySplitMode() {
@@ -539,9 +637,11 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   }
 
   void setOriginalPdfView(bool isOriginal) {
-    state = state.copyWith(
-      isOriginalPdfView: isOriginal,
-      isXRaySplitMode: false,
+    setDisplayMode(
+      isOriginal
+          ? ReaderDisplayMode.originalPdf
+          : ReaderDisplayMode.textReflow,
+      userInitiated: true,
     );
   }
 
@@ -1328,6 +1428,7 @@ class ReaderNotifier extends StateNotifier<ReaderState> {
   @override
   void dispose() {
     _cancelBookScanRequested = true;
+    _prefetchQueue.dispose();
     _sessionTimer?.cancel();
     ttsService.dispose();
     ambientService.dispose();

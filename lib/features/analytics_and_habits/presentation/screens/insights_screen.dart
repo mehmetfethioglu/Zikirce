@@ -5,6 +5,8 @@ import '../../../../core/providers/repository_providers.dart';
 import '../../../../domain/entities/habit_profile_entity.dart';
 import '../../../../domain/entities/reading_session_entity.dart';
 import '../../../bookshelf/presentation/widgets/streak_header_badge.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
+import '../../../subscription/presentation/widgets/pro_feature_lock_card.dart';
 import '../widgets/completion_seal_dialog.dart';
 import '../widgets/heatmap_widget.dart';
 
@@ -82,6 +84,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
     final now = DateTime.now();
     final todayKey = DateTime(now.year, now.month, now.day);
     final todayMinutesRead = sessionMap[todayKey] ?? 0;
+    final isPro = ref.watch(subscriptionProvider.select((s) => s.isPro));
 
     return Scaffold(
       appBar: AppBar(
@@ -102,7 +105,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Seri, Günlük Hedef ve Haftalık Zincir Kartı (İstatistik Sayfasında)
+            // Seri, Günlük Hedef ve Haftalık Zincir Kartı (Temel Modda Ücretsiz)
             StreakHeaderBadge(
               streakDays: _profile?.currentStreak ?? 0,
               dailyMinutesGoal: _profile?.dailyGoalMinutes ?? 20,
@@ -125,20 +128,6 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _StatCard(
-                    title: 'Okuma Hızı',
-                    value: '$avgWpm WPM',
-                    subtitle: 'Kelime / Dakika',
-                    icon: '⚡',
-                    color: Colors.amber,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
                     title: 'Toplam Süre',
                     value: '$totalMinutes Dk',
                     subtitle: 'Aktif seans',
@@ -146,36 +135,64 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                     color: Colors.blueAccent,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(
-                    title: 'Okunan Sayfa',
-                    value: '$totalPages Sayfa',
-                    subtitle: 'Tahrir külliyatı',
-                    icon: '📚',
-                    color: Colors.teal,
-                  ),
-                ),
               ],
             ),
-            const SizedBox(height: 20),
-
-            // Heatmap
-            HeatmapWidget(sessionMinutes: sessionMap),
-            const SizedBox(height: 24),
-
-            // Tahrir Seals Collection
-            Text(
-              'KAZANILAN TAHRİR MÜHÜRLERİ',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: theme.colorScheme.primary,
+            if (!isPro) ...[
+              const SizedBox(height: 20),
+              const ProFeatureLockCard(
+                icon: Icons.insights_rounded,
+                title: 'Isı Haritası, WPM & Tahrir Mühürleri — Tahrir Pro',
+                description:
+                    'Temel kullanımda Günlük Seri ve toplam okuma süreniz ücretsiz takip edilir. Okuma hızı (WPM) analizi, yıllık ısı haritası ve Tahrir Mühürleri koleksiyonu Tahrir Pro ile açılır.',
               ),
-            ),
-            const SizedBox(height: 12),
-            _buildSealsGrid(theme, totalPages: totalPages, totalMinutes: totalMinutes),
+            ] else ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Okuma Hızı',
+                      value: '$avgWpm WPM',
+                      subtitle: 'Kelime / Dakika',
+                      icon: '⚡',
+                      color: Colors.amber,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Okunan Sayfa',
+                      value: '$totalPages Sayfa',
+                      subtitle: 'Tahrir külliyatı',
+                      icon: '📚',
+                      color: Colors.teal,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Heatmap
+              HeatmapWidget(sessionMinutes: sessionMap),
+              const SizedBox(height: 24),
+
+              // Tahrir Seals Collection
+              Text(
+                'KAZANILAN TAHRİR MÜHÜRLERİ',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildSealsGrid(
+                theme,
+                totalPages: totalPages,
+                totalMinutes: totalMinutes,
+              ),
+            ],
           ],
         ),
       ),

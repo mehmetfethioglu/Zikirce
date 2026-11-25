@@ -2,6 +2,7 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven(url = "https://jitpack.io")
     }
     extra["compileSdkVersion"] = 36
     extra["compileSdk"] = 36

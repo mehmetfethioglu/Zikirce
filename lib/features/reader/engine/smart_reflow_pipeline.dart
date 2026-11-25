@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import '../domain/content_block.dart';
+import '../domain/reading_mode_hysteresis.dart';
+import '../services/native_document_restorer.dart';
 import '../services/pdf_snippet_cropper.dart';
 import '../services/scanned_pdf_ocr_service.dart';
 import 'encoding_normalizer.dart';
@@ -12,17 +14,31 @@ import 'ocr_proofreader_engine.dart';
 import 'ocr_text_healer.dart';
 import 'text_segmenter.dart';
 
-/// Pipeline sayfa analiz sonucu (içerik blokları, Latin dışı/hat bayrağı ve OCR Gözden Geçir raporu)
+/// Pipeline sayfa analiz sonucu (içerik blokları, Latin dışı bayrağı, güven skoru ve optik katman)
 @immutable
 class PipelinePageResult {
   final List<ContentBlock> blocks;
   final bool hasNonLatinOrVisualWarning;
   final OcrPageReviewReport ocrReviewReport;
+  final double ocrConfidence;
+  final List<OcrWordBox> wordBoxes;
+  final String? opticalAlphaMaskPath;
+  final List<OpticalWordBlob> opticalWordBlobs;
+  final int opticalImageWidth;
+  final int opticalImageHeight;
+  final double detectedSkewDeg;
 
   const PipelinePageResult({
     required this.blocks,
     this.hasNonLatinOrVisualWarning = false,
     this.ocrReviewReport = const OcrPageReviewReport.empty(),
+    this.ocrConfidence = 1.0,
+    this.wordBoxes = const [],
+    this.opticalAlphaMaskPath,
+    this.opticalWordBlobs = const [],
+    this.opticalImageWidth = 0,
+    this.opticalImageHeight = 0,
+    this.detectedSkewDeg = 0.0,
   });
 }
 
@@ -112,6 +128,13 @@ class SmartReflowPipeline {
           blocks: cachedPage.blocks,
           hasNonLatinOrVisualWarning: cachedPage.hasNonLatinOrVisualWarning,
           ocrReviewReport: cachedPage.ocrReviewReport,
+          ocrConfidence: cachedPage.ocrConfidence,
+          wordBoxes: cachedPage.wordBoxes,
+          opticalAlphaMaskPath: cachedPage.opticalAlphaMaskPath,
+          opticalWordBlobs: cachedPage.opticalWordBlobs,
+          opticalImageWidth: cachedPage.opticalImageWidth,
+          opticalImageHeight: cachedPage.opticalImageHeight,
+          detectedSkewDeg: cachedPage.detectedSkewDeg,
         );
       }
 
@@ -141,6 +164,13 @@ class SmartReflowPipeline {
             blocks: ocrResult.blocks,
             hasNonLatinOrVisualWarning: ocrResult.hasNonLatinOrVisualWarning,
             ocrReviewReport: ocrResult.ocrReviewReport,
+            ocrConfidence: ocrResult.ocrConfidence,
+            wordBoxes: ocrResult.wordBoxes,
+            opticalAlphaMaskPath: ocrResult.opticalAlphaMaskPath,
+            opticalWordBlobs: ocrResult.opticalWordBlobs,
+            opticalImageWidth: ocrResult.opticalImageWidth,
+            opticalImageHeight: ocrResult.opticalImageHeight,
+            detectedSkewDeg: ocrResult.detectedSkewDeg,
           );
         }
       }

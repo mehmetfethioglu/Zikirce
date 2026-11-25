@@ -46,6 +46,22 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
   }
 
   void _openBook(BookEntity book) {
+    final isPro = ref.read(subscriptionProvider).isPro;
+    if (!isPro && book.format != BookFormat.pdf) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'EPUB, TXT ve Markdown okuma Tahrir Pro özelliğidir. Temel modda PDF kitapları ücretsiz okuyabilirsiniz.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      TahrirProSheet.show(context);
+      return;
+    }
+
     final notifier = ref.read(bookshelfProvider.notifier);
     Navigator.of(context)
         .push(
@@ -56,8 +72,7 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
 
   void _openBookWithWarmup(BookEntity book) {
     final isPro = ref.read(subscriptionProvider).isPro;
-    final speedState = ref.read(speedReadingProvider);
-    if (!speedState.canStartFreeFasilToday(isPro: isPro)) {
+    if (!isPro) {
       TahrirProSheet.show(context);
       return;
     }
@@ -136,6 +151,10 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                 subtitle: const Text('Eserin tahrir mührünü ve okuma beratını görüntüle'),
                 onTap: () {
                   Navigator.pop(ctx);
+                  if (!ref.read(subscriptionProvider).isPro) {
+                    TahrirProSheet.show(context);
+                    return;
+                  }
                   CompletionSealDialog.show(
                     context,
                     bookTitle: book.title,
@@ -155,7 +174,8 @@ class _BookshelfScreenState extends ConsumerState<BookshelfScreen> {
                   onTap: () async {
                     Navigator.pop(ctx);
                     await notifier.markBookCompleted(book);
-                    if (context.mounted) {
+                    if (context.mounted &&
+                        ref.read(subscriptionProvider).isPro) {
                       CompletionSealDialog.show(
                         context,
                         bookTitle: book.title,

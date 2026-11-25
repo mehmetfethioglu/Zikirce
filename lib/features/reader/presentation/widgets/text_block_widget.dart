@@ -25,6 +25,7 @@ class TextBlockWidget extends StatefulWidget {
   final void Function(String selectedText)? onOpenConceptRadar;
   final void Function(String selectedText)? onCorrectWord;
   final void Function(String tappedWord, String paragraphText)? onTapWord;
+  final void Function(String peekedWord, String paragraphText)? onLongPressWord;
   final bool isOcrReviewHighlightEnabled;
   final Set<String> autoCorrectedWordsLower;
   final Set<String> suspiciousWordsLower;
@@ -44,6 +45,7 @@ class TextBlockWidget extends StatefulWidget {
     this.onOpenConceptRadar,
     this.onCorrectWord,
     this.onTapWord,
+    this.onLongPressWord,
     this.isOcrReviewHighlightEnabled = false,
     this.autoCorrectedWordsLower = const {},
     this.suspiciousWordsLower = const {},
@@ -55,43 +57,55 @@ class TextBlockWidget extends StatefulWidget {
 }
 
 class _TextBlockWidgetState extends State<TextBlockWidget> {
-  final List<TapGestureRecognizer> _tapRecognizers = [];
+  final List<GestureRecognizer> _gestureRecognizers = [];
 
-  void _clearTapRecognizers() {
-    for (final r in _tapRecognizers) {
+  void _clearGestureRecognizers() {
+    for (final r in _gestureRecognizers) {
       r.dispose();
     }
-    _tapRecognizers.clear();
+    _gestureRecognizers.clear();
   }
 
   @override
   void didUpdateWidget(covariant TextBlockWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _clearTapRecognizers();
+    _clearGestureRecognizers();
   }
 
   @override
   void dispose() {
-    _clearTapRecognizers();
+    _clearGestureRecognizers();
     super.dispose();
   }
 
-  TapGestureRecognizer? _createWordTapRecognizer(String rawWord) {
-    if (widget.onTapWord == null) return null;
-    final cleanTappedWord = rawWord
+  GestureRecognizer? _createWordGestureRecognizer(
+    String rawWord, {
+    bool useLongPressForPeek = false,
+  }) {
+    final cleanWord = rawWord
         .replaceAll(
           RegExp(r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$', unicode: true),
           '',
         )
         .trim();
-    if (cleanTappedWord.length < 2) return null;
+    if (cleanWord.length < 2) return null;
 
-    final recognizer = TapGestureRecognizer()
+    if (useLongPressForPeek && widget.onLongPressWord != null) {
+      final lp = LongPressGestureRecognizer()
+        ..onLongPress = () {
+          widget.onLongPressWord?.call(cleanWord, widget.block.text);
+        };
+      _gestureRecognizers.add(lp);
+      return lp;
+    }
+
+    if (widget.onTapWord == null) return null;
+    final tap = TapGestureRecognizer()
       ..onTap = () {
-        widget.onTapWord?.call(cleanTappedWord, widget.block.text);
+        widget.onTapWord?.call(cleanWord, widget.block.text);
       };
-    _tapRecognizers.add(recognizer);
-    return recognizer;
+    _gestureRecognizers.add(tap);
+    return tap;
   }
 
   Color _parseHexColor(String hex, Color fallback) {
@@ -108,7 +122,7 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
     required TextStyle normalStyle,
     required TextStyle boldStyle,
   }) {
-    _clearTapRecognizers();
+    _clearGestureRecognizers();
 
     final rawTts = widget.activeTtsWord?.trim();
     final ttsTarget = (rawTts != null && rawTts.isNotEmpty)
@@ -188,7 +202,6 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
       final cleanWord = OcrProofreaderEngine.toTurkishLower(
         token.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''),
       );
-      final tapRecognizer = _createWordTapRecognizer(token);
 
       final matchesSuspicious = hasReviewUnderlines &&
           ((outerStripped.isNotEmpty &&
@@ -200,6 +213,12 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
                   widget.autoCorrectedWordsLower.contains(outerStripped)) ||
               (cleanWord.isNotEmpty &&
                   widget.autoCorrectedWordsLower.contains(cleanWord)));
+      final tapRecognizer = _createWordGestureRecognizer(
+        token,
+        useLongPressForPeek:
+            (matchesSuspicious || matchesAutoCorrected) &&
+            widget.onLongPressWord != null,
+      );
 
       if (cleanWord.isNotEmpty &&
           (cleanWord == ttsTarget || outerStripped == ttsTarget)) {
@@ -234,7 +253,7 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
         final length = token.length;
         final highlightLength =
             (length <= 3) ? 1 : (length <= 6 ? 2 : (length * 0.45).round());
-        final secondRecognizer = _createWordTapRecognizer(token);
+        final secondRecognizer = _createWordGestureRecognizer(token);
         spans.add(
           TextSpan(
             text: token.substring(0, highlightLength),
@@ -415,6 +434,21 @@ class _TextBlockWidgetState extends State<TextBlockWidget> {
                 return AdaptiveTextSelectionToolbar.buttonItems(
                   anchors: editableTextState.contextMenuAnchors,
                   buttonItems: [
+                    if (widget.onLongPressWord != null)
+                      ContextMenuButtonItem(
+                        label: '🔎 Büyüteç (Orijinal Tarama)',
+                        onPressed: () {
+                          final selected = editableTextState.textEditingValue.selection
+                              .textInside(editableTextState.textEditingValue.text);
+                          editableTextState.hideToolbar();
+                          if (selected.trim().isNotEmpty) {
+                            widget.onLongPressWord!(
+                              selected.trim(),
+                              widget.block.text,
+                            );
+                          }
+                        },
+                      ),
                     if (widget.onCorrectWord != null)
                       ContextMenuButtonItem(
                         label: '🔍 Tashih / Düzelt',

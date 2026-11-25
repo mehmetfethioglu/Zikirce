@@ -140,3 +140,23 @@ final class CalligraphyHeaderBlock extends ContentBlock {
     this.boundingBox,
   });
 }
+
+/// Düşük güvenli, Arapça veya tablo içeren bölgeyi aktif tema rengine boyanan
+/// şeffaf mürekkep alfa-maskesi olarak metin akışına gömer (beyaz kutusuz).
+final class OpticalInkBlock extends ContentBlock {
+  final String title;
+  final String alphaMaskPath;
+  final Uint8List? rawAlphaMaskBytes;
+  final Rect cropRect;
+  final bool isArabic;
+  final String? fallbackText;
+
+  const OpticalInkBlock({
+    required this.title,
+    required this.alphaMaskPath,
+    this.rawAlphaMaskBytes,
+    required this.cropRect,
+    this.isArabic = false,
+    this.fallbackText,
+  });
+}

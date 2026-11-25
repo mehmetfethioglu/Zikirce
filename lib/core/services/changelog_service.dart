@@ -24,9 +24,27 @@ class ChangelogRelease {
 class ChangelogService {
   const ChangelogService();
 
-  static const String currentVersion = '1.14.0+20';
+  static const String currentVersion = '1.15.0+21';
 
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      version: 'v1.15.0',
+      date: '2026-11-25',
+      titleTr:
+          'Çift Modlu Eski PDF Restorasyonu, Hibrit OCR (Tesseract 5 + Apple Vision) & Tahrir Pro',
+      titleEn:
+          'Dual-Mode Old PDF Restoration, Hybrid OCR (Tesseract 5 + Apple Vision) & Tahrir Pro',
+      highlightsTr: [
+        'C++/FFI Sayfa Restorasyonu & K2pdfopt Baskı Akışı: Sararmış kağıt ve eğik taramalar için Aydınlatma Düzleştirme, ±5° Deskew, Sauvola Binarizasyon, tema renkli şeffaf Baskı Akışı (Akış / Baskı / PDF), 150 MB Disk LRU önbelleği ve 300 DPI uzun-basma Büyüteç (Peek) eklendi.',
+        'Cihaz İçi Hibrit OCR Doğrulaması: iOS Apple Vision (.accurate, TR/AR/EN) ve Android C++ FFI Tesseract 5 LSTM (PSM_SINGLE_LINE, SHA-256 doğrulamalı ~19 MB arka plan indirici) ile şüpheli ve Arapça satırlar otomatik iyileştirildi.',
+        'Tahrir Pro & Banner\'sız Esnek Erişim: Kurulumda ilk 24 saat ücretsiz Pro deneme, kapatılabilir karşılama ekranı, temel modda ücretsiz Orijinal PDF okuma + Günlük Seri, 3 ödüllü reklam ile 24 saat Pro ve haftalık/aylık/yıllık/ömür boyu abonelik seçenekleri sunuldu.',
+      ],
+      highlightsEn: [
+        'C++/FFI Page Restoration & Optical Reflow: Added Illumination Flattening, ±5° Deskew, Sauvola Binarization, theme-tinted transparent Optical Reflow (Flow / Print / PDF), 150 MB Disk LRU cache, and long-press 300 DPI original peek.',
+        'On-Device Hybrid OCR Verification: Added iOS Apple Vision (.accurate, TR/AR/EN) and Android C++ FFI Tesseract 5 LSTM (PSM_SINGLE_LINE, SHA-256 verified ~19 MB background download) for low-confidence and Arabic lines.',
+        'Tahrir Pro & Ad-Banner-Free Access: 24h free Pro trial on install, App Store compliant dismissible prompt, free Original PDF reading & Daily Streak in Basic mode, 3 rewarded ads for 24h Pro Pass, and weekly/monthly/yearly/lifetime plans.',
+      ],
+    ),
     ChangelogRelease(
       version: 'v1.14.0',
       date: '2026-11-15',

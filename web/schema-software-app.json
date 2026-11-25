@@ -8,7 +8,7 @@
       "operatingSystem": "Android, iOS, Windows, macOS",
       "applicationCategory": "BookApplication",
       "softwareVersion": "1.14.0",
-      "description": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and 100% deterministic privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with 0 ad trackers and 0 cloud dependencies, featuring 300 DPI on-device OCR, 34,795-root Zemberek proofreading, Popup Lexicon, Guided Flow reading coach, and Obsidian Markdown marginalia export.",
+      "description": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader developed by Akarworks in 2026 for mobile and desktop platforms. Engineered for 60 to 120 FPS responsiveness and on-device privacy, Tahrir converts scanned, distorted, and two-column academic PDF files into clean, reflowable text with zero banner ads and zero cloud document uploads, featuring 300 DPI on-device OCR, 34,795-root Zemberek proofreading, Popup Lexicon, Guided Flow reading coach, Obsidian Markdown marginalia export, a 24h install trial, free PDF/Daily Streak basic mode, optional 3-ad 24h rewarded video unlock, and Pro plans.",
       "url": "https://mehmetfethioglu.github.io/tahrir-indir/",
       "downloadUrl": "https://mehmetfethioglu.github.io/tahrir-indir/indir.html",
       "inLanguage": [
@@ -42,7 +42,7 @@
           "name": "What is Tahrir?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader featuring multi-column PDF reflow, 300 DPI on-device OCR scanning, 34,795-root Zemberek morphological proofreading, one-tap Popup Lexicon, Guided Flow semantic reading coach, and Obsidian-compatible marginalia export with zero ads or tracking."
+            "text": "Tahrir is an offline-first smart PDF, EPUB, and Markdown reader featuring multi-column PDF reflow, 300 DPI on-device OCR scanning, 34,795-root Zemberek morphological proofreading, one-tap Popup Lexicon, Guided Flow semantic reading coach, Obsidian-compatible marginalia export, a 24h free trial, free Basic mode (PDF reading and Daily Streak), and banner-free 3-ad rewarded 24h unlock or Pro subscriptions."
           }
         }
       ]

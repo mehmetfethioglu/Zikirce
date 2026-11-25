@@ -130,6 +130,7 @@ Bunu her mümin tatbik etmelidir.
           TextBlock() => 'text',
           InteractiveSnippetBlock() => 'snippet',
           CalligraphyHeaderBlock() => 'header',
+          OpticalInkBlock() => 'optical_ink',
         };
       }
 
