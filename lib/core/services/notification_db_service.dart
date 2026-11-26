@@ -46,6 +46,47 @@ class NotificationDbService {
     }
   }
 
+  static BildirimItem _mapRowToItem(sql.Row r) {
+    final idVal = r['id'] ?? r['Id'] ?? r['ID'] ?? r['fallback_id'] ?? 1;
+    return BildirimItem(
+      id: idVal is int ? idVal : (int.tryParse(idVal.toString()) ?? 1),
+      title: (r['baslik'] ?? r['Baslik'] ?? r['title'] ?? 'Günün Hatırlatması').toString(),
+      content: (r['metin'] ?? r['Metin'] ?? r['content'] ?? 'Rabbinin adını zikret ve bütün varlığınla O’na yönel.').toString(),
+      category: (r['kategori'] ?? r['Kategori'] ?? r['category'] ?? 'Zikir').toString(),
+    );
+  }
+
+  /// Fetches a specific reminder by ID (with rowid fallback) or null if unavailable.
+  static BildirimItem? getNotificationById(int id) {
+    if (_db == null) return null;
+
+    try {
+      final rows = _db!.select(
+        'SELECT rowid as fallback_id, * FROM bildirimler WHERE id = ? LIMIT 1;',
+        [id],
+      );
+      if (rows.isNotEmpty) {
+        return _mapRowToItem(rows.first);
+      }
+    } catch (e) {
+      debugPrint('[NotificationDbService] getNotificationById(id) notice: $e');
+    }
+
+    try {
+      final rows = _db!.select(
+        'SELECT rowid as fallback_id, * FROM bildirimler WHERE rowid = ? LIMIT 1;',
+        [id],
+      );
+      if (rows.isNotEmpty) {
+        return _mapRowToItem(rows.first);
+      }
+    } catch (e) {
+      debugPrint('[NotificationDbService] getNotificationById(rowid) error: $e');
+    }
+
+    return null;
+  }
+
   /// Fetches a random daily Islamic quote, hadith, or reminder
   static BildirimItem? getRandomNotification() {
     if (_db == null) return null;
@@ -53,14 +94,7 @@ class NotificationDbService {
     try {
       final rows = _db!.select('SELECT rowid as fallback_id, * FROM bildirimler ORDER BY RANDOM() LIMIT 1;');
       if (rows.isNotEmpty) {
-        final r = rows.first;
-        final idVal = r['id'] ?? r['Id'] ?? r['ID'] ?? r['fallback_id'] ?? 1;
-        return BildirimItem(
-          id: idVal is int ? idVal : (int.tryParse(idVal.toString()) ?? 1),
-          title: (r['baslik'] ?? r['Baslik'] ?? r['title'] ?? 'Günün Hatırlatması').toString(),
-          content: (r['metin'] ?? r['Metin'] ?? r['content'] ?? 'Rabbinin adını zikret ve bütün varlığınla O’na yönel.').toString(),
-          category: (r['kategori'] ?? r['Kategori'] ?? r['category'] ?? 'Zikir').toString(),
-        );
+        return _mapRowToItem(rows.first);
       }
     } catch (e) {
       debugPrint('[NotificationDbService] Query error: $e');

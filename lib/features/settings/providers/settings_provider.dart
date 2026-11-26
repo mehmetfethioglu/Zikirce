@@ -734,18 +734,31 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(isZikirReminderEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsZikirReminderEnabled', enabled);
+    await prefs.setBool('IsZikirReminderEnabled', enabled);
+    await LocalNotificationService.scheduleZikirDailyReminder(
+      timeHhmm: state.zikirReminderTime,
+      isEnabled: enabled,
+    );
   }
 
   Future<void> setZikirReminderTime(String time) async {
     state = state.copyWith(zikirReminderTime: time);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefString(prefs, 'ZikirReminderTime', time);
+    await prefs.setString('ZikirReminderTime', time);
+    if (state.isZikirReminderEnabled) {
+      await LocalNotificationService.scheduleZikirDailyReminder(
+        timeHhmm: time,
+        isEnabled: true,
+      );
+    }
   }
 
   Future<void> toggleQuranReminder(bool enabled) async {
     state = state.copyWith(isQuranReminderEnabled: enabled);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefBool(prefs, 'IsQuranReminderEnabled', enabled);
+    await prefs.setBool('IsQuranReminderEnabled', enabled);
     await LocalNotificationService.scheduleQuranDailyReminder(
       timeHhmm: state.quranReminderTime,
       isEnabled: enabled,
@@ -756,6 +769,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(quranReminderTime: time);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefString(prefs, 'QuranReminderTime', time);
+    await prefs.setString('QuranReminderTime', time);
     if (state.isQuranReminderEnabled) {
       await LocalNotificationService.scheduleQuranDailyReminder(
         timeHhmm: time,
@@ -878,9 +892,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(selectedReminderSound: sound);
     final prefs = await SharedPreferences.getInstance();
     await _setSessionPrefString(prefs, 'SelectedReminderSound', sound);
+    await prefs.setString('SelectedReminderSound', sound);
     final timings = ref.read(prayerTimingsProvider).valueOrNull;
     if (timings != null && state.isNamazReminderEnabled) {
       await LocalNotificationService.scheduleAllPrayerNotifications(timings);
+    }
+    if (state.isQuranReminderEnabled) {
+      await LocalNotificationService.scheduleQuranDailyReminder(
+        timeHhmm: state.quranReminderTime,
+        isEnabled: true,
+      );
+    }
+    if (state.isZikirReminderEnabled) {
+      await LocalNotificationService.scheduleZikirDailyReminder(
+        timeHhmm: state.zikirReminderTime,
+        isEnabled: true,
+      );
     }
   }
 

@@ -7,8 +7,9 @@ import '../../../../../core/services/haptic_service.dart';
 import '../../../../../core/theme/app_theme_colors.dart';
 import '../../../providers/dashboard_providers.dart';
 
-const double _kWaveTopPadding = 28.0;
+const double _kWaveTopPadding = 24.0;
 const double _kWaveBottomPadding = 8.0;
+const double _kWaveHorizontalInset = 14.0;
 
 List<Offset> _computeSevenDayWavePoints({
   required List<Last7DaysPoint> days,
@@ -18,10 +19,13 @@ List<Offset> _computeSevenDayWavePoints({
   if (days.isEmpty) return const [];
   final plotBottom = max(_kWaveTopPadding + 16.0, size.height - _kWaveBottomPadding);
   final usableHeight = max(12.0, plotBottom - _kWaveTopPadding);
-  final colWidth = size.width / days.length;
+  final usableWidth = max(1.0, size.width - (_kWaveHorizontalInset * 2));
+  final denom = max(1, days.length - 1);
 
   return List<Offset>.generate(days.length, (i) {
-    final x = colWidth * (i + 0.5);
+    final x = days.length == 1
+        ? size.width * 0.5
+        : _kWaveHorizontalInset + (usableWidth * (i / denom));
     final double y;
     if (peakCount <= 0) {
       y = plotBottom - 6.0;
@@ -48,7 +52,9 @@ class _Last7DaysActivityTrendCardState
 
   void _selectAtDx(double dx, double width, int count) {
     if (count <= 0 || width <= 0) return;
-    final idx = (dx / width * count).floor().clamp(0, count - 1);
+    final usableWidth = max(1.0, width - (_kWaveHorizontalInset * 2));
+    final normalized = ((dx - _kWaveHorizontalInset) / usableWidth).clamp(0.0, 1.0);
+    final idx = (normalized * max(1, count - 1)).round().clamp(0, count - 1);
     if (idx != _selectedIndex) {
       HapticService.selectionClick();
       setState(() => _selectedIndex = idx);
@@ -72,7 +78,7 @@ class _Last7DaysActivityTrendCardState
     final selectedDay = days.isNotEmpty ? days[safeIndex] : null;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(24),
@@ -101,8 +107,8 @@ class _Last7DaysActivityTrendCardState
             final pillLeft = (selectedPt.dx - pillContainerWidth / 2)
                 .clamp(0.0, max(0.0, width - pillContainerWidth))
                 .toDouble();
-            final pillTop = (selectedPt.dy - 26.0)
-                .clamp(2.0, max(2.0, height - 28.0))
+            final pillTop = (selectedPt.dy - 24.0)
+                .clamp(1.0, max(1.0, height - 24.0))
                 .toDouble();
 
             return GestureDetector(
@@ -196,7 +202,7 @@ class _Last7DaysActivityTrendCardState
                   ),
                 )
               : SizedBox(
-                  height: 108,
+                  height: 92,
                   child: LayoutBuilder(
                     builder: (context, chartConstraints) => buildWaveArea(
                       chartConstraints.maxWidth,
@@ -215,13 +221,15 @@ class _Last7DaysActivityTrendCardState
               SizedBox(
                 height: 18,
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(days.length, (index) {
                     final point = days[index];
                     final isSelected = index == safeIndex;
                     final label =
                         l10n.isTurkish ? point.dayShortTr : point.dayShortEn;
 
-                    return Expanded(
+                    return SizedBox(
+                      width: _kWaveHorizontalInset * 2,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
@@ -302,11 +310,11 @@ class _CleanReferenceWavePainter extends CustomPainter {
       final y = _kWaveTopPadding + usableHeight * factor;
       const dashWidth = 4.0;
       const dashGap = 4.0;
-      double x = 4.0;
-      while (x < size.width - 4.0) {
+      double x = 2.0;
+      while (x < size.width - 2.0) {
         canvas.drawLine(
           Offset(x, y),
-          Offset(min(x + dashWidth, size.width - 4.0), y),
+          Offset(min(x + dashWidth, size.width - 2.0), y),
           guidePaint,
         );
         x += dashWidth + dashGap;

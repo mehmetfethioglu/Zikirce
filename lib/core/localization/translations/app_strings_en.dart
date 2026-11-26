@@ -877,4 +877,13 @@ const Map<String, String> appStringsEn = {
   'Qibla_StepFace': 'Face Kaaba',
   'Qibla_StepTakbir': 'Takbir',
   'Qibla_ReplayTakbir': 'Replay Takbir',
+  'Qibla_GpsLocating': 'Locating GPS...',
+  'Qibla_GpsActiveTag': 'GPS • {0}',
+  'Qibla_GpsFallbackWarning':
+      'Location off • Calculated for {0} (direction may be inaccurate elsewhere)',
+  'Qibla_EnableLocationAction': 'Enable GPS',
+  'Qibla_OpenSettingsAction': 'Settings',
+  'Qibla_PrayerCityMismatch': 'Located in {0} • Update prayer times?',
+  'Qibla_UpdateCityAction': 'Update',
+  'Qibla_TrueNorthLabel': 'True North',
 };

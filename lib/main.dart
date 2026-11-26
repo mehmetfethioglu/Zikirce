@@ -169,11 +169,36 @@ void main(List<String> args) async {
                 cityOverride: savedCity,
               );
 
-              final isQuranReminder = prefs.getBool('IsQuranReminderEnabled') ?? true;
-              final quranTime = prefs.getString('QuranReminderTime') ?? '21:00';
+              final isDefaultSession =
+                  activeSessionId == UserSession.defaultSessionId;
+              final isQuranReminder = isDefaultSession
+                  ? (prefs.getBool('IsQuranReminderEnabled') ?? true)
+                  : (prefs.getBool('IsQuranReminderEnabled_$activeSessionId') ??
+                      prefs.getBool('IsQuranReminderEnabled') ??
+                      true);
+              final quranTime = isDefaultSession
+                  ? (prefs.getString('QuranReminderTime') ?? '21:00')
+                  : (prefs.getString('QuranReminderTime_$activeSessionId') ??
+                      prefs.getString('QuranReminderTime') ??
+                      '21:00');
               await LocalNotificationService.scheduleQuranDailyReminder(
                 timeHhmm: quranTime,
                 isEnabled: isQuranReminder,
+              );
+
+              final isZikirReminder = isDefaultSession
+                  ? (prefs.getBool('IsZikirReminderEnabled') ?? true)
+                  : (prefs.getBool('IsZikirReminderEnabled_$activeSessionId') ??
+                      prefs.getBool('IsZikirReminderEnabled') ??
+                      true);
+              final zikirTime = isDefaultSession
+                  ? (prefs.getString('ZikirReminderTime') ?? '09:00')
+                  : (prefs.getString('ZikirReminderTime_$activeSessionId') ??
+                      prefs.getString('ZikirReminderTime') ??
+                      '09:00');
+              await LocalNotificationService.scheduleZikirDailyReminder(
+                timeHhmm: zikirTime,
+                isEnabled: isZikirReminder,
               );
             } catch (e) {
               debugPrint('[Main] Deferred background tasks notice: $e');

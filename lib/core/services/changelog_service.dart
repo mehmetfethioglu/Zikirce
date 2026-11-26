@@ -51,11 +51,43 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 70;
-  static const String currentVersionName = '2.4.0';
+  static const int currentVersionCode = 71;
+  static const String currentVersionName = '2.4.1';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 71,
+      versionName: '2.4.1',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Yenilenen Ana Sayfa, Hızlı Erişim Şeridi & Canlı Vakit Sayacı',
+          titleEn: 'Refined Bento Home, Quick-Access Ribbon & Live Prayer Countdown',
+          descTr: 'Profil kartı sadeleştirilip profil fotoğrafı büyütüldü; altına Telafi Görevleri, Kıble Bulucu, Günlük Hedefler, Tilâvet Secdesi, Ezan Ayarları, Hatim Duası, Fıkıh ve Ezber kısayol şeridi eklendi. Minimal 5 vakit namaz kartı üstüne sonraki vakte kalan süreyi gösteren canlı sayaç yerleştirildi; zikir/seri kartları kompaktlaştırıldı ve trend grafiğinin yan boşlukları daraltıldı.',
+          descEn: 'Simplified the profile header with a larger avatar and added a horizontal quick-access ribbon for Make-up Tasks, Qibla Finder, Daily Goals, Sajdah Tilawah, Adhan Alerts, Khatam Dua, Fiqh, and Hifz. Added a live next-prayer countdown strip above the minimal 5-prayer card, compacted dhikr/streak cards, and widened the 7-day trend chart.',
+          icon: Icons.dashboard_customize_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Donanım Destekli Yerel 3B Kıble Pusulası & GPS Köprüsü',
+          titleEn: 'Hardware-Backed Native 3D Qibla Compass & GPS Bridge',
+          descTr: 'Android ve iOS için doğrudan donanım sensörleri (rotasyon vektörü/manyetometre) ve konum köprüsüyle çalışan yerel kıble sensör motoru eklendi; daha kararlı, düşük gecikmeli ve titreşimsiz Kâbe yönlendirmesi sağlandı.',
+          descEn: 'Added native hardware sensor and GPS bridges for Android and iOS to power the 3D Qibla Finder with lower latency, tighter heading stability, and smoother calibration.',
+          icon: Icons.explore_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Akıllı Bildirim & Ana Ekran Widget Derin Yönlendirmesi',
+          titleEn: 'Smart Notification & Home Widget Deep Routing',
+          descTr: 'Namaz vakti, 32 Farz, Feraciye/Salâ fazileti, Kur’ân, zikir ve kaza bildirimlerine veya ana ekran widget’larına dokunulduğunda ilgili ekran ve detay alt sayfası doğrudan açılacak şekilde derin bağlantı yönlendirmesi yenilendi.',
+          descEn: 'Upgraded deep routing from local notifications and home widgets so tapping prayer, 32 Farz, Feraciye/Sala, Quran, dhikr, or qada alerts opens the exact target screen and detail sheet.',
+          icon: Icons.notifications_active_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 70,
       versionName: '2.4.0',

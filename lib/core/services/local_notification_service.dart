@@ -7,6 +7,7 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'notification_db_service.dart';
 import 'prayer_times_service.dart';
 import '../../features/namaz_vakitleri/data/farz_32_data.dart';
 
@@ -29,7 +30,21 @@ class LocalNotificationService {
   static const int baseSpecialWeeklyNotificationId = 6500;
   static const int dailyKazaReminderNotificationId = 7000;
   static const int dailyQuranReminderNotificationId = 8000;
+  static const int dailyZikirReminderNotificationId = 8100;
   static const int audioDownloadNotificationId = 9000;
+
+  /// Stream emitting when user taps any local notification with a payload.
+  static final StreamController<String> notificationPayloadTapped =
+      StreamController<String>.broadcast();
+
+  static String? _pendingLaunchNotificationPayload;
+
+  /// Consumes and clears any cold-start notification payload captured during initialization.
+  static String? consumeInitialNotificationPayload() {
+    final pending = _pendingLaunchNotificationPayload;
+    _pendingLaunchNotificationPayload = null;
+    return pending;
+  }
 
   /// Stream emitting when user taps a "Did you pray?" question notification
   static final StreamController<({String prayerName, String dateStr})>
@@ -46,11 +61,19 @@ class LocalNotificationService {
     return pending;
   }
 
-  /// Dispatches a notification payload to the matching listener or buffers a cold-start prayer tap.
+  /// Dispatches a notification payload to the matching listener or buffers a cold-start tap.
   static void dispatchNotificationPayload(String? payload) {
-    if (payload == null || payload.isEmpty) return;
-    if (payload.startsWith('prayer_question|')) {
-      final parts = payload.split('|');
+    final trimmed = payload?.trim() ?? '';
+    if (trimmed.isEmpty) return;
+
+    if (notificationPayloadTapped.hasListener) {
+      notificationPayloadTapped.add(trimmed);
+    } else {
+      _pendingLaunchNotificationPayload = trimmed;
+    }
+
+    if (trimmed.startsWith('prayer_question|')) {
+      final parts = trimmed.split('|');
       if (parts.length >= 3) {
         final tap = (prayerName: parts[1], dateStr: parts[2]);
         if (pendingPrayerNotificationTapped.hasListener) {
@@ -59,16 +82,16 @@ class LocalNotificationService {
           _pendingLaunchPrayerTap = tap;
         }
       }
-    } else if (payload.startsWith('farz_article|')) {
-      final parts = payload.split('|');
+    } else if (trimmed.startsWith('farz_article|')) {
+      final parts = trimmed.split('|');
       if (parts.length >= 2) {
         final farzId = int.tryParse(parts[1]);
         if (farzId != null) {
           pendingFarzNotificationTapped.add(farzId);
         }
       }
-    } else if (payload.startsWith('special_spiritual|')) {
-      final parts = payload.split('|');
+    } else if (trimmed.startsWith('special_spiritual|')) {
+      final parts = trimmed.split('|');
       if (parts.length >= 2) {
         pendingSpiritualNotificationTapped.add(parts[1]);
       }
@@ -351,6 +374,7 @@ class LocalNotificationService {
     required tz.TZDateTime scheduledDate,
     required NotificationDetails notificationDetails,
     required String payload,
+    DateTimeComponents? matchDateTimeComponents,
   }) async {
     try {
       await _notificationsPlugin.zonedSchedule(
@@ -363,6 +387,7 @@ class LocalNotificationService {
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.wallClockTime,
         payload: payload,
+        matchDateTimeComponents: matchDateTimeComponents,
       );
     } catch (e) {
       debugPrint(
@@ -378,6 +403,7 @@ class LocalNotificationService {
           uiLocalNotificationDateInterpretation:
               UILocalNotificationDateInterpretation.wallClockTime,
           payload: payload,
+          matchDateTimeComponents: matchDateTimeComponents,
         );
       } catch (e2) {
         debugPrint(
@@ -416,6 +442,7 @@ class LocalNotificationService {
             .map((p) => p.id)
             .where((id) =>
                 id != dailyQuranReminderNotificationId &&
+                id != dailyZikirReminderNotificationId &&
                 id != audioDownloadNotificationId)
             .toList();
         await Future.wait(toCancel.map((id) => _notificationsPlugin.cancel(id)));
@@ -697,7 +724,7 @@ class LocalNotificationService {
             body: body,
             scheduledDate: targetTime,
             notificationDetails: details,
-            payload: 'farz_article|${farzItem.id}',
+            payload: 'prayer_time|${item.name}|${farzItem.id}',
           );
         }
 
@@ -893,22 +920,32 @@ class LocalNotificationService {
     }
   }
 
-  /// Schedules daily Quran reminder notification
-  static Future<void> scheduleQuranDailyReminder({
+  /// Schedules daily repeating reminder notification using shared time & sound configuration.
+  static Future<void> _scheduleDailyReminder({
+    required int id,
     required String timeHhmm,
     required bool isEnabled,
+    required int defaultHour,
+    required int defaultMinute,
+    required String title,
+    required String body,
+    required String payload,
+    required String logLabel,
   }) async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
-      await _notificationsPlugin.cancel(dailyQuranReminderNotificationId);
+      await _ensureTimezoneInitialized();
+      await _notificationsPlugin.cancel(id);
       if (!isEnabled) return;
 
       final parts = timeHhmm.trim().split(':');
       if (parts.length < 2) return;
-      final h = int.tryParse(parts[0].trim()) ?? 21;
-      final m = int.tryParse(parts[1].trim()) ?? 0;
+      final h = (int.tryParse(parts[0].trim()) ?? defaultHour).clamp(0, 23);
+      final m = (int.tryParse(parts[1].trim()) ?? defaultMinute).clamp(0, 59);
 
       final now = tz.TZDateTime.now(tz.local);
-      var scheduledTZ = tz.TZDateTime(tz.local, now.year, now.month, now.day, h, m);
+      var scheduledTZ =
+          tz.TZDateTime(tz.local, now.year, now.month, now.day, h, m);
       if (scheduledTZ.isBefore(now)) {
         scheduledTZ = scheduledTZ.add(const Duration(days: 1));
       }
@@ -917,24 +954,69 @@ class LocalNotificationService {
       final soundSetting =
           prefs.getString('SelectedReminderSound') ?? 'Bülbül Sesi';
       final channelConfig = _resolveChannelConfig(soundSetting);
-      const title = '📖 Günlük Kur\'an Hatırlatması';
       final details =
           _buildNotificationDetails(config: channelConfig, title: title);
 
       await _scheduleZonedWithFallback(
-        id: dailyQuranReminderNotificationId,
+        id: id,
         title: title,
-        body:
-            'Günün Kur\'an tilavetini tamamlayıp manevi hedefine bir adım daha yaklaş.',
+        body: body,
         scheduledDate: scheduledTZ,
         notificationDetails: details,
-        payload: 'quran_reminder',
+        payload: payload,
+        matchDateTimeComponents: DateTimeComponents.time,
       );
-      debugPrint(
-          '[LocalNotificationService] Scheduled Quran reminder at $scheduledTZ');
+      debugPrint('[LocalNotificationService] Scheduled $logLabel at $scheduledTZ');
     } catch (e) {
-      debugPrint('[LocalNotificationService] scheduleQuranDailyReminder error: $e');
+      debugPrint('[LocalNotificationService] $logLabel error: $e');
     }
+  }
+
+  /// Schedules daily Quran reminder notification
+  static Future<void> scheduleQuranDailyReminder({
+    required String timeHhmm,
+    required bool isEnabled,
+  }) async {
+    await _scheduleDailyReminder(
+      id: dailyQuranReminderNotificationId,
+      timeHhmm: timeHhmm,
+      isEnabled: isEnabled,
+      defaultHour: 21,
+      defaultMinute: 0,
+      title: '📖 Günlük Kur\'an Hatırlatması',
+      body:
+          'Günün Kur\'an tilavetini tamamlayıp manevi hedefine bir adım daha yaklaş.',
+      payload: 'quran_reminder',
+      logLabel: 'Quran daily reminder',
+    );
+  }
+
+  /// Schedules daily Zikir reminder notification
+  static Future<void> scheduleZikirDailyReminder({
+    required String timeHhmm,
+    required bool isEnabled,
+  }) async {
+    final randomItem =
+        isEnabled ? NotificationDbService.getRandomNotification() : null;
+    final randomContent = randomItem?.content.trim();
+    final body = (randomContent != null && randomContent.isNotEmpty)
+        ? randomContent
+        : 'Günlük zikir hedefini tamamlayıp manevi serini koru.';
+    final payload = randomItem != null
+        ? 'zikir_reminder|${randomItem.id}'
+        : 'zikir_reminder';
+
+    await _scheduleDailyReminder(
+      id: dailyZikirReminderNotificationId,
+      timeHhmm: timeHhmm,
+      isEnabled: isEnabled,
+      defaultHour: 9,
+      defaultMinute: 0,
+      title: '📿 Günlük Zikir Hatırlatması',
+      body: body,
+      payload: payload,
+      logLabel: 'Zikir daily reminder',
+    );
   }
 
   static Future<void> showTestNotification({String? sound}) async {
@@ -969,7 +1051,7 @@ class LocalNotificationService {
       title,
       '${sampleFarz.title}: ${sampleFarz.notificationSummary}',
       details,
-      payload: 'farz_article|${sampleFarz.id}',
+      payload: 'prayer_time|Öğle|${sampleFarz.id}',
     );
   }
 
@@ -1126,6 +1208,7 @@ class LocalNotificationService {
         'Kur\'an Sesleri İndiriliyor (%$percent)',
         '$statusText ($current / $total ayet)',
         NotificationDetails(android: androidDetails, iOS: darwinDetails),
+        payload: 'quran_audio_download|progress|$current|$total',
       );
     } catch (e) {
       debugPrint('[LocalNotificationService] showDownloadProgressNotification error: $e');
@@ -1155,6 +1238,7 @@ class LocalNotificationService {
         '✅ Kur\'an Sesleri İndirildi',
         'Toplam $total ayet başarıyla cihazınıza indirildi. Çevrimdışı dinleyebilirsiniz.',
         const NotificationDetails(android: androidDetails, iOS: darwinDetails),
+        payload: 'quran_audio_download|completed|$total',
       );
     } catch (e) {
       debugPrint('[LocalNotificationService] showDownloadCompletedNotification error: $e');

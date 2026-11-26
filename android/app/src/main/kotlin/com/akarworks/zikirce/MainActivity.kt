@@ -16,12 +16,16 @@ import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.akarworks.zikirce/battery_optimization"
     private val TV_CAST_CHANNEL = "com.akarworks.zikirce/tv_cast"
+    private val QIBLA_METHOD_CHANNEL = "com.akarworks.zikirce/qibla_native"
+    private val QIBLA_COMPASS_CHANNEL = "com.akarworks.zikirce/qibla_compass"
     private var tvCastChannel: MethodChannel? = null
+    private var qiblaBridge: QiblaNativeBridge? = null
     private var displayManager: DisplayManager? = null
     private var displayListener: DisplayManager.DisplayListener? = null
 
@@ -113,6 +117,26 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
         registerCastDisplayListener()
+
+        val bridge = qiblaBridge ?: QiblaNativeBridge(this)
+        qiblaBridge = bridge
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, QIBLA_METHOD_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                bridge.handleMethodCall(call, result)
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, QIBLA_COMPASS_CHANNEL)
+            .setStreamHandler(bridge)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        if (qiblaBridge?.onRequestPermissionsResult(requestCode, permissions, grantResults) == true) {
+            return
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
 
     override fun onResume() {
@@ -132,6 +156,8 @@ class MainActivity : FlutterFragmentActivity() {
         }
         displayListener = null
         tvCastChannel = null
+        qiblaBridge?.dispose()
+        qiblaBridge = null
         super.onDestroy()
     }
 

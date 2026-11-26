@@ -1,4 +1,3 @@
-• 3B Kıble Bulucu & İftitah Tekbiri: Eğim düzeltmeli pusula, 3B Kâbe seccade sahnesi, güneşle doğrulama ve hizalanınca otomatik tekbir/kıyam rehberi.
-• Katlanabilir & Geniş Ekran Desteği: Menteşe/çift panel düzeni, gezinme rayı ve Rahle çift sayfa Mushaf görünümü.
-• Zikirce TV Yansıtma & Ses Senkronu: Tek dokunuşla TV ekran yansıtma (Smart View, Miracast, Cast) ve Mukabele ses-ok gecikme ayarı.
-• Tilâvet Secdesi hatırlatıcısı ve kararlılık iyileştirmeleri.
+• Yenilenen Ana Sayfa: Büyütülen profil fotoğrafı, Kaza/Kıble/Hedef/Hatim Duası hızlı erişim şeridi, canlı sonraki vakit sayaçlı minimal 5 vakit namaz kartı ve genişletilmiş trend grafiği.
+• Yerel 3B Kıble Köprüsü: Android ve iOS donanım sensörleriyle daha akıcı ve hassas pusula.
+• Akıllı Bildirim & Widget Yönlendirmesi: Bildirim ve widget dokunuşlarında ilgili detay ekranına doğrudan geçiş.

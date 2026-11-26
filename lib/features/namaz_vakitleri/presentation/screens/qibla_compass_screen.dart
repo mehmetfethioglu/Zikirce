@@ -5,12 +5,12 @@ import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../domain/qibla_math.dart';
 import '../../domain/qibla_models.dart';
+import '../../providers/prayer_providers.dart';
 import '../../providers/qibla_providers.dart';
-import '../widgets/city_selection_sheet.dart';
 import '../widgets/qibla_3d_scene.dart';
 import '../widgets/qibla_finder_card.dart';
 
-class QiblaCompassScreen extends ConsumerWidget {
+class QiblaCompassScreen extends ConsumerStatefulWidget {
   final double? userLat;
   final double? userLng;
 
@@ -20,20 +20,61 @@ class QiblaCompassScreen extends ConsumerWidget {
     this.userLng,
   });
 
-  static void _openCitySelection(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const CitySelectionSheet(),
-    );
+  static String _figureModeLabel(QiblaFigureMode mode, AppLocalizations l10n) {
+    switch (mode) {
+      case QiblaFigureMode.male:
+        return l10n.qiblaModeMale;
+      case QiblaFigureMode.female:
+        return l10n.qiblaModeFemale;
+      case QiblaFigureMode.prayerRugOnly:
+        return l10n.qiblaModeRugOnly;
+    }
+  }
+
+  @override
+  ConsumerState<QiblaCompassScreen> createState() => _QiblaCompassScreenState();
+}
+
+class _QiblaCompassScreenState extends ConsumerState<QiblaCompassScreen>
+    with WidgetsBindingObserver {
+  QiblaParams get _params => QiblaParams(
+        userLat: widget.userLat,
+        userLng: widget.userLng,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        widget.userLat == null &&
+        widget.userLng == null) {
+      final current = ref.read(qiblaControllerProvider(_params));
+      if (current.locationSource != QiblaLocationSource.gps) {
+        ref
+            .read(qiblaControllerProvider(_params).notifier)
+            .refreshGpsLocation(requestPermission: false);
+      }
+    }
   }
 
   static void _openCalibrationSheet(BuildContext context, QiblaState state) {
     final colors = context.colors;
     final l10n = context.l10n;
     final decSign = state.declinationDeg >= 0 ? '+' : '';
+    final locationTag = state.isUsingTrueNorth
+        ? '${state.cityName} (${l10n.qiblaTrueNorthLabel})'
+        : '${state.cityName} ($decSign${state.declinationDeg.toStringAsFixed(1)}°)';
 
     showModalBottomSheet<void>(
       context: context,
@@ -91,14 +132,14 @@ class QiblaCompassScreen extends ConsumerWidget {
                 runSpacing: 8,
                 children: <Widget>[
                   _InfoTag(
-                    label:
-                        '${state.cityName} ($decSign${state.declinationDeg.toStringAsFixed(1)}°)',
+                    label: locationTag,
                     colors: colors,
                   ),
-                  _InfoTag(
-                    label: '${state.magneticFieldUt.toStringAsFixed(0)} µT',
-                    colors: colors,
-                  ),
+                  if (state.magneticFieldUt > 0)
+                    _InfoTag(
+                      label: '${state.magneticFieldUt.toStringAsFixed(0)} µT',
+                      colors: colors,
+                    ),
                   _InfoTag(
                     label: state.isSunVisible
                         ? '☀️ ${l10n.qiblaSunVerifyLabel}: ${state.sunAzimuthDeg.round()}°'
@@ -114,25 +155,13 @@ class QiblaCompassScreen extends ConsumerWidget {
     );
   }
 
-  static String _figureModeLabel(QiblaFigureMode mode, AppLocalizations l10n) {
-    switch (mode) {
-      case QiblaFigureMode.male:
-        return l10n.qiblaModeMale;
-      case QiblaFigureMode.female:
-        return l10n.qiblaModeFemale;
-      case QiblaFigureMode.prayerRugOnly:
-        return l10n.qiblaModeRugOnly;
-    }
-  }
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final params = QiblaParams(userLat: userLat, userLng: userLng);
+  Widget build(BuildContext context) {
+    final params = _params;
     final colors = context.colors;
     final l10n = context.l10n;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final showCityInAppBar =
-        userLat == null && userLng == null && screenWidth >= 350;
+    final showLocationInAppBar = screenWidth >= 350;
 
     return Scaffold(
       backgroundColor: colors.pageBackground,
@@ -165,13 +194,10 @@ class QiblaCompassScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            if (showCityInAppBar) ...<Widget>[
+            if (showLocationInAppBar) ...<Widget>[
               const SizedBox(width: 8),
               Flexible(
-                child: _AppBarCityChip(
-                  params: params,
-                  onTap: () => _openCitySelection(context),
-                ),
+                child: _AppBarLocationBadge(params: params),
               ),
             ],
           ],
@@ -222,6 +248,7 @@ class QiblaCompassScreen extends ConsumerWidget {
                               params: params,
                               showInteractiveHint: false,
                             ),
+                            _LocationSafetyBanner(params: params),
                             const SizedBox(height: 8),
                             _ScenarioStepperBar(
                               params: params,
@@ -233,11 +260,7 @@ class QiblaCompassScreen extends ConsumerWidget {
                               compact: true,
                             ),
                             const SizedBox(height: 10),
-                            _BottomControlsRow(
-                              params: params,
-                              showCityPill: false,
-                              onCityTap: () => _openCitySelection(context),
-                            ),
+                            _BottomControlsRow(params: params),
                           ],
                         ),
                       ),
@@ -267,6 +290,7 @@ class QiblaCompassScreen extends ConsumerWidget {
                     params: params,
                     showInteractiveHint: true,
                   ),
+                  _LocationSafetyBanner(params: params),
                   const SizedBox(height: 6),
                   _ScenarioStepperBar(
                     params: params,
@@ -295,13 +319,7 @@ class QiblaCompassScreen extends ConsumerWidget {
                     compact: isNarrow,
                   ),
                   const SizedBox(height: 8),
-                  _BottomControlsRow(
-                    params: params,
-                    showCityPill: !showCityInAppBar &&
-                        userLat == null &&
-                        userLng == null,
-                    onCityTap: () => _openCitySelection(context),
-                  ),
+                  _BottomControlsRow(params: params),
                 ],
               ),
             );
@@ -312,37 +330,92 @@ class QiblaCompassScreen extends ConsumerWidget {
   }
 }
 
-class _AppBarCityChip extends ConsumerWidget {
+class _AppBarLocationBadge extends ConsumerWidget {
   final QiblaParams params;
-  final VoidCallback onTap;
 
-  const _AppBarCityChip({required this.params, required this.onTap});
+  const _AppBarLocationBadge({required this.params});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cityName = ref.watch(
-      qiblaControllerProvider(params).select((s) => s.cityName),
+    final loc = ref.watch(
+      qiblaControllerProvider(params).select(
+        (s) => (
+          cityName: s.cityName,
+          locationSource: s.locationSource,
+          locationStatus: s.locationStatus,
+        ),
+      ),
     );
     final colors = context.colors;
+    final l10n = context.l10n;
+    final controller = ref.read(qiblaControllerProvider(params).notifier);
+
+    const emeraldColor = Color(0xFF1F7A5C);
+    const amberColor = Color(0xFFD97706);
+
+    final bool isGps = loc.locationSource == QiblaLocationSource.gps;
+    final bool isResolving =
+        loc.locationSource == QiblaLocationSource.fallbackCity &&
+            loc.locationStatus == QiblaLocationStatus.resolving;
+    final bool isFallback =
+        loc.locationSource == QiblaLocationSource.fallbackCity && !isResolving;
+
+    final IconData icon;
+    final String label;
+    final Color accentTint;
+    final VoidCallback? onTap;
+
+    if (isGps) {
+      icon = Icons.my_location_rounded;
+      label = l10n.qiblaGpsActiveTag.replaceAll('{0}', loc.cityName);
+      accentTint = emeraldColor;
+      onTap = () => controller.refreshGpsLocation(requestPermission: true);
+    } else if (isResolving) {
+      icon = Icons.gps_not_fixed_rounded;
+      label = l10n.qiblaGpsLocating;
+      accentTint = colors.accent;
+      onTap = null;
+    } else if (isFallback) {
+      icon = Icons.location_off_rounded;
+      label = loc.cityName;
+      accentTint = amberColor;
+      onTap = (loc.locationStatus == QiblaLocationStatus.permissionDeniedForever ||
+              loc.locationStatus == QiblaLocationStatus.serviceDisabled)
+          ? controller.openLocationSettings
+          : () => controller.refreshGpsLocation(requestPermission: true);
+    } else {
+      icon = Icons.location_on_rounded;
+      label = loc.cityName;
+      accentTint = colors.accent;
+      onTap = null;
+    }
 
     return InkWell(
+      key: const Key('qibla_location_badge'),
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: colors.cardBackground,
+          color: isGps || isFallback
+              ? accentTint.withValues(alpha: 0.12)
+              : colors.cardBackground,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: colors.borderStroke, width: 0.8),
+          border: Border.all(
+            color: isGps || isFallback
+                ? accentTint.withValues(alpha: 0.42)
+                : colors.borderStroke,
+            width: 0.8,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.location_on_rounded, size: 13, color: colors.accent),
-            const SizedBox(width: 3),
+            Icon(icon, size: 13, color: accentTint),
+            const SizedBox(width: 4),
             Flexible(
               child: Text(
-                cityName,
+                label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -356,6 +429,177 @@ class _AppBarCityChip extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+class _LocationSafetyBanner extends ConsumerWidget {
+  final QiblaParams params;
+
+  const _LocationSafetyBanner({required this.params});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final slice = ref.watch(
+      qiblaControllerProvider(params).select(
+        (s) => (
+          cityName: s.cityName,
+          needsLocationWarning: s.needsLocationWarning,
+          locationStatus: s.locationStatus,
+          suggestedPrayerCity: s.suggestedPrayerCity,
+        ),
+      ),
+    );
+    final colors = context.colors;
+    final l10n = context.l10n;
+    final controller = ref.read(qiblaControllerProvider(params).notifier);
+
+    if (slice.needsLocationWarning) {
+      const amberColor = Color(0xFFD97706);
+      final openSettings =
+          slice.locationStatus == QiblaLocationStatus.permissionDeniedForever ||
+              slice.locationStatus == QiblaLocationStatus.serviceDisabled;
+      final actionLabel = openSettings
+          ? l10n.qiblaOpenSettingsAction
+          : l10n.qiblaEnableLocationAction;
+
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Container(
+          key: const Key('qibla_location_warning_banner'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: amberColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: amberColor.withValues(alpha: 0.42),
+              width: 0.9,
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              const Icon(
+                Icons.location_off_rounded,
+                size: 15,
+                color: amberColor,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  l10n.qiblaGpsFallbackWarning.replaceAll('{0}', slice.cityName),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.25,
+                    fontWeight: FontWeight.w600,
+                    color: colors.primaryText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                key: const Key('qibla_enable_gps_btn'),
+                borderRadius: BorderRadius.circular(9),
+                onTap: openSettings
+                    ? controller.openLocationSettings
+                    : () => controller.refreshGpsLocation(requestPermission: true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: amberColor,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    actionLabel,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final suggested = slice.suggestedPrayerCity;
+    if (suggested != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Container(
+          key: const Key('qibla_prayer_city_suggestion_banner'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: colors.accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: colors.accent.withValues(alpha: 0.35),
+              width: 0.85,
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.sync_alt_rounded, size: 14, color: colors.accent),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  l10n.qiblaPrayerCityMismatch.replaceAll('{0}', suggested),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: colors.primaryText,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              InkWell(
+                key: const Key('qibla_sync_prayer_city_btn'),
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  ref.read(selectedCityProvider.notifier).setCity(suggested);
+                  controller.dismissPrayerCitySuggestion();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: colors.accent,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    l10n.qiblaUpdateCityAction,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: controller.dismissPrayerCitySuggestion,
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: colors.secondaryTextAlt,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 }
 
@@ -831,13 +1075,9 @@ class _MetricCard extends StatelessWidget {
 
 class _BottomControlsRow extends ConsumerWidget {
   final QiblaParams params;
-  final bool showCityPill;
-  final VoidCallback onCityTap;
 
   const _BottomControlsRow({
     required this.params,
-    required this.showCityPill,
-    required this.onCityTap,
   });
 
   @override
@@ -845,7 +1085,6 @@ class _BottomControlsRow extends ConsumerWidget {
     final controls = ref.watch(
       qiblaControllerProvider(params).select(
         (s) => (
-          cityName: s.cityName,
           figureMode: s.figureMode,
           isInteractivePreview: s.isInteractivePreview,
           phase: s.phase,
@@ -866,34 +1105,6 @@ class _BottomControlsRow extends ConsumerWidget {
       spacing: 8,
       runSpacing: 6,
       children: <Widget>[
-        if (showCityPill)
-          InkWell(
-            onTap: onCityTap,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: colors.cardBackground,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: colors.borderStroke, width: 0.8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Icon(Icons.location_on_rounded, size: 13, color: colors.accent),
-                  const SizedBox(width: 4),
-                  Text(
-                    controls.cityName,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: colors.primaryText,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         InkWell(
           onTap: controller.cycleFigureMode,
           borderRadius: BorderRadius.circular(14),

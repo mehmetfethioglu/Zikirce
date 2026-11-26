@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <!-- Remove unused FOREGROUND_SERVICE permission injected by transitive dependencies (WorkManager/Glance) to clear Google Play policy blocks -->
     <uses-permission
@@ -90,6 +92,9 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.LAUNCH" />
             </intent-filter>
         </activity>
         <meta-data

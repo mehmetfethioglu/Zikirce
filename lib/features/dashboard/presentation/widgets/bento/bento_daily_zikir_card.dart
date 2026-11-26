@@ -53,191 +53,167 @@ class BentoDailyZikirCard extends ConsumerWidget {
         ? colors.borderStroke
         : Color.lerp(surfaceColor, colors.accent, isDark ? 0.35 : 0.20)!;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () {
-          HapticService.selectionClick();
-          DailyGoalsSheet.show(context);
-        },
-        onLongPress: () {
-          HapticService.selectionClick();
-          QuickStatsSharePreviewModal.show(
-            context: context,
-            todayZikir: stats.formattedToday,
-            thisWeekZikir: stats.formattedThisWeek,
-            dailyAvgZikir: stats.formattedDailyAverage,
-            totalZikir: stats.formattedTotal == '0' && totalZikirVal > 0
-                ? formatCompactNumber(totalZikirVal)
-                : stats.formattedTotal,
-            quranPages: stats.formattedQuranToday,
-            rankName: userRank.name,
-            rankBadge: userRank.badge,
-            initialTheme: ZikirShareThemeData.themeForGoalOrTask(
-              category: 'İbadet Karnesi',
-            ),
-          );
-        },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final hasBoundedHeight = constraints.hasBoundedHeight;
-            final h = constraints.maxHeight;
-            final pad = hasBoundedHeight ? (h * 0.12).clamp(10.0, 14.0) : 14.0;
-            final numFontSize =
-                hasBoundedHeight ? (h * 0.21).clamp(20.0, 24.5) : 24.0;
-            final ringSize =
-                hasBoundedHeight ? (h * 0.38).clamp(36.0, 44.0) : 44.0;
-            final isCompact = hasBoundedHeight && h < 105;
+    final cardTitle = l10n.isTurkish ? 'Bugünkü Zikir' : "Today's Dhikr";
 
-            return Container(
-              padding: EdgeInsets.all(pad),
-              decoration: BoxDecoration(
-                color: surfaceColor,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: borderColor, width: 1.0),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize:
-                    hasBoundedHeight ? MainAxisSize.max : MainAxisSize.min,
-                mainAxisAlignment: hasBoundedHeight
-                    ? MainAxisAlignment.spaceBetween
-                    : MainAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: isCompact ? 24 : 28,
-                        height: isCompact ? 24 : 28,
-                        decoration: BoxDecoration(
-                          color: colors.accent.withValues(
-                            alpha: isDark ? 0.24 : 0.14,
-                          ),
-                          borderRadius: BorderRadius.circular(isCompact ? 8 : 10),
-                        ),
-                        child: Icon(
-                          Icons.auto_awesome_rounded,
-                          size: isCompact ? 14 : 16,
-                          color: colors.accent,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.isTurkish ? 'Bugünkü Zikir' : "Today's Dhikr",
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: isCompact ? 12 : 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: colors.primaryText,
-                          ),
-                        ),
-                      ),
-                      if (isGold && !isClaimed)
-                        _SurpriseChestMiniChip(isTurkish: l10n.isTurkish),
-                    ],
-                  ),
-                  if (!hasBoundedHeight) const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                stats.formattedToday,
-                                style: TextStyle(
-                                  fontSize: numFontSize,
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.primaryText,
-                                  height: 1.05,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: isCompact ? 4 : 6),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: (goalsStatus?.orderedGoals ??
-                                        const <DailyGoalItemState?>[
-                                          null,
-                                          null,
-                                          null,
-                                          null,
-                                          null,
-                                        ])
-                                    .map((goal) {
-                                  final Color heartColor;
-                                  if (goal == null || !goal.isEnabled) {
-                                    heartColor =
-                                        colors.accent.withValues(alpha: 0.16);
-                                  } else if (goal.isCompleted) {
-                                    heartColor = colors.accent;
-                                  } else {
-                                    heartColor =
-                                        colors.accent.withValues(alpha: 0.42);
-                                  }
-                                  return Padding(
-                                    padding: const EdgeInsets.only(right: 2.5),
-                                    child: Icon(
-                                      Icons.favorite_rounded,
-                                      size: isCompact ? 10.5 : 11.5,
-                                      color: heartColor,
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      SizedBox(
-                        width: ringSize,
-                        height: ringSize,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: ringSize,
-                              height: ringSize,
-                              child: CircularProgressIndicator(
-                                value: progress,
-                                strokeWidth: isCompact ? 4.5 : 5,
-                                strokeCap: StrokeCap.round,
-                                backgroundColor:
-                                    colors.accent.withValues(alpha: 0.16),
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(colors.accent),
-                              ),
-                            ),
-                            Text(
-                              progress >= 1.0 ? '✓' : '%$pct',
-                              style: TextStyle(
-                                fontSize: isCompact ? 9.5 : 10.5,
-                                fontWeight: FontWeight.w800,
-                                color: colors.accent,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+    return Semantics(
+      label: cardTitle,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            HapticService.selectionClick();
+            DailyGoalsSheet.show(context);
+          },
+          onLongPress: () {
+            HapticService.selectionClick();
+            QuickStatsSharePreviewModal.show(
+              context: context,
+              todayZikir: stats.formattedToday,
+              thisWeekZikir: stats.formattedThisWeek,
+              dailyAvgZikir: stats.formattedDailyAverage,
+              totalZikir: stats.formattedTotal == '0' && totalZikirVal > 0
+                  ? formatCompactNumber(totalZikirVal)
+                  : stats.formattedTotal,
+              quranPages: stats.formattedQuranToday,
+              rankName: userRank.name,
+              rankBadge: userRank.badge,
+              initialTheme: ZikirShareThemeData.themeForGoalOrTask(
+                category: 'İbadet Karnesi',
               ),
             );
           },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final hasBoundedHeight = constraints.hasBoundedHeight;
+              final h = constraints.maxHeight;
+              final padV = hasBoundedHeight ? (h * 0.12).clamp(6.0, 10.0) : 10.0;
+              final numFontSize =
+                  hasBoundedHeight ? (h * 0.30).clamp(18.0, 23.0) : 22.0;
+              final ringSize =
+                  hasBoundedHeight ? (h * 0.56).clamp(32.0, 40.0) : 38.0;
+              final isCompact = hasBoundedHeight && h < 76;
+
+              return Stack(
+                children: [
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: padV,
+                    ),
+                    decoration: BoxDecoration(
+                      color: surfaceColor,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: borderColor, width: 1.0),
+                    ),
+                    child: Center(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    stats.formattedToday,
+                                    style: TextStyle(
+                                      fontSize: numFontSize,
+                                      fontWeight: FontWeight.w800,
+                                      color: colors.primaryText,
+                                      height: 1.05,
+                                      letterSpacing: -0.5,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(height: isCompact ? 3 : 5),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: (goalsStatus?.orderedGoals ??
+                                            const <DailyGoalItemState?>[
+                                              null,
+                                              null,
+                                              null,
+                                              null,
+                                              null,
+                                            ])
+                                        .map((goal) {
+                                      final Color heartColor;
+                                      if (goal == null || !goal.isEnabled) {
+                                        heartColor =
+                                            colors.accent.withValues(alpha: 0.16);
+                                      } else if (goal.isCompleted) {
+                                        heartColor = colors.accent;
+                                      } else {
+                                        heartColor =
+                                            colors.accent.withValues(alpha: 0.42);
+                                      }
+                                      return Padding(
+                                        padding: const EdgeInsets.only(right: 2.5),
+                                        child: Icon(
+                                          Icons.favorite_rounded,
+                                          size: isCompact ? 10.0 : 11.0,
+                                          color: heartColor,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          SizedBox(
+                            width: ringSize,
+                            height: ringSize,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                SizedBox(
+                                  width: ringSize,
+                                  height: ringSize,
+                                  child: CircularProgressIndicator(
+                                    value: progress,
+                                    strokeWidth: isCompact ? 4.0 : 4.5,
+                                    strokeCap: StrokeCap.round,
+                                    backgroundColor:
+                                        colors.accent.withValues(alpha: 0.16),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      colors.accent,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  progress >= 1.0 ? '✓' : '%$pct',
+                                  style: TextStyle(
+                                    fontSize: isCompact ? 9.0 : 10.0,
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.accent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isGold && !isClaimed)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: _SurpriseChestMiniChip(isTurkish: l10n.isTurkish),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

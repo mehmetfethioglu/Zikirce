@@ -10,7 +10,6 @@ import '../../../../../core/theme/app_theme_colors.dart';
 import '../../../../../core/widgets/cloud_sync_app_bar_badge.dart';
 import '../../../../gamification/providers/gamification_providers.dart';
 import '../../../../settings/providers/settings_provider.dart';
-import '../../../providers/dashboard_providers.dart';
 import '../account_switcher_sheet.dart';
 import '../rank_info_bottom_sheet.dart';
 
@@ -74,8 +73,12 @@ class MinimalHomeHeader extends ConsumerWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final hasBoundedHeight = constraints.hasBoundedHeight;
-            final isCompact = hasBoundedHeight && constraints.maxHeight < 130;
-            final avatarSize = isCompact ? 44.0 : 50.0;
+            final isCompact = hasBoundedHeight && constraints.maxHeight < 86;
+            final verticalPad = isCompact ? 6.0 : 9.0;
+            final avatarSize = hasBoundedHeight
+                ? (constraints.maxHeight - (verticalPad * 2) - 4.0)
+                    .clamp(46.0, isCompact ? 54.0 : 60.0)
+                : 56.0;
             final actionSize = isCompact ? 34.0 : 36.0;
 
             return Stack(
@@ -91,142 +94,128 @@ class MinimalHomeHeader extends ConsumerWidget {
                 ),
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: isCompact ? 8 : 12,
+                    horizontal: 14,
+                    vertical: verticalPad,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize:
-                        hasBoundedHeight ? MainAxisSize.max : MainAxisSize.min,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          _ProfileAvatarBadge(
-                            size: avatarSize,
-                            userAvatar: userAvatar,
-                            isCloud: sessionInfo.isCloud,
-                            hasShareBadge: hasShareBadge,
-                            badgePrimaryColor: badgePrimaryColor,
-                            badgeSecondaryColor: badgeSecondaryColor,
-                            onOpenShareReminder: onOpenShareReminder,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GestureDetector(
-                                  onTap: () => AccountSwitcherSheet.show(context),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _ProfileAvatarBadge(
+                          size: avatarSize,
+                          userAvatar: userAvatar,
+                          isCloud: sessionInfo.isCloud,
+                          hasShareBadge: hasShareBadge,
+                          badgePrimaryColor: badgePrimaryColor,
+                          badgeSecondaryColor: badgeSecondaryColor,
+                          onOpenShareReminder: onOpenShareReminder,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTap: () => AccountSwitcherSheet.show(context),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      l10n.isTurkish
+                                          ? 'Selamün Aleyküm'
+                                          : 'Peace be upon you',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: isCompact ? 11.5 : 12.0,
+                                        fontWeight: FontWeight.w300,
+                                        color: colors.secondaryText,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      userName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: isCompact ? 16.5 : 18.0,
+                                        fontWeight: FontWeight.w800,
+                                        color: colors.primaryText,
+                                        height: 1.15,
+                                        letterSpacing: -0.3,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              InkWell(
+                                onTap: () => RankInfoBottomSheet.show(context),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 1),
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        l10n.isTurkish
-                                            ? 'Selamün Aleyküm'
-                                            : 'Peace be upon you',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: isCompact ? 12 : 12.5,
-                                          fontWeight: FontWeight.w300,
-                                          color: colors.secondaryText,
-                                          letterSpacing: 0.2,
+                                        userRank.badge,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          userRank.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: colors.secondaryText,
+                                          ),
                                         ),
                                       ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        userName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: isCompact ? 17.5 : 18.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: colors.primaryText,
-                                          height: 1.15,
-                                          letterSpacing: -0.3,
-                                        ),
+                                      const SizedBox(width: 2),
+                                      Icon(
+                                        Icons.keyboard_arrow_right_rounded,
+                                        size: 15,
+                                        color: colors.secondaryTextAlt,
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(height: 3),
-                                InkWell(
-                                  onTap: () => RankInfoBottomSheet.show(context),
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 1),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          userRank.badge,
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Flexible(
-                                          child: Text(
-                                            userRank.name,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: colors.secondaryText,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 2),
-                                        Icon(
-                                          Icons.keyboard_arrow_right_rounded,
-                                          size: 15,
-                                          color: colors.secondaryTextAlt,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          const CloudSyncAppBarBadge(),
-                          _HeaderCircleActionButton(
-                            size: actionSize,
-                            icon: Icons.insights_rounded,
-                            tooltip: l10n.isTurkish
-                                ? 'Detaylı İstatistikler ve Rozetler'
-                                : 'Detailed Statistics & Badges',
-                            onTap: () {
-                              HapticService.selectionClick();
-                              context.push('/stats');
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          _HeaderCircleActionButton(
-                            size: actionSize,
-                            icon: Icons.settings_outlined,
-                            tooltip: l10n.isTurkish ? 'Ayarlar' : 'Settings',
-                            onTap: () {
-                              HapticService.selectionClick();
-                              context.push('/settings');
-                            },
-                          ),
-                        ],
-                      ),
-                      if (hasBoundedHeight)
-                        const Spacer()
-                      else
-                        const SizedBox(height: 10),
-                      Container(
-                        height: 0.8,
-                        color: colors.borderStroke.withValues(alpha: 0.6),
-                      ),
-                      SizedBox(height: isCompact ? 4 : 7),
-                      _ProfileDescriptiveSummary(isCompact: isCompact),
-                    ],
+                        ),
+                        const SizedBox(width: 6),
+                        const CloudSyncAppBarBadge(),
+                        _HeaderCircleActionButton(
+                          size: actionSize,
+                          icon: Icons.insights_rounded,
+                          tooltip: l10n.isTurkish
+                              ? 'Detaylı İstatistikler ve Rozetler'
+                              : 'Detailed Statistics & Badges',
+                          onTap: () {
+                            HapticService.selectionClick();
+                            context.push('/stats');
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        _HeaderCircleActionButton(
+                          size: actionSize,
+                          icon: Icons.settings_outlined,
+                          tooltip: l10n.isTurkish ? 'Ayarlar' : 'Settings',
+                          onTap: () {
+                            HapticService.selectionClick();
+                            context.push('/settings');
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -383,73 +372,6 @@ class _HeaderCircleActionButton extends StatelessWidget {
               size: size < 35 ? 17 : 18,
               color: colors.primaryText,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileDescriptiveSummary extends ConsumerWidget {
-  final bool isCompact;
-
-  const _ProfileDescriptiveSummary({required this.isCompact});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
-    final l10n = context.l10n;
-    final summary = ref.watch(dashboardProfileSummaryProvider);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          HapticService.selectionClick();
-          context.push('/stats');
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 1.5),
-                child: Icon(
-                  summary.isGoldCompleted
-                      ? Icons.workspace_premium_rounded
-                      : Icons.auto_awesome_rounded,
-                  size: 14,
-                  color: summary.isGoldCompleted
-                      ? const Color(0xFFF59E0B)
-                      : colors.accent,
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  l10n.isTurkish ? summary.summaryTr : summary.summaryEn,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: isCompact ? 11.3 : 12.0,
-                    height: 1.32,
-                    fontWeight: FontWeight.w500,
-                    color: colors.secondaryText,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: colors.secondaryTextAlt,
-                ),
-              ),
-            ],
           ),
         ),
       ),

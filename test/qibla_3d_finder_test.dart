@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zikirce/core/localization/app_localizations.dart';
+import 'package:zikirce/core/services/prayer_times_service.dart';
 import 'package:zikirce/core/session/session_providers.dart';
 import 'package:zikirce/core/session/user_session.dart';
 import 'package:zikirce/core/theme/app_theme_colors.dart';
@@ -15,8 +16,32 @@ import 'package:zikirce/features/namaz_vakitleri/domain/qibla_models.dart';
 import 'package:zikirce/features/namaz_vakitleri/presentation/screens/qibla_compass_screen.dart';
 import 'package:zikirce/features/namaz_vakitleri/presentation/widgets/qibla_3d_painter.dart';
 import 'package:zikirce/features/namaz_vakitleri/presentation/widgets/qibla_finder_card.dart';
+import 'package:zikirce/features/namaz_vakitleri/providers/prayer_providers.dart';
 import 'package:zikirce/features/namaz_vakitleri/providers/qibla_providers.dart';
+import 'package:zikirce/features/namaz_vakitleri/services/qibla_location_service.dart';
 import 'package:zikirce/features/namaz_vakitleri/services/qibla_sensor_service.dart';
+
+class _FakeQiblaLocationSource implements QiblaLocationService {
+  QiblaLocationResult nextResult;
+  int getCalls = 0;
+  int openSettingsCalls = 0;
+
+  _FakeQiblaLocationSource(this.nextResult);
+
+  @override
+  Future<QiblaLocationResult> getCurrentLocation({
+    bool requestPermission = true,
+  }) async {
+    getCalls++;
+    return nextResult;
+  }
+
+  @override
+  Future<bool> openLocationSettings() async {
+    openSettingsCalls++;
+    return true;
+  }
+}
 
 class _FakeQiblaSensorSource implements QiblaSensorSource {
   final StreamController<QiblaSensorSample> _controller =
@@ -77,6 +102,32 @@ void main() {
     test('İstanbul ile Kâbe arasındaki Haversine mesafesini doğru hesaplar', () {
       final km = QiblaMath.calculateDistanceToKaabaKm(41.0082, 28.9784);
       expect(km, inInclusiveRange(2380.0, 2420.0));
+    });
+
+    test('calculateDistanceKm ve findNearestCity en yakın şehri bulur', () {
+      final istToAnk = QiblaMath.calculateDistanceKm(
+        41.0082,
+        28.9784,
+        39.9334,
+        32.8597,
+      );
+      expect(istToAnk, inInclusiveRange(340.0, 360.0));
+
+      final nearest = QiblaMath.findNearestCity(
+        39.9334,
+        32.8597,
+        PrayerTimesService.cityCoordinates,
+      );
+      expect(nearest, isNotNull);
+      expect(nearest!.city, equals('Ankara'));
+      expect(nearest.distanceKm, lessThan(1.0));
+
+      final farAway = QiblaMath.findNearestCity(
+        40.7128,
+        -74.0060,
+        PrayerTimesService.cityCoordinates,
+      );
+      expect(farAway, isNull);
     });
 
     test('Manyetik sapma (declination) Türkiye, Londra ve NYC için doğrudur', () {
@@ -156,14 +207,19 @@ void main() {
 
   group('QiblaController durum makinesi ve hysteresis testleri', () {
     late _FakeQiblaSensorSource fakeSensor;
+    late _FakeQiblaLocationSource fakeLocation;
     late ProviderContainer container;
     late ProviderSubscription<QiblaState> sub;
 
     setUp(() {
       fakeSensor = _FakeQiblaSensorSource();
+      fakeLocation = _FakeQiblaLocationSource(
+        const QiblaLocationResult(status: QiblaLocationStatus.unavailable),
+      );
       container = ProviderContainer(
         overrides: [
           qiblaSensorSourceProvider.overrideWithValue(fakeSensor),
+          qiblaLocationSourceProvider.overrideWithValue(fakeLocation),
           activeSessionProvider.overrideWithValue(UserSession.defaultSession()),
         ],
       );
@@ -393,6 +449,85 @@ void main() {
         container.read(qiblaControllerProvider(params)).phase,
         QiblaAlignmentPhase.qiyam,
       );
+    });
+
+    test('iOS Gerçek Kuzey (isTrueNorth) örneğine sapma açısı eklenmez ve kalibrasyon uyarısı işlenir',
+        () {
+      const params = QiblaParams();
+      final controller = container.read(qiblaControllerProvider(params).notifier);
+
+      controller.onSensorSample(
+        const QiblaSensorSample(
+          headingDeg: 151.6,
+          tiltDeg: 1.0,
+          pitchDeg: 0.5,
+          rollDeg: 0.5,
+          magneticFieldUt: 0.0,
+          isTrueNorth: true,
+          needsCalibration: false,
+          headingAccuracyDeg: 5.0,
+        ),
+      );
+      var state = container.read(qiblaControllerProvider(params));
+      expect(state.isUsingTrueNorth, isTrue);
+      expect(state.headingDeg, closeTo(151.6, 0.01));
+      expect(state.sensorStatus, QiblaSensorStatus.active);
+
+      controller.onSensorSample(
+        const QiblaSensorSample(
+          headingDeg: 151.6,
+          tiltDeg: 1.0,
+          pitchDeg: 0.5,
+          rollDeg: 0.5,
+          magneticFieldUt: 0.0,
+          isTrueNorth: true,
+          needsCalibration: true,
+          headingAccuracyDeg: 35.0,
+        ),
+      );
+      state = container.read(qiblaControllerProvider(params));
+      expect(state.sensorStatus, QiblaSensorStatus.interference);
+    });
+
+    test('GPS aktifken namaz vakti şehri değişse bile kıble yönü GPS konumunu korur',
+        () async {
+      final ankaraGps = _FakeQiblaLocationSource(
+        const QiblaLocationResult(
+          status: QiblaLocationStatus.gpsActive,
+          latitude: 39.9334,
+          longitude: 32.8597,
+          accuracyMeters: 25.0,
+        ),
+      );
+      final gpsContainer = ProviderContainer(
+        overrides: [
+          qiblaSensorSourceProvider.overrideWithValue(fakeSensor),
+          qiblaLocationSourceProvider.overrideWithValue(ankaraGps),
+          activeSessionProvider.overrideWithValue(UserSession.defaultSession()),
+        ],
+      );
+      final gpsSub = gpsContainer.listen(
+        qiblaControllerProvider(const QiblaParams()),
+        (_, __) {},
+      );
+      addTearDown(() {
+        gpsSub.close();
+        gpsContainer.dispose();
+      });
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      var state = gpsContainer.read(qiblaControllerProvider(const QiblaParams()));
+      expect(state.locationSource, QiblaLocationSource.gps);
+      expect(state.cityName, equals('Ankara'));
+      expect(state.qiblaBearingDeg, closeTo(159.4, 0.8));
+      expect(state.suggestedPrayerCity, equals('Ankara'));
+
+      // Namaz vakti şehri İzmir'e çevrilse bile kıble Ankara GPS yönünde kalır
+      await gpsContainer.read(selectedCityProvider.notifier).setCity('İzmir');
+      state = gpsContainer.read(qiblaControllerProvider(const QiblaParams()));
+      expect(state.locationSource, QiblaLocationSource.gps);
+      expect(state.cityName, equals('Ankara'));
+      expect(state.qiblaBearingDeg, closeTo(159.4, 0.8));
     });
   });
 
@@ -700,6 +835,121 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 1400));
       expect(find.textContaining('Kıyam'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+
+    testWidgets(
+        'GPS aktifken şehir seçme ekranı açılmaz ve seyahat önerisi gösterilir',
+        (tester) async {
+      final fakeSensor = _FakeQiblaSensorSource();
+      final ankaraGps = _FakeQiblaLocationSource(
+        const QiblaLocationResult(
+          status: QiblaLocationStatus.gpsActive,
+          latitude: 39.9334,
+          longitude: 32.8597,
+          accuracyMeters: 20.0,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            qiblaSensorSourceProvider.overrideWithValue(fakeSensor),
+            qiblaLocationSourceProvider.overrideWithValue(ankaraGps),
+            activeSessionProvider.overrideWithValue(UserSession.defaultSession()),
+          ],
+          child: MaterialApp(
+            locale: const Locale('tr'),
+            supportedLocales: const <Locale>[Locale('tr'), Locale('en')],
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: ThemeData.light().copyWith(
+              extensions: const <ThemeExtension<dynamic>>[
+                AppThemeColors.greenLight,
+              ],
+            ),
+            home: const QiblaCompassScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('GPS • Ankara'), findsOneWidget);
+      expect(
+        find.byKey(const Key('qibla_prayer_city_suggestion_banner')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('qibla_location_warning_banner')),
+        findsNothing,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+
+    testWidgets(
+        'Konum izni reddedilirse uyarı şeridi görünür ve Konumu Aç GPS isteğini yineler',
+        (tester) async {
+      final fakeSensor = _FakeQiblaSensorSource();
+      final deniedGps = _FakeQiblaLocationSource(
+        const QiblaLocationResult(status: QiblaLocationStatus.permissionDenied),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            qiblaSensorSourceProvider.overrideWithValue(fakeSensor),
+            qiblaLocationSourceProvider.overrideWithValue(deniedGps),
+            activeSessionProvider.overrideWithValue(UserSession.defaultSession()),
+          ],
+          child: MaterialApp(
+            locale: const Locale('tr'),
+            supportedLocales: const <Locale>[Locale('tr'), Locale('en')],
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: ThemeData.light().copyWith(
+              extensions: const <ThemeExtension<dynamic>>[
+                AppThemeColors.greenLight,
+              ],
+            ),
+            home: const QiblaCompassScreen(),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        find.byKey(const Key('qibla_location_warning_banner')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('qibla_enable_gps_btn')), findsOneWidget);
+      expect(deniedGps.getCalls, equals(1));
+
+      deniedGps.nextResult = const QiblaLocationResult(
+        status: QiblaLocationStatus.gpsActive,
+        latitude: 41.0082,
+        longitude: 28.9784,
+      );
+      await tester.tap(find.byKey(const Key('qibla_enable_gps_btn')));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(deniedGps.getCalls, equals(2));
+      expect(find.text('GPS • İstanbul'), findsOneWidget);
+      expect(
+        find.byKey(const Key('qibla_location_warning_banner')),
+        findsNothing,
+      );
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

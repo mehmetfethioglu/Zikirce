@@ -272,6 +272,7 @@ struct PrayerTimesWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerTimesWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Namaz Vakitleri Tablosu")
         .description("Günlük 6 vakit namaz tablosu ve canlı geri sayım sayacı.")
@@ -350,6 +351,7 @@ struct PrayerTimesMiniWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerTimesMiniWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Mini Vakit Şeridi")
         .description("Kompakt yatay namaz vakitleri şeridi ve canlı sayaç.")
@@ -532,6 +534,7 @@ struct PrayerCountdownWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerCountdownWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Vakit Geri Sayım")
         .description("Sıradaki namaz vaktine kalan süreyi saniye saniye gösterir.")
@@ -634,6 +637,7 @@ struct PrayerDigitalClockWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerDigitalClockWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Dijital Vakit Saati")
         .description("Dijital saat, hicri takvim ve sıradaki vakit geri sayımı.")
@@ -973,6 +977,7 @@ struct PrayerAnalogClockWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerAnalogClockWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Selçuklu Yıldızı Analog Saat")
         .description("Zikirce 8 köşeli Selçuklu yıldızı ve tesbih çerçeveli analog saat, alt bölümde canlı geri sayım sayacı.")
@@ -1180,6 +1185,7 @@ struct PrayerNextWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerNextWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Sıradaki Vakit Kartı")
         .description("Sıradaki namaz vaktini, saatini ve canlı geri sayımını gösterir.")
@@ -1257,6 +1263,7 @@ struct PrayerMiniWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             PrayerMiniWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Minimal Vakit")
         .description("Kompakt sıradaki vakit saati ve canlı geri sayım.")

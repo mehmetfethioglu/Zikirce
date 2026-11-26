@@ -105,19 +105,49 @@ class QiblaMath {
     return normalizeAngleDeg(bearing);
   }
 
-  /// Haversine formülü ile Kâbe-i Muazzama'ya kuş uçuşu mesafeyi (km) döndürür.
-  static double calculateDistanceToKaabaKm(double lat, double lng) {
-    final dLat = (kaabaLat - lat) * _degToRad;
-    final dLng = (kaabaLng - lng) * _degToRad;
-    final lat1 = lat * _degToRad;
-    const lat2 = kaabaLat * _degToRad;
+  /// İki coğrafi koordinat arasındaki Haversine mesafesini (km) döndürür.
+  static double calculateDistanceKm(
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
+    final dLat = (lat2 - lat1) * _degToRad;
+    final dLng = (lng2 - lng1) * _degToRad;
+    final lat1Rad = lat1 * _degToRad;
+    final lat2Rad = lat2 * _degToRad;
 
     final sinHalfLat = math.sin(dLat / 2.0);
     final sinHalfLng = math.sin(dLng / 2.0);
     final a = sinHalfLat * sinHalfLat +
-        math.cos(lat1) * math.cos(lat2) * sinHalfLng * sinHalfLng;
+        math.cos(lat1Rad) * math.cos(lat2Rad) * sinHalfLng * sinHalfLng;
     final c = 2.0 * math.atan2(math.sqrt(a), math.sqrt((1.0 - a).clamp(0.0, 1.0)));
     return _earthRadiusKm * c;
+  }
+
+  /// Haversine formülü ile Kâbe-i Muazzama'ya kuş uçuşu mesafeyi (km) döndürür.
+  static double calculateDistanceToKaabaKm(double lat, double lng) {
+    return calculateDistanceKm(lat, lng, kaabaLat, kaabaLng);
+  }
+
+  /// Verilen GPS koordinatına en yakın bilinen şehri ve mesafesini döndürür.
+  static ({String city, double distanceKm})? findNearestCity(
+    double lat,
+    double lng,
+    Map<String, (double, double)> cityCoordinates, {
+    double maxDistanceKm = 120.0,
+  }) {
+    String? bestCity;
+    var bestDistance = double.infinity;
+    for (final entry in cityCoordinates.entries) {
+      final d = calculateDistanceKm(lat, lng, entry.value.$1, entry.value.$2);
+      if (d < bestDistance) {
+        bestDistance = d;
+        bestCity = entry.key;
+      }
+    }
+    if (bestCity == null || bestDistance > maxDistanceKm) return null;
+    return (city: bestCity, distanceKm: bestDistance);
   }
 
   /// Çift doğrusal (bilinear) enterpolasyon ile yaklaşık manyetik sapma açısını (°) döndürür.

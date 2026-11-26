@@ -25,8 +25,11 @@ import 'package:zikirce/features/dashboard/presentation/widgets/annual_heatmap_w
 import 'package:zikirce/features/dashboard/presentation/widgets/bento/bento_daily_zikir_card.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/bento/bento_home_action_cards.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/bento/bento_streak_rhythm_card.dart';
+import 'package:zikirce/features/dashboard/presentation/widgets/bento/home_quick_access_ribbon.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/bento/last_7_days_activity_trend_card.dart';
+import 'package:zikirce/features/dashboard/presentation/widgets/bento/minimal_five_prayers_card.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/bento/minimal_home_header.dart';
+import 'package:zikirce/features/dashboard/presentation/widgets/kaza_tasks_horizontal_list.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/stats_treasury_summary_card.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/zikir_distribution_donut.dart';
 import 'package:zikirce/features/dashboard/presentation/widgets/zikir_history_section.dart';
@@ -292,8 +295,15 @@ void main() {
     }
 
     testWidgets(
-      'BismillahDashboardScreen renders simplified profile card, single-card favorite zikirs & clean wave trends without prayer card',
+      'BismillahDashboardScreen renders simplified profile card, quick-access ribbon, minimal 5 prayers card, compact stat cards, favorite zikirs & wave trends',
       (tester) async {
+        tester.view.physicalSize = const Size(393, 852);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
         await tester.pumpWidget(
           buildHarness(
             child: const BismillahDashboardScreen(),
@@ -305,13 +315,19 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(find.byType(MinimalHomeHeader), findsOneWidget);
+        expect(find.byType(HomeQuickAccessRibbon), findsOneWidget);
+        expect(find.byType(MinimalFivePrayersCard), findsOneWidget);
         expect(find.byType(BentoDailyZikirCard), findsOneWidget);
         expect(find.byType(BentoStreakRhythmCard), findsOneWidget);
         expect(find.byType(FavoriteZikirsCarouselCard), findsOneWidget);
         expect(find.byType(Last7DaysActivityTrendCard), findsOneWidget);
 
-        // Prayers card and removed cluttered titles/nested side-by-side metrics must not appear
+        // Removed header descriptions, stat card titles & cluttered nested labels must not appear
+        expect(find.textContaining('Manevi yolculuğun başlıyor'), findsNothing);
+        expect(find.text('Bugünkü Zikir'), findsNothing);
+        expect(find.text('Gün Serisi'), findsNothing);
         expect(find.text('Günün Namazları'), findsNothing);
+        expect(find.text('Günün 5 Vakit Namazı'), findsNothing);
         expect(find.text('Bu Hafta'), findsNothing);
         expect(find.text('Günlük Ort.'), findsNothing);
         expect(find.text('Favori Zikirler'), findsNothing);
@@ -320,12 +336,28 @@ void main() {
         expect(find.text('Son 7 Gün'), findsNothing);
         expect(find.text('Detaylar'), findsNothing);
 
-        // Descriptive summary is rendered directly inside the profile card
-        expect(find.textContaining('Manevi yolculuğun başlıyor'), findsOneWidget);
+        // Quick access tiles, minimal 5 prayers pills, and countdown strip exist
+        expect(find.byKey(const Key('home_quick_access_kaza')), findsOneWidget);
+        expect(find.byKey(const Key('home_quick_access_qibla')), findsOneWidget);
+        expect(find.byKey(const Key('minimal_prayer_countdown_text')), findsOneWidget);
+        expect(find.text('Sabah'), findsOneWidget);
+        expect(find.text('Öğle'), findsOneWidget);
+        expect(find.text('İkindi'), findsOneWidget);
+        expect(find.text('Akşam'), findsOneWidget);
+        expect(find.text('Yatsı'), findsOneWidget);
 
-        // Profile header maintains a clean proportional height
-        final headerSize = tester.getSize(find.byType(MinimalHomeHeader));
-        expect(headerSize.height, greaterThanOrEqualTo(100));
+        // Vertical ordering: profile header -> quick-access ribbon -> minimal prayers -> zikir/streak
+        final headerRect = tester.getRect(find.byType(MinimalHomeHeader));
+        final ribbonRect = tester.getRect(find.byType(HomeQuickAccessRibbon));
+        final prayersRect = tester.getRect(find.byType(MinimalFivePrayersCard));
+        final zikirRect = tester.getRect(find.byType(BentoDailyZikirCard));
+        expect(headerRect.bottom, lessThanOrEqualTo(ribbonRect.top + 1.0));
+        expect(ribbonRect.bottom, lessThanOrEqualTo(prayersRect.top + 1.0));
+        expect(prayersRect.bottom, lessThanOrEqualTo(zikirRect.top + 1.0));
+
+        // Compact single-row profile header height
+        expect(headerRect.height, greaterThanOrEqualTo(64));
+        expect(headerRect.height, lessThan(115));
 
         // Greeting is thin (w300) and username is bold (w800)
         final greetingText = tester.widget<Text>(find.text('Selamün Aleyküm'));
@@ -333,6 +365,29 @@ void main() {
 
         final nameText = tester.widget<Text>(find.text('Ana Profil'));
         expect(nameText.style?.fontWeight, FontWeight.w800);
+
+        await disposeWidgetTree(tester);
+      },
+    );
+
+    testWidgets(
+      'Tapping Telafi Görevleri quick-access tile opens KazaTasksHorizontalList sheet cleanly',
+      (tester) async {
+        await tester.pumpWidget(
+          buildHarness(
+            child: const BismillahDashboardScreen(),
+            themeColors: AppThemeColors.greenLight,
+            brightness: Brightness.light,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+
+        await tester.tap(find.byKey(const Key('home_quick_access_kaza')));
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('Telafi Görevleri'), findsOneWidget);
+        expect(find.byType(KazaTasksHorizontalList), findsOneWidget);
 
         await disposeWidgetTree(tester);
       },

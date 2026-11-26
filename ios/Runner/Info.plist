@@ -68,6 +68,8 @@
 		</array>
 		<key>NSCameraUsageDescription</key>
 		<string>Zikirce, zikir halkası ve profil karekodlarını okuyabilmek için kamera erişimine ihtiyaç duyar.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Zikirce, kıble yönünü bulunduğunuz gerçek konuma göre doğru hesaplayabilmek için yalnızca kullanım sırasında konum erişimine ihtiyaç duyar.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Zikirce, ezber ve talim modülünde Kur'an-ı Kerim telaffuzunuzu analiz etmek için mikrofon erişimine ihtiyaç duyar.</string>
 		<key>NSPhotoLibraryUsageDescription</key>

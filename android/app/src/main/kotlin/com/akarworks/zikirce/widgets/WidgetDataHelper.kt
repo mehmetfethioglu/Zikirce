@@ -1,9 +1,15 @@
 package com.akarworks.zikirce.widgets
 
+import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.database.sqlite.SQLiteDatabase
 import android.graphics.*
+import android.net.Uri
+import android.os.Build
+import com.akarworks.zikirce.MainActivity
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -71,6 +77,54 @@ data class WidgetKulliyatData(
 )
 
 object WidgetDataHelper {
+
+    const val HOME_WIDGET_LAUNCH_ACTION = "es.antonborri.home_widget.action.LAUNCH"
+
+    fun createWidgetLaunchPendingIntent(
+        context: Context,
+        requestCode: Int,
+        deepLinkUri: String,
+        route: String
+    ): PendingIntent {
+        val uriWithHomeWidget = when {
+            deepLinkUri.contains("homeWidget") -> deepLinkUri
+            deepLinkUri.contains("?") -> "$deepLinkUri&homeWidget"
+            else -> "$deepLinkUri?homeWidget"
+        }
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            action = HOME_WIDGET_LAUNCH_ACTION
+            data = Uri.parse(uriWithHomeWidget)
+            putExtra("route", route)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+        }
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            val options = ActivityOptions.makeBasic()
+            if (Build.VERSION.SDK_INT >= 35) {
+                options.setPendingIntentCreatorBackgroundActivityStartMode(
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                options.pendingIntentBackgroundActivityStartMode =
+                    ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+            }
+            return PendingIntent.getActivity(context, requestCode, openIntent, flags, options.toBundle())
+        }
+
+        return PendingIntent.getActivity(context, requestCode, openIntent, flags)
+    }
 
     private val hijriMonthNamesTr = arrayOf(
         "Muharrem", "Safer", "Rebiülevvel", "Rebiülahir",

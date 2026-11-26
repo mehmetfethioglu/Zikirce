@@ -12,11 +12,69 @@ class FiqhLibraryScreen extends StatelessWidget {
   final int? initialFarzId;
   final void Function(int farzId)? onStartQuizForFarz;
 
+  static const String _completedFarzPrefKey = 'CompletedFarzIds_v1';
+
   const FiqhLibraryScreen({
     super.key,
     this.initialFarzId,
     this.onStartQuizForFarz,
   });
+
+  /// Opens the 32 Farz detail modal bottom sheet directly on top of the active screen.
+  static Future<bool> showFarzDetailSheet(
+    BuildContext context, {
+    required int farzId,
+    String? prayerName,
+  }) async {
+    final target = kFarz32List.cast<FarzKnowledgeItem?>().firstWhere(
+          (item) => item?.id == farzId,
+          orElse: () => null,
+        );
+    if (target == null) return false;
+
+    final readIds = <int>{};
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedList = prefs.getStringList(_completedFarzPrefKey) ?? const [];
+      readIds.addAll(savedList.map(int.tryParse).whereType<int>());
+    } catch (e) {
+      debugPrint('[FiqhLibraryScreen] Load read status error: $e');
+    }
+
+    if (!context.mounted) return false;
+
+    HapticService.selectionClick();
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FarzDetailModalSheet(
+        item: target,
+        prayerName: prayerName,
+        isRead: readIds.contains(target.id),
+        onToggleRead: () async {
+          HapticService.selectionClick();
+          if (readIds.contains(target.id)) {
+            readIds.remove(target.id);
+          } else {
+            readIds.add(target.id);
+          }
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setStringList(
+              _completedFarzPrefKey,
+              readIds.map((id) => id.toString()).toList(),
+            );
+          } catch (e) {
+            debugPrint('[FiqhLibraryScreen] Save read status error: $e');
+          }
+        },
+      ),
+    );
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +109,8 @@ class _FiqhLibraryViewState extends State<FiqhLibraryView> {
   bool _isLoadingProgress = true;
   final TextEditingController _searchController = TextEditingController();
 
-  static const String _completedFarzPrefKey = 'CompletedFarzIds_v1';
+  static const String _completedFarzPrefKey =
+      FiqhLibraryScreen._completedFarzPrefKey;
 
   @override
   void initState() {
@@ -616,12 +675,14 @@ class _FiqhLibraryViewState extends State<FiqhLibraryView> {
 /// Rich reading view modal bottom sheet for 32 Farz articles
 class _FarzDetailModalSheet extends StatefulWidget {
   final FarzKnowledgeItem item;
+  final String? prayerName;
   final bool isRead;
   final VoidCallback onToggleRead;
   final VoidCallback? onStartQuiz;
 
   const _FarzDetailModalSheet({
     required this.item,
+    this.prayerName,
     required this.isRead,
     required this.onToggleRead,
     this.onStartQuiz,
@@ -696,24 +757,51 @@ class _FarzDetailModalSheetState extends State<_FarzDetailModalSheet> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: colors.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        'FARZ #${item.id} • ${item.category.displayName}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: colors.accent,
-                          letterSpacing: 0.4,
-                        ),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (widget.prayerName != null &&
+                              widget.prayerName!.trim().isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _emeraldColor.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '🕌 ${widget.prayerName!.trim()} Vakti',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _emeraldColor,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colors.accent.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'FARZ #${item.id} • ${item.category.displayName}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: colors.accent,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
                     IconButton(
                       icon: Icon(Icons.share_outlined,
                           color: colors.primaryText, size: 20),
@@ -780,7 +868,10 @@ class _FarzDetailModalSheetState extends State<_FarzDetailModalSheet> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Ezan Bildirimi Özeti',
+                                  (widget.prayerName != null &&
+                                          widget.prayerName!.trim().isNotEmpty)
+                                      ? '${widget.prayerName!.trim()} Vakti Bildirimi Özeti'
+                                      : 'Ezan Bildirimi Özeti',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,

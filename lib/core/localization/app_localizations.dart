@@ -241,6 +241,14 @@ class AppLocalizations {
   String get qiblaStepFace => translate('Qibla_StepFace');
   String get qiblaStepTakbir => translate('Qibla_StepTakbir');
   String get qiblaReplayTakbir => translate('Qibla_ReplayTakbir');
+  String get qiblaGpsLocating => translate('Qibla_GpsLocating');
+  String get qiblaGpsActiveTag => translate('Qibla_GpsActiveTag');
+  String get qiblaGpsFallbackWarning => translate('Qibla_GpsFallbackWarning');
+  String get qiblaEnableLocationAction => translate('Qibla_EnableLocationAction');
+  String get qiblaOpenSettingsAction => translate('Qibla_OpenSettingsAction');
+  String get qiblaPrayerCityMismatch => translate('Qibla_PrayerCityMismatch');
+  String get qiblaUpdateCityAction => translate('Qibla_UpdateCityAction');
+  String get qiblaTrueNorthLabel => translate('Qibla_TrueNorthLabel');
 
   // Zikir Page & List
   String get zikirPageCounter => translate('ZikirPage_Counter');

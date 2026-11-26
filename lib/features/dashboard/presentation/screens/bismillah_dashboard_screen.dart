@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -11,12 +10,10 @@ import '../../../../core/providers/database_provider.dart';
 import '../../../../core/services/battery_optimization_service.dart';
 import '../../../../core/services/changelog_service.dart';
 import '../../../../core/services/haptic_service.dart';
-import '../../../../core/services/local_notification_service.dart';
 import '../../../../core/services/prayer_tracking_service.dart';
 import '../../../../core/theme/app_theme_colors.dart';
 import '../../../gamification/providers/gamification_providers.dart';
 import '../../../gamification/services/golden_day_service.dart';
-import '../../../namaz_vakitleri/presentation/screens/fiqh_library_screen.dart';
 import '../../../namaz_vakitleri/presentation/widgets/bulk_kaza_prompt_dialog.dart';
 import '../../../namaz_vakitleri/presentation/widgets/exact_alarm_prompt_sheet.dart';
 import '../../../namaz_vakitleri/presentation/widgets/past_days_prayer_dialog.dart';
@@ -30,7 +27,9 @@ import '../../providers/share_reminder_provider.dart';
 import '../widgets/bento/bento_daily_zikir_card.dart';
 import '../widgets/bento/bento_home_action_cards.dart';
 import '../widgets/bento/bento_streak_rhythm_card.dart';
+import '../widgets/bento/home_quick_access_ribbon.dart';
 import '../widgets/bento/last_7_days_activity_trend_card.dart';
+import '../widgets/bento/minimal_five_prayers_card.dart';
 import '../widgets/bento/minimal_home_header.dart';
 import '../widgets/pending_past_prayers_banner.dart';
 import '../widgets/quick_stats_share_preview_modal.dart';
@@ -47,7 +46,6 @@ class BismillahDashboardScreen extends ConsumerStatefulWidget {
 
 class _BismillahDashboardScreenState
     extends ConsumerState<BismillahDashboardScreen> {
-  StreamSubscription<int>? _farzNotifSub;
   bool _hasCheckedPendingPrayers = false;
 
   @override
@@ -56,25 +54,7 @@ class _BismillahDashboardScreenState
     _initPrayerTrackingAndNotifications();
   }
 
-  @override
-  void dispose() {
-    _farzNotifSub?.cancel();
-    super.dispose();
-  }
-
   void _initPrayerTrackingAndNotifications() {
-    _farzNotifSub = LocalNotificationService
-        .pendingFarzNotificationTapped.stream
-        .listen((farzId) {
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => FiqhLibraryScreen(initialFarzId: farzId),
-          ),
-        );
-      }
-    });
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _hasCheckedPendingPrayers) return;
       _hasCheckedPendingPrayers = true;
@@ -369,7 +349,7 @@ class _BismillahDashboardScreenState
     const topPad = 8.0;
     final hasPendingBanner = pendingPastResult?.hasRecent == true;
     final textScale = MediaQuery.textScalerOf(context).scale(1.0).clamp(1.0, 1.35);
-    final minCanvasHeight = (hasPendingBanner ? 576.0 : 516.0) * textScale;
+    final minCanvasHeight = (hasPendingBanner ? 640.0 : 584.0) * textScale;
     final maxCanvasHeight = math.max(minCanvasHeight, 840.0);
     final compactHorizontalPad = layout.isNarrowCoverScreen ? 12.0 : 16.0;
 
@@ -384,13 +364,13 @@ class _BismillahDashboardScreenState
 
             if (layout.supportsTwoPaneHorizontal) {
               final minTwoPaneHeight =
-                  (hasPendingBanner ? 510.0 : 460.0) * textScale;
+                  (hasPendingBanner ? 520.0 : 470.0) * textScale;
               final maxTwoPaneHeight = math.max(minTwoPaneHeight, 900.0);
               final fitsTwoPane = availableHeight >= minTwoPaneHeight;
               final twoPaneCanvasHeight = fitsTwoPane
                   ? availableHeight.clamp(minTwoPaneHeight, maxTwoPaneHeight)
                   : minTwoPaneHeight;
-              final gap = (twoPaneCanvasHeight * 0.018).clamp(8.0, 14.0);
+              final gap = (twoPaneCanvasHeight * 0.015).clamp(6.0, 12.0);
 
               return SingleChildScrollView(
                 physics: fitsTwoPane
@@ -420,7 +400,7 @@ class _BismillahDashboardScreenState
                           SizedBox(height: gap),
                         ],
                         Expanded(
-                          flex: 52,
+                          flex: 28,
                           child: MinimalHomeHeader(
                             hasShareBadge: hasShareBadge,
                             badgePrimaryColor: badgePrimaryColor,
@@ -430,13 +410,22 @@ class _BismillahDashboardScreenState
                           ),
                         ),
                         SizedBox(height: gap),
+                        HomeQuickAccessRibbon(
+                          compact: twoPaneCanvasHeight < 520,
+                        ),
+                        SizedBox(height: gap),
                         const Expanded(
-                          flex: 48,
+                          flex: 34,
+                          child: MinimalFivePrayersCard(),
+                        ),
+                        SizedBox(height: gap),
+                        const Expanded(
+                          flex: 30,
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Expanded(child: BentoDailyZikirCard()),
-                              SizedBox(width: 12),
+                              SizedBox(width: 10),
                               Expanded(child: BentoStreakRhythmCard()),
                             ],
                           ),
@@ -447,12 +436,12 @@ class _BismillahDashboardScreenState
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         const Expanded(
-                          flex: 54,
+                          flex: 52,
                           child: FavoriteZikirsCarouselCard(),
                         ),
                         SizedBox(height: gap),
                         const Expanded(
-                          flex: 46,
+                          flex: 48,
                           child: Last7DaysActivityTrendCard(),
                         ),
                       ],
@@ -466,7 +455,7 @@ class _BismillahDashboardScreenState
             final canvasHeight = fitsViewport
                 ? availableHeight.clamp(minCanvasHeight, maxCanvasHeight)
                 : minCanvasHeight;
-            final gap = (canvasHeight * 0.016).clamp(8.0, 12.0);
+            final gap = (canvasHeight * 0.012).clamp(6.0, 10.0);
 
             return SingleChildScrollView(
               physics: fitsViewport
@@ -491,7 +480,7 @@ class _BismillahDashboardScreenState
                       SizedBox(height: gap),
                     ],
                     Expanded(
-                      flex: 22,
+                      flex: 14,
                       child: MinimalHomeHeader(
                         hasShareBadge: hasShareBadge,
                         badgePrimaryColor: badgePrimaryColor,
@@ -501,25 +490,32 @@ class _BismillahDashboardScreenState
                       ),
                     ),
                     SizedBox(height: gap),
+                    HomeQuickAccessRibbon(compact: canvasHeight < 660),
+                    SizedBox(height: gap),
                     const Expanded(
-                      flex: 19,
+                      flex: 17,
+                      child: MinimalFivePrayersCard(),
+                    ),
+                    SizedBox(height: gap),
+                    const Expanded(
+                      flex: 15,
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: BentoDailyZikirCard()),
-                          SizedBox(width: 12),
+                          SizedBox(width: 10),
                           Expanded(child: BentoStreakRhythmCard()),
                         ],
                       ),
                     ),
                     SizedBox(height: gap),
                     const Expanded(
-                      flex: 33,
+                      flex: 29,
                       child: FavoriteZikirsCarouselCard(),
                     ),
                     SizedBox(height: gap),
                     const Expanded(
-                      flex: 26,
+                      flex: 25,
                       child: Last7DaysActivityTrendCard(),
                     ),
                   ],

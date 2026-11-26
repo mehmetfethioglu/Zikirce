@@ -8,6 +8,7 @@ import '../../../../core/services/sound_pool_service.dart';
 import '../../../../core/session/session_providers.dart';
 import '../domain/qibla_math.dart';
 import '../domain/qibla_models.dart';
+import '../services/qibla_location_service.dart';
 import '../services/qibla_sensor_service.dart';
 import 'prayer_providers.dart';
 
@@ -17,6 +18,12 @@ final qiblaSensorSourceProvider =
   final source = DeviceQiblaSensorSource();
   ref.onDispose(source.dispose);
   return source;
+});
+
+/// Kıble anlık konum sağlayıcısı (DIP: testlerde sahte kaynakla override edilebilir).
+final qiblaLocationSourceProvider =
+    Provider.autoDispose<QiblaLocationService>((ref) {
+  return NativeQiblaLocationService();
 });
 
 /// Kıble ekranı için isteğe bağlı koordinat parametresi.
@@ -46,6 +53,9 @@ class QiblaController extends StateNotifier<QiblaState> {
   static const List<double> _approachingDetents = <double>[20.0, 12.0, 6.0];
 
   final QiblaSensorSource _sensorSource;
+  final QiblaLocationService? _locationService;
+  final bool _hasExplicitCoordinates;
+  String _prayerCityName;
 
   StreamSubscription<QiblaSensorSample>? _sensorSub;
   Timer? _sensorTimeoutTimer;
@@ -58,21 +68,31 @@ class QiblaController extends StateNotifier<QiblaState> {
   bool _userForcedPreview = false;
   bool _figureModeOverridden = false;
   bool _soundOverridden = false;
+  bool _isResolvingLocation = false;
+  bool _prayerCitySuggestionDismissed = false;
   DateTime _lastDetentHapticAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   QiblaController({
     required QiblaSensorSource sensorSource,
+    QiblaLocationService? locationSource,
+    bool hasExplicitCoordinates = false,
+    String? prayerCityName,
     required String cityName,
     required double latitude,
     required double longitude,
     required QiblaFigureMode initialFigureMode,
   })  : _sensorSource = sensorSource,
+        _locationService = locationSource,
+        _hasExplicitCoordinates = hasExplicitCoordinates,
+        _prayerCityName = prayerCityName ?? cityName,
         super(
           _buildInitialState(
             cityName: cityName,
             latitude: latitude,
             longitude: longitude,
             initialFigureMode: initialFigureMode,
+            hasExplicitCoordinates: hasExplicitCoordinates,
+            hasLocationSource: locationSource != null,
           ),
         ) {
     _initialize();
@@ -83,6 +103,8 @@ class QiblaController extends StateNotifier<QiblaState> {
     required double latitude,
     required double longitude,
     required QiblaFigureMode initialFigureMode,
+    required bool hasExplicitCoordinates,
+    required bool hasLocationSource,
   }) {
     final bearing = QiblaMath.calculateQiblaBearing(latitude, longitude);
     final distanceKm = QiblaMath.calculateDistanceToKaabaKm(latitude, longitude);
@@ -117,11 +139,22 @@ class QiblaController extends StateNotifier<QiblaState> {
       figureMode: initialFigureMode,
       isSoundEnabled: false,
       isInteractivePreview: false,
+      locationSource: hasExplicitCoordinates
+          ? QiblaLocationSource.manualParams
+          : QiblaLocationSource.fallbackCity,
+      locationStatus: hasExplicitCoordinates
+          ? QiblaLocationStatus.gpsActive
+          : (hasLocationSource
+              ? QiblaLocationStatus.resolving
+              : QiblaLocationStatus.unavailable),
     );
   }
 
   void _initialize() {
     unawaited(_loadPreferences());
+    if (!_hasExplicitCoordinates && _locationService != null) {
+      unawaited(refreshGpsLocation(requestPermission: true));
+    }
 
     _sensorSub = _sensorSource.sampleStream.listen(
       onSensorSample,
@@ -216,9 +249,9 @@ class QiblaController extends StateNotifier<QiblaState> {
       _sensorTimeoutTimer = null;
     }
 
-    final trueTargetHeading = QiblaMath.normalizeAngleDeg(
-      sample.headingDeg + state.declinationDeg,
-    );
+    final trueTargetHeading = sample.isTrueNorth
+        ? QiblaMath.normalizeAngleDeg(sample.headingDeg)
+        : QiblaMath.normalizeAngleDeg(sample.headingDeg + state.declinationDeg);
 
     final double nextHeading;
     if (isFirstSample || state.isInteractivePreview) {
@@ -251,9 +284,10 @@ class QiblaController extends StateNotifier<QiblaState> {
       }
     }
 
-    final hasInterference = sample.magneticFieldUt > 0 &&
+    final hasMagneticAnomaly = sample.magneticFieldUt > 0 &&
         (sample.magneticFieldUt < QiblaMath.minValidMagneticFieldUt ||
             sample.magneticFieldUt > QiblaMath.maxValidMagneticFieldUt);
+    final hasInterference = sample.needsCalibration || hasMagneticAnomaly;
 
     final status = hasInterference
         ? QiblaSensorStatus.interference
@@ -267,6 +301,177 @@ class QiblaController extends StateNotifier<QiblaState> {
       magneticFieldUt: sample.magneticFieldUt,
       sensorStatus: status,
       isInteractive: false,
+      isUsingTrueNorth: sample.isTrueNorth,
+    );
+  }
+
+  /// Cihaz GPS konumunu tek seferlik yeniler; başarılıysa namaz vakti şehrinden bağımsız kıble açısı hesaplar.
+  Future<void> refreshGpsLocation({bool requestPermission = true}) async {
+    if (_disposed ||
+        _hasExplicitCoordinates ||
+        _locationService == null ||
+        _isResolvingLocation) {
+      return;
+    }
+
+    _isResolvingLocation = true;
+    if (state.locationSource == QiblaLocationSource.fallbackCity &&
+        state.locationStatus != QiblaLocationStatus.resolving) {
+      state = state.copyWith(locationStatus: QiblaLocationStatus.resolving);
+    }
+
+    try {
+      final result = await _locationService.getCurrentLocation(
+        requestPermission: requestPermission,
+      );
+      if (_disposed) return;
+
+      if (result.hasCoordinates) {
+        final lat = result.latitude!;
+        final lng = result.longitude!;
+        final bearing = QiblaMath.calculateQiblaBearing(lat, lng);
+        final distanceKm = QiblaMath.calculateDistanceToKaabaKm(lat, lng);
+        final declination = QiblaMath.estimateMagneticDeclination(lat, lng);
+        final solar = QiblaMath.calculateSolarPosition(
+          lat,
+          lng,
+          DateTime.now().toUtc(),
+        );
+        final newDelta = QiblaMath.shortestAngleDelta(state.headingDeg, bearing);
+
+        final nearest = QiblaMath.findNearestCity(
+          lat,
+          lng,
+          PrayerTimesService.cityCoordinates,
+        );
+        final displayLabel = nearest?.city ??
+            '${lat.toStringAsFixed(2)}°, ${lng.toStringAsFixed(2)}°';
+
+        String? nextSuggestedCity;
+        if (!_prayerCitySuggestionDismissed &&
+            nearest != null &&
+            nearest.city != _prayerCityName) {
+          final prayerCoords =
+              PrayerTimesService.cityCoordinates[_prayerCityName];
+          if (prayerCoords != null) {
+            final mismatchKm = QiblaMath.calculateDistanceKm(
+              lat,
+              lng,
+              prayerCoords.$1,
+              prayerCoords.$2,
+            );
+            if (mismatchKm > 50.0) {
+              nextSuggestedCity = nearest.city;
+            }
+          }
+        }
+
+        state = state.copyWith(
+          cityName: displayLabel,
+          latitude: lat,
+          longitude: lng,
+          qiblaBearingDeg: bearing,
+          distanceKm: distanceKm,
+          declinationDeg: declination,
+          sunAzimuthDeg: solar.azimuthDeg,
+          sunElevationDeg: solar.elevationDeg,
+          angleDeltaDeg: newDelta,
+          locationSource: QiblaLocationSource.gps,
+          locationStatus: QiblaLocationStatus.gpsActive,
+          gpsAccuracyMeters: result.accuracyMeters,
+          clearGpsAccuracy: result.accuracyMeters == null,
+          suggestedPrayerCity: nextSuggestedCity,
+          clearSuggestedPrayerCity: nextSuggestedCity == null,
+        );
+
+        _evaluateAlignment(
+          newHeadingDeg: state.headingDeg,
+          tiltDeg: state.tiltDeg,
+          pitchDeg: state.pitchDeg,
+          rollDeg: state.rollDeg,
+          magneticFieldUt: state.magneticFieldUt,
+          sensorStatus: state.sensorStatus,
+          isInteractive: state.isInteractivePreview,
+        );
+      } else if (state.locationSource == QiblaLocationSource.fallbackCity) {
+        state = state.copyWith(
+          locationStatus: result.status,
+          clearGpsAccuracy: true,
+        );
+      }
+    } catch (e) {
+      debugPrint('[QiblaController] GPS location warning: $e');
+      if (!_disposed && state.locationSource == QiblaLocationSource.fallbackCity) {
+        state = state.copyWith(
+          locationStatus: QiblaLocationStatus.unavailable,
+          clearGpsAccuracy: true,
+        );
+      }
+    } finally {
+      _isResolvingLocation = false;
+    }
+  }
+
+  /// Sistem konum veya uygulama izin ayarlarını açar.
+  Future<bool> openLocationSettings() async {
+    if (_disposed || _locationService == null) return false;
+    return _locationService.openLocationSettings();
+  }
+
+  /// Seyahat kaynaklı namaz vakti şehir güncelleme önerisini kapatır.
+  void dismissPrayerCitySuggestion() {
+    _prayerCitySuggestionDismissed = true;
+    if (!_disposed && state.suggestedPrayerCity != null) {
+      state = state.copyWith(clearSuggestedPrayerCity: true);
+    }
+  }
+
+  /// Namaz vakitleri şehri değiştiğinde GPS aktifse kıbleyi bozmaz; yalnızca fallback ise günceller.
+  void syncFallbackCity({
+    required String cityName,
+    required double latitude,
+    required double longitude,
+  }) {
+    if (_disposed || _hasExplicitCoordinates) return;
+    _prayerCityName = cityName;
+
+    if (state.locationSource == QiblaLocationSource.gps) {
+      if (state.suggestedPrayerCity == cityName) {
+        state = state.copyWith(clearSuggestedPrayerCity: true);
+      }
+      return;
+    }
+
+    final bearing = QiblaMath.calculateQiblaBearing(latitude, longitude);
+    final distanceKm = QiblaMath.calculateDistanceToKaabaKm(latitude, longitude);
+    final declination = QiblaMath.estimateMagneticDeclination(latitude, longitude);
+    final solar = QiblaMath.calculateSolarPosition(
+      latitude,
+      longitude,
+      DateTime.now().toUtc(),
+    );
+    final newDelta = QiblaMath.shortestAngleDelta(state.headingDeg, bearing);
+
+    state = state.copyWith(
+      cityName: cityName,
+      latitude: latitude,
+      longitude: longitude,
+      qiblaBearingDeg: bearing,
+      distanceKm: distanceKm,
+      declinationDeg: declination,
+      sunAzimuthDeg: solar.azimuthDeg,
+      sunElevationDeg: solar.elevationDeg,
+      angleDeltaDeg: newDelta,
+    );
+
+    _evaluateAlignment(
+      newHeadingDeg: state.headingDeg,
+      tiltDeg: state.tiltDeg,
+      pitchDeg: state.pitchDeg,
+      rollDeg: state.rollDeg,
+      magneticFieldUt: state.magneticFieldUt,
+      sensorStatus: state.sensorStatus,
+      isInteractive: state.isInteractivePreview,
     );
   }
 
@@ -301,6 +506,7 @@ class QiblaController extends StateNotifier<QiblaState> {
     required double magneticFieldUt,
     required QiblaSensorStatus sensorStatus,
     required bool isInteractive,
+    bool? isUsingTrueNorth,
   }) {
     final prevAbsDelta = state.angleDeltaDeg.abs();
     final newDelta = QiblaMath.shortestAngleDelta(
@@ -356,6 +562,7 @@ class QiblaController extends StateNotifier<QiblaState> {
       sensorStatus: sensorStatus,
       phase: nextPhase,
       isInteractivePreview: isInteractive,
+      isUsingTrueNorth: isUsingTrueNorth,
     );
   }
 
@@ -518,24 +725,42 @@ class QiblaController extends StateNotifier<QiblaState> {
 final qiblaControllerProvider = StateNotifierProvider.autoDispose
     .family<QiblaController, QiblaState, QiblaParams>((ref, params) {
   final sensorSource = ref.watch(qiblaSensorSourceProvider);
-  final selectedCity = ref.watch(selectedCityProvider);
+  final locationSource = ref.watch(qiblaLocationSourceProvider);
+  final selectedCity = ref.read(selectedCityProvider);
   final avatar = ref.watch(activeSessionProvider.select((s) => s.avatar));
 
   final coords = PrayerTimesService.cityCoordinates[selectedCity] ??
       PrayerTimesService.cityCoordinates['İstanbul'] ??
       (41.0082, 28.9784);
 
+  final hasExplicitCoords = params.userLat != null && params.userLng != null;
   final lat = params.userLat ?? coords.$1;
   final lng = params.userLng ?? coords.$2;
   final initialMode = avatar.toLowerCase().contains('female')
       ? QiblaFigureMode.female
       : QiblaFigureMode.male;
 
-  return QiblaController(
+  final controller = QiblaController(
     sensorSource: sensorSource,
+    locationSource: hasExplicitCoords ? null : locationSource,
+    hasExplicitCoordinates: hasExplicitCoords,
+    prayerCityName: selectedCity,
     cityName: selectedCity,
     latitude: lat,
     longitude: lng,
     initialFigureMode: initialMode,
   );
+
+  ref.listen<String>(selectedCityProvider, (_, nextCity) {
+    final nextCoords = PrayerTimesService.cityCoordinates[nextCity];
+    if (nextCoords != null) {
+      controller.syncFallbackCity(
+        cityName: nextCity,
+        latitude: nextCoords.$1,
+        longitude: nextCoords.$2,
+      );
+    }
+  });
+
+  return controller;
 });

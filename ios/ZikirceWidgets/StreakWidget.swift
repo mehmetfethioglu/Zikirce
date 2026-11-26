@@ -476,6 +476,7 @@ struct HijriCalendarWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: PrayerTimelineProvider()) { entry in
             HijriCalendarWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Hicri Takvim")
         .description("Hicri ve Miladi takvim ile sıradaki namaz vaktine geri sayım.")
@@ -544,6 +545,7 @@ struct PrayerKazaWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: KazaTimelineProvider()) { entry in
             PrayerKazaWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Kaza Namazı Tablosu")
         .description("Kalan kaza namazlarınızın vakit bazında detaylı özeti.")
@@ -629,6 +631,7 @@ struct KazaQuickWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: KazaTimelineProvider()) { entry in
             KazaQuickWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://namaz?homeWidget"))
         }
         .configurationDisplayName("Hızlı Kaza Özeti")
         .description("Toplam kalan kaza borcu ve günlük tamamlanma durumu.")
@@ -717,6 +720,7 @@ struct KalpSagligiWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             KalpSagligiWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://stats?homeWidget"))
         }
         .configurationDisplayName("Manevi Kalp Sağlığı")
         .description("Günlük zikir hedefinize göre manevi kalp doluluk oranı.")
@@ -804,6 +808,7 @@ struct ZikirCounterWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             ZikirCounterWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://zikir?homeWidget"))
         }
         .configurationDisplayName("Zikir Sayacı")
         .description("Günlük çekilen zikir sayısı ve hedef ilerleme çubuğu.")
@@ -901,6 +906,7 @@ struct StreakWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: StreakTimelineProvider()) { entry in
             StreakWidgetEntryView(entry: entry)
+                .widgetURL(URL(string: "zikirce://zikir?homeWidget"))
         }
         .configurationDisplayName("Zikir Zinciri (Seri)")
         .description("Haftalık zikir zinciri ve kesintisiz seri takibi.")
@@ -917,7 +923,7 @@ struct KulliyatWidgetEntryView: View {
 
     private var deepLinkURL: URL? {
         let encodedId = entry.lastBookId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? entry.lastBookId
-        return URL(string: "zikirce://kulliyat?bookId=\(encodedId)&page=\(entry.lastBookPage)")
+        return URL(string: "zikirce://kulliyat?bookId=\(encodedId)&page=\(entry.lastBookPage)&homeWidget")
     }
 
     var body: some View {

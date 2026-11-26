@@ -8,17 +8,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import '../core/services/cloud_sync_engine.dart';
 import '../core/services/local_notification_service.dart';
+import '../core/services/widget_sync_service.dart';
 import '../core/localization/app_localizations.dart';
 import '../core/localization/locale_provider.dart';
 import '../core/providers/tv_mode_provider.dart';
 import '../core/services/screen_awake_service.dart';
 import '../core/theme/theme_provider.dart';
+import '../core/widgets/notification_detail_bottom_sheet.dart';
 import '../features/settings/providers/settings_provider.dart';
 import '../features/tv/providers/tv_cast_provider.dart';
 import '../features/namaz_vakitleri/providers/prayer_providers.dart';
 import '../features/gamification/providers/gamification_providers.dart';
 import '../core/widgets/celebration/spiritual_celebration_overlay.dart';
 import '../core/widgets/splash/zikirce_splash_overlay.dart';
+import 'router/app_deep_link_router.dart';
 import 'router/app_router.dart';
 
 /// Masaüstü ve tüm platformlarda fare ile sürüklemeyi (mouse drag) aktif kılan ScrollBehavior
@@ -44,25 +47,28 @@ class ZikirceApp extends ConsumerStatefulWidget {
 
 class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObserver {
   StreamSubscription<Uri?>? _widgetClickSub;
-  StreamSubscription<({String prayerName, String dateStr})>? _prayerNotifSub;
+  StreamSubscription<String>? _notificationPayloadSub;
+  bool _isNotificationSheetOpen = false;
+  int _activeSheetRequestId = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _prayerNotifSub = LocalNotificationService
-        .pendingPrayerNotificationTapped.stream
-        .listen((_) {
-      appRouter.go('/namaz');
-    });
+    _notificationPayloadSub = LocalNotificationService
+        .notificationPayloadTapped.stream
+        .listen(_handleNotificationPayload);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Warm up cloudSyncProvider early so CloudSyncEngine has application-level Ref
       ref.read(cloudSyncProvider.notifier);
       CloudSyncEngine.instance.syncOnAppResume(ref);
       CloudSyncEngine.instance.startPeriodicSync(ref);
       _initWidgetDeepLinkListener();
-      if (LocalNotificationService.consumeInitialPrayerNotificationTap() != null) {
-        appRouter.go('/namaz');
+      final initialPayload =
+          LocalNotificationService.consumeInitialNotificationPayload();
+      LocalNotificationService.consumeInitialPrayerNotificationTap();
+      if (initialPayload != null) {
+        _handleNotificationPayload(initialPayload);
       }
     });
   }
@@ -70,42 +76,141 @@ class _ZikirceAppState extends ConsumerState<ZikirceApp> with WidgetsBindingObse
   Future<void> _initWidgetDeepLinkListener() async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
     try {
-      final initialUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
-      if (initialUri != null) {
-        _handleWidgetUri(initialUri);
+      if (Platform.isIOS) {
+        await HomeWidget.setAppGroupId(WidgetSyncService.appGroupId);
       }
-      _widgetClickSub = HomeWidget.widgetClicked.listen((uri) {
+      _widgetClickSub ??= HomeWidget.widgetClicked.listen((uri) {
         if (uri != null) {
           _handleWidgetUri(uri);
         }
       });
-    } catch (_) {}
+      final initialUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      if (initialUri != null) {
+        _handleWidgetUri(initialUri);
+      }
+    } catch (e) {
+      debugPrint('[ZikirceApp] Widget deep-link listener error: $e');
+    }
+  }
+
+  void _handleNotificationPayload(String payload) {
+    final intent = AppDeepLinkRouter.resolveNotificationPayload(payload);
+    if (intent != null) {
+      _applyNavigationIntent(intent);
+    }
   }
 
   void _handleWidgetUri(Uri uri) {
-    final host = uri.host.toLowerCase();
-    final path = uri.path.toLowerCase();
-    if (host == 'kulliyat' || path.contains('kulliyat')) {
-      final bookId = uri.queryParameters['bookId'] ?? '';
-      final page = uri.queryParameters['page'] ?? '1';
-      appRouter.go('/kuran');
-      if (bookId.isNotEmpty) {
-        Future.microtask(() {
-          appRouter.push('/kulliyat?bookId=$bookId&page=$page');
-        });
+    final intent = AppDeepLinkRouter.resolveWidgetUri(uri);
+    if (intent != null) {
+      _applyNavigationIntent(intent);
+    }
+  }
+
+  Future<bool> _waitForRouteArrival(String expectedPath) async {
+    final currentPath =
+        appRouter.routerDelegate.currentConfiguration.uri.path;
+    if (currentPath == expectedPath) return true;
+    if (currentPath == '/onboarding') return false;
+
+    final completer = Completer<bool>();
+    late VoidCallback listener;
+    Timer? timeoutTimer;
+
+    void finish(bool arrived) {
+      if (!completer.isCompleted) {
+        completer.complete(arrived);
       }
-    } else if (host == 'kuran' || path.contains('kuran')) {
-      appRouter.go('/kuran');
-    } else if (host == 'namaz' || path.contains('namaz')) {
-      appRouter.go('/namaz');
-    } else if (host == 'zikir' || path.contains('zikir')) {
-      appRouter.go('/zikir');
+    }
+
+    listener = () {
+      final path = appRouter.routerDelegate.currentConfiguration.uri.path;
+      if (path == expectedPath) {
+        finish(true);
+      } else if (path == '/onboarding') {
+        finish(false);
+      }
+    };
+
+    appRouter.routerDelegate.addListener(listener);
+    timeoutTimer = Timer(const Duration(seconds: 2), () => finish(false));
+
+    try {
+      return await completer.future;
+    } finally {
+      timeoutTimer.cancel();
+      appRouter.routerDelegate.removeListener(listener);
+    }
+  }
+
+  Future<void> _presentNotificationDetailAfterArrival({
+    required NotificationDetailSpec spec,
+    required String expectedPath,
+    required int requestId,
+  }) async {
+    final arrived = await _waitForRouteArrival(expectedPath);
+    if (!arrived || !mounted || requestId != _activeSheetRequestId) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        requestId != _activeSheetRequestId ||
+        _isNotificationSheetOpen) {
+      return;
+    }
+
+    final currentPath =
+        appRouter.routerDelegate.currentConfiguration.uri.path;
+    if (currentPath != expectedPath) return;
+
+    final rootCtx = appRootNavigatorKey.currentContext;
+    if (rootCtx == null || !rootCtx.mounted) return;
+
+    _isNotificationSheetOpen = true;
+    try {
+      await NotificationDetailBottomSheet.show(rootCtx, spec: spec);
+    } catch (e) {
+      debugPrint('[ZikirceApp] Notification detail sheet error: $e');
+    } finally {
+      _isNotificationSheetOpen = false;
+    }
+  }
+
+  void _applyNavigationIntent(AppNavigationIntent intent) {
+    if (!mounted || TvModeService.isHardwareTv || ref.read(isTvModeProvider)) {
+      return;
+    }
+
+    final pushRoute = intent.pushRoute;
+    final expectedPath = (pushRoute != null && pushRoute.isNotEmpty)
+        ? Uri.parse(pushRoute).path
+        : Uri.parse(intent.baseRoute).path;
+
+    appRouter.go(intent.baseRoute);
+    if (pushRoute != null && pushRoute.isNotEmpty) {
+      Future.microtask(() {
+        if (mounted) {
+          appRouter.push(pushRoute);
+        }
+      });
+    }
+
+    final detailSpec = intent.notificationDetail;
+    if (detailSpec != null) {
+      final requestId = ++_activeSheetRequestId;
+      unawaited(
+        _presentNotificationDetailAfterArrival(
+          spec: detailSpec,
+          expectedPath: expectedPath,
+          requestId: requestId,
+        ),
+      );
     }
   }
 
   @override
   void dispose() {
-    _prayerNotifSub?.cancel();
+    _activeSheetRequestId++;
+    _notificationPayloadSub?.cancel();
     _widgetClickSub?.cancel();
     CloudSyncEngine.instance.stopPeriodicSync();
     WidgetsBinding.instance.removeObserver(this);

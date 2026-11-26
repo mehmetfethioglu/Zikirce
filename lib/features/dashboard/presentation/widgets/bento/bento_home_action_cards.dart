@@ -118,9 +118,9 @@ class _FavoriteZikirsCarouselCardState
                     if (hasBoundedHeight)
                       Expanded(child: pageView)
                     else
-                      SizedBox(height: 164, child: pageView),
+                      SizedBox(height: 130, child: pageView),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                       child: _FavoriteZikirBottomBar(
                         item: activeItem,
                         count: items.length,
@@ -588,8 +588,9 @@ class _ArabicCalligraphyFitBox extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxHeight < 120;
+        final topPad = constraints.maxHeight < 95 ? 6.0 : (isCompact ? 8.0 : 12.0);
         return Padding(
-          padding: EdgeInsets.fromLTRB(18, isCompact ? 8 : 12, 18, 4),
+          padding: EdgeInsets.fromLTRB(18, topPad, 18, 4),
           child: LayoutBuilder(
             builder: (context, innerConstraints) {
               final availW = innerConstraints.maxWidth;

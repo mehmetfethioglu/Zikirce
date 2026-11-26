@@ -1,6 +1,5 @@
 package com.akarworks.zikirce.widgets
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
@@ -8,11 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.*
 import android.net.Uri
-import android.os.Build
 import android.text.TextPaint
 import android.text.TextUtils
 import android.widget.RemoteViews
-import com.akarworks.zikirce.MainActivity
 import com.akarworks.zikirce.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,18 +58,13 @@ class KulliyatWidgetProvider : AppWidgetProvider() {
                         views.setImageViewBitmap(R.id.widget_image_dark, darkBitmap)
                     }
 
-                    val openIntent = Intent(context, MainActivity::class.java).apply {
-                        action = "es.antonborri.home_widget.action.LAUNCH"
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        this.data = Uri.parse("zikirce://kulliyat?bookId=${data.lastBookId}&page=${data.lastBookPage}")
-                        putExtra("route", "/kulliyat")
-                    }
-                    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                    } else {
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                    }
-                    val pendingIntent = PendingIntent.getActivity(context, 114, openIntent, flags)
+                    val encodedBookId = Uri.encode(data.lastBookId)
+                    val pendingIntent = WidgetDataHelper.createWidgetLaunchPendingIntent(
+                        context = context,
+                        requestCode = 114,
+                        deepLinkUri = "zikirce://kulliyat?bookId=$encodedBookId&page=${data.lastBookPage}",
+                        route = "/kulliyat"
+                    )
                     views.setOnClickPendingIntent(R.id.widget_root_layout, pendingIntent)
 
                     appWidgetManager.updateAppWidget(appWidgetId, views)

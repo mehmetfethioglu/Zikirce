@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/onboarding/presentation/screens/onboarding_screen.dart';
 import '../../features/dashboard/presentation/screens/bismillah_dashboard_screen.dart';
 import '../../features/dashboard/presentation/screens/detailed_stats_screen.dart';
+import 'app_deep_link_router.dart';
 import 'app_startup_route_config.dart';
 export 'app_startup_route_config.dart';
 import '../../features/zikir/presentation/screens/zikir_counter_screen.dart';
@@ -32,11 +33,11 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../../features/hatim/presentation/screens/mukabele_hatim_screen.dart';
 import '../../features/tv/presentation/screens/zikirce_tv_hub_screen.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> appRootNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouter = GoRouter(
-  navigatorKey: _rootNavigatorKey,
+  navigatorKey: appRootNavigatorKey,
   observers: [
     SentryNavigatorObserver(),
   ],
@@ -55,12 +56,16 @@ final appRouter = GoRouter(
     if (!isCompleted) {
       return '/onboarding';
     }
+    if (state.uri.scheme == 'zikirce') {
+      final intent = AppDeepLinkRouter.resolveWidgetUri(state.uri);
+      return intent?.pushRoute ?? intent?.baseRoute ?? '/';
+    }
     return null;
   },
   routes: [
     GoRoute(
       path: '/onboarding',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final fromSettings = state.uri.queryParameters['fromSettings'] == 'true';
         return OnboardingScreen(isFromSettings: fromSettings);
@@ -110,7 +115,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/mushaf',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final pageStr = state.uri.queryParameters['page'];
         final page = int.tryParse(pageStr ?? '') ?? 1;
@@ -119,7 +124,7 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/mukabele',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final pageStr = state.uri.queryParameters['page'];
         final page = int.tryParse(pageStr ?? '') ?? 1;
@@ -130,32 +135,32 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/ezber',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const MemorizationScreen(),
     ),
     GoRoute(
       path: '/settings',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const SettingsScreen(),
     ),
     GoRoute(
       path: '/sessions',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const SessionManagementScreen(),
     ),
     GoRoute(
       path: '/privacy',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const PrivacyPolicyScreen(),
     ),
     GoRoute(
       path: '/guide',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const UserGuideScreen(),
     ),
     GoRoute(
       path: '/kulliyat',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final bookId = state.uri.queryParameters['bookId'] ?? 'book_tafseer_kuran_yolu';
         if (bookId == 'book_mushaf') {
@@ -168,12 +173,12 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/irfan/quiz',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const IrfanQuizSessionScreen(),
     ),
     GoRoute(
       path: '/fiqh',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final farzId = int.tryParse(state.uri.queryParameters['farzId'] ?? '');
         return FiqhLibraryScreen(initialFarzId: farzId);
@@ -181,12 +186,12 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: '/stats',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) => const DetailedStatsScreen(),
     ),
     GoRoute(
       path: '/qibla',
-      parentNavigatorKey: _rootNavigatorKey,
+      parentNavigatorKey: appRootNavigatorKey,
       builder: (context, state) {
         final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '');
         final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '');

@@ -877,4 +877,13 @@ const Map<String, String> appStringsTr = {
   'Qibla_StepFace': 'Kâbe\'ye Dön',
   'Qibla_StepTakbir': 'Tekbir',
   'Qibla_ReplayTakbir': 'Tekbiri Tekrarla',
+  'Qibla_GpsLocating': 'GPS aranıyor...',
+  'Qibla_GpsActiveTag': 'GPS • {0}',
+  'Qibla_GpsFallbackWarning':
+      'Konum kapalı • {0} için hesaplanıyor (farklı şehirdeyseniz yön hatalı olabilir)',
+  'Qibla_EnableLocationAction': 'Konumu Aç',
+  'Qibla_OpenSettingsAction': 'Ayarlar',
+  'Qibla_PrayerCityMismatch': 'Konumunuz {0} • Namaz vakitlerini güncelle?',
+  'Qibla_UpdateCityAction': 'Güncelle',
+  'Qibla_TrueNorthLabel': 'Gerçek Kuzey',
 };

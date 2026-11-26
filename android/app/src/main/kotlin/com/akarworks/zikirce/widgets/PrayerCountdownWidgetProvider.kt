@@ -1,6 +1,5 @@
 package com.akarworks.zikirce.widgets
 
-import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
@@ -10,7 +9,6 @@ import android.graphics.*
 import android.os.Build
 import android.os.SystemClock
 import android.widget.RemoteViews
-import com.akarworks.zikirce.MainActivity
 import com.akarworks.zikirce.R
 import kotlin.math.cos
 import kotlin.math.sin
@@ -72,15 +70,12 @@ class PrayerCountdownWidgetProvider : AppWidgetProvider() {
                     views.setImageViewBitmap(R.id.widget_rings_image, bitmap)
                 }
 
-                val openIntent = Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                } else {
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                }
-                val pendingIntent = PendingIntent.getActivity(context, 102, openIntent, flags)
+                val pendingIntent = WidgetDataHelper.createWidgetLaunchPendingIntent(
+                    context = context,
+                    requestCode = 102,
+                    deepLinkUri = "zikirce://namaz",
+                    route = "/namaz"
+                )
                 views.setOnClickPendingIntent(R.id.widget_root_layout, pendingIntent)
 
                 appWidgetManager.updateAppWidget(appWidgetId, views)

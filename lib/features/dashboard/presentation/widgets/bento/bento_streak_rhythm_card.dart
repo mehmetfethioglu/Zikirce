@@ -45,93 +45,60 @@ class BentoStreakRhythmCard extends ConsumerWidget {
         ? colors.borderStroke
         : Color.lerp(surfaceColor, warmAccent, isDark ? 0.35 : 0.22)!;
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () {
-          HapticService.selectionClick();
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const StreakDetailsScreen()),
-          );
-        },
-        onLongPress: () {
-          HapticService.selectionClick();
-          StreakSharePreviewModal.show(
-            context,
-            currentStreak: streak.current,
-            bestStreak: streak.best,
-            totalDays: streak.totalDays,
-            rankName: userRank.name,
-            rankBadge: userRank.badge,
-            isGoldCompleted: isGoldCompleted,
-            initialTheme: ZikirShareThemeData.themeForGoalOrTask(
-              goalType: 'streak',
-              isGold: isGoldCompleted,
-            ),
-          );
-        },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final hasBoundedHeight = constraints.hasBoundedHeight;
-            final h = constraints.maxHeight;
-            final pad = hasBoundedHeight ? (h * 0.12).clamp(10.0, 14.0) : 14.0;
-            final numFontSize =
-                hasBoundedHeight ? (h * 0.21).clamp(20.0, 24.5) : 24.0;
-            final miniBarHeight =
-                hasBoundedHeight ? (h * 0.34).clamp(30.0, 40.0) : 40.0;
-            final isCompact = hasBoundedHeight && h < 105;
+    final cardTitle = l10n.isTurkish ? 'Gün Serisi' : 'Day Streak';
 
-            return Container(
-              padding: EdgeInsets.all(pad),
-              decoration: BoxDecoration(
-                color: surfaceColor,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: borderColor, width: 1.0),
+    return Semantics(
+      label: cardTitle,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            HapticService.selectionClick();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const StreakDetailsScreen()),
+            );
+          },
+          onLongPress: () {
+            HapticService.selectionClick();
+            StreakSharePreviewModal.show(
+              context,
+              currentStreak: streak.current,
+              bestStreak: streak.best,
+              totalDays: streak.totalDays,
+              rankName: userRank.name,
+              rankBadge: userRank.badge,
+              isGoldCompleted: isGoldCompleted,
+              initialTheme: ZikirShareThemeData.themeForGoalOrTask(
+                goalType: 'streak',
+                isGold: isGoldCompleted,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize:
-                    hasBoundedHeight ? MainAxisSize.max : MainAxisSize.min,
-                mainAxisAlignment: hasBoundedHeight
-                    ? MainAxisAlignment.spaceBetween
-                    : MainAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: isCompact ? 24 : 28,
-                        height: isCompact ? 24 : 28,
-                        decoration: BoxDecoration(
-                          color: warmAccent.withValues(
-                            alpha: isDark ? 0.24 : 0.14,
-                          ),
-                          borderRadius: BorderRadius.circular(isCompact ? 8 : 10),
-                        ),
-                        child: Icon(
-                          Icons.local_fire_department_rounded,
-                          size: isCompact ? 14 : 16,
-                          color: warmAccent,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.isTurkish ? 'Gün Serisi' : 'Day Streak',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: isCompact ? 12 : 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: colors.primaryText,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (!hasBoundedHeight) const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+            );
+          },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final hasBoundedHeight = constraints.hasBoundedHeight;
+              final h = constraints.maxHeight;
+              final padV = hasBoundedHeight ? (h * 0.12).clamp(6.0, 10.0) : 10.0;
+              final numFontSize =
+                  hasBoundedHeight ? (h * 0.30).clamp(18.0, 23.0) : 22.0;
+              final miniBarHeight =
+                  hasBoundedHeight ? (h * 0.50).clamp(26.0, 36.0) : 34.0;
+              final isCompact = hasBoundedHeight && h < 76;
+
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: padV,
+                ),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: borderColor, width: 1.0),
+                ),
+                child: Center(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: Column(
@@ -152,13 +119,13 @@ class BentoStreakRhythmCard extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                            SizedBox(height: isCompact ? 2 : 4),
+                            SizedBox(height: isCompact ? 1 : 3),
                             Text(
                               l10n.bismillahDays,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: isCompact ? 11 : 11.5,
+                                fontSize: isCompact ? 10.5 : 11.0,
                                 fontWeight: FontWeight.w600,
                                 color: colors.secondaryTextAlt,
                               ),
@@ -175,10 +142,10 @@ class BentoStreakRhythmCard extends ConsumerWidget {
                       ),
                     ],
                   ),
-                ],
-              ),
-            );
-          },
+                ),
+              );
+            },
+          ),
         ),
       ),
     );

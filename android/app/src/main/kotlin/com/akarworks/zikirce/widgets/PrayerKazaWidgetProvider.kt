@@ -11,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.RemoteViews
 import android.widget.Toast
-import com.akarworks.zikirce.MainActivity
 import com.akarworks.zikirce.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -135,11 +134,13 @@ class PrayerKazaWidgetProvider : AppWidgetProvider() {
                     views.setOnClickPendingIntent(cardIds[i], pendingDec)
                 }
 
-                // Open App on title click
-                val openIntent = Intent(context, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                val pendingOpen = PendingIntent.getActivity(context, 106, openIntent, flags)
+                // Open App on title/root click
+                val pendingOpen = WidgetDataHelper.createWidgetLaunchPendingIntent(
+                    context = context,
+                    requestCode = 106,
+                    deepLinkUri = "zikirce://namaz",
+                    route = "/namaz"
+                )
                 views.setOnClickPendingIntent(R.id.widget_title_kaza, pendingOpen)
                 views.setOnClickPendingIntent(R.id.widget_root_layout, pendingOpen)
 
