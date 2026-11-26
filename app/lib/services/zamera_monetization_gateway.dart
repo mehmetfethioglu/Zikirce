@@ -132,6 +132,8 @@ abstract interface class BillingGateway {
 
   Future<void> restore();
 
+  Future<void> acknowledgePurchase(String productId, String? transactionId);
+
   Future<void> dispose();
 }
 
@@ -148,6 +150,8 @@ class StoreKitPlayBillingGateway implements BillingGateway {
 
   final InAppPurchase? _iapOverride;
   final Map<String, ProductDetails> _productCache = <String, ProductDetails>{};
+  final Map<String, PurchaseDetails> _pendingCompletions =
+      <String, PurchaseDetails>{};
   final StreamController<BillingPurchaseUpdate> _updatesController =
       StreamController<BillingPurchaseUpdate>.broadcast();
 
@@ -182,6 +186,10 @@ class StoreKitPlayBillingGateway implements BillingGateway {
     }
   }
 
+  static String _completionKey(String productId, String? transactionId) {
+    return '$productId::${transactionId ?? ''}';
+  }
+
   Future<void> _onStorePurchases(List<PurchaseDetails> purchases) async {
     for (final PurchaseDetails details in purchases) {
       final eventType =
@@ -192,10 +200,18 @@ class StoreKitPlayBillingGateway implements BillingGateway {
           : null;
 
       if (details.pendingCompletePurchase) {
-        try {
-          await _iap.completePurchase(details);
-        } catch (e, st) {
-          debugPrint('StoreKitPlayBillingGateway complete error: $e\n$st');
+        if (eventType == BillingEventType.purchased ||
+            eventType == BillingEventType.restored) {
+          // Defer acknowledgement until controller persists entitlement locally.
+          _pendingCompletions[
+            _completionKey(details.productID, details.purchaseID)
+          ] = details;
+        } else {
+          try {
+            await _iap.completePurchase(details);
+          } catch (e, st) {
+            debugPrint('StoreKitPlayBillingGateway complete error: $e\n$st');
+          }
         }
       }
 
@@ -210,6 +226,29 @@ class StoreKitPlayBillingGateway implements BillingGateway {
           ),
         );
       }
+    }
+  }
+
+  @override
+  Future<void> acknowledgePurchase(
+    String productId,
+    String? transactionId,
+  ) async {
+    final exactKey = _completionKey(productId, transactionId);
+    PurchaseDetails? details = _pendingCompletions.remove(exactKey);
+    if (details == null) {
+      final fallbackEntry = _pendingCompletions.entries
+          .where((e) => e.value.productID == productId)
+          .firstOrNull;
+      if (fallbackEntry != null) {
+        details = _pendingCompletions.remove(fallbackEntry.key);
+      }
+    }
+    if (details == null) return;
+    try {
+      await _iap.completePurchase(details);
+    } catch (e, st) {
+      debugPrint('StoreKitPlayBillingGateway acknowledge error: $e\n$st');
     }
   }
 
@@ -241,14 +280,30 @@ class StoreKitPlayBillingGateway implements BillingGateway {
         ZameraPlanId.allProductIds,
       );
       for (final ProductDetails details in response.productDetails) {
-        _productCache[details.id] = details;
         final plan = ZameraPlanId.fromProductId(details.id);
+        final existingCached = _productCache[details.id];
+        if (existingCached == null) {
+          _productCache[details.id] = details;
+        } else if (plan != null &&
+            plan.hasFreeTrial &&
+            details.rawPrice < existingCached.rawPrice) {
+          // Prefer the free-trial Play Billing offerToken when multiple offers share one SKU.
+          _productCache[details.id] = details;
+        }
+
         if (plan != null) {
-          offers[plan] = ZameraStoreOffer(
-            plan: plan,
-            localizedPrice: details.price,
-            isLiveFromStore: true,
-          );
+          final currentOffer = offers[plan];
+          final shouldUpdateOfferPrice =
+              currentOffer == null ||
+              !currentOffer.isLiveFromStore ||
+              details.rawPrice > 0.0;
+          if (shouldUpdateOfferPrice) {
+            offers[plan] = ZameraStoreOffer(
+              plan: plan,
+              localizedPrice: details.price,
+              isLiveFromStore: true,
+            );
+          }
         }
       }
       return offers;

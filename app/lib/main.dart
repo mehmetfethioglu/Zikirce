@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'constants/camera_colors.dart';
+import 'l10n/zamera_l10n.dart';
 import 'screens/camera_home_screen.dart';
 import 'services/version_tracking_service.dart';
 import 'services/zamera_monetization_service.dart';
@@ -47,14 +49,23 @@ Future<void> main() async {
 class ZameraApp extends StatelessWidget {
   final VersionTrackingService? versionService;
   final MonetizationService? monetization;
+  final Locale? localeOverride;
 
-  const ZameraApp({super.key, this.versionService, this.monetization});
+  const ZameraApp({
+    super.key,
+    this.versionService,
+    this.monetization,
+    this.localeOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Zamera',
       debugShowCheckedModeBanner: false,
+      locale: localeOverride,
+      supportedLocales: ZameraL10n.supportedLocales,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: kObsidianBg,

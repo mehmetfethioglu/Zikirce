@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "Zamera accesses the camera to capture calibrated true-color RAW photos and provide manual lens and exposure controls.";
+"NSMicrophoneUsageDescription" = "Zamera accesses the microphone to record stereo audio and display live dBFS levels during Pro Video recording.";
+"NSPhotoLibraryAddUsageDescription" = "Zamera requests access to save captured DNG, PNG, JPEG, and video files to your photo library.";
+"NSPhotoLibraryUsageDescription" = "Zamera accesses your photo library to review captured RAW photos and calibration assets in Pro Media Studio.";

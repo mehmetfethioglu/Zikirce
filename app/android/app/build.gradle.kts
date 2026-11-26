@@ -54,6 +54,11 @@ android {
 
     buildTypes {
         release {
+            if (System.getenv("CI") == "true" && !keystorePropertiesFile.exists()) {
+                throw org.gradle.api.GradleException("Release keystore key.properties missing in CI")
+            }
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

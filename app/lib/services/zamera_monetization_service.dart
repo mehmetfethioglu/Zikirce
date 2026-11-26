@@ -35,9 +35,12 @@ class ZameraMonetizationController extends ChangeNotifier
   final MonetizationRepository _repository;
   final BillingGateway _billing;
   final DateTime Function() _nowUtc;
+  final Duration restoreGraceTimeout;
 
   ZameraMonetizationState _state;
   StreamSubscription<BillingPurchaseUpdate>? _purchaseSub;
+  Completer<void>? _restoreCompleter;
+  bool _isRevalidating = false;
   bool _disposed = false;
 
   ZameraMonetizationController({
@@ -45,6 +48,7 @@ class ZameraMonetizationController extends ChangeNotifier
     BillingGateway? billingGateway,
     DateTime Function()? nowUtcProvider,
     ZameraMonetizationState? initialState,
+    this.restoreGraceTimeout = const Duration(milliseconds: 600),
   }) : _repository = repository ?? const SharedPrefsMonetizationRepository(),
        _billing = billingGateway ?? StoreKitPlayBillingGateway(),
        _nowUtc = nowUtcProvider ?? (() => DateTime.now().toUtc()),
@@ -137,6 +141,17 @@ class ZameraMonetizationController extends ChangeNotifier
       if (_disposed) return;
       _state = _state.copyWith(storeAvailable: available, offers: offers);
       notifyListeners();
+
+      if (available &&
+          _state.needsStoreRevalidation(_nowUtc()) &&
+          !_isRevalidating) {
+        _isRevalidating = true;
+        try {
+          await _billing.restore();
+        } finally {
+          _isRevalidating = false;
+        }
+      }
     } catch (e, st) {
       debugPrint('ZameraMonetizationController.refreshStoreOffers error: $e\n$st');
     }
@@ -182,8 +197,12 @@ class ZameraMonetizationController extends ChangeNotifier
     );
     notifyListeners();
 
+    final completer = Completer<void>();
+    _restoreCompleter = completer;
+
     try {
       await _billing.restore();
+      await completer.future.timeout(restoreGraceTimeout, onTimeout: () {});
       if (!_disposed && _state.isBusy) {
         _state = _state.copyWith(
           isBusy: false,
@@ -201,6 +220,10 @@ class ZameraMonetizationController extends ChangeNotifier
           statusMessageTr: 'Geri yükleme hatası: $e',
         );
         notifyListeners();
+      }
+    } finally {
+      if (identical(_restoreCompleter, completer)) {
+        _restoreCompleter = null;
       }
     }
   }
@@ -229,16 +252,22 @@ class ZameraMonetizationController extends ChangeNotifier
         final plan = ZameraPlanId.fromProductId(update.productId);
         if (plan == null) {
           _state = _state.copyWith(isBusy: false);
+          if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+            _restoreCompleter!.complete();
+          }
           notifyListeners();
           return;
         }
         final now = _nowUtc().toUtc();
-        final (ZameraEntitlementStatus nextStatus, DateTime? trialEnd) =
-            _resolveEntitlementForPlan(
-              plan: plan,
-              isRestore: update.eventType == BillingEventType.restored,
-              nowUtc: now,
-            );
+        final (
+          ZameraEntitlementStatus nextStatus,
+          DateTime? trialEnd,
+          DateTime? subExpiry,
+        ) = _resolveEntitlementForPlan(
+          plan: plan,
+          isRestore: update.eventType == BillingEventType.restored,
+          nowUtc: now,
+        );
 
         _state = _state.copyWith(
           status: nextStatus,
@@ -246,12 +275,22 @@ class ZameraMonetizationController extends ChangeNotifier
           activatedAtUtc: now,
           trialEndsAtUtc: trialEnd,
           clearTrialEndsAt: trialEnd == null,
+          lastVerifiedAtUtc: now,
+          subscriptionExpiresAtUtc: subExpiry,
+          clearSubscriptionExpiresAt: subExpiry == null,
           isBusy: false,
           statusMessageTr: nextStatus == ZameraEntitlementStatus.trialActive
               ? '1 Aylık ücretsiz Zamera Pro denemeniz başlatıldı!'
               : 'Zamera Pro etkinleştirildi!',
         );
         await _repository.save(_state);
+        await _billing.acknowledgePurchase(
+          update.productId,
+          update.transactionId,
+        );
+        if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+          _restoreCompleter!.complete();
+        }
         if (!_disposed) {
           notifyListeners();
         }
@@ -262,6 +301,9 @@ class ZameraMonetizationController extends ChangeNotifier
           isBusy: false,
           statusMessageTr: 'Satın alma işlemi iptal edildi.',
         );
+        if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+          _restoreCompleter!.complete();
+        }
         notifyListeners();
         return;
 
@@ -271,26 +313,35 @@ class ZameraMonetizationController extends ChangeNotifier
           statusMessageTr:
               update.errorMessage ?? 'Mağaza işlemi tamamlanamadı.',
         );
+        if (_restoreCompleter != null && !_restoreCompleter!.isCompleted) {
+          _restoreCompleter!.complete();
+        }
         notifyListeners();
         return;
     }
   }
 
-  (ZameraEntitlementStatus, DateTime?) _resolveEntitlementForPlan({
+  (ZameraEntitlementStatus, DateTime?, DateTime?) _resolveEntitlementForPlan({
     required ZameraPlanId plan,
     required bool isRestore,
     required DateTime nowUtc,
   }) {
     if (plan.isLifetime) {
-      return (ZameraEntitlementStatus.proLifetime, null);
+      return (ZameraEntitlementStatus.proLifetime, null, null);
     }
     if (plan.hasFreeTrial && !isRestore) {
       return (
         ZameraEntitlementStatus.trialActive,
         nowUtc.add(Duration(days: plan.trialDays)),
+        null,
       );
     }
-    return (ZameraEntitlementStatus.proActive, null);
+    final expiryWindowDays = plan == ZameraPlanId.annualPro ? 370 : 35;
+    return (
+      ZameraEntitlementStatus.proActive,
+      null,
+      nowUtc.add(Duration(days: expiryWindowDays)),
+    );
   }
 
   @override

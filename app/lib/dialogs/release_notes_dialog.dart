@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../constants/camera_colors.dart';
+import '../l10n/zamera_l10n.dart';
 import '../models/app_version_info.dart';
 
 /// Modal dialog showing Zamera General Features (onboarding) or Version Release Notes.
@@ -57,6 +58,7 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
   @override
   Widget build(BuildContext context) {
     final latest = AppVersionInfo.latestRelease;
+    final isTr = ZameraL10n.isTurkish(context);
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -151,9 +153,11 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        const Text(
-                          'Gerçek Renk (ΔE₀₀) & Profesyonel Kamera',
-                          style: TextStyle(
+                        Text(
+                          isTr
+                              ? 'Gerçek Renk (ΔE₀₀) & Profesyonel Kamera'
+                              : 'True Color (ΔE₀₀) & Pro Camera',
+                          style: const TextStyle(
                             fontSize: 11,
                             color: kZameraCyan,
                             fontWeight: FontWeight.w600,
@@ -199,7 +203,7 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            'Genel Özellikler',
+                            isTr ? 'Genel Özellikler' : 'Overview',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -225,7 +229,9 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                           ),
                           alignment: Alignment.center,
                           child: Text(
-                            'Sürüm ${latest.version}',
+                            isTr
+                                ? 'Sürüm ${latest.version}'
+                                : 'Release ${latest.version}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -250,8 +256,8 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                 child: _showFeatures
-                    ? _buildFeaturesList()
-                    : _buildChangelogContent(latest),
+                    ? _buildFeaturesList(isTr: isTr)
+                    : _buildChangelogContent(latest, isTr: isTr),
               ),
             ),
 
@@ -270,9 +276,9 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                         size: 15,
                         color: kZameraCyan,
                       ),
-                      label: const Text(
-                        'Gizlilik',
-                        style: TextStyle(
+                      label: Text(
+                        isTr ? 'Gizlilik' : 'Privacy',
+                        style: const TextStyle(
                           fontSize: 11,
                           color: kZameraCyan,
                           fontWeight: FontWeight.w600,
@@ -298,9 +304,9 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                         vertical: 10,
                       ),
                     ),
-                    child: const Text(
-                      'Başla / Anladım',
-                      style: TextStyle(
+                    child: Text(
+                      isTr ? 'Başla / Anladım' : 'Get Started',
+                      style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
                       ),
@@ -315,13 +321,13 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
     );
   }
 
-  Widget _buildFeaturesList() {
+  Widget _buildFeaturesList({required bool isTr}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'ZAMERA PROFESYONEL ÖZELLİKLERİ',
-          style: TextStyle(
+        Text(
+          isTr ? 'ZAMERA PROFESYONEL ÖZELLİKLERİ' : 'ZAMERA PRO CAPABILITIES',
+          style: const TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.0,
@@ -386,7 +392,8 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
     );
   }
 
-  Widget _buildChangelogContent(ReleaseNote note) {
+  Widget _buildChangelogContent(ReleaseNote note, {required bool isTr}) {
+    final bullets = isTr ? note.bulletPointsTr : note.bulletPointsEn;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -394,7 +401,9 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'SÜRÜM ${note.version} (DERLEME ${note.buildNumber})',
+              isTr
+                  ? 'SÜRÜM ${note.version} (DERLEME ${note.buildNumber})'
+                  : 'VERSION ${note.version} (BUILD ${note.buildNumber})',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
@@ -410,7 +419,7 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
         ),
         const SizedBox(height: 6),
         Text(
-          note.titleTr,
+          isTr ? note.titleTr : note.titleEn,
           style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w800,
@@ -428,7 +437,7 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final bp in note.bulletPointsTr) ...[
+              for (final bp in bullets) ...[
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -460,9 +469,9 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
           ),
         ),
         const SizedBox(height: 18),
-        const Text(
-          'GEÇMİŞ SÜRÜMLER',
-          style: TextStyle(
+        Text(
+          isTr ? 'GEÇMİŞ SÜRÜMLER' : 'PREVIOUS RELEASES',
+          style: const TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w800,
             letterSpacing: 0.8,
@@ -491,7 +500,7 @@ class _ReleaseNotesDialogState extends State<ReleaseNotesDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    oldNote.titleTr,
+                    isTr ? oldNote.titleTr : oldNote.titleEn,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: Colors.white54),

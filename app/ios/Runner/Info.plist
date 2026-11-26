@@ -5,7 +5,12 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>tr</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>Zamera</string>
 	<key>CFBundleExecutable</key>
@@ -29,13 +34,13 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Zamera, sanat eserlerinin gerçek renkli RAW fotoğraflarını çekmek ve profesyonel lens/pozlama kontrolü sağlamak için kameraya erişir.</string>
+	<string>Zamera accesses the camera to capture calibrated true-color RAW photos and provide manual lens and exposure controls.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Zamera, profesyonel video çekimlerinde ses kaydı ve seviye takibi için mikrofona erişir.</string>
+	<string>Zamera accesses the microphone to record stereo audio and display live dBFS levels during Pro Video recording.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Zamera, çekilen DNG, 16-bit PNG/TIFF ve sRGB/Display P3 fotoğrafları galerinize kaydetmek için izin ister.</string>
+	<string>Zamera requests access to save captured DNG, PNG, JPEG, and video files to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Zamera, kalibrasyon profillerini ve çekilen RAW fotoğrafları görüntülemek için fotoğraf arşivinize erişir.</string>
+	<string>Zamera accesses your photo library to review captured RAW photos and calibration assets in Pro Media Studio.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

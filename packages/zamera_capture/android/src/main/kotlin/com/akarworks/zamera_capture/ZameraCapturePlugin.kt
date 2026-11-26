@@ -374,7 +374,7 @@ class ZameraCapturePlugin :
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         activity = binding.activity
-        wakeAndKeepScreenOn(binding.activity)
+        applyWideColorGamut(binding.activity)
         binding.addRequestPermissionsResultListener(this)
         binding.addActivityResultListener(this)
     }
@@ -385,33 +385,41 @@ class ZameraCapturePlugin :
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
         activity = binding.activity
-        wakeAndKeepScreenOn(binding.activity)
+        applyWideColorGamut(binding.activity)
         binding.addRequestPermissionsResultListener(this)
         binding.addActivityResultListener(this)
     }
 
-    private fun wakeAndKeepScreenOn(act: Activity) {
+    private fun applyWideColorGamut(act: Activity) {
         try {
             act.runOnUiThread {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     act.window?.colorMode = android.content.pm.ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                    act.setShowWhenLocked(true)
-                    act.setTurnScreenOn(true)
-                }
-                act.window?.addFlags(
-                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                        android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                )
             }
         } catch (e: Throwable) {
-            android.util.Log.w("ZameraCapture", "wakeAndKeepScreenOn warning: ${e.message}")
+            android.util.Log.w("ZameraCapture", "applyWideColorGamut warning: ${e.message}")
+        }
+    }
+
+    private fun setKeepScreenOn(enabled: Boolean) {
+        val act = activity ?: return
+        try {
+            mainHandler.post {
+                val win = act.window ?: return@post
+                if (enabled) {
+                    win.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("ZameraCapture", "setKeepScreenOn warning: ${e.message}")
         }
     }
 
     override fun onDetachedFromActivity() {
+        setKeepScreenOn(false)
         activity = null
     }
 
@@ -829,6 +837,7 @@ class ZameraCapturePlugin :
                                                 backgroundHandler
                                             )
                                             mainHandler.post {
+                                                setKeepScreenOn(true)
                                                 result.success(
                                                     mapOf(
                                                         "textureId" to entry.id(),
@@ -917,7 +926,7 @@ class ZameraCapturePlugin :
                         cameraDevice = null
                         if (error == CameraDevice.StateCallback.ERROR_CAMERA_DISABLED && !retriedOpenOnScreenWake) {
                             retriedOpenOnScreenWake = true
-                            activity?.let { wakeAndKeepScreenOn(it) }
+                            setKeepScreenOn(true)
                             backgroundHandler?.postDelayed({
                                 try {
                                     openAndConfigureCamera()
@@ -5050,6 +5059,8 @@ class ZameraCapturePlugin :
             lastTotalCaptureResult = null
         } catch (e: Exception) {
             android.util.Log.w("ZameraCapture", "stopPreviewSession cleanup warning: ${e.message}")
+        } finally {
+            setKeepScreenOn(false)
         }
     }
 
@@ -5412,6 +5423,7 @@ class ZameraCapturePlugin :
                         onReady = {
                             startAudioFloatMeterMonitor(videoPreferredAudioDeviceId)
                             mainHandler.post {
+                                setKeepScreenOn(true)
                                 result.success(
                                     mapOf(
                                         "textureId" to entry.id(),

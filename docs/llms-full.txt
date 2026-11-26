@@ -1,12 +1,12 @@
-# Zamera — Extended Product & Privacy Knowledge Bundle (v0.1.6+7)
+# Zamera — Extended Product & Privacy Knowledge Bundle (v0.1.7+8)
 > Zamera — 100% On-Device True-Color Artwork Camera, Pro DSLR & Unified Cinema Video Studio by Akarworks.
 
 ## 1. Canonical Overview
-Zamera is a cross-platform true-color photography, manual DSLR camera, and unified cinema video application developed by Akarworks for iOS 17.0+ and Android 10+. Engineered for 100% offline processing, zero telemetry, and 60 to 120 FPS responsiveness, Zamera unifies four studio modes inside one app: Art Mode calibration with a 24-patch ColorChecker CIEDE2000 solver (targeting Delta E00 <= 1.0), manual PASM exposure with 1/3-EV stops, 14-bit Bayer RAW and Apple ProRAW capture, computational Portrait bokeh, and 180-degree shutter-locked 10-bit Pro Video (Rec.709, Apple Log, ProRes 422 HQ, HLG10). Version 0.1.6+7 delivers Zamera Pro with a 30-day free trial via native StoreKit 2 and Google Play Billing, daily free TrueColor/RAW/Sticker quotas, a transparent PNG cutout studio, CIE L*a*b* pixel colorimetry, 64-bin RGB histograms, and an SMPTE cinema player with zero cloud uploads. Zamera preserves full local KVKK, GDPR, and CCPA privacy with zero third-party trackers.
+Zamera is a cross-platform true-color photography, manual DSLR camera, and unified cinema video application developed by Akarworks for iOS 17.0+ and Android 10+. Engineered for 100% offline processing, zero telemetry, and 60 to 120 FPS responsiveness, Zamera unifies four studio modes inside one app: Art Mode calibration with a 24-patch ColorChecker CIEDE2000 solver (targeting Delta E00 <= 1.0), manual PASM exposure with 1/3-EV stops, 14-bit Bayer RAW and Apple ProRAW capture, computational Portrait bokeh, and 180-degree shutter-locked 10-bit Pro Video (Rec.709, Apple Log, ProRes 422 HQ, HLG10). Version 0.1.7+8 delivers hardened StoreKit 2 / Google Play Billing lifecycle verification, bilingual TR/EN support, rust FFI safety, and a 30-day free trial for Zamera Pro alongside daily free TrueColor/RAW/Sticker quotas with zero cloud uploads. Zamera preserves full local KVKK, GDPR, and CCPA privacy with zero third-party trackers.
 
 ## 2. Privacy & Data Safety Guarantees
 - Zero Data Collection: Zamera collects zero photos, videos, audio, location, telemetry, usage analytics, or device advertising identifiers.
-- Offline Color & AI Pipelines: Embedded Rust `zamera_core` CIEDE2000 math, Android ML Kit Subject Segmentation + U2-Net cutout, and Apple Vision segmentation execute entirely on user device hardware.
+- Offline Color & AI Pipelines: Embedded Rust `zamera_core` CIEDE2000 math, Android on-device ML Kit Subject/Selfie Segmentation + LiteRT/U2-Net cutout, and Apple Vision segmentation execute on user device hardware without uploading user media.
 - Minimal Permissions: Camera, Microphone (strictly during Pro Video mode), and local Media Storage (for saving DNG/JPEG/PNG/video files to DCIM/Zamera or Apple Photos).
 - Regulatory Alignment: Fully aligned with KVKK (Turkey Law No. 6698), EU GDPR, and California CCPA via zero external data transmission.
 - Zero-Telemetry Storefront Billing: Zamera Pro entitlements are processed exclusively through native Apple StoreKit 2 and Google Play Billing without third-party monetization trackers (no RevenueCat/Adapty).
@@ -31,5 +31,6 @@ No. Zamera uses Apple StoreKit 2 and Google Play Billing directly on-device so s
 ## 5. Official Links
 - [Privacy Policy](https://mehmetfethioglu.github.io/zamera-privacy/)
 - [Direct Privacy Policy HTML](https://mehmetfethioglu.github.io/zamera-privacy/privacy.html)
+- [Terms of Use & EULA](https://mehmetfethioglu.github.io/zamera-privacy/terms.html)
 - [Support & FAQ](https://mehmetfethioglu.github.io/zamera-privacy/support.html)
 - [Download Portal](https://mehmetfethioglu.github.io/zamera-privacy/indir.html)

@@ -99,7 +99,11 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   bool _isStartingCamera = false;
   Offset? _lastFocusTapNorm;
   Timer? _telemetryTimer;
-  Map<String, dynamic> _liveTelemetry = const {};
+  final ValueNotifier<Map<String, dynamic>> _liveTelemetryNotifier =
+      ValueNotifier<Map<String, dynamic>>(const {});
+  Map<String, dynamic> get _liveTelemetry => _liveTelemetryNotifier.value;
+  set _liveTelemetry(Map<String, dynamic> value) =>
+      _liveTelemetryNotifier.value = value;
 
   // Optical / Digital Zoom Factor displayed on the iOS Lens Radial Wheel (0.5x .. 10.0x)
   double _zoomFactor = 1.0;
@@ -181,7 +185,9 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
   bool _videoProfileTrayOpen = false;
   ZameraCubeLut3D? _customCubeLut;
   bool _isVideoRecording = false;
-  ZameraVideoTelemetry? _videoTelemetry;
+  final ValueNotifier<ZameraVideoTelemetry?> _videoTelemetryNotifier =
+      ValueNotifier<ZameraVideoTelemetry?>(null);
+  ZameraVideoTelemetry? get _videoTelemetry => _videoTelemetryNotifier.value;
   ZameraVideoRecordingResult? _lastVideoResult;
   List<ZameraAudioInputDevice> _audioInputDevices = const [];
   String _selectedAudioDeviceId = 'default';
@@ -537,6 +543,8 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
     _telemetryTimer?.cancel();
     _selfTimerCountdown?.cancel();
     _rackFocusResetTimer?.cancel();
+    _liveTelemetryNotifier.dispose();
+    _videoTelemetryNotifier.dispose();
     _mediaArchive.removeListener(_onMediaArchiveChanged);
     widget.monetization?.removeListener(_onMonetizationChanged);
     if (_ownsMediaArchive && _mediaArchive is ChangeNotifier) {
@@ -636,24 +644,29 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
       if (_selectedMode == 3) {
         final vidTel = await ZameraVideo.getVideoTelemetry();
         if (!mounted) return;
+        _videoTelemetryNotifier.value = vidTel;
         bool steppedDownFps = false;
-        setState(() {
-          _videoTelemetry = vidTel;
-          if (vidTel.thermalLevel == ZameraThermalLevel.severe ||
-              vidTel.thermalLevel == ZameraThermalLevel.critical) {
-            _showFocusPeaking = false;
-            _videoLutPreset = ZameraLutPreset.none;
-            if (_videoFps > 30) {
-              _videoFps = 30;
-              steppedDownFps = true;
+        final thermalThrottle =
+            vidTel.thermalLevel == ZameraThermalLevel.severe ||
+            vidTel.thermalLevel == ZameraThermalLevel.critical;
+        final stoppedRecording = _isVideoRecording && !vidTel.isRecording;
+        if (thermalThrottle || stoppedRecording) {
+          setState(() {
+            if (thermalThrottle) {
+              _showFocusPeaking = false;
+              _videoLutPreset = ZameraLutPreset.none;
+              if (_videoFps > 30) {
+                _videoFps = 30;
+                steppedDownFps = true;
+              }
             }
-          }
-          if (_isVideoRecording && !vidTel.isRecording) {
-            _isVideoRecording = false;
-            _statusBanner =
-                'Kayıt otomatik sonlandırıldı ve DCIM/Zamera\'ya kaydedildi (${vidTel.thermalLevel.badgeText})';
-          }
-        });
+            if (stoppedRecording) {
+              _isVideoRecording = false;
+              _statusBanner =
+                  'Kayıt otomatik sonlandırıldı ve DCIM/Zamera\'ya kaydedildi (${vidTel.thermalLevel.badgeText})';
+            }
+          });
+        }
         if (steppedDownFps) {
           _scheduleNativeControlsPush(artworkMode: false);
         }
@@ -673,15 +686,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         trackedFaceCenter = Offset(fx, fy);
         trackedFaceRadius = (math.max(fw, fh) * 0.95).clamp(0.24, 0.48);
       }
-      setState(() {
-        _liveTelemetry = tel;
-        if (trackedFaceCenter != null && _selectedMode == 2) {
-          _lastFocusTapNorm = trackedFaceCenter;
-          if (trackedFaceRadius != null) {
-            _portraitSubjectRadius = trackedFaceRadius;
-          }
+      _liveTelemetryNotifier.value = tel;
+      if (trackedFaceCenter != null && _selectedMode == 2) {
+        final prevCenter = _lastFocusTapNorm;
+        final moved = prevCenter == null ||
+            (prevCenter - trackedFaceCenter).distance > 0.008 ||
+            (trackedFaceRadius != null &&
+                (_portraitSubjectRadius - trackedFaceRadius).abs() > 0.01);
+        if (moved) {
+          setState(() {
+            _lastFocusTapNorm = trackedFaceCenter;
+            if (trackedFaceRadius != null) {
+              _portraitSubjectRadius = trackedFaceRadius;
+            }
+          });
         }
-      });
+      }
     } catch (e) {
       _liveTelemetry = <String, dynamic>{
         ..._liveTelemetry,
@@ -2278,18 +2298,22 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                     },
                   );
                 },
-                child: Container(
-                  width: 30,
-                  height: 30,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withValues(alpha: 0.14),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.settings_outlined,
-                    size: 18,
-                    color: Colors.white,
+                child: Semantics(
+                  button: true,
+                  label: 'Ayarlar / Settings',
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.14),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -2605,18 +2629,6 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             (rawCenterSrgb[2] as num).round().clamp(0, 255),
           ]
         : const <int>[128, 128, 128];
-    final rawCenterLab = _liveTelemetry['liveCenterLabD50'];
-    final liveCenterLabD50 = (rawCenterLab is List && rawCenterLab.length >= 3)
-        ? <double>[
-            (rawCenterLab[0] as num).toDouble(),
-            (rawCenterLab[1] as num).toDouble(),
-            (rawCenterLab[2] as num).toDouble(),
-          ]
-        : ZameraCapture.srgb8ToLabD50(
-            liveCenterSrgb[0],
-            liveCenterSrgb[1],
-            liveCenterSrgb[2],
-          );
     final anyManualLocked =
         _dslrMode != DslrExposureMode.programP ||
         _manualExposure ||
@@ -2717,36 +2729,38 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
         children: [
           // 1. FULL-BLEED CAMERA TEXTURE (with real-time Monochrome shader or Video 3D LUT / HLG-to-SDR Monitor)
           if (session != null && session.textureId >= 0)
-            ClipRect(
-              child: ColorFiltered(
-                colorFilter: isMonoPortrait
-                    ? ColorFilter.matrix(
-                        isHighKeyMono
-                            ? const <double>[
-                                0.36, 0.71, 0.14, 0, 24,
-                                0.36, 0.71, 0.14, 0, 24,
-                                0.36, 0.71, 0.14, 0, 24,
-                                0, 0, 0, 1, 0,
-                              ]
-                            : const <double>[
-                                0.38, 0.75, 0.15, 0, -14,
-                                0.38, 0.75, 0.15, 0, -14,
-                                0.38, 0.75, 0.15, 0, -14,
-                                0, 0, 0, 1, 0,
-                              ],
-                      )
-                    : (videoLutMatrix != null
-                        ? ColorFilter.matrix(videoLutMatrix)
-                        : const ColorFilter.mode(
-                            Colors.transparent,
-                            BlendMode.dst,
-                          )),
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: session.previewHeight.toDouble(),
-                    height: session.previewWidth.toDouble(),
-                    child: Texture(textureId: session.textureId),
+            RepaintBoundary(
+              child: ClipRect(
+                child: ColorFiltered(
+                  colorFilter: isMonoPortrait
+                      ? ColorFilter.matrix(
+                          isHighKeyMono
+                              ? const <double>[
+                                  0.36, 0.71, 0.14, 0, 24,
+                                  0.36, 0.71, 0.14, 0, 24,
+                                  0.36, 0.71, 0.14, 0, 24,
+                                  0, 0, 0, 1, 0,
+                                ]
+                              : const <double>[
+                                  0.38, 0.75, 0.15, 0, -14,
+                                  0.38, 0.75, 0.15, 0, -14,
+                                  0.38, 0.75, 0.15, 0, -14,
+                                  0, 0, 0, 1, 0,
+                                ],
+                        )
+                      : (videoLutMatrix != null
+                          ? ColorFilter.matrix(videoLutMatrix)
+                          : const ColorFilter.mode(
+                              Colors.transparent,
+                              BlendMode.dst,
+                            )),
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: session.previewHeight.toDouble(),
+                      height: session.previewWidth.toDouble(),
+                      child: Texture(textureId: session.textureId),
+                    ),
                   ),
                 ),
               ),
@@ -2815,32 +2829,69 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
 
           // 2A. Sanat Modu (1:1 TrueColor) Center Spot Reticle, Live Lab/ΔE00 Badge & Quick Action Bar
           if (isArtworkMode) ...[
-            if (_showSpotMeter) ...[
-              Center(
-                child: TrueColorCenterReticle(
-                  srgb8: liveCenterSrgb,
-                  isCalibrated: _calibrationResult.isMeasuredFromSensor,
-                ),
-              ),
-              Positioned(
-                top: _showLiveHistogram ? 108 : (anyManualLocked ? 78 : 54),
-                left: 14,
-                right: 14,
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _showCalibrationAndProbeSheet,
-                    child: TrueColorSpotMeterBadge(
-                      srgb8: liveCenterSrgb,
-                      labD50: liveCenterLabD50,
-                      isCalibrated: _calibrationResult.isMeasuredFromSensor,
-                      wbLabel: _activeArtworkWbBadgeLabel,
-                    ),
+            if (_showSpotMeter)
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: ValueListenableBuilder<Map<String, dynamic>>(
+                    valueListenable: _liveTelemetryNotifier,
+                    builder: (context, telMap, _) {
+                      final rawSrgb = telMap['liveCenterSrgb'];
+                      final spotSrgb = (rawSrgb is List && rawSrgb.length >= 3)
+                          ? <int>[
+                              (rawSrgb[0] as num).round().clamp(0, 255),
+                              (rawSrgb[1] as num).round().clamp(0, 255),
+                              (rawSrgb[2] as num).round().clamp(0, 255),
+                            ]
+                          : liveCenterSrgb;
+                      final rawLab = telMap['liveCenterLabD50'];
+                      final spotLab = (rawLab is List && rawLab.length >= 3)
+                          ? <double>[
+                              (rawLab[0] as num).toDouble(),
+                              (rawLab[1] as num).toDouble(),
+                              (rawLab[2] as num).toDouble(),
+                            ]
+                          : ZameraCapture.srgb8ToLabD50(
+                              spotSrgb[0],
+                              spotSrgb[1],
+                              spotSrgb[2],
+                            );
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Center(
+                            child: TrueColorCenterReticle(
+                              srgb8: spotSrgb,
+                              isCalibrated:
+                                  _calibrationResult.isMeasuredFromSensor,
+                            ),
+                          ),
+                          Positioned(
+                            top: _showLiveHistogram
+                                ? 108
+                                : (anyManualLocked ? 78 : 54),
+                            left: 14,
+                            right: 14,
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _showCalibrationAndProbeSheet,
+                                child: TrueColorSpotMeterBadge(
+                                  srgb8: spotSrgb,
+                                  labD50: spotLab,
+                                  isCalibrated:
+                                      _calibrationResult.isMeasuredFromSensor,
+                                  wbLabel: _activeArtworkWbBadgeLabel,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
-            ],
             if (!_radialMenuOpen && _activeDial == ActiveProDial.none)
               Positioned(
                 left: 0,
@@ -2953,7 +3004,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               top: 50,
               left: 12,
               right: 12,
-              child: _buildInteractiveVideoCinemaHud(),
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _videoTelemetryNotifier,
+                  builder: (context, _) => _buildInteractiveVideoCinemaHud(),
+                ),
+              ),
             ),
             if (!_radialMenuOpen && _activeDial == ActiveProDial.none)
               Positioned(
@@ -3050,54 +3106,59 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
               top: 50,
               left: 12,
               right: 12,
-              child: ProDslrExposureBar(
-                mode: _dslrMode,
-                driveMode: _proDriveMode,
-                meteredEvDelta:
-                    ((_liveTelemetry['meteredEvDelta'] as num?)?.toDouble() ??
-                            0.0)
-                        .clamp(-3.0, 3.0),
-                evCompensation: _evCompensation,
-                aeAfLocked: _aeAfLocked,
-                liveIso: _dslrMode.isIsoManual
-                    ? _iso.round()
-                    : ((_liveTelemetry['iso'] as num?)?.round() ??
-                        _lastCaptureResult?.iso ??
-                        100),
-                liveShutterLabel: _dslrMode.isShutterManual
-                    ? DslrStopsRegistry.formatShutterNs(_shutterExposureNs)
-                    : DslrStopsRegistry.formatShutterNs(
-                        (_liveTelemetry['exposureTimeNs'] as num?)?.toInt() ??
-                            _lastCaptureResult?.exposureTimeNs ??
-                            8000000,
-                      ),
-                liveWbLabel: _manualWb
-                    ? '${_kelvin.round()}K${_tint.abs() >= 1 ? " ${_tint > 0 ? "+${_tint.round()}M" : "${_tint.round()}G"}" : ""}'
-                    : 'AWB ${((_liveTelemetry['solvedCctKelvin'] as num?)?.round() ?? 5500)}K',
-                countdownRemainingSec: _selfTimerRemainingSec,
-                onModeChanged: _setDslrExposureMode,
-                onDriveModeChanged: (nextDrive) {
-                  HapticFeedback.selectionClick();
-                  setState(() {
-                    _proDriveMode = nextDrive;
-                    _statusBanner = 'Sürücü Modu: ${nextDrive.shortLabel}';
-                  });
-                },
-                onToggleAeAfLock: _toggleAeAfLock,
-                onTapShutter: () =>
-                    _selectRadialSettingDial(ActiveProDial.shutter),
-                onTapIso: () => _selectRadialSettingDial(ActiveProDial.iso),
-                onTapWb: () => _selectRadialSettingDial(ActiveProDial.wb),
-                onEvChanged: (nextEv) {
-                  setState(() {
-                    if (_dslrMode == DslrExposureMode.manualM) {
-                      _dslrMode = DslrExposureMode.programP;
-                      _manualExposure = false;
-                    }
-                    _evCompensation = nextEv.clamp(-3.0, 3.0);
-                  });
-                  _scheduleNativeControlsPush(artworkMode: false);
-                },
+              child: RepaintBoundary(
+                child: ValueListenableBuilder<Map<String, dynamic>>(
+                  valueListenable: _liveTelemetryNotifier,
+                  builder: (context, telMap, _) => ProDslrExposureBar(
+                    mode: _dslrMode,
+                    driveMode: _proDriveMode,
+                    meteredEvDelta:
+                        ((telMap['meteredEvDelta'] as num?)?.toDouble() ?? 0.0)
+                            .clamp(-3.0, 3.0),
+                    evCompensation: _evCompensation,
+                    aeAfLocked: _aeAfLocked,
+                    liveIso: _dslrMode.isIsoManual
+                        ? _iso.round()
+                        : ((telMap['iso'] as num?)?.round() ??
+                            _lastCaptureResult?.iso ??
+                            100),
+                    liveShutterLabel: _dslrMode.isShutterManual
+                        ? DslrStopsRegistry.formatShutterNs(_shutterExposureNs)
+                        : DslrStopsRegistry.formatShutterNs(
+                            (telMap['exposureTimeNs'] as num?)?.toInt() ??
+                                _lastCaptureResult?.exposureTimeNs ??
+                                8000000,
+                          ),
+                    liveWbLabel: _manualWb
+                        ? '${_kelvin.round()}K${_tint.abs() >= 1 ? " ${_tint > 0 ? "+${_tint.round()}M" : "${_tint.round()}G"}" : ""}'
+                        : 'AWB ${((telMap['solvedCctKelvin'] as num?)?.round() ?? 5500)}K',
+                    countdownRemainingSec: _selfTimerRemainingSec,
+                    onModeChanged: _setDslrExposureMode,
+                    onDriveModeChanged: (nextDrive) {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _proDriveMode = nextDrive;
+                        _statusBanner =
+                            'Sürücü Modu: ${nextDrive.shortLabel}';
+                      });
+                    },
+                    onToggleAeAfLock: _toggleAeAfLock,
+                    onTapShutter: () =>
+                        _selectRadialSettingDial(ActiveProDial.shutter),
+                    onTapIso: () => _selectRadialSettingDial(ActiveProDial.iso),
+                    onTapWb: () => _selectRadialSettingDial(ActiveProDial.wb),
+                    onEvChanged: (nextEv) {
+                      setState(() {
+                        if (_dslrMode == DslrExposureMode.manualM) {
+                          _dslrMode = DslrExposureMode.programP;
+                          _manualExposure = false;
+                        }
+                        _evCompensation = nextEv.clamp(-3.0, 3.0);
+                      });
+                      _scheduleNativeControlsPush(artworkMode: false);
+                    },
+                  ),
+                ),
               ),
             ),
 
@@ -5275,9 +5336,12 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               // Left: iOS Squircle Last Capture Thumbnail (Tap for Full-Screen Pro Media & Sticker Studio)
-              GestureDetector(
-                key: const ValueKey('home_media_studio_thumb'),
-                onTap: hasMedia ? _openMediaStudio : null,
+              Semantics(
+                button: true,
+                label: 'Medya Stüdyosu / Media Studio',
+                child: GestureDetector(
+                  key: const ValueKey('home_media_studio_thumb'),
+                  onTap: hasMedia ? _openMediaStudio : null,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -5386,10 +5450,18 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                   ],
                 ),
               ),
+              ),
 
               // Center: Background-Free Chevron Arrow directly above the Shutter Button + Swipe-to-Open Radial Settings!
-              GestureDetector(
-                key: const ValueKey('shutter_button_gesture'),
+              Semantics(
+                button: true,
+                label: isVideo
+                    ? (_isVideoRecording
+                        ? 'Video Kaydını Durdur'
+                        : 'Video Kaydını Başlat')
+                    : 'Fotoğraf Çek',
+                child: GestureDetector(
+                  key: const ValueKey('shutter_button_gesture'),
                 behavior: HitTestBehavior.opaque,
                 onVerticalDragStart: (_) {
                   _shutterVerticalDragDy = 0.0;
@@ -5512,10 +5584,14 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                   ],
                 ),
               ),
+              ),
 
               // Right: Clean iOS Circular Button (Flip Front/Back Camera on Tap, Gray Card / AEB on LongPress)
-              GestureDetector(
-                onTap: () {
+              Semantics(
+                button: true,
+                label: 'Kamera Değiştir / Lens',
+                child: GestureDetector(
+                  onTap: () {
                   if (isVideo && _isVideoRecording) return;
                   final nextId = _selectedCameraId == '1' ? '2' : '1';
                   if (isVideo) {
@@ -5551,6 +5627,7 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
                   ),
                 ),
               ),
+              ),
             ],
           ),
         ],
@@ -5560,26 +5637,31 @@ class _ZameraHomeScreenState extends State<ZameraHomeScreen>
 
   Widget _buildIosModeTab(String label, int modeIndex) {
     final selected = _selectedMode == modeIndex;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() {
-          _applyIdealPresetForMode(modeIndex);
-        });
-      },
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11.5,
-          letterSpacing: 1.0,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-          color: selected ? kIosYellow : Colors.white,
-          shadows: const [
-            Shadow(
-              color: Colors.black54,
-              blurRadius: 4,
-            ),
-          ],
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _applyIdealPresetForMode(modeIndex);
+          });
+        },
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            letterSpacing: 1.0,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? kIosYellow : Colors.white,
+            shadows: const [
+              Shadow(
+                color: Colors.black54,
+                blurRadius: 4,
+              ),
+            ],
+          ),
         ),
       ),
     );

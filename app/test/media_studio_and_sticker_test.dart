@@ -171,6 +171,9 @@ void main() {
           .setMockMethodCallHandler(captureChannel, null);
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
+      if (Platform.isWindows) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+      }
       try {
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);

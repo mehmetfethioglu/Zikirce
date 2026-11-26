@@ -342,7 +342,7 @@
                 <div class="app-logo">Z</div>
                 <div>
                     <div class="brand-title">Zamera</div>
-                    <div class="brand-sub">TrueColor &amp; Pro Camera · v0.1.6</div>
+                    <div class="brand-sub">TrueColor &amp; Pro Camera · v0.1.7</div>
                 </div>
             </a>
             <div class="lang-switch">
@@ -353,6 +353,7 @@
 
         <nav class="nav-links">
             <a href="index.html" class="active-link">Gizlilik / Privacy</a>
+            <a href="terms.html">Koşullar / Terms</a>
             <a href="support.html">Destek / Support</a>
             <a href="indir.html">İndir / Download</a>
         </nav>
@@ -363,7 +364,7 @@
                 <div class="hero-badge">🔒 %100 Cihaz İçi &amp; Sıfır Takip</div>
                 <h1>Gizlilik Politikası ve Veri Güvenliği</h1>
                 <p>Zamera, kullanıcı gizliliğini mutlak öncelik kabul eder. Çektiğiniz hiçbir fotoğraf, video, ses, RAW dosyası veya çıkartma harici bir sunucuya iletilmez.</p>
-                <div class="meta-line">Son Güncelleme: 23 Kasım 2026 · Sürüm 0.1.6 (iOS &amp; Android)</div>
+                <div class="meta-line">Son Güncelleme: 26 Kasım 2026 · Sürüm 0.1.7 (iOS &amp; Android)</div>
             </section>
 
             <article class="card">
@@ -387,9 +388,9 @@
 
             <article class="card">
                 <h2>3. Cihaz İçi Yapay Zeka Çıkartma (Sticker) &amp; Renk Bilimi</h2>
-                <p>Zamera v0.1.6 içindeki tüm görüntü işleme ve yapay zeka modelleri tamamen çevrimdışı biçimde cihaz donanımı üzerinde yürütülür:</p>
+                <p>Zamera v0.1.7 içindeki tüm görüntü işleme ve yapay zeka modelleri tamamen cihaz donanımı üzerinde yerel olarak yürütülür:</p>
                 <ul>
-                    <li><strong>Şeffaf Sticker Kesimi:</strong> Android cihazlarda cihaz içi ML Kit Subject Segmentation + U&sup2;-Net bağlı nesne motoru, iOS cihazlarda ise Apple Vision ön plan maskeleme motoru yalnızca seçtiğiniz fotoğraftan şeffaf PNG çıkartması üretir. Kesilen çıkartmalar cihaz içi korumalı klasörde saklanır ve yalnızca siz "Kopyala" veya "Paylaş" düğmesine bastığınızda sistem panosuna ya da seçtiğiniz uygulamaya aktarılır.</li>
+                    <li><strong>Şeffaf Sticker Kesimi:</strong> Android cihazlarda cihaz içi Google ML Kit Subject/Selfie Segmentation, yerel LiteRT (TFLite) ve U&sup2;-Net bağlı nesne motoru (ilk kurulumda sistem modülü gerekirse Play Services yalnız standart bileşen hazırlığı yapabilir; hiçbir fotoğraf/video pikseliniz dışarı aktarılmaz), iOS cihazlarda ise Apple Vision ön plan maskeleme motoru yalnızca seçtiğiniz fotoğraftan şeffaf PNG çıkartması üretir. Kesilen çıkartmalar cihaz içi korumalı klasörde saklanır ve yalnızca siz "Kopyala" veya "Paylaş" düğmesine bastığınızda sistem panosuna ya da seçtiğiniz uygulamaya aktarılır.</li>
                     <li><strong>Sanat Modu &amp; Gerçek Renk Motoru:</strong> 24-yama ColorChecker kalibrasyonu ve CIE &Delta;E<sub>00</sub> renk bilimi hesaplamaları gömülü yerel Rust çekirdeği (<code>zamera_core</code>) tarafından doğrudan CPU/GPU üzerinde çalıştırılır; hiçbir piksel verisi ağa gönderilmez.</li>
                 </ul>
             </article>
@@ -419,7 +420,7 @@
                 <div class="hero-badge">🔒 100% On-Device &amp; Zero Tracking</div>
                 <h1>Privacy Policy &amp; Data Safety</h1>
                 <p>Zamera is engineered by Akarworks as an offline-first true-color photography, cinema video, and Pro Media Studio application for iOS 17.0+ and Android 10+ that collects zero personal data, uploads zero user media to external servers, and embeds zero advertising or third-party analytics SDKs. Every workflow executes strictly on device hardware: 14-bit Bayer RAW and Apple ProRAW capture, embedded Rust zamera_core CIEDE2000 (&Delta;E00 &le; 1.0) 24-patch calibration, PASM exposure control, 180-degree shutter-locked cinema recording, and transparent PNG sticker segmentation run locally in RAM. Camera, microphone, and local media storage permissions operate exclusively when you trigger viewfinder preview, Pro Video audio metering, or Pro Media Studio export, ensuring 100% deterministic privacy compliance under KVKK, GDPR, and CCPA guidelines with full user ownership over every DNG, JPEG, PNG, and video file.</p>
-                <div class="meta-line">Last Updated: November 23, 2026 · Version 0.1.6 (iOS &amp; Android)</div>
+                <div class="meta-line">Last Updated: November 26, 2026 · Version 0.1.7 (iOS &amp; Android)</div>
             </section>
 
             <article class="card">
@@ -442,9 +443,9 @@
 
             <article class="card">
                 <h2>3. On-Device AI Sticker Cutout &amp; Color Science</h2>
-                <p>All AI segmentation and colorimetry engines inside Zamera v0.1.6 run 100% locally on your device:</p>
+                <p>All AI segmentation and colorimetry engines inside Zamera v0.1.7 execute locally on your device hardware:</p>
                 <ul>
-                    <li><strong>Transparent PNG Sticker Cutout:</strong> On Android, on-device Google ML Kit Subject Segmentation and U&sup2;-Net connected-subject isolation operate completely offline without network calls; on iOS, Apple Vision foreground segmentation processes images locally on Neural Engine/GPU hardware. Extracted PNG stickers are stored only inside your local app sandbox and leave it only when you choose Copy or Share.</li>
+                    <li><strong>Transparent PNG Sticker Cutout:</strong> On Android, on-device Google ML Kit Subject/Selfie Segmentation, bundled LiteRT (TFLite), and U&sup2;-Net connected-subject isolation process images locally in device RAM (Play Services may provision standard on-device ML Kit module binaries when needed, while zero user photos or pixel data ever leave your device); on iOS, Apple Vision foreground segmentation runs locally on Neural Engine/GPU hardware. Extracted PNG stickers are stored only inside your local app sandbox and leave it only when you choose Copy or Share.</li>
                     <li><strong>True-Color Rust Engine:</strong> 24-patch ColorChecker calibration and CIE &Delta;E<sub>00</sub> calculations execute locally in the embedded Rust core (<code>zamera_core</code>) with zero cloud processing.</li>
                 </ul>
             </article>
@@ -470,7 +471,7 @@
 
         <footer class="footer">
             <p>&copy; 2026 Akarworks. Tüm hakları saklıdır / All rights reserved.</p>
-            <p style="margin-top: 6px;">Zamera — Gerçek Renk (Sanat Modu) &amp; Profesyonel Kamera · <a href="support.html">Destek / Support</a></p>
+            <p style="margin-top: 6px;">Zamera — Gerçek Renk (Sanat Modu) &amp; Profesyonel Kamera · <a href="terms.html">Kullanım Koşulları / Terms</a> · <a href="support.html">Destek / Support</a></p>
         </footer>
     </div>
 

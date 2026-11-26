@@ -1,0 +1,4 @@
+Zamera v0.1.7:
+• Billing & Store Compliance: Added StoreKit 2 / Play Billing lifecycle revalidation, free-trial offerToken selection, and Terms of Use (EULA) links.
+• Bilingual TR/EN & Accessibility: Added English/Turkish UI support, Semantics labels for screen readers, and Android 11+ external URL queries.
+• 120 FPS & Hardening: Isolated live telemetry repaints, added Rust FFI catch_unwind/bounds guards, and scoped keep-screen-on strictly to active camera sessions.

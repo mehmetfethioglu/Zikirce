@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zamera/dialogs/settings_sheet.dart';
 import 'package:zamera/dialogs/zamera_paywall_sheet.dart';
+import 'package:zamera/l10n/zamera_l10n.dart';
 import 'package:zamera/models/zamera_monetization_models.dart';
 import 'package:zamera/models/zamera_preferences.dart';
 import 'package:zamera/services/zamera_monetization_gateway.dart';
@@ -70,6 +71,13 @@ class _FakeBillingGateway implements BillingGateway {
     }
   }
 
+  final List<String> acknowledgedProducts = <String>[];
+
+  @override
+  Future<void> acknowledgePurchase(String productId, String? transactionId) async {
+    acknowledgedProducts.add(productId);
+  }
+
   @override
   Future<void> dispose() async {
     if (!_controller.isClosed) {
@@ -105,7 +113,7 @@ void main() {
 
       final fallbackOffer = const ZameraStoreOffer(plan: ZameraPlanId.annualPro);
       expect(fallbackOffer.priceForLocale(isTurkish: true), equals('₺449,99 / yıl'));
-      expect(fallbackOffer.priceForLocale(isTurkish: false), equals(r'$19.99 / yıl'));
+      expect(fallbackOffer.priceForLocale(isTurkish: false), equals(r'$19.99 / yr'));
     });
 
     test('enforces daily Aha-Moment quotas and resets automatically on UTC day rollover', () async {
@@ -524,5 +532,153 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ZameraPaywallSheet), findsOneWidget);
     });
+
+    test('validates needsStoreRevalidation, bounded proActive expiry, async restore wait, and ack order', () async {
+      DateTime clock = DateTime.utc(2026, 11, 26, 10, 0);
+      final repo = InMemoryMonetizationRepository();
+      final events = <String>[];
+
+      final delayedBilling = _DelayedBillingGateway(
+        onAck: (id) => events.add('ack:$id'),
+      );
+      final controller = await ZameraMonetizationController.initialize(
+        repository: repo,
+        billingGateway: delayedBilling,
+        nowUtcProvider: () => clock,
+        refreshOffersInBackground: false,
+      );
+      addTearDown(controller.dispose);
+
+      // Simulate purchase -> repository must persist BEFORE acknowledgePurchase is invoked
+      await controller.purchasePlan(ZameraPlanId.monthlyPro);
+      await Future<void>.delayed(Duration.zero);
+      expect(repo.stored?.status, equals(ZameraEntitlementStatus.proActive));
+      expect(events, equals(const <String>['ack:com.akarworks.zamera.pro.monthly']));
+      expect(controller.hasProAccess, isTrue);
+
+      // Within 24h -> no store revalidation required; after >24h -> needsStoreRevalidation is true
+      expect(controller.state.needsStoreRevalidation(clock), isFalse);
+      clock = clock.add(const Duration(hours: 25));
+      expect(controller.state.needsStoreRevalidation(clock), isTrue);
+
+      // Past monthly expiry window (35d) without store renewal -> no longer entitled
+      clock = clock.add(const Duration(days: 40));
+      expect(controller.hasProAccess, isFalse);
+
+      // Async delayed restore waits for stream event rather than returning false prematurely
+      delayedBilling.delayedRestorePlan = ZameraPlanId.annualPro;
+      await controller.restorePurchases();
+      expect(controller.hasProAccess, isTrue);
+      expect(
+        controller.state.statusMessageTr,
+        equals('Zamera Pro etkinleştirildi!'),
+      );
+    });
+
+    testWidgets('ZameraPaywallSheet renders English locale, Terms of Use EULA link, and Semantics', (tester) async {
+      final controller = await ZameraMonetizationController.initialize(
+        repository: InMemoryMonetizationRepository(),
+        billingGateway: _FakeBillingGateway(),
+        refreshOffersInBackground: false,
+      );
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          supportedLocales: ZameraL10n.supportedLocales,
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () => ZameraPaywallSheet.show(
+                    context,
+                    monetization: controller,
+                    triggeredFeature: ZameraProFeature.cinemaTenBitLogProRes,
+                  ),
+                  child: const Text('OPEN_EN_PAYWALL'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('OPEN_EN_PAYWALL'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1-MONTH FREE TRIAL'), findsOneWidget);
+      expect(find.text('Start 1-Month Free Trial'), findsOneWidget);
+      expect(find.text('Lifetime Pro'), findsOneWidget);
+      expect(find.text('Monthly Pro'), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('paywall_terms_btn')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('paywall_privacy_btn')), findsOneWidget);
+      expect(find.text('Terms of Use (EULA)'), findsOneWidget);
+      expect(find.text('Privacy Policy'), findsOneWidget);
+      expect(find.bySemanticsLabel('Close'), findsOneWidget);
+    });
   });
+}
+
+class _DelayedBillingGateway implements BillingGateway {
+  final StreamController<BillingPurchaseUpdate> _controller =
+      StreamController<BillingPurchaseUpdate>.broadcast();
+  final void Function(String productId) onAck;
+  ZameraPlanId? delayedRestorePlan;
+
+  _DelayedBillingGateway({required this.onAck});
+
+  @override
+  Future<bool> isAvailable() async => true;
+
+  @override
+  Future<Map<ZameraPlanId, ZameraStoreOffer>> queryPrices() async =>
+      ZameraMonetizationState.defaultOffers();
+
+  @override
+  Stream<BillingPurchaseUpdate> get purchaseUpdates => _controller.stream;
+
+  @override
+  Future<bool> buy(ZameraPlanId plan) async {
+    _controller.add(
+      BillingPurchaseUpdate(
+        eventType: BillingEventType.purchased,
+        productId: plan.productId,
+        transactionId: 'tx_delay_${plan.name}',
+      ),
+    );
+    return true;
+  }
+
+  @override
+  Future<void> restore() async {
+    final plan = delayedRestorePlan;
+    if (plan != null) {
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 50)).then((_) {
+          if (!_controller.isClosed) {
+            _controller.add(
+              BillingPurchaseUpdate(
+                eventType: BillingEventType.restored,
+                productId: plan.productId,
+                transactionId: 'tx_rest_${plan.name}',
+              ),
+            );
+          }
+        }),
+      );
+    }
+  }
+
+  @override
+  Future<void> acknowledgePurchase(String productId, String? transactionId) async {
+    onAck(productId);
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (!_controller.isClosed) {
+      await _controller.close();
+    }
+  }
 }

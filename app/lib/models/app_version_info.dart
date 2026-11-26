@@ -38,10 +38,11 @@ class ReleaseNote {
 
 /// Central repository of Zamera features and version release history.
 class AppVersionInfo {
-  static const String currentVersion = '0.1.6';
-  static const int currentBuildNumber = 7;
+  static const String currentVersion = '0.1.7';
+  static const int currentBuildNumber = 8;
   static const String appName = 'Zamera';
   static const String privacyPolicyUrl = 'https://mehmetfethioglu.github.io/zamera-privacy/';
+  static const String termsOfUseUrl = 'https://mehmetfethioglu.github.io/zamera-privacy/terms.html';
   static const String supportEmail = 'theakar@windowslive.com';
 
   /// General features presented to users on their first launch or via Settings.
@@ -85,6 +86,25 @@ class AppVersionInfo {
 
   /// Changelog history of all releases.
   static const List<ReleaseNote> releaseHistory = [
+    ReleaseNote(
+      version: '0.1.7',
+      buildNumber: 8,
+      releaseDate: '26 Kasım 2026',
+      titleTr: 'Çift Dilli TR/EN, Abonelik Senkronu, iOS Rust Köprüsü & 120 FPS İzolasyon',
+      titleEn: 'Bilingual TR/EN, Billing Lifecycle, iOS Rust Linkage & 120 FPS Isolation',
+      bulletPointsTr: [
+        'Abonelik Yaşam Döngüsü & EULA: StoreKit 2 / Google Play Billing açılış yeniden doğrulaması, ücretsiz deneme offerToken önceliği, asenkron geri yükleme senkronu ve Kullanım Koşulları (EULA) bağlantısı eklendi.',
+        'Çift Dilli TR/EN & Erişilebilirlik: Sistem diline duyarlı Türkçe/İngilizce arayüz, iOS InfoPlist yerel metinleri, TalkBack/VoiceOver Semantics etiketleri ve Android 11+ harici bağlantı sorguları eklendi.',
+        'iOS Rust Bağlantısı & FFI Emniyeti: zamera_core statik kütüphanesi iOS podspec ile -force_load bağlandı; Rust çekirdeği modülerleştirilip tüm FFI/JNI girişleri catch_unwind ve sınır kontrolüyle korundu.',
+        '120 FPS Telemetri İzolasyonu & Güvenlik: Canlı vizör telemetrisi ValueNotifier/RepaintBoundary katmanlarına ayrıldı; kilit ekranı aşan bayraklar kaldırılıp ekran uyanıklığı yalnızca aktif kamera oturumuna bağlandı.',
+      ],
+      bulletPointsEn: [
+        'Billing Lifecycle & EULA: Added StoreKit 2 / Google Play Billing launch revalidation, free-trial offerToken selection, async restore synchronization, and Terms of Use (EULA) links.',
+        'Bilingual TR/EN & Accessibility: Added system-aware English/Turkish UI, localized iOS InfoPlist prompts, Semantics labels for screen readers, and Android 11+ URL queries.',
+        'iOS Rust Linkage & FFI Safety: Linked zamera_core into iOS via podspec -force_load; modularized Rust core and guarded all FFI/JNI entrypoints with catch_unwind and strict bounds checks.',
+        '120 FPS Telemetry Isolation & Hardening: Isolated live viewfinder telemetry via ValueNotifier and RepaintBoundary; removed lock-screen bypass flags and scoped wake-lock to active camera sessions.',
+      ],
+    ),
     ReleaseNote(
       version: '0.1.6',
       buildNumber: 7,

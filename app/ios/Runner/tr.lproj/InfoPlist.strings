@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "Zamera, sanat eserlerinin gerçek renkli RAW fotoğraflarını çekmek ve profesyonel lens/pozlama kontrolü sağlamak için kameraya erişir.";
+"NSMicrophoneUsageDescription" = "Zamera, profesyonel video çekimlerinde ses kaydı ve seviye takibi için mikrofona erişir.";
+"NSPhotoLibraryAddUsageDescription" = "Zamera, çekilen DNG, 16-bit PNG/TIFF ve sRGB/Display P3 fotoğrafları galerinize kaydetmek için izin ister.";
+"NSPhotoLibraryUsageDescription" = "Zamera, kalibrasyon profillerini ve çekilen RAW fotoğrafları görüntülemek için fotoğraf arşivinize erişir.";

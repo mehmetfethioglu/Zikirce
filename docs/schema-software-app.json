@@ -6,7 +6,7 @@
       "name": "Zamera",
       "operatingSystem": "Android, iOS",
       "applicationCategory": "PhotographyApplication",
-      "softwareVersion": "0.1.6",
+      "softwareVersion": "0.1.7",
       "description": "Zamera is a professional on-device true-color artwork photography and unified cinema camera application developed by Akarworks for iOS and Android with CIEDE2000 calibration, 14-bit Bayer RAW / ProRAW capture, transparent AI sticker cutout, 10-bit Pro Video, Pro Media Studio, and zero telemetry.",
       "url": "https://mehmetfethioglu.github.io/zamera-privacy/",
       "inLanguage": [
@@ -56,7 +56,7 @@
           "name": "Does Zamera collect or upload photos, videos, or personal data?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Zamera v0.1.6 processes 100% of photos, videos, color calibration matrices, and transparent sticker cutouts locally on the user's device without cloud uploads, analytics trackers, or advertising SDKs."
+            "text": "No. Zamera v0.1.7 processes 100% of photos, videos, color calibration matrices, and transparent sticker cutouts locally on the user's device without cloud uploads, analytics trackers, or advertising SDKs."
           }
         },
         {

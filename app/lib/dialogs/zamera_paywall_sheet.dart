@@ -1,9 +1,8 @@
-import 'dart:ui' show PlatformDispatcher;
-
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/camera_colors.dart';
+import '../l10n/zamera_l10n.dart';
 import '../models/app_version_info.dart';
 import '../models/zamera_monetization_models.dart';
 import '../services/zamera_monetization_service.dart';
@@ -76,21 +75,20 @@ class _ZameraPaywallSheetState extends State<ZameraPaywallSheet> {
     setState(() {});
   }
 
-  bool _isTurkishLocale(BuildContext context) {
-    final lang =
-        Localizations.maybeLocaleOf(context)?.languageCode ??
-        PlatformDispatcher.instance.locale.languageCode;
-    return lang.toLowerCase().startsWith('tr');
-  }
-
-  Future<void> _openPrivacyPolicy() async {
+  Future<void> _openExternalPage(String url, {required bool isTurkish}) async {
     try {
-      final uri = Uri.parse(AppVersionInfo.privacyPolicyUrl);
+      final uri = Uri.parse(url);
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gizlilik sayfası açılamadı: $e')),
+        SnackBar(
+          content: Text(
+            isTurkish
+                ? 'Sayfa açılamadı: $e'
+                : 'Could not open page: $e',
+          ),
+        ),
       );
     }
   }
@@ -98,7 +96,7 @@ class _ZameraPaywallSheetState extends State<ZameraPaywallSheet> {
   @override
   Widget build(BuildContext context) {
     final state = widget.monetization.state;
-    final isTr = _isTurkishLocale(context);
+    final isTr = ZameraL10n.isTurkish(context);
     final selectedOffer = state.offerFor(_selectedPlan);
 
     return SafeArea(
@@ -113,13 +111,19 @@ class _ZameraPaywallSheetState extends State<ZameraPaywallSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              _PaywallHeader(onClose: () => Navigator.of(context).pop(false)),
+              _PaywallHeader(
+                isTurkish: isTr,
+                onClose: () => Navigator.of(context).pop(false),
+              ),
               if (widget.triggeredFeature != null) ...<Widget>[
                 const SizedBox(height: 10),
-                _AhaReasonCallout(feature: widget.triggeredFeature!),
+                _AhaReasonCallout(
+                  feature: widget.triggeredFeature!,
+                  isTurkish: isTr,
+                ),
               ],
               const SizedBox(height: 12),
-              const _ProFeatureChecklist(),
+              _ProFeatureChecklist(isTurkish: isTr),
               const SizedBox(height: 14),
               for (final plan in ZameraPlanId.values) ...<Widget>[
                 _PlanSelectorCard(
@@ -153,11 +157,23 @@ class _ZameraPaywallSheetState extends State<ZameraPaywallSheet> {
                 selectedPriceLabel: selectedOffer.priceForLocale(
                   isTurkish: isTr,
                 ),
+                isTurkish: isTr,
                 isBusy: state.isBusy,
                 onPurchase: () =>
                     widget.monetization.purchasePlan(_selectedPlan),
                 onRestore: widget.monetization.restorePurchases,
-                onOpenPrivacy: _openPrivacyPolicy,
+                onOpenTerms: () => _openExternalPage(
+                  isTr
+                      ? AppVersionInfo.termsOfUseUrl
+                      : '${AppVersionInfo.termsOfUseUrl}?lang=en',
+                  isTurkish: isTr,
+                ),
+                onOpenPrivacy: () => _openExternalPage(
+                  isTr
+                      ? AppVersionInfo.privacyPolicyUrl
+                      : '${AppVersionInfo.privacyPolicyUrl}?lang=en',
+                  isTurkish: isTr,
+                ),
               ),
             ],
           ),
@@ -168,9 +184,10 @@ class _ZameraPaywallSheetState extends State<ZameraPaywallSheet> {
 }
 
 class _PaywallHeader extends StatelessWidget {
+  final bool isTurkish;
   final VoidCallback onClose;
 
-  const _PaywallHeader({required this.onClose});
+  const _PaywallHeader({required this.isTurkish, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -207,22 +224,26 @@ class _PaywallHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'Zamera Pro · Gerçek Renk & Sinema',
-                    style: TextStyle(
+                    isTurkish
+                        ? 'Zamera Pro · Gerçek Renk & Sinema'
+                        : 'Zamera Pro · True Color & Cinema',
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                     ),
                   ),
-                  SizedBox(height: 2),
+                  const SizedBox(height: 2),
                   Text(
-                    '1 Ay Ücretsiz Dene · %100 Cihaz İçi · Sıfır Veri Takibi',
-                    style: TextStyle(
+                    isTurkish
+                        ? '1 Ay Ücretsiz Dene · %100 Cihaz İçi · Sıfır Veri Takibi'
+                        : '1-Month Free Trial · 100% On-Device · Zero Tracking',
+                    style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: kZameraCyan,
@@ -231,11 +252,15 @@ class _PaywallHeader extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              key: const ValueKey<String>('paywall_close_btn'),
-              tooltip: 'Kapat',
-              onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, color: Colors.white70),
+            Semantics(
+              button: true,
+              label: isTurkish ? 'Kapat' : 'Close',
+              child: IconButton(
+                key: const ValueKey<String>('paywall_close_btn'),
+                tooltip: isTurkish ? 'Kapat' : 'Close',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded, color: Colors.white70),
+              ),
             ),
           ],
         ),
@@ -246,8 +271,9 @@ class _PaywallHeader extends StatelessWidget {
 
 class _AhaReasonCallout extends StatelessWidget {
   final ZameraProFeature feature;
+  final bool isTurkish;
 
-  const _AhaReasonCallout({required this.feature});
+  const _AhaReasonCallout({required this.feature, required this.isTurkish});
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +294,7 @@ class _AhaReasonCallout extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  feature.titleTr,
+                  feature.title(isTurkish: isTurkish),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -277,7 +303,7 @@ class _AhaReasonCallout extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  feature.ahaReasonTr,
+                  feature.ahaReason(isTurkish: isTurkish),
                   style: const TextStyle(
                     fontSize: 11,
                     color: Colors.white70,
@@ -294,26 +320,33 @@ class _AhaReasonCallout extends StatelessWidget {
 }
 
 class _ProFeatureChecklist extends StatelessWidget {
-  static const List<(IconData, String)> _items = <(IconData, String)>[
-    (
-      Icons.palette_outlined,
-      'Sınırsız TrueColor ΔE₀₀ ≤ 1.0 Sanat Modu & 24-Yama Kalibrasyon',
-    ),
-    (
-      Icons.raw_on_rounded,
-      'Sınırsız 14-bit DNG RAW, 48MP ProRAW & Kayıpsız 1:1 PNG Arşivi',
-    ),
-    (
-      Icons.content_cut_rounded,
-      'Sınırsız Şeffaf / Beyaz Konturlu PNG Sticker Kesimi ve Rafı',
-    ),
-    (
-      Icons.videocam_outlined,
-      '10-Bit Apple Log / HLG10 / ProRes 422 HQ & Özel .cube 3D LUT',
-    ),
-  ];
+  static const List<(IconData, String, String)> _items =
+      <(IconData, String, String)>[
+        (
+          Icons.palette_outlined,
+          'Sınırsız TrueColor ΔE₀₀ ≤ 1.0 Sanat Modu & 24-Yama Kalibrasyon',
+          'Unlimited TrueColor ΔE₀₀ ≤ 1.0 Art Mode & 24-Patch Calibration',
+        ),
+        (
+          Icons.raw_on_rounded,
+          'Sınırsız 14-bit DNG RAW, 48MP ProRAW & Kayıpsız 1:1 PNG Arşivi',
+          'Unlimited 14-bit DNG RAW, 48MP ProRAW & Lossless 1:1 PNG Archive',
+        ),
+        (
+          Icons.content_cut_rounded,
+          'Sınırsız Şeffaf / Beyaz Konturlu PNG Sticker Kesimi ve Rafı',
+          'Unlimited Transparent / White-Outline PNG Sticker Cutouts',
+        ),
+        (
+          Icons.videocam_outlined,
+          '10-Bit Apple Log / HLG10 / ProRes 422 HQ & Özel .cube 3D LUT',
+          '10-Bit Apple Log / HLG10 / ProRes 422 HQ & Custom .cube 3D LUTs',
+        ),
+      ];
 
-  const _ProFeatureChecklist();
+  final bool isTurkish;
+
+  const _ProFeatureChecklist({required this.isTurkish});
 
   @override
   Widget build(BuildContext context) {
@@ -333,7 +366,7 @@ class _ProFeatureChecklist extends StatelessWidget {
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                    _items[i].$2,
+                    isTurkish ? _items[i].$2 : _items[i].$3,
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
@@ -371,110 +404,121 @@ class _PlanSelectorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final priceText = offer.priceForLocale(isTurkish: isTurkish);
     final originalText = offer.originalPriceForLocale(isTurkish: isTurkish);
+    final title = plan.title(isTurkish: isTurkish);
+    final badge = plan.badge(isTurkish: isTurkish);
+    final subtitle = plan.subtitle(isTurkish: isTurkish);
     final borderColor = isSelected
         ? kIosYellow
         : (plan.isRecommended
               ? kZameraCyan.withValues(alpha: 0.45)
               : kBorderDark);
 
-    return Material(
-      color: isSelected ? kIosYellow.withValues(alpha: 0.12) : kCardDark,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$title, $badge, $priceText',
+      child: Material(
+        color: isSelected ? kIosYellow.withValues(alpha: 0.12) : kCardDark,
         borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: borderColor, width: isSelected ? 1.6 : 1),
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(
-                isSelected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_off_rounded,
-                color: isSelected ? kIosYellow : Colors.white38,
-                size: 20,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: borderColor,
+                width: isSelected ? 1.6 : 1,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: <Widget>[
-                        Text(
-                          plan.titleTr,
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: plan.hasFreeTrial
-                                ? kIosYellow
-                                : kZameraCyan.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            plan.badgeTr,
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900,
-                              color: plan.hasFreeTrial
-                                  ? Colors.black
-                                  : kZameraCyan,
+            ),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: isSelected ? kIosYellow : Colors.white38,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: <Widget>[
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
                             ),
                           ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: plan.hasFreeTrial
+                                  ? kIosYellow
+                                  : kZameraCyan.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              badge,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                color: plan.hasFreeTrial
+                                    ? Colors.black
+                                    : kZameraCyan,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: Colors.white60,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: <Widget>[
+                    if (originalText != null)
+                      Text(
+                        originalText,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white38,
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
                     Text(
-                      plan.subtitleTr,
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: Colors.white60,
+                      priceText,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: isSelected ? kIosYellow : Colors.white,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  if (originalText != null)
-                    Text(
-                      originalText,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.white38,
-                        decoration: TextDecoration.lineThrough,
-                      ),
-                    ),
-                  Text(
-                    priceText,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      color: isSelected ? kIosYellow : Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -485,58 +529,72 @@ class _PlanSelectorCard extends StatelessWidget {
 class _PaywallFooterActions extends StatelessWidget {
   final ZameraPlanId selectedPlan;
   final String selectedPriceLabel;
+  final bool isTurkish;
   final bool isBusy;
   final VoidCallback onPurchase;
   final VoidCallback onRestore;
+  final VoidCallback onOpenTerms;
   final VoidCallback onOpenPrivacy;
 
   const _PaywallFooterActions({
     required this.selectedPlan,
     required this.selectedPriceLabel,
+    required this.isTurkish,
     required this.isBusy,
     required this.onPurchase,
     required this.onRestore,
+    required this.onOpenTerms,
     required this.onOpenPrivacy,
   });
 
   @override
   Widget build(BuildContext context) {
-    final renewalNote = selectedPlan.hasFreeTrial
-        ? 'İlk 30 gün boyunca ücret yansımaz. Memnun kalmazsanız mağaza ayarlarından tek dokunuşla iptal edebilirsiniz ($selectedPriceLabel).'
-        : (selectedPlan.isLifetime
-              ? 'Tek seferlik $selectedPriceLabel ödeme ile abonelik olmadan ömür boyu Zamera Pro erişimi.'
-              : '$selectedPriceLabel aylık plan; dilediğiniz an mağaza ayarlarından iptal edilebilir.');
+    final renewalNote = isTurkish
+        ? (selectedPlan.hasFreeTrial
+              ? 'İlk 30 gün boyunca ücret yansımaz. Memnun kalmazsanız mağaza ayarlarından tek dokunuşla iptal edebilirsiniz ($selectedPriceLabel).'
+              : (selectedPlan.isLifetime
+                    ? 'Tek seferlik $selectedPriceLabel ödeme ile abonelik olmadan ömür boyu Zamera Pro erişimi.'
+                    : '$selectedPriceLabel aylık plan; dilediğiniz an mağaza ayarlarından iptal edilebilir.'))
+        : (selectedPlan.hasFreeTrial
+              ? 'Free for 30 days, then $selectedPriceLabel unless canceled at least 24 hours before renewal in Store Settings.'
+              : (selectedPlan.isLifetime
+                    ? 'One-time $selectedPriceLabel purchase for lifetime Zamera Pro access with zero subscriptions.'
+                    : '$selectedPriceLabel billed monthly; manage or cancel anytime in your Store account settings.'));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        FilledButton(
-          key: const ValueKey<String>('paywall_primary_cta_btn'),
-          style: FilledButton.styleFrom(
-            backgroundColor: kIosYellow,
-            foregroundColor: Colors.black,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+        Semantics(
+          button: true,
+          label: selectedPlan.ctaLabel(isTurkish: isTurkish),
+          child: FilledButton(
+            key: const ValueKey<String>('paywall_primary_cta_btn'),
+            style: FilledButton.styleFrom(
+              backgroundColor: kIosYellow,
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
             ),
+            onPressed: isBusy ? null : onPurchase,
+            child: isBusy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: Colors.black,
+                    ),
+                  )
+                : Text(
+                    selectedPlan.ctaLabel(isTurkish: isTurkish),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
           ),
-          onPressed: isBusy ? null : onPurchase,
-          child: isBusy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: Colors.black,
-                  ),
-                )
-              : Text(
-                  selectedPlan.ctaLabelTr,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -558,9 +616,9 @@ class _PaywallFooterActions extends StatelessWidget {
             TextButton(
               key: const ValueKey<String>('paywall_restore_btn'),
               onPressed: isBusy ? null : onRestore,
-              child: const Text(
-                'Satın Alımları Geri Yükle',
-                style: TextStyle(
+              child: Text(
+                isTurkish ? 'Satın Alımları Geri Yükle' : 'Restore Purchases',
+                style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   color: kZameraCyan,
@@ -569,10 +627,20 @@ class _PaywallFooterActions extends StatelessWidget {
             ),
             const Text('·', style: TextStyle(color: Colors.white24)),
             TextButton(
+              key: const ValueKey<String>('paywall_terms_btn'),
+              onPressed: onOpenTerms,
+              child: Text(
+                isTurkish ? 'Kullanım Koşulları (EULA)' : 'Terms of Use (EULA)',
+                style: const TextStyle(fontSize: 11.5, color: Colors.white60),
+              ),
+            ),
+            const Text('·', style: TextStyle(color: Colors.white24)),
+            TextButton(
+              key: const ValueKey<String>('paywall_privacy_btn'),
               onPressed: onOpenPrivacy,
-              child: const Text(
-                'Gizlilik (Sıfır Takip)',
-                style: TextStyle(fontSize: 11.5, color: Colors.white60),
+              child: Text(
+                isTurkish ? 'Gizlilik (Sıfır Takip)' : 'Privacy Policy',
+                style: const TextStyle(fontSize: 11.5, color: Colors.white60),
               ),
             ),
           ],

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:zamera_video/zamera_video.dart' show ZameraVideoProfile;
 
 import '../constants/camera_colors.dart';
+import '../l10n/zamera_l10n.dart';
 import '../models/app_version_info.dart';
 import '../models/zamera_monetization_models.dart';
 import '../models/zamera_preferences.dart';
@@ -275,6 +276,9 @@ class _SettingsSheetState extends State<SettingsSheet> {
                               onOpenPrivacyPolicy: () => _launchExternalUrl(
                                 AppVersionInfo.privacyPolicyUrl,
                               ),
+                              onOpenTermsOfUse: () => _launchExternalUrl(
+                                AppVersionInfo.termsOfUseUrl,
+                              ),
                               onOpenLicenses: _openLicenseDialog,
                               onContactSupport: () => _launchExternalUrl(
                                 'mailto:${AppVersionInfo.supportEmail}',
@@ -326,6 +330,9 @@ class _SettingsSheetState extends State<SettingsSheet> {
                           onOpenPrivacyPolicy: () => _launchExternalUrl(
                             AppVersionInfo.privacyPolicyUrl,
                           ),
+                          onOpenTermsOfUse: () => _launchExternalUrl(
+                            AppVersionInfo.termsOfUseUrl,
+                          ),
                           onOpenLicenses: _openLicenseDialog,
                           onContactSupport: () => _launchExternalUrl(
                             'mailto:${AppVersionInfo.supportEmail}',
@@ -355,6 +362,7 @@ class _SettingsTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTr = ZameraL10n.isTurkish(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 7.0),
       child: Row(
@@ -379,22 +387,24 @@ class _SettingsTopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Text(
-                  'Zamera Ayarları',
-                  style: TextStyle(
+                  isTr ? 'Zamera Ayarları' : 'Zamera Settings',
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
                 Text(
-                  'Kayıt Formatları, Vizör & Kalibrasyon',
-                  style: TextStyle(
+                  isTr
+                      ? 'Kayıt Formatları, Vizör & Kalibrasyon'
+                      : 'Capture Formats, Viewfinder & Calibration',
+                  style: const TextStyle(
                     fontSize: 11,
                     color: Colors.white54,
                     fontWeight: FontWeight.w500,
@@ -733,6 +743,7 @@ class _AboutHardwareLegalSection extends StatelessWidget {
   final VoidCallback onOpenProbe;
   final VoidCallback onOpenCalibration;
   final VoidCallback onOpenPrivacyPolicy;
+  final VoidCallback onOpenTermsOfUse;
   final VoidCallback onOpenLicenses;
   final VoidCallback onContactSupport;
 
@@ -742,66 +753,105 @@ class _AboutHardwareLegalSection extends StatelessWidget {
     required this.onOpenProbe,
     required this.onOpenCalibration,
     required this.onOpenPrivacyPolicy,
+    required this.onOpenTermsOfUse,
     required this.onOpenLicenses,
     required this.onContactSupport,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isTr = ZameraL10n.isTurkish(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const _SettingsSectionHeader(title: 'BİLGİ & YENİLİKLER'),
+        _SettingsSectionHeader(
+          title: isTr ? 'BİLGİ & YENİLİKLER' : 'ABOUT & UPDATES',
+        ),
         _SettingsActionTile(
           icon: Icons.new_releases_outlined,
           iconColor: kIosYellow,
-          title: 'Sürüm Notları & Yenilikler',
-          subtitle: 'v${AppVersionInfo.currentVersion} güncelleme detayları',
+          title: isTr ? 'Sürüm Notları & Yenilikler' : 'Release Notes',
+          subtitle: isTr
+              ? 'v${AppVersionInfo.currentVersion} güncelleme detayları'
+              : 'What\'s new in v${AppVersionInfo.currentVersion}',
           onTap: onOpenReleaseNotes,
         ),
         _SettingsActionTile(
           icon: Icons.auto_awesome_outlined,
           iconColor: kZameraCyan,
-          title: 'Zamera Genel Özellikleri',
-          subtitle: 'Sanat Modu, Pro Foto, Video & Gizlilik rehberi',
+          title: isTr ? 'Zamera Genel Özellikleri' : 'Zamera Capabilities',
+          subtitle: isTr
+              ? 'Sanat Modu, Pro Foto, Video & Gizlilik rehberi'
+              : 'Art Mode, Pro Photo, Video & Privacy overview',
           onTap: onOpenGeneralFeatures,
         ),
         const SizedBox(height: 8),
-        const _SettingsSectionHeader(title: 'DONANIM & KALİBRASYON'),
+        _SettingsSectionHeader(
+          title: isTr ? 'DONANIM & KALİBRASYON' : 'HARDWARE & CALIBRATION',
+        ),
         _SettingsActionTile(
           icon: Icons.memory_outlined,
           iconColor: const Color(0xFF64D2FF),
-          title: 'Cihaz Yetenek Probe (Faz 0)',
-          subtitle: 'Camera2 / AVFoundation donanım ve lens dökümü',
+          title: isTr
+              ? 'Cihaz Yetenek Probe (Faz 0)'
+              : 'Device Hardware Probe (Phase 0)',
+          subtitle: isTr
+              ? 'Camera2 / AVFoundation donanım ve lens dökümü'
+              : 'Camera2 / AVFoundation sensors & physical lenses',
           onTap: onOpenProbe,
         ),
         _SettingsActionTile(
           icon: Icons.palette_outlined,
           iconColor: const Color(0xFF34C759),
-          title: 'ColorChecker Kalibrasyonu (Faz 1)',
-          subtitle: '24-Yama D50 CIE-DE2000 renk matrisi çözücü',
+          title: isTr
+              ? 'ColorChecker Kalibrasyonu (Faz 1)'
+              : 'ColorChecker Calibration (Phase 1)',
+          subtitle: isTr
+              ? '24-Yama D50 CIE-DE2000 renk matrisi çözücü'
+              : '24-Patch D50 CIE-DE2000 color matrix solver',
           onTap: onOpenCalibration,
         ),
         const SizedBox(height: 8),
-        const _SettingsSectionHeader(title: 'GİZLİLİK & YASAL'),
+        _SettingsSectionHeader(
+          title: isTr ? 'GİZLİLİK & YASAL' : 'PRIVACY & LEGAL',
+        ),
         _SettingsActionTile(
           icon: Icons.security_outlined,
           iconColor: const Color(0xFF30D158),
-          title: 'Gizlilik Politikası (GitHub Pages)',
-          subtitle: 'KVKK, GDPR & %100 çevrimdışı yerel veri güvencesi',
+          title: isTr
+              ? 'Gizlilik Politikası (GitHub Pages)'
+              : 'Privacy Policy (GitHub Pages)',
+          subtitle: isTr
+              ? 'KVKK, GDPR & %100 çevrimdışı yerel veri güvencesi'
+              : 'GDPR, CCPA & 100% on-device zero-telemetry guarantee',
           onTap: onOpenPrivacyPolicy,
+        ),
+        _SettingsActionTile(
+          icon: Icons.description_outlined,
+          iconColor: kZameraCyan,
+          title: isTr
+              ? 'Kullanım Koşulları & EULA'
+              : 'Terms of Use & EULA',
+          subtitle: isTr
+              ? 'Zamera Pro abonelik ve lisans şartları'
+              : 'Zamera Pro subscription & license terms',
+          onTap: onOpenTermsOfUse,
         ),
         _SettingsActionTile(
           icon: Icons.policy_outlined,
           iconColor: const Color(0xFFBF5AF2),
-          title: 'Telif & Açık Kaynak Lisansları',
-          subtitle: 'ADR-2 sıfır-GPL mağaza uyumluluk beyanı',
+          title: isTr
+              ? 'Telif & Açık Kaynak Lisansları'
+              : 'Copyright & Open-Source Licenses',
+          subtitle: isTr
+              ? 'ADR-2 sıfır-GPL mağaza uyumluluk beyanı'
+              : 'ADR-2 zero-GPL store compliance policy',
           onTap: onOpenLicenses,
         ),
         _SettingsActionTile(
           icon: Icons.mail_outline,
           iconColor: const Color(0xFFFF9F0A),
-          title: 'Destek & İletişim',
+          title: isTr ? 'Destek & İletişim' : 'Support & Contact',
           subtitle: AppVersionInfo.supportEmail,
           onTap: onContactSupport,
         ),
@@ -1220,14 +1270,17 @@ class _ZameraProStatusSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTr = ZameraL10n.isTurkish(context);
     final state = monetization.state;
     final hasPro = monetization.hasProAccess;
     final statusBadge = switch (state.status) {
-      ZameraEntitlementStatus.proLifetime => 'ÖMÜR BOYU PRO AKTİF',
-      ZameraEntitlementStatus.proActive => 'ZAMERA PRO AKTİF',
+      ZameraEntitlementStatus.proLifetime =>
+        isTr ? 'ÖMÜR BOYU PRO AKTİF' : 'LIFETIME PRO ACTIVE',
+      ZameraEntitlementStatus.proActive =>
+        isTr ? 'ZAMERA PRO AKTİF' : 'ZAMERA PRO ACTIVE',
       ZameraEntitlementStatus.trialActive when hasPro =>
-        '1 AY ÜCRETSİZ DENEME AKTİF',
-      _ => 'ÜCRETSİZ SÜRÜM',
+        isTr ? '1 AY ÜCRETSİZ DENEME AKTİF' : '1-MONTH FREE TRIAL ACTIVE',
+      _ => isTr ? 'ÜCRETSİZ SÜRÜM' : 'FREE TIER',
     };
     final artRem = monetization.remainingFreeToday(
       ZameraProFeature.unlimitedTrueColorCapture,
@@ -1239,14 +1292,20 @@ class _ZameraProStatusSection extends StatelessWidget {
       ZameraProFeature.stickerCutoutExport,
     );
     final subtitleText = hasPro
-        ? 'Sınırsız TrueColor 1:1, ColorChecker, 14-bit DNG RAW, 10-bit Log/ProRes ve Sticker dışa aktarımı açık.'
-        : 'Bugünkü kalan ücretsiz haklar: Sanat $artRem/1 · RAW $rawRem/1 · Sticker $stickerRem/3';
+        ? (isTr
+              ? 'Sınırsız TrueColor 1:1, ColorChecker, 14-bit DNG RAW, 10-bit Log/ProRes ve Sticker dışa aktarımı açık.'
+              : 'Unlimited TrueColor 1:1, ColorChecker, 14-bit DNG RAW, 10-bit Log/ProRes & Sticker exports unlocked.')
+        : (isTr
+              ? 'Bugünkü kalan ücretsiz haklar: Sanat $artRem/1 · RAW $rawRem/1 · Sticker $stickerRem/3'
+              : 'Today\'s remaining free quotas: Art $artRem/1 · RAW $rawRem/1 · Sticker $stickerRem/3');
 
     return Column(
       key: const ValueKey<String>('settings_pro_status_card'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const _SettingsSectionHeader(title: 'ZAMERA PRO & LİSANS'),
+        _SettingsSectionHeader(
+          title: isTr ? 'ZAMERA PRO & LİSANS' : 'ZAMERA PRO & LICENSE',
+        ),
         _SettingsCardContainer(
           children: <Widget>[
             Row(
@@ -1312,9 +1371,9 @@ class _ZameraProStatusSection extends StatelessWidget {
                         monetization: monetization,
                       ),
                       icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                      label: const Text(
-                        '1 Ay Ücretsiz Dene',
-                        style: TextStyle(
+                      label: Text(
+                        isTr ? '1 Ay Ücretsiz Dene' : 'Try 1 Month Free',
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
                         ),
@@ -1339,7 +1398,11 @@ class _ZameraProStatusSection extends StatelessWidget {
                       ? null
                       : monetization.restorePurchases,
                   child: Text(
-                    state.isBusy ? 'Sorgulanıyor...' : 'Satın Alımları Geri Yükle',
+                    state.isBusy
+                        ? (isTr ? 'Sorgulanıyor...' : 'Checking...')
+                        : (isTr
+                              ? 'Satın Alımları Geri Yükle'
+                              : 'Restore Purchases'),
                     style: const TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,

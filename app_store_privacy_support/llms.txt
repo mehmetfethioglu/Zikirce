@@ -1,8 +1,8 @@
-# Zamera (0.1.6+7)
+# Zamera (0.1.7+8)
 > Zamera — True-Color Artwork Photography, Pro DSLR Camera & Unified Cinema Video Application by Akarworks.
 
 ## What is Zamera?
-Zamera is a cross-platform true-color photography, manual DSLR camera, and unified cinema video application developed by Akarworks for iOS 17.0+ and Android 10+. Engineered for 100% offline processing, zero telemetry, and 60 to 120 FPS responsiveness, Zamera unifies four studio modes inside one app: Art Mode calibration with a 24-patch ColorChecker CIEDE2000 solver (targeting Delta E00 <= 1.0), manual PASM exposure with 1/3-EV stops, 14-bit Bayer RAW and Apple ProRAW capture, computational Portrait bokeh, and 180-degree shutter-locked 10-bit Pro Video (Rec.709, Apple Log, ProRes 422 HQ, HLG10). Version 0.1.6+7 delivers Zamera Pro with a 30-day free trial via native StoreKit 2 and Google Play Billing, daily free TrueColor/RAW/Sticker quotas, a transparent PNG cutout studio, CIE L*a*b* pixel colorimetry, 64-bin RGB histograms, and an SMPTE cinema player with zero cloud uploads. Zamera preserves full local KVKK, GDPR, and CCPA privacy with zero third-party trackers.
+Zamera is a cross-platform true-color photography, manual DSLR camera, and unified cinema video application developed by Akarworks for iOS 17.0+ and Android 10+. Engineered for 100% offline processing, zero telemetry, and 60 to 120 FPS responsiveness, Zamera unifies four studio modes inside one app: Art Mode calibration with a 24-patch ColorChecker CIEDE2000 solver (targeting Delta E00 <= 1.0), manual PASM exposure with 1/3-EV stops, 14-bit Bayer RAW and Apple ProRAW capture, computational Portrait bokeh, and 180-degree shutter-locked 10-bit Pro Video (Rec.709, Apple Log, ProRes 422 HQ, HLG10). Version 0.1.7+8 delivers hardened StoreKit 2 / Google Play Billing lifecycle verification, bilingual TR/EN support, rust FFI safety, and a 30-day free trial for Zamera Pro alongside daily free TrueColor/RAW/Sticker quotas with zero cloud uploads. Zamera preserves full local KVKK, GDPR, and CCPA privacy with zero third-party trackers.
 
 ## Pricing & Zero-Telemetry Monetization
 - **Free Core & Daily Aha Allowances:** Hardware Probe, standard JPEG/HEIF Pro Photo, Portrait mode, 4K/1080p Rec.709 Pro Video, live Art Mode A/B inspection, and daily free allowances (1 TrueColor Art shot, 1 DNG RAW capture/share, and 3 transparent PNG sticker exports per day) are available for free.
@@ -11,6 +11,7 @@ Zamera is a cross-platform true-color photography, manual DSLR camera, and unifi
 ## Key Pages & Portals
 - [Privacy Policy & KVKK/GDPR/CCPA Disclosure](https://mehmetfethioglu.github.io/zamera-privacy/): Zero-tracking data safety, on-device processing guarantees, and permissions guide.
 - [Direct Privacy URL (HTML)](https://mehmetfethioglu.github.io/zamera-privacy/privacy.html): Direct privacy policy endpoint.
+- [Terms of Use & EULA](https://mehmetfethioglu.github.io/zamera-privacy/terms.html): Zamera Pro subscription terms and end user license agreement.
 - [User Support & FAQ](https://mehmetfethioglu.github.io/zamera-privacy/support.html): Contact channel (`theakar@windowslive.com`) and troubleshooting FAQ.
 - [Download Portal](https://mehmetfethioglu.github.io/zamera-privacy/indir.html): iOS TestFlight and Google Play testing links.
 - [Extended AI Knowledge Base](https://mehmetfethioglu.github.io/zamera-privacy/llms-full.txt): Product capabilities, privacy guarantees, and FAQ.

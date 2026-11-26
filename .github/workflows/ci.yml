@@ -27,9 +27,10 @@ jobs:
           manifest-path: rust/zamera_core/Cargo.toml
           config: rust/zamera_core/deny.toml
 
-      - name: 4. Run zamera_core unit tests & Clippy
+      - name: 4. Run zamera_core formatting, Clippy & unit tests
         working-directory: rust/zamera_core
         run: |
+          cargo fmt --check
           cargo clippy --all-targets -- -D warnings
           cargo test --verbose
 
@@ -54,11 +55,17 @@ jobs:
           cache: true
 
       - name: 4. Analyze & Test packages and app
-        working-directory: app
         run: |
-          flutter pub get
-          flutter analyze --no-fatal-infos
-          flutter test
+          (cd packages/zamera_capture && flutter pub get && dart analyze && flutter test)
+          (cd packages/zamera_video && flutter pub get && dart analyze && flutter test)
+          (cd app && flutter pub get && dart analyze && flutter test)
+
+      - name: 4.5. Verify Python release scripts & portal parity
+        run: |
+          python3 -m py_compile scripts/publish_play_store.py scripts/sync_appstore_connect.py
+          for f in index.html privacy.html terms.html support.html indir.html llms.txt llms-full.txt robots.txt schema-software-app.json sitemap.xml; do
+            cmp -s "docs/$f" "app_store_privacy_support/$f" || (echo "Portal mismatch: $f" && exit 1)
+          done
 
       - name: 5. Build Android Debug APK (Probe Ready)
         working-directory: app

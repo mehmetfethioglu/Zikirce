@@ -133,7 +133,9 @@ void main() {
     });
     final vs = await VersionTrackingService.initialize();
 
-    await tester.pumpWidget(ZameraApp(versionService: vs));
+    await tester.pumpWidget(
+      ZameraApp(versionService: vs, localeOverride: const Locale('tr')),
+    );
     expect(find.text('ZAMERA'), findsNothing);
     expect(find.text('Faz 0: Probe'), findsNothing);
     expect(find.text('SANAT'), findsOneWidget);
@@ -769,7 +771,9 @@ void main() {
           .setMockMethodCallHandler(channel, null);
     });
 
-    await tester.pumpWidget(ZameraApp(versionService: vs));
+    await tester.pumpWidget(
+      ZameraApp(versionService: vs, localeOverride: const Locale('tr')),
+    );
     await tester.pumpAndSettle();
 
     // Visible Sanat Modu 1:1 pills without opening top drawer

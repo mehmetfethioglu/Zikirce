@@ -59,9 +59,12 @@ jobs:
           cache: true
 
       - name: 6. Restore Upload Keystore & key.properties
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' && env.ANDROID_KEY_PROPERTIES != '' }}
         working-directory: app
         run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_PROPERTIES" ]; then
+            echo "ERROR: ANDROID_KEYSTORE_BASE64 and ANDROID_KEY_PROPERTIES secrets are required for release signing." >&2
+            exit 1
+          fi
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/zamera-upload-keystore.jks
           printf "%s\n" "$ANDROID_KEY_PROPERTIES" | tr -d '\r' > android/key.properties
 

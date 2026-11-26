@@ -1,0 +1,4 @@
+Zamera v0.1.7:
+• Abonelik & Uyum: 30 gün ücretsiz deneme sonrası otomatik abonelik yenileme doğrulaması, Google Play teklif token koruması ve Kullanım Koşulları (EULA) eklendi.
+• Çift Dilli TR/EN & Erişilebilirlik: Türkçe/İngilizce arayüz, TalkBack etiketleri ve Android 11+ bağlantı uyumu sağlandı.
+• 120 FPS & Güvenlik: İzole vizör telemetrisi, panik korumalı 16 KB hizalı Rust renk çekirdeği ve yalnızca kamera oturumunda açık ekran koruması.
