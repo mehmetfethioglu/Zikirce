@@ -264,7 +264,9 @@ class UserProfileService extends ChangeNotifier {
       // Verify and auto-unlock any badges met by previous state
       _checkBadgeUnlocks();
       notifyListeners();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UserProfileService.loadProfile error: $e');
+    }
   }
 
   /// Sets Google Account details and persists them locally
@@ -369,7 +371,9 @@ class UserProfileService extends ChangeNotifier {
       if (raw != null) {
         try {
           recentScans = jsonDecode(raw) as Map<String, dynamic>;
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('UserProfileService recentScans decode error: $e');
+        }
       }
 
       // Check if this barcode was scanned recently
@@ -487,7 +491,9 @@ class UserProfileService extends ChangeNotifier {
       await prefs.setInt(_keyHealthy, _profile.healthyChoices);
       await prefs.setInt(_keyXp, _profile.xp);
       await prefs.setString(_keyBadges, jsonEncode(_profile.unlockedBadgeIds.toList()));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UserProfileService._persistStats error: $e');
+    }
   }
 
   /// Export profile and stats to clean JSON string for Google Drive backup
@@ -529,7 +535,7 @@ class UserProfileService extends ChangeNotifier {
       return true;
     } catch (e) {
       if (kDebugMode) {
-        print('UserProfileService import error: $e');
+        debugPrint('UserProfileService import error: $e');
       }
       return false;
     }

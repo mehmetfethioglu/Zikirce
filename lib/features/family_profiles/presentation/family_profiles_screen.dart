@@ -56,7 +56,9 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
     // Clean up duplicate profiles
     try {
       await db.rawDelete('DELETE FROM family_profiles WHERE id NOT IN (SELECT MIN(id) FROM family_profiles GROUP BY profile_name)');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('FamilyProfilesScreen._loadProfiles dedupe note: $e');
+    }
 
     final List<Map<String, dynamic>> maps = await db.query('family_profiles');
 
@@ -79,7 +81,7 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
     _loadProfiles();
   }
 
-  void _showAddProfileDialog() {
+  Future<void> _showAddProfileDialog() async {
     final TextEditingController nameController = TextEditingController();
     final Set<String> selectedRestrictions = {'SYNTHETIC_COLORS', 'HIGH_SUGAR'};
     final surfaceColor = context.surfaceColor;
@@ -87,7 +89,8 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
     final textSecondary = context.textSecondaryColor;
     final borderColor = context.borderColor;
 
-    showModalBottomSheet(
+    try {
+      await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -324,9 +327,12 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
         ),
       ),
     );
+    } finally {
+      nameController.dispose();
+    }
   }
 
-  void _showEditProfileModal(FamilyProfile profile) {
+  Future<void> _showEditProfileModal(FamilyProfile profile) async {
     final TextEditingController nameController = TextEditingController(text: profile.profileName);
     final Set<String> selectedRestrictions = Set<String>.from(profile.restrictions);
     final surfaceColor = context.surfaceColor;
@@ -334,7 +340,8 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
     final textSecondary = context.textSecondaryColor;
     final borderColor = context.borderColor;
 
-    showModalBottomSheet(
+    try {
+      await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -614,6 +621,9 @@ class _FamilyProfilesScreenState extends State<FamilyProfilesScreen> {
         ),
       ),
     );
+    } finally {
+      nameController.dispose();
+    }
   }
 
   @override

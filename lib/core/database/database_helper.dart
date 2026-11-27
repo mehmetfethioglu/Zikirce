@@ -23,7 +23,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 15,
+      version: 16,
       onCreate: _onCreate,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -219,8 +219,73 @@ class DatabaseHelper {
             debugPrint('DB v15 meal lifecycle upgrade note: $e');
           }
         }
+        if (oldVersion < 16) {
+          try {
+            await _createIndexes(db);
+          } catch (e) {
+            debugPrint('DB v16 index upgrade note: $e');
+          }
+          await _repairEmptySeedTables(db);
+        }
       },
     );
+  }
+
+  /// Normalizes an E-number asset/JSON entry into the SQLite `e_numbers` schema.
+  static Map<String, Object?> mapENumberRow(Map<String, dynamic> item) {
+    final String rawHazards = (item['health_hazards'] ?? item['health_impact'] ?? 'Bilgi yok').toString().trim();
+    final String rawCategory = (item['category'] ?? item['description'] ?? 'Gıda Katkısı').toString().trim();
+    return {
+      'code': (item['code'] ?? '').toString().trim(),
+      'name': (item['name'] ?? '').toString().trim(),
+      'risk_level': (item['risk_level'] ?? 'LOW').toString().trim(),
+      'health_hazards': rawHazards.isEmpty ? 'Bilgi yok' : rawHazards,
+      'category': rawCategory.isEmpty ? 'Gıda Katkısı' : rawCategory,
+    };
+  }
+
+  Future<void> _createIndexes(Database db) async {
+    const statements = [
+      'CREATE INDEX IF NOT EXISTS idx_pantry_tag_zone ON pantry_items(normalized_tag, storage_zone)',
+      'CREATE INDEX IF NOT EXISTS idx_pantry_expires ON pantry_items(expires_at)',
+      'CREATE INDEX IF NOT EXISTS idx_shopping_checked ON shopping_list(is_checked, added_at)',
+      'CREATE INDEX IF NOT EXISTS idx_snapshots_name ON offline_ai_snapshots(product_name)',
+      'CREATE INDEX IF NOT EXISTS idx_snapshots_brand ON offline_ai_snapshots(brand)',
+      'CREATE INDEX IF NOT EXISTS idx_tagsis_brand ON taklit_tagsis(brand_name)',
+      'CREATE INDEX IF NOT EXISTS idx_tagsis_announced ON taklit_tagsis(announced_at)',
+      'CREATE INDEX IF NOT EXISTS idx_history_scanned ON product_history(scanned_at)',
+      'CREATE INDEX IF NOT EXISTS idx_crowd_status_type ON crowdsourced_queue(status, type)',
+      'CREATE INDEX IF NOT EXISTS idx_meal_plan_date_slot ON meal_plan_entries(plan_date, meal_slot)',
+    ];
+    for (final sql in statements) {
+      await db.execute(sql);
+    }
+  }
+
+  Future<int> _tableCount(Database db, String table) async {
+    return Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM $table')) ?? 0;
+  }
+
+  Future<void> _repairEmptySeedTables(Database db) async {
+    if (await _tableCount(db, 'e_numbers') == 0) {
+      await _seedENumbers(db);
+    }
+    if (await _tableCount(db, 'boycott_brands') == 0) {
+      await _seedBoycottBrands(db);
+    }
+    if (await _tableCount(db, 'family_profiles') == 0) {
+      await _seedDefaultFamilyProfiles(db);
+    }
+    if (await _tableCount(db, 'offline_ai_snapshots') == 0) {
+      try {
+        await _syncSnapshotsWithDb(db);
+      } catch (e) {
+        debugPrint('DB v16 snapshots repair note: $e');
+      }
+    }
+    if (await _tableCount(db, 'taklit_tagsis') == 0) {
+      await _seedTaklitTagsis(db);
+    }
   }
 
   Future<void> _createMealLifecycleTables(Database db) async {
@@ -502,46 +567,53 @@ class DatabaseHelper {
     await _createKilerceTables(db);
     await _createMealModuleTables(db);
     await _createMealLifecycleTables(db);
+    await _createIndexes(db);
     await _seedInitialData(db);
     await _seedStarterPantryItems(db);
   }
 
-  Future<void> _seedInitialData(Database db) async {
-    final int now = DateTime.now().millisecondsSinceEpoch;
-
+  Future<void> _seedENumbers(Database db) async {
     try {
-      // 1. Seed E-Numbers
       final eNumbersString = await rootBundle.loadString('assets/data/e_numbers.json');
-      final List<dynamic> eNumbersJson = jsonDecode(eNumbersString);
-      for (final item in eNumbersJson) {
-        await db.insert('e_numbers', {
-          'code': item['code'],
-          'name': item['name'],
-          'risk_level': item['risk_level'],
-          'health_hazards': item['health_hazards'],
+      final List<dynamic> eNumbersJson = jsonDecode(eNumbersString) as List<dynamic>;
+      final batch = db.batch();
+      for (final raw in eNumbersJson) {
+        if (raw is! Map) continue;
+        final row = mapENumberRow(Map<String, dynamic>.from(raw));
+        if ((row['code'] as String).isEmpty) continue;
+        batch.insert('e_numbers', row, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('E-numbers seed note: $e');
+    }
+  }
+
+  Future<void> _seedBoycottBrands(Database db) async {
+    try {
+      final boycottString = await rootBundle.loadString('assets/data/boycott_list.json');
+      final List<dynamic> boycottJson = jsonDecode(boycottString) as List<dynamic>;
+      final batch = db.batch();
+      for (final raw in boycottJson) {
+        if (raw is! Map) continue;
+        final item = Map<String, dynamic>.from(raw);
+        batch.insert('boycott_brands', {
+          'brand_name': item['brand_name'],
+          'parent_company': item['parent_company'] ?? item['brand_name'],
+          'status_flag': item['boycott_status'] ?? 'FLAGGED',
+          'reason': item['reason'],
+          'evidence_url': item['evidence_url'],
           'category': item['category'],
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('Boycott seed note: $e');
+    }
+  }
 
-      // 2. Seed Boycott Brands
-      try {
-        final boycottString = await rootBundle.loadString('assets/data/boycott_list.json');
-        final List<dynamic> boycottJson = jsonDecode(boycottString);
-        for (final item in boycottJson) {
-          await db.insert('boycott_brands', {
-            'brand_name': item['brand_name'],
-            'parent_company': item['parent_company'] ?? item['brand_name'],
-            'status_flag': item['boycott_status'] ?? 'FLAGGED',
-            'reason': item['reason'],
-            'evidence_url': item['evidence_url'],
-            'category': item['category'],
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-      } catch (e) {
-        debugPrint('Boycott seed note: $e');
-      }
-
-      // 3. Seed Default Family Profiles
+  Future<void> _seedDefaultFamilyProfiles(Database db) async {
+    try {
       await db.insert('family_profiles', {
         'profile_name': 'Çocuk Profili (Katkı Maddesiz & Şekersiz)',
         'is_active': 1,
@@ -560,34 +632,45 @@ class DatabaseHelper {
           'HALAL',
         ]),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-
-      // 4. Seed Offline AI Snapshots (GS1 Modulo-10 verified)
-      try {
-        await _syncSnapshotsWithDb(db);
-      } catch (e) {
-        debugPrint('Snapshots seed note: $e');
-      }
-
-      // 5. Seed Ministry Taklit & Tağşiş List
-      try {
-        final tagsisString = await rootBundle.loadString('assets/data/taklit_tagsis_list.json');
-        final List<dynamic> tagsisJson = jsonDecode(tagsisString);
-        for (final item in tagsisJson) {
-          await db.insert('taklit_tagsis', {
-            'company_name': item['company_name'],
-            'brand_name': item['brand_name'],
-            'product_name': item['product_name'],
-            'reason': item['reason'],
-            'category': item['category'] ?? 'Gıda',
-            'announced_at': item['announced_at'] ?? now,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
-        }
-      } catch (e) {
-        debugPrint('Tagsis seed note: $e');
-      }
     } catch (e) {
-      debugPrint('Initial DB seed warning: $e');
+      debugPrint('Family profiles seed note: $e');
     }
+  }
+
+  Future<void> _seedTaklitTagsis(Database db) async {
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final tagsisString = await rootBundle.loadString('assets/data/taklit_tagsis_list.json');
+      final List<dynamic> tagsisJson = jsonDecode(tagsisString) as List<dynamic>;
+      final batch = db.batch();
+      for (final raw in tagsisJson) {
+        if (raw is! Map) continue;
+        final item = Map<String, dynamic>.from(raw);
+        batch.insert('taklit_tagsis', {
+          'company_name': item['company_name'],
+          'brand_name': item['brand_name'],
+          'product_name': item['product_name'],
+          'reason': item['reason'],
+          'category': item['category'] ?? 'Gıda',
+          'announced_at': item['announced_at'] ?? now,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('Tagsis seed note: $e');
+    }
+  }
+
+  Future<void> _seedInitialData(Database db) async {
+    await _seedENumbers(db);
+    await _seedBoycottBrands(db);
+    await _seedDefaultFamilyProfiles(db);
+    try {
+      await _syncSnapshotsWithDb(db);
+    } catch (e) {
+      debugPrint('Snapshots seed note: $e');
+    }
+    await _seedTaklitTagsis(db);
   }
 
   /// Validates GS1 EAN-8 / EAN-13 Modulo-10 check digit and rejects in-store PLU (20-29) & synthetic 8690772000 prefixes.

@@ -20,6 +20,9 @@ class RecipeCatalogExploreView extends StatefulWidget {
   final int readyNowCount;
   final int wasteSaverCount;
   final bool isLoading;
+  final bool isCloudLoading;
+  final bool cloudHasMore;
+  final VoidCallback? onLoadMoreCloud;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<RecipeFilterTab> onFilterChanged;
   final ValueChanged<String?> onCategoryChanged;
@@ -54,6 +57,9 @@ class RecipeCatalogExploreView extends StatefulWidget {
     this.readyNowCount = 0,
     this.wasteSaverCount = 0,
     this.isLoading = false,
+    this.isCloudLoading = false,
+    this.cloudHasMore = false,
+    this.onLoadMoreCloud,
     this.onOpenCustomRecipeForm,
     this.onPantryUpdated,
     this.rescueItems = const [],
@@ -277,6 +283,28 @@ class _RecipeCatalogExploreViewState extends State<RecipeCatalogExploreView> {
                   onQuickAddToPlan: () => widget.onQuickAddToPlan(match),
                 );
               },
+            ),
+          ),
+        if (widget.matches.isNotEmpty &&
+            (widget.cloudHasMore || widget.isCloudLoading))
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
+              child: widget.isCloudLoading
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: AppColors.primaryEmerald,
+                        ),
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: widget.onLoadMoreCloud,
+                      icon: const Icon(Icons.cloud_download_outlined, size: 18),
+                      label: const Text('Daha Fazla Bulut Tarifi Yükle (23.933+)'),
+                    ),
             ),
           ),
       ],

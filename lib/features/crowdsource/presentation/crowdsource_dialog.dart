@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,10 +11,11 @@ import 'package:share_plus/share_plus.dart';
 import '../../monetization/domain/subscription_service.dart';
 import '../../network/domain/edge_worker_sync_service.dart';
 import '../../network/domain/open_food_facts_service.dart';
+import '../../ocr/domain/cloud_vision_ocr_service.dart';
 
 class CrowdsourceDialog {
   /// Simple Ownership & Alternative Report Dialog
-  static void show(BuildContext context, {required String barcode}) {
+  static Future<void> show(BuildContext context, {required String barcode}) async {
     final TextEditingController payloadController = TextEditingController();
     String reportType = 'OWNERSHIP_UPDATE';
 
@@ -21,9 +23,10 @@ class CrowdsourceDialog {
     final textPrimary = context.textPrimaryColor;
     final textSecondary = context.textSecondaryColor;
 
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: surfaceColor,
           title: Text('Topluluk Etik & Alternatif Bildirimi', style: TextStyle(color: textPrimary, fontSize: 16)),
@@ -98,6 +101,9 @@ class CrowdsourceDialog {
         ),
       ),
     );
+    } finally {
+      payloadController.dispose();
+    }
   }
 
   /// Checks if a barcode is already registered in SQLite or OFF API and returns product info
@@ -132,7 +138,9 @@ class CrowdsourceDialog {
                 ingredients = parts[1].trim();
               }
             }
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('CrowdsourceDialog snapshot json decode note ($code): $e');
+          }
         }
 
         return {
@@ -162,7 +170,9 @@ class CrowdsourceDialog {
           'source': 'Bulut API Veritabanı',
         };
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('CrowdsourceDialog._lookupBarcodeAndCheckExistence error ($code): $e');
+    }
 
     return {'exists': false};
   }
@@ -178,6 +188,7 @@ class CrowdsourceDialog {
     final TextEditingController nameController = TextEditingController(text: prefilledProductName ?? '');
     final TextEditingController brandController = TextEditingController(text: prefilledBrand ?? '');
     final TextEditingController ingredientsController = TextEditingController();
+    bool isDisposed = false;
 
     bool hasBarcodePhoto = (initialBarcode != null && initialBarcode.isNotEmpty);
     bool hasPackagingPhoto = (prefilledProductName != null && prefilledProductName.isNotEmpty);
@@ -186,6 +197,7 @@ class CrowdsourceDialog {
     // Check if initialBarcode already exists in DB
     if (initialBarcode != null && initialBarcode.isNotEmpty) {
       _lookupBarcodeAndCheckExistence(initialBarcode).then((data) {
+        if (isDisposed) return;
         if (data != null && data['exists'] == true) {
           if (nameController.text.isEmpty) nameController.text = data['product_name'] ?? '';
           if (brandController.text.isEmpty) brandController.text = data['brand'] ?? '';
@@ -194,7 +206,8 @@ class CrowdsourceDialog {
       });
     }
 
-    await showModalBottomSheet(
+    try {
+      await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -572,7 +585,9 @@ class CrowdsourceDialog {
                                       },
                                       conflictAlgorithm: ConflictAlgorithm.replace,
                                     );
-                                  } catch (_) {}
+                                  } catch (e) {
+                                    debugPrint('CrowdsourceDialog snapshot cache error: $e');
+                                  }
 
                                   // Live Cloud Upload via Edge Worker
                                   try {
@@ -591,7 +606,9 @@ class CrowdsourceDialog {
                                         whereArgs: [finalBarcode],
                                       );
                                     }
-                                  } catch (_) {}
+                                  } catch (e) {
+                                    debugPrint('CrowdsourceDialog cloud upload error: $e');
+                                  }
 
                                   if (context.mounted) {
                                     Navigator.pop(context);
@@ -600,7 +617,7 @@ class CrowdsourceDialog {
                                       _showRewardModal(context, reward);
                                     }
                                   }
-                                } catch (e) {
+                                    } catch (e) {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
@@ -627,6 +644,13 @@ class CrowdsourceDialog {
         },
       ),
     );
+    } finally {
+      isDisposed = true;
+      barcodeController.dispose();
+      nameController.dispose();
+      brandController.dispose();
+      ingredientsController.dispose();
+    }
   }
 
   /// Live Barcode Scanner Camera Modal with Database Existence Check
@@ -817,7 +841,7 @@ class CrowdsourceDialog {
     );
   }
 
-  /// Real Camera Photo Capture, Google ML Kit OCR & Crop Confirmation Modal
+  /// Real Camera Photo Capture, Cloud Gemini 2.5 Flash-Lite OCR (with ML Kit fallback) & Confirmation Modal
   static Future<void> _capturePhotoAndPerformOcr(
     BuildContext context, {
     required String mode, // 'PACKAGING' or 'INGREDIENTS'
@@ -831,23 +855,60 @@ class CrowdsourceDialog {
     try {
       final XFile? image = await picker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 95,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 82,
       );
 
       if (image == null) return; // User cancelled camera
 
-      final inputImage = InputImage.fromFilePath(image.path);
-      final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      CloudProductLabelResult? cloudResult;
+      try {
+        final Uint8List bytes = await image.readAsBytes();
+        cloudResult = await CloudVisionOcrService.instance
+            .analyzeProductLabelBytes(bytes, mode: mode);
+      } catch (e) {
+        debugPrint('CrowdsourceDialog cloud OCR fallback note: $e');
+      }
 
-      final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
-      final String rawText = recognizedText.text.trim();
-      await textRecognizer.close();
+      String rawText = '';
+      bool usedCloudPackaging = false;
+
+      if (cloudResult != null) {
+        if (mode == 'PACKAGING' && cloudResult.hasPackagingData) {
+          usedCloudPackaging = true;
+          final productWithQty = [
+            cloudResult.productName,
+            if (cloudResult.netQuantity.isNotEmpty) cloudResult.netQuantity,
+          ].where((s) => s.isNotEmpty).join(' ').trim();
+          rawText = [
+            if (cloudResult.brand.isNotEmpty) cloudResult.brand,
+            if (productWithQty.isNotEmpty) productWithQty,
+          ].join('\n').trim();
+        } else if (mode == 'INGREDIENTS' &&
+            cloudResult.ingredientsText.isNotEmpty) {
+          rawText = cloudResult.ingredientsText;
+        }
+      }
+
+      if (rawText.isEmpty) {
+        final inputImage = InputImage.fromFilePath(image.path);
+        final textRecognizer =
+            TextRecognizer(script: TextRecognitionScript.latin);
+        try {
+          final RecognizedText recognizedText =
+              await textRecognizer.processImage(inputImage);
+          rawText = recognizedText.text.trim();
+        } finally {
+          await textRecognizer.close();
+        }
+      }
 
       if (rawText.isNotEmpty) {
         String textToUse = rawText;
 
         // Smart Extraction Filter for Ingredients: Crop starting from "İçindekiler"
-        if (mode == 'INGREDIENTS') {
+        if (mode == 'INGREDIENTS' && cloudResult == null) {
           final RegExp ingredientsPattern = RegExp(
             r'(i̇çi̇ndeki̇ler|içindekiler|icindekiler|ingredients|bileşenler)\s*[:\-\s]?',
             caseSensitive: false,
@@ -886,10 +947,24 @@ class CrowdsourceDialog {
         onSuccess();
 
         if (mode == 'PACKAGING') {
-          final lines = confirmedText.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-          nameController.text = confirmedText.replaceAll('\n', ' ');
-          if (lines.isNotEmpty) {
+          final lines = confirmedText
+              .split('\n')
+              .map((l) => l.trim())
+              .where((l) => l.isNotEmpty)
+              .toList();
+          if (usedCloudPackaging && lines.length >= 2) {
             brandController.text = lines.first;
+            nameController.text = lines.sublist(1).join(' ');
+          } else {
+            nameController.text = confirmedText.replaceAll('\n', ' ');
+            if (lines.isNotEmpty) {
+              brandController.text = lines.first;
+            }
+          }
+          if (cloudResult != null &&
+              cloudResult.ingredientsText.isNotEmpty &&
+              ingredientsController.text.isEmpty) {
+            ingredientsController.text = cloudResult.ingredientsText;
           }
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -902,6 +977,15 @@ class CrowdsourceDialog {
           }
         } else if (mode == 'INGREDIENTS') {
           ingredientsController.text = confirmedText;
+          if (cloudResult != null) {
+            if (brandController.text.isEmpty && cloudResult.brand.isNotEmpty) {
+              brandController.text = cloudResult.brand;
+            }
+            if (nameController.text.isEmpty &&
+                cloudResult.productName.isNotEmpty) {
+              nameController.text = cloudResult.productName;
+            }
+          }
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -944,7 +1028,8 @@ class CrowdsourceDialog {
     final TextEditingController textController = TextEditingController(text: initialText);
     String? result;
 
-    await showDialog(
+    try {
+      await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -1010,6 +1095,9 @@ class CrowdsourceDialog {
         ],
       ),
     );
+    } finally {
+      textController.dispose();
+    }
 
     return result;
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../ocr/domain/cloud_vision_ocr_service.dart';
 import 'kiler_models.dart';
 
 class ReceiptParsedItem {
@@ -49,19 +50,31 @@ class ReceiptOcrService {
     'ara toplam',
   ];
 
-  /// Captures or selects a market receipt photo and extracts food items via ML Kit OCR.
+  /// Captures or selects a market receipt photo and extracts food items.
+  /// Tries cost-efficient Gemini 2.5 Flash-Lite via Worker first, then falls back to ML Kit.
   static Future<List<ReceiptParsedItem>> scanReceiptFromSource(
     ImageSource source,
   ) async {
     final ImagePicker picker = ImagePicker();
     final XFile? photo = await picker.pickImage(
       source: source,
-      maxWidth: 2048,
-      maxHeight: 2048,
-      imageQuality: 88,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 80,
     );
 
     if (photo == null) return const [];
+
+    try {
+      final Uint8List bytes = await photo.readAsBytes();
+      final cloudItems =
+          await CloudVisionOcrService.instance.analyzeReceiptImageBytes(bytes);
+      if (cloudItems != null && cloudItems.isNotEmpty) {
+        return mapCloudItems(cloudItems);
+      }
+    } catch (e) {
+      debugPrint('ReceiptOcrService cloud fallback note: $e');
+    }
 
     final TextRecognizer recognizer = TextRecognizer(
       script: TextRecognitionScript.latin,
@@ -77,6 +90,47 @@ class ReceiptOcrService {
     } finally {
       await recognizer.close();
     }
+  }
+
+  /// Maps structured items returned by Gemini 2.5 Flash-Lite into deduplicated [ReceiptParsedItem]s.
+  static List<ReceiptParsedItem> mapCloudItems(List<CloudReceiptItem> cloudItems) {
+    final Map<String, ReceiptParsedItem> uniqueByTag = {};
+
+    for (final item in cloudItems) {
+      final cleanName = item.name.trim();
+      if (cleanName.length < 2) continue;
+
+      final resolved = IngredientNormalizer.resolveMetadata(cleanName);
+      final StorageZone effectiveZone = item.storageZoneCode.trim().isNotEmpty
+          ? StorageZone.fromDb(item.storageZoneCode.trim().toUpperCase())
+          : resolved.defaultZone;
+      final String effectiveUnit = item.unitLabel.trim().isNotEmpty
+          ? item.unitLabel.trim()
+          : resolved.defaultUnit;
+
+      final template = QuickIngredientTemplate(
+        tag: resolved.tag,
+        name: cleanName,
+        emoji: resolved.emoji,
+        category: resolved.category,
+        defaultZone: effectiveZone,
+        defaultShelfDays: resolved.defaultShelfDays,
+        defaultUnit: effectiveUnit,
+        defaultHealthScore: resolved.defaultHealthScore,
+        keywords: resolved.keywords,
+      );
+
+      uniqueByTag.putIfAbsent(
+        resolved.tag,
+        () => ReceiptParsedItem(
+          rawLine: item.rawLine.isNotEmpty ? item.rawLine : cleanName,
+          template: template,
+          selected: true,
+        ),
+      );
+    }
+
+    return uniqueByTag.values.toList();
   }
 
   /// Parses raw OCR text from a Turkish grocery receipt into matched food templates.

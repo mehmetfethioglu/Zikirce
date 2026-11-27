@@ -144,6 +144,348 @@ class _KitchenDailyAssistantBannerState
   }
 }
 
+/// WhatsApp-style floating corner bubble for the daily kitchen assistant.
+/// Shows the active prompt count badge and opens a reactive modal bottom sheet.
+class KitchenDailyAssistantFab extends StatefulWidget {
+  final List<KitchenDailyPrompt> prompts;
+  final ValueChanged<KitchenDailyPrompt>? onAddPromptMissingToShopping;
+  final ValueChanged<KitchenDailyPrompt>? onBoughtPromptMissingToPantry;
+  final ValueChanged<KitchenDailyPrompt>? onSnoozePromptMissing;
+  final ValueChanged<KitchenDailyPrompt>? onConfirmPromptCooked;
+  final ValueChanged<KitchenDailyPrompt>? onPostponePromptPlanned;
+  final ValueChanged<KitchenDailyPrompt>? onSkipPromptPlanned;
+  final ValueChanged<KitchenDailyPrompt>? onOpenUnplannedPrompt;
+  final ValueChanged<KitchenDailyPrompt>? onSkipUnplannedPrompt;
+
+  const KitchenDailyAssistantFab({
+    super.key,
+    required this.prompts,
+    this.onAddPromptMissingToShopping,
+    this.onBoughtPromptMissingToPantry,
+    this.onSnoozePromptMissing,
+    this.onConfirmPromptCooked,
+    this.onPostponePromptPlanned,
+    this.onSkipPromptPlanned,
+    this.onOpenUnplannedPrompt,
+    this.onSkipUnplannedPrompt,
+  });
+
+  @override
+  State<KitchenDailyAssistantFab> createState() =>
+      _KitchenDailyAssistantFabState();
+}
+
+class _KitchenDailyAssistantFabState extends State<KitchenDailyAssistantFab> {
+  late final ValueNotifier<List<KitchenDailyPrompt>> _promptsNotifier;
+  bool _isSheetOpen = false;
+  bool _notifierDisposed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _promptsNotifier = ValueNotifier<List<KitchenDailyPrompt>>(widget.prompts);
+  }
+
+  @override
+  void didUpdateWidget(covariant KitchenDailyAssistantFab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.prompts, widget.prompts)) {
+      final nextPrompts = widget.prompts;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_notifierDisposed) return;
+        _promptsNotifier.value = nextPrompts;
+      });
+    }
+  }
+
+  void _disposeNotifierSafely() {
+    if (_notifierDisposed) return;
+    _notifierDisposed = true;
+    _promptsNotifier.dispose();
+  }
+
+  @override
+  void dispose() {
+    if (_isSheetOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_notifierDisposed) return;
+        _promptsNotifier.value = const [];
+      });
+    } else {
+      _disposeNotifierSafely();
+    }
+    super.dispose();
+  }
+
+  void _openAssistantSheet(BuildContext context) {
+    _isSheetOpen = true;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _KitchenDailyAssistantSheet(
+        promptsNotifier: _promptsNotifier,
+        onAddPromptMissingToShopping: widget.onAddPromptMissingToShopping,
+        onBoughtPromptMissingToPantry: widget.onBoughtPromptMissingToPantry,
+        onSnoozePromptMissing: widget.onSnoozePromptMissing,
+        onConfirmPromptCooked: widget.onConfirmPromptCooked == null
+            ? null
+            : (p) {
+                Navigator.of(sheetContext).pop();
+                widget.onConfirmPromptCooked!(p);
+              },
+        onPostponePromptPlanned: widget.onPostponePromptPlanned,
+        onSkipPromptPlanned: widget.onSkipPromptPlanned,
+        onOpenUnplannedPrompt: widget.onOpenUnplannedPrompt == null
+            ? null
+            : (p) {
+                Navigator.of(sheetContext).pop();
+                widget.onOpenUnplannedPrompt!(p);
+              },
+        onSkipUnplannedPrompt: widget.onSkipUnplannedPrompt,
+      ),
+    ).whenComplete(() {
+      _isSheetOpen = false;
+      if (!mounted) {
+        _disposeNotifierSafely();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.prompts.isEmpty) return const SizedBox.shrink();
+
+    final count = widget.prompts.length;
+
+    return Semantics(
+      button: true,
+      label: 'Günlük Mutfak Asistanı ($count yoklama)',
+      child: Tooltip(
+        message: 'Günlük Mutfak Asistanı ($count)',
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Material(
+              color: AppColors.primaryEmerald,
+              shape: const CircleBorder(),
+              elevation: 6,
+              shadowColor: AppColors.primaryEmerald.withValues(alpha: 0.45),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => _openAssistantSheet(context),
+                child: const SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: Center(
+                    child: Icon(
+                      Icons.assistant_rounded,
+                      color: Colors.white,
+                      size: 27,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: -4,
+              right: -4,
+              child: IgnorePointer(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 22,
+                    minHeight: 22,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.cautionGold,
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                        color: Theme.of(context).scaffoldBackgroundColor,
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      '$count',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xFF0A120E),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        height: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KitchenDailyAssistantSheet extends StatefulWidget {
+  final ValueNotifier<List<KitchenDailyPrompt>> promptsNotifier;
+  final ValueChanged<KitchenDailyPrompt>? onAddPromptMissingToShopping;
+  final ValueChanged<KitchenDailyPrompt>? onBoughtPromptMissingToPantry;
+  final ValueChanged<KitchenDailyPrompt>? onSnoozePromptMissing;
+  final ValueChanged<KitchenDailyPrompt>? onConfirmPromptCooked;
+  final ValueChanged<KitchenDailyPrompt>? onPostponePromptPlanned;
+  final ValueChanged<KitchenDailyPrompt>? onSkipPromptPlanned;
+  final ValueChanged<KitchenDailyPrompt>? onOpenUnplannedPrompt;
+  final ValueChanged<KitchenDailyPrompt>? onSkipUnplannedPrompt;
+
+  const _KitchenDailyAssistantSheet({
+    required this.promptsNotifier,
+    required this.onAddPromptMissingToShopping,
+    required this.onBoughtPromptMissingToPantry,
+    required this.onSnoozePromptMissing,
+    required this.onConfirmPromptCooked,
+    required this.onPostponePromptPlanned,
+    required this.onSkipPromptPlanned,
+    required this.onOpenUnplannedPrompt,
+    required this.onSkipUnplannedPrompt,
+  });
+
+  @override
+  State<_KitchenDailyAssistantSheet> createState() =>
+      _KitchenDailyAssistantSheetState();
+}
+
+class _KitchenDailyAssistantSheetState
+    extends State<_KitchenDailyAssistantSheet> {
+  bool _didAutoPop = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<KitchenDailyPrompt>>(
+      valueListenable: widget.promptsNotifier,
+      builder: (context, prompts, _) {
+        if (prompts.isEmpty && !_didAutoPop) {
+          _didAutoPop = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            Navigator.of(context).pop();
+          });
+        }
+
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.78,
+          ),
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+            border: Border.all(color: context.cardBorderColor),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color:
+                            context.textSecondaryColor.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryEmerald,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.assistant_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Günlük Mutfak Asistanı',
+                              style: TextStyle(
+                                color: context.textPrimaryColor,
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              '${prompts.length} aktif yoklama',
+                              style: TextStyle(
+                                color: context.textSecondaryColor,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        tooltip: 'Kapat',
+                        icon: Icon(
+                          Icons.close_rounded,
+                          color: context.textSecondaryColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: prompts.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) => _KitchenPromptCard(
+                        prompt: prompts[index],
+                        onAddMissingToShopping:
+                            widget.onAddPromptMissingToShopping,
+                        onBoughtMissingToPantry:
+                            widget.onBoughtPromptMissingToPantry,
+                        onSnoozeMissing: widget.onSnoozePromptMissing,
+                        onConfirmCooked: widget.onConfirmPromptCooked,
+                        onPostponePlanned: widget.onPostponePromptPlanned,
+                        onSkipPlanned: widget.onSkipPromptPlanned,
+                        onOpenUnplanned: widget.onOpenUnplannedPrompt,
+                        onSkipUnplanned: widget.onSkipUnplannedPrompt,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _KitchenPromptCard extends StatelessWidget {
   final KitchenDailyPrompt prompt;
   final ValueChanged<KitchenDailyPrompt>? onAddMissingToShopping;

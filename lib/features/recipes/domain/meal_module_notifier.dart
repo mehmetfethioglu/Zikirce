@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/services/kilerce_notification_service.dart';
 import '../../family_profiles/domain/family_profile_engine.dart';
 import '../../kiler/domain/kiler_models.dart';
 import '../../kiler/domain/kiler_service.dart';
+import '../../monetization/domain/kilerce_pro_models.dart';
+import '../data/builtin_recipe_r2_map.dart';
+import '../data/kilerce_cloud_recipe_client.dart';
 import '../data/sqlite_meal_module_repository.dart';
 import 'meal_lifecycle_assistant.dart';
 import 'meal_module_repository.dart';
@@ -47,6 +51,7 @@ final mealModuleNotifierProvider =
   return MealModuleNotifier(
     repository: repository,
     loadActiveProfile: activeProfileLoader,
+    cloudGateway: KilerceCloudRecipeClient.instance,
     kilerListenable: KilerService.instance,
     onConsumeIngredients: (tags, title) =>
         KilerService.instance.consumeRecipeIngredients(tags, title),
@@ -68,8 +73,12 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   final QuickPantryConsumer _onQuickConsume;
   final MissingShoppingAdder _onAddMissingToShopping;
   final NowProvider _nowProvider;
+  final KilerceCloudRecipeGateway? _cloudGateway;
 
   List<MealPlanEntry> _lifecycleEntries = const [];
+  Timer? _cloudSearchDebounce;
+  Timer? _notificationSyncDebounce;
+  int _cloudRequestSeq = 0;
 
   MealModuleNotifier({
     required this._repository,
@@ -80,6 +89,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     QuickPantryConsumer? onQuickConsume,
     MissingShoppingAdder? onAddMissingToShopping,
     NowProvider? nowProvider,
+    this._cloudGateway,
     DateTime? initialNow,
     bool autoLoad = true,
   })  : _kilerListenable = kilerListenable ?? KilerService.instance,
@@ -132,10 +142,15 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   void _onKilerChanged() {
     if (!mounted) return;
     _commitDerivedState(state);
+    _scheduleCloudRefresh(immediate: false);
   }
 
   @override
   void dispose() {
+    _cloudSearchDebounce?.cancel();
+    _cloudSearchDebounce = null;
+    _notificationSyncDebounce?.cancel();
+    _notificationSyncDebounce = null;
     _kilerListenable.removeListener(_onKilerChanged);
     super.dispose();
   }
@@ -192,6 +207,8 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
         clearErrorMessage: true,
       );
       _commitDerivedState(nextState);
+      unawaited(_hydrateBuiltinRecipePhotos());
+      unawaited(refreshCloudRecipes(resetPage: true));
     } catch (e, st) {
       debugPrint('MealModuleNotifier.loadAll error: $e\n$st');
       if (!mounted) return;
@@ -230,6 +247,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   void setFilter(RecipeFilterTab filter) {
     if (state.selectedFilter == filter) return;
     _commitDerivedState(state.copyWith(selectedFilter: filter));
+    _scheduleCloudRefresh(immediate: true);
   }
 
   void setCategory(String? category) {
@@ -241,6 +259,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
         clearSelectedCategory: shouldClear,
       ),
     );
+    _scheduleCloudRefresh(immediate: true);
   }
 
   void setRegion(String? regionId) {
@@ -255,11 +274,139 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
         clearSelectedRegion: shouldClear,
       ),
     );
+    _scheduleCloudRefresh(immediate: true);
   }
 
   void setSearchQuery(String query) {
     if (state.searchQuery == query) return;
     _commitDerivedState(state.copyWith(searchQuery: query));
+    _scheduleCloudRefresh(immediate: query.trim().isEmpty);
+  }
+
+  void _scheduleCloudRefresh({required bool immediate}) {
+    if (_cloudGateway == null) return;
+    _cloudSearchDebounce?.cancel();
+    if (immediate) {
+      unawaited(refreshCloudRecipes(resetPage: true));
+      return;
+    }
+    _cloudSearchDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (mounted) {
+        unawaited(refreshCloudRecipes(resetPage: true));
+      }
+    });
+  }
+
+  Future<void> refreshCloudRecipes({bool resetPage = true}) async {
+    final gateway = _cloudGateway;
+    if (gateway == null || !mounted) return;
+    if (state.selectedFilter == RecipeFilterTab.favorites ||
+        state.selectedFilter == RecipeFilterTab.custom) {
+      return;
+    }
+
+    final int targetPage = resetPage ? 1 : state.cloudPage + 1;
+    final int reqSeq = ++_cloudRequestSeq;
+    state = state.copyWith(isCloudLoading: true);
+
+    try {
+      final pantryItems = _kilerListenable.value.pantryItems;
+      final pantryTags = pantryItems
+          .map((e) => e.normalizedTag.trim())
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
+      final expiringTags = pantryItems
+          .where((e) => e.isExpiringSoon || e.isExpired)
+          .map((e) => e.normalizedTag.trim())
+          .where((t) => t.isNotEmpty)
+          .toSet()
+          .toList();
+
+      final query = state.searchQuery.trim();
+      final bool usePantryEndpoint = query.isEmpty &&
+          state.selectedRegion == null &&
+          pantryTags.isNotEmpty &&
+          (state.selectedFilter == RecipeFilterTab.all ||
+              state.selectedFilter == RecipeFilterTab.readyNow ||
+              state.selectedFilter == RecipeFilterTab.wasteSaver ||
+              state.selectedFilter == RecipeFilterTab.almostReady);
+
+      final CloudRecipeSearchPage page = usePantryEndpoint
+          ? await gateway.matchPantry(
+              pantryTags: pantryTags,
+              expiringTags: expiringTags,
+              kilerceCategory: state.selectedCategory,
+              limit: 20,
+              offset: (targetPage - 1) * 20,
+            )
+          : await gateway.searchRecipes(
+              query: query,
+              kilerceCategory: state.selectedCategory,
+              regionId: state.selectedRegion,
+              maxMinutes:
+                  state.selectedFilter == RecipeFilterTab.quick ? 20 : null,
+              page: targetPage,
+              limit: 20,
+            );
+
+      if (!mounted || reqSeq != _cloudRequestSeq) return;
+
+      final List<KilerRecipe> nextCloud = resetPage
+          ? page.items
+          : [
+              ...state.cloudRecipes,
+              ...page.items.where(
+                (item) => !state.cloudRecipes.any((e) => e.id == item.id),
+              ),
+            ];
+
+      _commitDerivedState(
+        state.copyWith(
+          cloudRecipes: nextCloud,
+          isCloudLoading: false,
+          cloudHasMore: page.hasMore,
+          cloudPage: targetPage,
+        ),
+      );
+    } catch (e) {
+      debugPrint('MealModuleNotifier.refreshCloudRecipes error: $e');
+      if (!mounted || reqSeq != _cloudRequestSeq) return;
+      state = state.copyWith(isCloudLoading: false);
+    }
+  }
+
+  Future<void> loadMoreCloudRecipes() => refreshCloudRecipes(resetPage: false);
+
+  /// Fetches full recipe steps & ingredients from Cloudflare D1 (cached once unlocked).
+  Future<CloudRecipeDetailResult> loadCloudRecipeDetail(String recipeId) async {
+    final cleanId = recipeId.trim();
+    final cached = state.hydratedCloudRecipes[cleanId];
+    if (cached != null && cached.steps.isNotEmpty) {
+      return CloudRecipeDetailSuccess(
+        recipe: cached,
+        entitlement: const KilerceEntitlementSnapshot(isPro: true),
+      );
+    }
+
+    final gateway = _cloudGateway;
+    if (gateway == null) {
+      return const CloudRecipeDetailFailure(
+        'Tarif detayı şu an çevrimdışı modda açılamıyor.',
+      );
+    }
+
+    final result = await gateway.fetchRecipeDetail(cleanId);
+    if (!mounted) return result;
+    if (result is CloudRecipeDetailSuccess) {
+      final updatedHydrated =
+          Map<String, KilerRecipe>.from(state.hydratedCloudRecipes)
+            ..[cleanId] = result.recipe;
+      _commitDerivedState(
+        state.copyWith(hydratedCloudRecipes: updatedHydrated),
+      );
+    }
+    return result;
   }
 
   void setPreset(MealPlanPreset preset) {
@@ -982,13 +1129,50 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     );
   }
 
+  Future<void> _hydrateBuiltinRecipePhotos() async {
+    final gateway = _cloudGateway;
+    if (gateway == null || !mounted || state.builtinSignedImageUrls.isNotEmpty) {
+      return;
+    }
+    try {
+      final urlsByRelPath = await gateway.signMediaBatch(
+        kilerceBuiltinRecipeR2Paths.values.toSet().toList(),
+      );
+      if (!mounted || urlsByRelPath.isEmpty) return;
+
+      final Map<String, String> byRecipeId = {};
+      for (final entry in kilerceBuiltinRecipeR2Paths.entries) {
+        final signed = urlsByRelPath[entry.value];
+        if (signed != null && signed.isNotEmpty) {
+          byRecipeId[entry.key] = signed;
+        }
+      }
+      if (byRecipeId.isEmpty) return;
+
+      _commitDerivedState(
+        state.copyWith(builtinSignedImageUrls: byRecipeId),
+      );
+    } catch (e) {
+      debugPrint('MealModuleNotifier._hydrateBuiltinRecipePhotos error: $e');
+    }
+  }
+
   void _commitDerivedState(MealModuleState next) {
     final List<PantryItem> pantryItems = _kilerListenable.value.pantryItems;
     final Map<String, String> overrides = next.recipePhotoOverrides;
 
+    final List<KilerRecipe> effectiveCloud = next.cloudRecipes
+        .map((c) => next.hydratedCloudRecipes[c.id] ?? c)
+        .toList();
+
     final Map<String, KilerRecipe> rawRecipeById =
         RecipeRecommendationEngine.buildRecipeIndex(
       customRecipes: next.customRecipes,
+      additionalRecipes: [
+        ...effectiveCloud,
+        ...next.hydratedCloudRecipes.values,
+      ],
+      builtinImageUrls: next.builtinSignedImageUrls,
     );
     final Map<String, KilerRecipe> recipeById = overrides.isEmpty
         ? rawRecipeById
@@ -1007,6 +1191,8 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       region: next.selectedRegion,
       favoriteIds: next.favoriteIds,
       customRecipes: next.customRecipes,
+      additionalRecipes: effectiveCloud,
+      builtinImageUrls: next.builtinSignedImageUrls,
       cookCounts: next.cookCounts,
     );
     final List<EvaluatedRecipeMatch> matches = overrides.isEmpty
@@ -1021,6 +1207,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       activeProfile: next.activeProfile,
       favoriteIds: next.favoriteIds,
       customRecipes: next.customRecipes,
+      builtinImageUrls: next.builtinSignedImageUrls,
     );
     final List<EvaluatedRecipeMatch> wasteRescueMatches = overrides.isEmpty
         ? rawWasteRescue
@@ -1053,6 +1240,24 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       wasteRescueMatches: wasteRescueMatches,
       activePrompts: activePrompts,
     );
+    _scheduleNotificationSync();
+  }
+
+  void _scheduleNotificationSync() {
+    if (_cloudGateway == null || !mounted) return;
+    _notificationSyncDebounce?.cancel();
+    _notificationSyncDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      final List<MealPlanEntry> entriesSnapshot =
+          _lifecycleEntries.isNotEmpty ? _lifecycleEntries : state.weekEntries;
+      unawaited(
+        KilerceNotificationService.instance.syncMorningMenuReminder(
+          entries: entriesSnapshot,
+          recipeById: state.recipeById,
+          pantryItems: _kilerListenable.value.pantryItems,
+        ),
+      );
+    });
   }
 
   static KilerRecipe _applyPhotoOverride(

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../../family_profiles/domain/family_profile_engine.dart';
 import '../../kiler/domain/kiler_models.dart';
 
@@ -648,7 +649,8 @@ class KilerRecipe {
         if (decoded is Map<String, dynamic>) {
           payload = decoded;
         }
-      } catch (_) {
+      } catch (e) {
+        debugPrint('KilerRecipe.fromCustomDbMap payload decode error: $e');
         payload = {};
       }
     }
@@ -1149,6 +1151,12 @@ class MealModuleState {
   final bool showFullWeekOverview;
   final List<EvaluatedRecipeMatch> evaluatedMatches;
   final Map<String, KilerRecipe> recipeById;
+  final List<KilerRecipe> cloudRecipes;
+  final Map<String, KilerRecipe> hydratedCloudRecipes;
+  final Map<String, String> builtinSignedImageUrls;
+  final bool isCloudLoading;
+  final bool cloudHasMore;
+  final int cloudPage;
   final List<PlannedShoppingGap> weeklyShoppingGaps;
   final Map<String, SlotCheckInRecord> slotCheckIns;
   final Map<String, String> recipePhotoOverrides;
@@ -1175,6 +1183,12 @@ class MealModuleState {
     this.showFullWeekOverview = false,
     this.evaluatedMatches = const [],
     this.recipeById = const {},
+    this.cloudRecipes = const [],
+    this.hydratedCloudRecipes = const {},
+    this.builtinSignedImageUrls = const {},
+    this.isCloudLoading = false,
+    this.cloudHasMore = false,
+    this.cloudPage = 1,
     this.weeklyShoppingGaps = const [],
     this.slotCheckIns = const {},
     this.recipePhotoOverrides = const {},
@@ -1214,6 +1228,12 @@ class MealModuleState {
     bool? showFullWeekOverview,
     List<EvaluatedRecipeMatch>? evaluatedMatches,
     Map<String, KilerRecipe>? recipeById,
+    List<KilerRecipe>? cloudRecipes,
+    Map<String, KilerRecipe>? hydratedCloudRecipes,
+    Map<String, String>? builtinSignedImageUrls,
+    bool? isCloudLoading,
+    bool? cloudHasMore,
+    int? cloudPage,
     List<PlannedShoppingGap>? weeklyShoppingGaps,
     Map<String, SlotCheckInRecord>? slotCheckIns,
     Map<String, String>? recipePhotoOverrides,
@@ -1246,6 +1266,13 @@ class MealModuleState {
       showFullWeekOverview: showFullWeekOverview ?? this.showFullWeekOverview,
       evaluatedMatches: evaluatedMatches ?? this.evaluatedMatches,
       recipeById: recipeById ?? this.recipeById,
+      cloudRecipes: cloudRecipes ?? this.cloudRecipes,
+      hydratedCloudRecipes: hydratedCloudRecipes ?? this.hydratedCloudRecipes,
+      builtinSignedImageUrls:
+          builtinSignedImageUrls ?? this.builtinSignedImageUrls,
+      isCloudLoading: isCloudLoading ?? this.isCloudLoading,
+      cloudHasMore: cloudHasMore ?? this.cloudHasMore,
+      cloudPage: cloudPage ?? this.cloudPage,
       weeklyShoppingGaps: weeklyShoppingGaps ?? this.weeklyShoppingGaps,
       slotCheckIns: slotCheckIns ?? this.slotCheckIns,
       recipePhotoOverrides: recipePhotoOverrides ?? this.recipePhotoOverrides,

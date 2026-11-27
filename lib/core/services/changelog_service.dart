@@ -48,11 +48,231 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 16;
-  static const String currentVersionName = '3.2.2';
+  static const int currentVersionCode = 25;
+  static const String currentVersionName = '3.3.8';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 25,
+      versionName: '3.3.8',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Sadeleştirilmiş Bakanlık Kara Listesi & Profil Menüsü',
+          titleEn: 'Simplified Ministry Blacklist & Profile Menu',
+          descTr:
+              'Kara liste kartları sadeleştirildi; üst çubuktaki profil fotoğrafına dokunarak hesap, aile profili, kara liste, kılavuz ve ayarlara hızlıca ulaşabilirsiniz.',
+          descEn:
+              'Streamlined blacklist cards and replaced top-bar clutter with a profile avatar menu for quick access to account, family profiles, blacklist, guide, and settings.',
+          icon: Icons.account_circle_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Sabah Menü & Eksik Malzeme Bildirimleri',
+          titleEn: 'Morning Menu & Missing Ingredient Alerts',
+          descTr:
+              'Bugünkü menünüz için kilerinizde eksik ürün varsa sabah belirlenen saatte bildirimle hatırlatma yapılır.',
+          descEn:
+              'Morning local notifications now remind you when planned dishes for today have missing pantry ingredients.',
+          icon: Icons.notifications_active_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'İlk Açılış Kullanım Kılavuzu',
+          titleEn: 'First-Launch Interactive User Guide',
+          descTr:
+              'Yeni başlayanlar için kiler, sabah bildirimleri ve gıda güvenliği adımlarını anlatan 5 adımlı kullanım kılavuzu eklendi.',
+          descEn:
+              'Added a 5-step walkthrough explaining pantry tracking, morning menu reminders, and food safety checks.',
+          icon: Icons.menu_book_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Temsili Görsel Bilgilendirmesi & Tarif Fotoğrafı Gönder',
+          titleEn: 'Representative Dish Notice & Recipe Photo Feedback',
+          descTr:
+              'Temsili yemek görsellerinin yerine kendi pişirdiğiniz tarif fotoğraflarını Ayarlar veya tarif detayı üzerinden kolayca paylaşabilirsiniz.',
+          descEn:
+              'Added clear notice for representative dish images and a quick feedback flow to submit real recipe photos via Settings or recipe details.',
+          icon: Icons.add_a_photo_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 24,
+      versionName: '3.3.7',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Gemini 3.5 Flash-Lite Akıllı Fiş & Etiket OCR',
+          titleEn: 'Gemini 3.5 Flash-Lite Smart Receipt & Label OCR',
+          descTr:
+              'Market fişi, ürün bildirimi ve etiket okuma adımları Gemini 3.5 Flash-Lite bulut görüş motoruyla güçlendirildi; çevrimdışı durumda cihaz içi ML Kit yedeği otomatik devreye girer.',
+          descEn:
+              'Upgraded receipt scanning, product submission, and ingredient label OCR with Gemini 3.5 Flash-Lite vision and automatic on-device ML Kit fallback.',
+          icon: Icons.document_scanner_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 23,
+      versionName: '3.3.6',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Gerçek Siyah OLED & Soft Mint Tema',
+          titleEn: 'True-Black OLED & Soft Mint Theme',
+          descTr:
+              'Koyu tema OLED ekranlar için gerçek siyah (#000000) tabana, açık tema ise yumuşak mint pastel tonlara ayarlandı.',
+          descEn:
+              'Tuned the dark theme to true OLED black (#000000) and refreshed the light theme with soft mint pastel tones.',
+          icon: Icons.contrast_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Tarif Yemek Görselleri Düzeltildi',
+          titleEn: 'Recipe Dish Images Restored',
+          descTr:
+              'Sunucu medya imzalama anahtarı release derlemesine dahil edilerek yemek görsellerinin logo yerine gerçek fotoğraflarla yüklenmesi sağlandı.',
+          descEn:
+              'Included the edge media signing key in release builds so recipe cards load real dish photographs instead of the fallback logo.',
+          icon: Icons.image_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 22,
+      versionName: '3.3.5',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Yumuşak Pastel Açık & Koyu Tema',
+          titleEn: 'Soft Pastel Light & Dark Theme',
+          descTr:
+              'Açık ve koyu temalar sıcak yulaf ve botanik arduvaz pastel renk paletiyle yenilendi.',
+          descEn:
+              'Light and dark themes were refreshed with warm oat and botanical slate pastel palettes.',
+          icon: Icons.palette_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Sadeleştirilmiş Kilerim Ekranı',
+          titleEn: 'Simplified Pantry Screen',
+          descTr:
+              'Kilerim sayfası ve ürün kartları tek satırlı sade düzen, hızlı miktar hapı ve detay penceresiyle sadeleştirildi.',
+          descEn:
+              'Simplified the Pantry screen and item cards with a clean single-row layout, quick quantity pill, and detail sheet.',
+          icon: Icons.kitchen_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Modern Barkod & Ürün Analiz Arayüzü',
+          titleEn: 'Modernized Barcode & Product Analysis UI',
+          descTr:
+              'Barkod tarama ve ürün analiz raporu ekranları temiz pastel kartlarla modernize edildi.',
+          descEn:
+              'Modernized the barcode scanner and product result screens with clean pastel cards.',
+          icon: Icons.qr_code_scanner_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 21,
+      versionName: '3.3.4',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Yemek Listem İçin Tam Görselli Sade Kartlar',
+          titleEn: 'Full-Bleed Minimal Meal Planner Cards',
+          descTr:
+              'Haftalık yemek listesindeki öğün kartları Tarif Keşfet ile aynı tam boy görsel, yalın skor ve minimal simge tasarımına geçirildi; dar ekranlardaki küçük taşmalar giderildi.',
+          descEn:
+              'Planned meal cards in the weekly planner now share the clean full-bleed dish photography and minimal icon overlays from Recipe Explorer, with tight-screen overflows fixed.',
+          icon: Icons.photo_library_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Yüzen Günlük Mutfak Asistanı Balonu',
+          titleEn: 'Floating Daily Kitchen Assistant Bubble',
+          descTr:
+              'Kilerim ve Yemek Listem ekranlarındaki büyük asistan kartı yerine sağ alt köşede rozetli yüzen sohbet balonu eklendi; dokunulunca tüm yoklamalar alttan açılır pencerede listelenir.',
+          descEn:
+              'Replaced the large inline assistant banner with a compact floating corner bubble and badge on Pantry and Meal Planner screens, opening all active prompts in a bottom sheet.',
+          icon: Icons.assistant_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 20,
+      versionName: '3.3.3',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Pro, Promo Kod & Ödüllü Reklam Bulut Senkronu',
+          titleEn: 'Cloud Sync for Pro, Promo Codes & Rewarded Ads',
+          descTr:
+              'TESTER2026 promo kodu ve 3 ödüllü reklamla kazanılan Pro erişimi artık bulut API ile anında eşitleniyor; tarif detaylarında hatalı ödeme duvarı açılması engellendi.',
+          descEn:
+              'Pro access unlocked via the TESTER2026 promo code or 3 rewarded ads now syncs directly with the cloud API, preventing false paywalls on recipe details.',
+          icon: Icons.cloud_done_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'D1 & KV Hak Doğrulama Dayanıklılığı',
+          titleEn: 'Resilient D1 & KV Entitlement Verification',
+          descTr:
+              'Cloudflare Edge Worker katmanında günlük yazma limiti veya KV kısıtlarına karşı güvenli yedekleme ile kesintisiz tarif detayı açılışı sağlandı.',
+          descEn:
+              'Added resilient fallback handling on the Cloudflare Edge Worker layer so recipe details open smoothly without transient quota errors.',
+          icon: Icons.verified_user_rounded,
+        ),
+      ],
+    ),
+    ChangelogRelease(
+      versionCode: 19,
+      versionName: '3.3.2',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: '🍽️ Tam Sayfa Tarif Detayı & Minimal Görsel Kartlar',
+          titleEn: '🍽️ Full-Page Recipe Detail & Minimal Full-Bleed Cards',
+          descTr: 'Tarif detayları artık sadeleştirilmiş tam sayfa görünümde açılır; yemek kartları ise tam görsel ve yalın ikonlarla yenilendi.',
+          descEn: 'Recipe details now open in a clean full-page layout, and recipe cards feature full-bleed imagery with minimal icons.',
+          icon: Icons.auto_awesome_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: '⚙️ Yeni Kilerce Ayarlar & Pro Ödül Merkezi',
+          titleEn: '⚙️ New Kilerce Settings & Pro Rewards Center',
+          descTr: 'Tema, tam JSON yedekleme, SKT bildirimleri, abonelik ve reklam ödülleri tek bir Ayarlar sayfasında toplandı.',
+          descEn: 'Theme, full JSON backup, expiry alerts, subscriptions, and ad rewards are unified in a dedicated Settings screen.',
+          icon: Icons.settings_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: '⚡ Bulut Tarif Kararlılık Düzeltmesi',
+          titleEn: '⚡ Cloud Recipe Reliability Fix',
+          descTr: 'Bazı bulut tariflerde oluşan geçici sunucu hatası giderildi ve otomatik yeniden deneme desteği eklendi.',
+          descEn: 'Fixed transient server errors when opening cloud recipes and added automatic retry handling.',
+          icon: Icons.verified_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 16,
       versionName: '3.2.2',

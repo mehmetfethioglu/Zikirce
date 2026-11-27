@@ -30,10 +30,9 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
 
   String _collapsedHeadline() {
     if (widget.rescueItems.isEmpty) {
-      return 'İsraf Kurtarma Önerileri';
+      return 'Öncelikli malzeme önerileri';
     }
-    final previewNames = widget.rescueItems.take(2).map((e) => e.name).join(', ');
-    return '${widget.rescueItems.length} öncelikli ürün ($previewNames)';
+    return '${widget.rescueItems.length} öncelikli malzeme';
   }
 
   @override
@@ -45,7 +44,8 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
     return Container(
       decoration: BioMinimalUi.cardDecoration(
         context,
-        accentBorder: AppColors.cautionGold.withValues(alpha: 0.42),
+        fillColor: context.pastelPeachTint,
+        accentBorder: context.accentWarm.withValues(alpha: 0.28),
         radius: 16,
       ),
       child: Column(
@@ -58,8 +58,20 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
-                  const Text('♻️', style: TextStyle(fontSize: 16)),
-                  const SizedBox(width: 8),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: context.surfaceColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.schedule_rounded,
+                      size: 16,
+                      color: context.accentWarm,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
                   Expanded(
                     child: Text(
                       _collapsedHeadline(),
@@ -67,8 +79,8 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: context.textPrimaryColor,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -79,15 +91,15 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.cautionGold.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(8),
+                      color: context.surfaceColor,
+                      borderRadius: BorderRadius.circular(9),
                     ),
                     child: Text(
-                      'Öneriler (${widget.rescueRecipes.length})',
-                      style: const TextStyle(
-                        color: AppColors.cautionGold,
+                      '${widget.rescueRecipes.length} tarif',
+                      style: TextStyle(
+                        color: context.accentWarm,
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -122,7 +134,7 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
                   if (widget.rescueRecipes.isNotEmpty) ...[
                     const SizedBox(height: 10),
                     SizedBox(
-                      height: 156,
+                      height: 150,
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         physics: const BouncingScrollPhysics(),
@@ -148,7 +160,7 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
                       child: TextButton(
                         onPressed: widget.onOpenRecipesTab,
                         style: TextButton.styleFrom(
-                          foregroundColor: AppColors.cautionGold,
+                          foregroundColor: context.accentWarm,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -157,7 +169,7 @@ class _PantryWasteRescueCardState extends State<PantryWasteRescueCard> {
                           'Tümünü Gör',
                           style: TextStyle(
                             fontSize: 11.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -180,9 +192,10 @@ class _RescueItemBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUrgentExpiry = item.isExpired || item.isExpiringSoon;
-    final badgeColor = item.isExpired || item.daysRemaining <= 1
-        ? AppColors.dangerRed
-        : AppColors.cautionGold;
+    final isCritical = item.isExpired || item.daysRemaining <= 1;
+    final badgeColor = isCritical ? context.accentDanger : context.accentWarm;
+    final badgeBg =
+        isCritical ? context.pastelBlushTint : context.surfaceColor;
 
     final String statusText;
     if (item.isExpired) {
@@ -190,7 +203,7 @@ class _RescueItemBadge extends StatelessWidget {
     } else if (item.daysRemaining == 0) {
       statusText = 'Bugün son';
     } else if (isUrgentExpiry) {
-      statusText = 'Son ${item.daysRemaining} gün';
+      statusText = 'Son ${item.daysRemaining}g';
     } else {
       statusText = '${item.daysInPantry}g bekliyor';
     }
@@ -198,12 +211,12 @@ class _RescueItemBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.12),
+        color: badgeBg,
         borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.42)),
+        border: Border.all(color: badgeColor.withValues(alpha: 0.35)),
       ),
       child: Text(
-        '${item.name} • $statusText',
+        '${item.name} · $statusText',
         style: TextStyle(
           color: badgeColor,
           fontSize: 10.5,
@@ -236,37 +249,25 @@ class _RescueRecipeCard extends StatelessWidget {
     }.toList();
 
     return Container(
-      width: 236,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: context.subtleSurfaceColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.cardBorderColor),
-      ),
+      width: 224,
+      padding: const EdgeInsets.all(11),
+      decoration: BioMinimalUi.cardDecoration(context, radius: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(recipe.emoji, style: const TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  recipe.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.textPrimaryColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           Text(
-            '⏱️ $totalMin dk • %${match.matchPercent} Kiler • Skor ${match.combinedHealthScore}',
+            recipe.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: context.textPrimaryColor,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '$totalMin dk · %${match.matchPercent} Kiler · Skor ${match.combinedHealthScore}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
@@ -279,14 +280,14 @@ class _RescueRecipeCard extends StatelessWidget {
           Expanded(
             child: Text(
               rescuedNames.isNotEmpty
-                  ? 'Kurtarır: ${rescuedNames.take(3).join(', ')}'
+                  ? 'Değerlendirir: ${rescuedNames.take(3).join(', ')}'
                   : recipe.subtitle,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.cautionGold,
+              style: TextStyle(
+                color: context.accentWarm,
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -297,9 +298,9 @@ class _RescueRecipeCard extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: onOpen,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primaryEmerald,
+                    foregroundColor: context.accentPrimary,
                     side: BorderSide(
-                      color: AppColors.primaryEmerald.withValues(alpha: 0.6),
+                      color: context.accentPrimary.withValues(alpha: 0.45),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 6),
                     minimumSize: Size.zero,
@@ -312,7 +313,7 @@ class _RescueRecipeCard extends StatelessWidget {
                     'Tarifi Aç',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -323,8 +324,9 @@ class _RescueRecipeCard extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onAddToPlan,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryEmerald,
-                      foregroundColor: Colors.white,
+                      backgroundColor: context.accentPrimary,
+                      foregroundColor: context.onAccentPrimary,
+                      elevation: 0,
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -338,7 +340,7 @@ class _RescueRecipeCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),

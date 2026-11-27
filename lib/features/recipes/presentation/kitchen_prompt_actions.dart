@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../kiler/domain/kiler_models.dart';
+import '../../monetization/domain/subscription_service.dart';
+import '../../monetization/presentation/paywall_screen.dart';
+import '../data/kilerce_cloud_recipe_client.dart';
 import '../domain/meal_lifecycle_assistant.dart';
 import '../domain/meal_module_notifier.dart';
 import '../domain/recipe_models.dart';
 import 'widgets/kitchen_checkin_sheets.dart';
 import 'widgets/meal_slot_picker_sheet.dart';
-import 'widgets/recipe_detail_sheet.dart';
+import 'recipe_detail_screen.dart';
 
 /// Shared UI action coordinator bridging daily kitchen prompts, meal planning,
 /// and custom dish photo capture with [MealModuleNotifier].
@@ -225,45 +228,134 @@ class KitchenPromptActions {
     required String selectedDateIso,
     required int planServings,
   }) async {
-    final bool hasCustomPhoto =
-        match.recipe.localImagePath?.trim().isNotEmpty ?? false;
+    EvaluatedRecipeMatch resolvedMatch = match;
+    if (match.recipe.steps.isEmpty && !match.recipe.isCustom) {
+      CloudRecipeDetailResult detailRes = await _fetchDetailWithLoader(
+        context,
+        () => notifier.loadCloudRecipeDetail(match.recipe.id),
+      );
+      if (!context.mounted) return;
 
-    await RecipeDetailSheet.show(
+      if (detailRes is CloudRecipeProRequired) {
+        final bool isLocallyAdFree =
+            await SubscriptionService.instance.isAdFree();
+        if (!context.mounted) return;
+        if (isLocallyAdFree) {
+          await SubscriptionService.instance.syncCloudEntitlement();
+          if (!context.mounted) return;
+          detailRes = await _fetchDetailWithLoader(
+            context,
+            () => notifier.loadCloudRecipeDetail(match.recipe.id),
+          );
+          if (!context.mounted) return;
+        }
+      }
+
+      if (detailRes is CloudRecipeProRequired) {
+        final bool? unlocked = await PaywallScreen.show(
+          context,
+          initialEntitlement: detailRes.entitlement,
+          reasonMessage: detailRes.message,
+        );
+        if (unlocked != true || !context.mounted) return;
+        detailRes = await _fetchDetailWithLoader(
+          context,
+          () => notifier.loadCloudRecipeDetail(match.recipe.id),
+        );
+        if (!context.mounted) return;
+      }
+
+      if (detailRes is CloudRecipeDetailSuccess) {
+        resolvedMatch = EvaluatedRecipeMatch(
+          recipe: detailRes.recipe,
+          matchedRequiredTags: match.matchedRequiredTags,
+          missingRequiredTags: match.missingRequiredTags,
+          matchedOptionalTags: match.matchedOptionalTags,
+          expiringIngredientsUsed: match.expiringIngredientsUsed,
+          longWaitingIngredientsUsed: match.longWaitingIngredientsUsed,
+          combinedHealthScore: match.combinedHealthScore,
+          profileWarnings: match.profileWarnings,
+          isFavorite: match.isFavorite,
+          cookCount: match.cookCount,
+        );
+      } else if (detailRes is CloudRecipeProRequired) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(detailRes.message)),
+        );
+        return;
+      } else if (detailRes is CloudRecipeDetailFailure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(detailRes.message)),
+        );
+        return;
+      } else {
+        return;
+      }
+    }
+
+    final bool hasCustomPhoto =
+        resolvedMatch.recipe.localImagePath?.trim().isNotEmpty ?? false;
+
+    await RecipeDetailScreen.open(
       context,
-      match,
-      isFavorite: match.isFavorite,
-      onToggleFavorite: () => notifier.toggleFavorite(match.recipe.id),
+      resolvedMatch,
+      isFavorite: resolvedMatch.isFavorite,
+      onToggleFavorite: () => notifier.toggleFavorite(resolvedMatch.recipe.id),
       onAddToMealPlan: () => openAddRecipeToPlanSheet(
         context: context,
         notifier: notifier,
-        recipe: match.recipe,
+        recipe: resolvedMatch.recipe,
         weekMondayIso: weekMondayIso,
         selectedDateIso: selectedDateIso,
         planServings: planServings,
       ),
       onRecipeCooked: (servings) => notifier.logCookedRecipe(
-        match.recipe,
+        resolvedMatch.recipe,
         servings: servings,
         consumeFromPantry: false,
       ),
-      onDeleteCustom: match.recipe.isCustom
-          ? () => notifier.deleteCustomRecipe(match.recipe.id)
+      onDeleteCustom: resolvedMatch.recipe.isCustom
+          ? () => notifier.deleteCustomRecipe(resolvedMatch.recipe.id)
           : null,
       onPickCustomPhoto: () => _pickAndSaveRecipePhoto(
         context: context,
         notifier: notifier,
-        recipeId: match.recipe.id,
-        recipeTitle: match.recipe.title,
+        recipeId: resolvedMatch.recipe.id,
+        recipeTitle: resolvedMatch.recipe.title,
       ),
       onRemoveCustomPhoto: hasCustomPhoto
           ? () => _removeCustomRecipePhoto(
                 context: context,
                 notifier: notifier,
-                recipeId: match.recipe.id,
-                recipeTitle: match.recipe.title,
+                recipeId: resolvedMatch.recipe.id,
+                recipeTitle: resolvedMatch.recipe.title,
               )
           : null,
     );
+  }
+
+  static Future<CloudRecipeDetailResult> _fetchDetailWithLoader(
+    BuildContext context,
+    Future<CloudRecipeDetailResult> Function() fetcher,
+  ) async {
+    BuildContext? dialogCtx;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogCtx = ctx;
+        return const Center(
+          child: CircularProgressIndicator(color: AppColors.primaryEmerald),
+        );
+      },
+    );
+    try {
+      return await fetcher();
+    } finally {
+      if (dialogCtx != null && dialogCtx!.mounted) {
+        Navigator.of(dialogCtx!).pop();
+      }
+    }
   }
 
   static Future<void> _pickAndSaveRecipePhoto({

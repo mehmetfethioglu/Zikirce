@@ -580,11 +580,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('🫒 Ege ×'), findsNothing);
 
-      // Search for a recipe and verify compact card + quick Takvime Ekle button
+      // Search for a recipe and verify minimal full-bleed card + quick add (+) icon
       await tester.enterText(find.byType(TextField), 'menemen');
       await tester.pumpAndSettle();
       expect(find.text('Klasik Köy Menemeni'), findsOneWidget);
-      expect(find.text('Takvime Ekle'), findsWidgets);
+      expect(find.byTooltip('Takvime Ekle'), findsWidgets);
 
       // Switch to Yemek Listem mode and generate 7-day plan
       await tester.tap(find.textContaining('Yemek Listem'));

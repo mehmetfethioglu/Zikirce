@@ -104,16 +104,19 @@ void main() {
       products = jsonDecode(jsonFile.readAsStringSync()) as List<dynamic>;
     });
 
-    test('JSON ve SQLite (foodscore_master.db > 0 byte) yüksek hacimli temiz ürün içerir', () {
+    test('Aktif market snapshot JSON ve veri varlıkları yüksek hacimli temiz ürün içerir', () {
       expect(products.length, greaterThanOrEqualTo(2000));
 
-      final masterDb = File('assets/data/foodscore_master.db');
-      expect(masterDb.existsSync(), isTrue, reason: 'foodscore_master.db varlığı mevcut olmalı');
+      final snapshotsJson = File('assets/data/top_turkiye_ai_snapshots.json');
+      expect(snapshotsJson.existsSync(), isTrue);
       expect(
-        masterDb.lengthSync(),
+        snapshotsJson.lengthSync(),
         greaterThan(1024 * 1024),
-        reason: 'foodscore_master.db 0 byte olamaz; gerçek katalog içermelidir',
+        reason: 'top_turkiye_ai_snapshots.json gerçek katalog içermelidir',
       );
+      expect(File('assets/data/e_numbers.json').existsSync(), isTrue);
+      expect(File('assets/data/boycott_list.json').existsSync(), isTrue);
+      expect(File('assets/data/taklit_tagsis_list.json').existsSync(), isTrue);
     });
 
     test('Tüm barkodlar %100 gerçek GS1 Modulo-10 uyumludur; sahte ardışık ve PLU barkod yoktur', () {

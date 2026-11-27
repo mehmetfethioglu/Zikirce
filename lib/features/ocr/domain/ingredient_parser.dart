@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../../core/database/database_helper.dart';
 
@@ -109,7 +110,9 @@ class IngredientParser {
           highlights.add(row['name'] as String);
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('IngredientParser name lookup error: $e');
+    }
 
     stopwatch.stop();
     return IngredientParseResult(

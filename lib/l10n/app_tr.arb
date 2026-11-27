@@ -1,0 +1,21 @@
+{
+  "@@locale": "tr",
+  "appTitle": "Kilerce: Barkod, Dolap & Tarif",
+  "brandTagline": "BARKOD • DOLAP • TARİF",
+  "tabPantry": "Kilerim",
+  "tabRecipes": "Yemek & Tarif",
+  "tabScanner": "Barkod & Analiz",
+  "tabShoppingProfile": "Alışveriş & Profil",
+  "pantrySummaryBadge": "{count} Ürün • Skor {score}",
+  "@pantrySummaryBadge": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "score": { "type": "int" }
+    }
+  },
+  "taklitTagsisTooltip": "Bakanlık Taklit & Tağşiş Listesi",
+  "expiryAlertTitle": "SKT Bildirimleri",
+  "expiryAlertSubtitle": "Son kullanma tarihi yaklaşan ürünler için günlük hatırlatma",
+  "backupSuccessMessage": "Kiler, tarif ve profil verileri yedeklendi",
+  "restoreSuccessMessage": "Tüm Kilerce verileri geri yüklendi"
+}

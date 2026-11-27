@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/kilerce_logo_mark.dart';
+import '../../data/recipe_image_disk_cache.dart';
 import '../../domain/recipe_models.dart';
 
 enum _VisualSourceMode {
@@ -25,6 +26,8 @@ class RecipeVisualHeader extends StatelessWidget {
   final bool compact;
   final int? combinedScore;
   final bool heroMode;
+  final bool showOverlays;
+  final BorderRadius? borderRadius;
 
   const RecipeVisualHeader({
     super.key,
@@ -33,6 +36,8 @@ class RecipeVisualHeader extends StatelessWidget {
     this.compact = false,
     this.combinedScore,
     this.heroMode = false,
+    this.showOverlays = true,
+    this.borderRadius,
   });
 
   _VisualSourceMode _resolveSourceMode() {
@@ -64,7 +69,7 @@ class RecipeVisualHeader extends StatelessWidget {
       case _VisualSourceMode.networkUrl:
         if (!heroMode) return null;
         final credit = recipe.photoCredit?.trim();
-        return '📷 ${(credit != null && credit.isNotEmpty) ? credit : 'Doğrulanmış Foto'}';
+        return '📷 ${(credit != null && credit.isNotEmpty) ? credit : 'Temsili Görsel'}';
       case _VisualSourceMode.bundledAsset:
         return heroMode ? '✨ Kilerce Vektör Sunum' : null;
       case _VisualSourceMode.gradientFallback:
@@ -74,7 +79,8 @@ class RecipeVisualHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(heroMode ? 20 : 16);
+    final effectiveRadius =
+        borderRadius ?? BorderRadius.circular(heroMode ? 20 : 16);
     final regionMeta = TurkishRegionRegistry.findById(recipe.regionId);
     final categoryMeta = RecipeCategoryRegistry.findById(recipe.category);
     final palette = _CategoryPaletteRegistry.paletteFor(recipe.category);
@@ -82,7 +88,7 @@ class RecipeVisualHeader extends StatelessWidget {
     final sourceBadge = _sourceBadgeLabel(sourceMode);
 
     return ClipRRect(
-      borderRadius: borderRadius,
+      borderRadius: effectiveRadius,
       child: SizedBox(
         width: double.infinity,
         height: height,
@@ -97,15 +103,16 @@ class RecipeVisualHeader extends StatelessWidget {
               heroMode: heroMode,
             ),
             const _ScrimOverlay(),
-            _TopHeaderOverlay(
-              categoryEmoji: categoryMeta?.emoji ?? recipe.emoji,
-              categoryLabel: categoryMeta?.shortLabel ?? recipe.category,
-              combinedScore: combinedScore,
-              sourceBadgeLabel: sourceBadge,
-              compact: compact,
-              heroMode: heroMode,
-            ),
-            if (heroMode)
+            if (showOverlays)
+              _TopHeaderOverlay(
+                categoryEmoji: categoryMeta?.emoji ?? recipe.emoji,
+                categoryLabel: categoryMeta?.shortLabel ?? recipe.category,
+                combinedScore: combinedScore,
+                sourceBadgeLabel: sourceBadge,
+                compact: compact,
+                heroMode: heroMode,
+              ),
+            if (showOverlays && heroMode)
               _BottomMetaOverlay(
                 originCity: recipe.originCity,
                 regionShortLabel: regionMeta?.shortLabel,
@@ -202,14 +209,11 @@ class _VisualBackdrop extends StatelessWidget {
           ),
         );
       case _VisualSourceMode.networkUrl:
-        return Image.network(
-          recipe.imageUrl!.trim(),
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _CategoryRegionFallbackArt(
-            palette: palette,
-            compact: compact,
-            heroMode: heroMode,
-          ),
+        return _DiskCachedRecipeImage(
+          imageUrl: recipe.imageUrl!.trim(),
+          palette: palette,
+          compact: compact,
+          heroMode: heroMode,
         );
       case _VisualSourceMode.bundledAsset:
         return Image.asset(
@@ -511,6 +515,87 @@ class _HealthScoreOverlayBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
       ),
+    );
+  }
+}
+
+class _DiskCachedRecipeImage extends StatefulWidget {
+  final String imageUrl;
+  final _CategoryPalette palette;
+  final bool compact;
+  final bool heroMode;
+
+  const _DiskCachedRecipeImage({
+    required this.imageUrl,
+    required this.palette,
+    required this.compact,
+    required this.heroMode,
+  });
+
+  @override
+  State<_DiskCachedRecipeImage> createState() => _DiskCachedRecipeImageState();
+}
+
+class _DiskCachedRecipeImageState extends State<_DiskCachedRecipeImage> {
+  File? _cachedFile;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveImage();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DiskCachedRecipeImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (RecipeImageDiskCache.canonicalCacheKey(oldWidget.imageUrl) !=
+        RecipeImageDiskCache.canonicalCacheKey(widget.imageUrl)) {
+      _cachedFile = null;
+      _resolveImage();
+    }
+  }
+
+  Future<void> _resolveImage() async {
+    if (kIsWeb) return;
+    final file = await RecipeImageDiskCache.instance.getOrFetchFile(widget.imageUrl);
+    if (!mounted) return;
+    if (file != null) {
+      setState(() {
+        _cachedFile = file;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Image.network(
+        widget.imageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _CategoryRegionFallbackArt(
+          palette: widget.palette,
+          compact: widget.compact,
+          heroMode: widget.heroMode,
+        ),
+      );
+    }
+
+    if (_cachedFile != null) {
+      return Image.file(
+        _cachedFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _CategoryRegionFallbackArt(
+          palette: widget.palette,
+          compact: widget.compact,
+          heroMode: widget.heroMode,
+        ),
+      );
+    }
+
+    return _CategoryRegionFallbackArt(
+      palette: widget.palette,
+      compact: widget.compact,
+      heroMode: widget.heroMode,
     );
   }
 }

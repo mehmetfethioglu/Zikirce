@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:sqflite/sqflite.dart';
 import '../../../core/database/database_helper.dart';
+import 'open_food_facts_service.dart';
 
 enum ScanDataSource {
   onlineCloudWorker,
@@ -236,7 +237,6 @@ class OfflineFallbackManager {
         final String resolvedBrand = brand.isNotEmpty ? brand : 'Topluluk Katkısı';
         final String ingText = (payload['ingredients_text'] as String? ?? '').trim();
         final String lowerIng = ingText.toLowerCase();
-        final String lowerName = name.toLowerCase();
 
         final bool hasRisks = lowerIng.contains('glikoz') ||
             lowerIng.contains('fruktoz') ||
@@ -250,19 +250,11 @@ class OfflineFallbackManager {
             lowerIng.contains('benzoat') ||
             RegExp(r'\b[Ee][\s\-\.]?\d{3,4}\b').hasMatch(ingText);
 
-        final bool isPureNatural = (lowerName.contains('zeytinyağ') ||
-                lowerName.contains('makarna') ||
-                lowerName.contains('yulaf') ||
-                lowerName.contains('mercimek') ||
-                lowerName.contains('nohut') ||
-                lowerName.contains('fasulye') ||
-                lowerName.contains('un') ||
-                lowerName.contains('pirinç') ||
-                lowerName.contains('su') ||
-                lowerName.contains('süt') ||
-                lowerName.contains('yoğurt') ||
-                lowerName.contains('bulgur')) &&
-            !hasRisks;
+        final bool isPureNatural = !hasRisks &&
+            OpenFoodFactsService.isPureNaturalFoodName(
+              name,
+              ingredientsText: ingText,
+            );
 
         final int score = hasRisks ? 45 : (isPureNatural ? 95 : 85);
         final int nova = hasRisks ? 4 : (isPureNatural ? 1 : 2);

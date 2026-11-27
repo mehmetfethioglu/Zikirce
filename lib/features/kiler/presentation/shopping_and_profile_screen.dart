@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import '../../../core/services/changelog_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../family_profiles/presentation/family_profiles_screen.dart';
+import '../../monetization/domain/subscription_service.dart';
+import '../../monetization/presentation/paywall_screen.dart';
+import '../../settings/presentation/kilerce_settings_screen.dart';
 import '../../taklit_tagsis/presentation/taklit_tagsis_screen.dart';
+import '../domain/expiry_reminder_service.dart';
 import '../domain/kiler_models.dart';
 import '../domain/kiler_service.dart';
 
@@ -16,6 +20,30 @@ class ShoppingAndProfileScreen extends StatefulWidget {
 
 class _ShoppingAndProfileScreenState extends State<ShoppingAndProfileScreen> {
   final TextEditingController _addController = TextEditingController();
+  bool _sktRemindersEnabled = true;
+  bool _isPro = false;
+  int _adProgress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrefsAndPro();
+  }
+
+  Future<void> _loadPrefsAndPro() async {
+    final results = await Future.wait<dynamic>([
+      ExpiryReminderService.instance.isEnabled(),
+      SubscriptionService.instance.isAdFree(),
+      SubscriptionService.instance.getRewardAdProgress(),
+    ]);
+    if (mounted) {
+      setState(() {
+        _sktRemindersEnabled = results[0] as bool;
+        _isPro = results[1] as bool;
+        _adProgress = results[2] as int;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -193,14 +221,45 @@ class _ShoppingAndProfileScreenState extends State<ShoppingAndProfileScreen> {
 
             const SizedBox(height: 20),
 
-            // 3. Family Health Profiles & Food Safety Quick Access
+            // 3. Kilerce Pro, Settings & Food Safety Quick Access
             Text(
-              'Aile Sağlık Profilleri & Güvenlik',
+              'Kilerce Pro, Ayarlar & Güvenlik',
               style: TextStyle(
                 color: textPrimary,
                 fontSize: 15.5,
                 fontWeight: FontWeight.bold,
               ),
+            ),
+            const SizedBox(height: 10),
+            _NavigationFeatureCard(
+              icon: Icons.workspace_premium_rounded,
+              color: _isPro ? AppColors.primaryEmerald : AppColors.cautionGold,
+              title: _isPro
+                  ? 'Kilerce Pro Aktif'
+                  : 'Kilerce Pro & Reklam Ödülleri',
+              subtitle: _isPro
+                  ? 'Sınırsız 23.933+ tarif & reklamsız deneyimi yönetin'
+                  : 'Abonelik paketleri veya 3 reklam ile +3 saat Pro ($_adProgress/3)',
+              onTap: () async {
+                await PaywallScreen.show(context);
+                if (mounted) _loadPrefsAndPro();
+              },
+            ),
+            const SizedBox(height: 10),
+            _NavigationFeatureCard(
+              icon: Icons.settings_rounded,
+              color: AppColors.primaryMint,
+              title: 'Uygulama Ayarları',
+              subtitle: 'Tema, yedekleme, profil rozetleri ve gizlilik politikası',
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const KilerceSettingsScreen(),
+                  ),
+                );
+                if (mounted) _loadPrefsAndPro();
+              },
             ),
             const SizedBox(height: 10),
             _NavigationFeatureCard(
@@ -238,9 +297,58 @@ class _ShoppingAndProfileScreenState extends State<ShoppingAndProfileScreen> {
             _NavigationFeatureCard(
               icon: Icons.new_releases_rounded,
               color: AppColors.primaryMint,
-              title: 'Kilerce Sürüm Notları (v3.0.0)',
+              title: 'Kilerce Sürüm Notları (v${ChangelogService.currentVersionName})',
               subtitle: 'Yeni eklenen akıllı kiler, fiş OCR ve şef özelliklerini inceleyin',
               onTap: () => ChangelogService.showHistory(context),
+            ),
+            const SizedBox(height: 10),
+            Semantics(
+              toggled: _sktRemindersEnabled,
+              label: 'Son kullanma tarihi hatırlatma bildirimleri',
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: surfaceColor,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                ),
+                child: SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  activeThumbColor: AppColors.primaryEmerald,
+                  secondary: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.cautionGold.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_active_rounded,
+                      color: AppColors.cautionGold,
+                      size: 22,
+                    ),
+                  ),
+                  title: Text(
+                    'SKT Bildirimleri',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Son kullanma tarihi yaklaşan ürünler için günlük hatırlatma',
+                    style: TextStyle(color: textSecondary, fontSize: 11.5),
+                  ),
+                  value: _sktRemindersEnabled,
+                  onChanged: (val) async {
+                    setState(() => _sktRemindersEnabled = val);
+                    await ExpiryReminderService.instance.setEnabled(val);
+                    if (val) {
+                      await ExpiryReminderService.instance.triggerNow();
+                    }
+                  },
+                ),
+              ),
             ),
           ],
         );

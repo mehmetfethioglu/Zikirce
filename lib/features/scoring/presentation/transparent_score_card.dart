@@ -23,13 +23,19 @@ class TransparentScoreCard extends StatefulWidget {
 }
 
 class _TransparentScoreCardState extends State<TransparentScoreCard> {
-  bool _isExpanded = true;
+  bool _isExpanded = false;
 
-  Color _getMatchColor(int percentage) {
-    if (percentage >= 80) return AppColors.primaryEmerald;
-    if (percentage >= 60) return AppColors.primaryMint;
-    if (percentage >= 40) return AppColors.cautionGold;
-    return AppColors.dangerRed;
+  Color _getMatchColor(BuildContext context, int percentage) {
+    if (percentage >= 80) return context.accentPrimary;
+    if (percentage >= 60) return context.accentSecondary;
+    if (percentage >= 40) return context.accentWarm;
+    return context.accentDanger;
+  }
+
+  Color _getMatchTint(BuildContext context, int percentage) {
+    if (percentage >= 60) return context.pastelSageTint;
+    if (percentage >= 40) return context.pastelPeachTint;
+    return context.pastelBlushTint;
   }
 
   @override
@@ -38,78 +44,74 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
     final textPrimary = context.textPrimaryColor;
     final textSecondary = context.textSecondaryColor;
     final borderColor = context.borderColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final match = widget.personalMatch;
-    final matchColor = match != null ? _getMatchColor(match.matchPercentage) : AppColors.primaryEmerald;
+    final matchColor = match != null
+        ? _getMatchColor(context, match.matchPercentage)
+        : context.accentPrimary;
+    final matchTint = match != null
+        ? _getMatchTint(context, match.matchPercentage)
+        : context.pastelSageTint;
 
     return Container(
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BioMinimalUi.cardDecoration(context, radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 1. Personal Match Header Banner
           if (match != null) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: matchColor.withValues(alpha: 0.1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                border: Border(bottom: BorderSide(color: matchColor.withValues(alpha: 0.2))),
+                color: matchTint,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(19)),
+                border: Border(
+                  bottom: BorderSide(color: matchColor.withValues(alpha: 0.18)),
+                ),
               ),
               child: Row(
                 children: [
                   Container(
-                    width: 44,
-                    height: 44,
+                    width: 42,
+                    height: 42,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: matchColor.withValues(alpha: 0.2),
-                      border: Border.all(color: matchColor, width: 2),
+                      color: surfaceColor,
+                      border: Border.all(
+                        color: matchColor.withValues(alpha: 0.45),
+                        width: 1.5,
+                      ),
                     ),
                     child: Center(
                       child: Text(
                         '%${match.matchPercentage}',
                         style: TextStyle(
                           color: matchColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Text(
-                              match.statusLabel,
-                              style: TextStyle(
-                                color: matchColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          match.statusLabel,
+                          style: TextStyle(
+                            color: matchColor,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13.5,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${match.profileName} Sağlık Hedeflerine Göre',
-                          style: TextStyle(color: textSecondary, fontSize: 11),
+                          '${match.profileName} hedeflerine göre',
+                          style: TextStyle(color: textSecondary, fontSize: 11.5),
                         ),
                       ],
                     ),
@@ -125,7 +127,10 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: surfaceColor,
                           borderRadius: BorderRadius.circular(12),
@@ -134,14 +139,18 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.tune_rounded, size: 14, color: AppColors.primaryMint),
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 14,
+                              color: context.accentSecondary,
+                            ),
                             const SizedBox(width: 4),
                             Text(
-                              'Ayarlar',
+                              'Ayarla',
                               style: TextStyle(
                                 color: textPrimary,
                                 fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
@@ -154,50 +163,57 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
           ],
 
           // 2. Score Breakdown Title & Collapse Toggle
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.receipt_long_rounded, color: AppColors.primaryEmerald, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Açık Puan Karnesi',
-                        style: TextStyle(
-                          color: textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Şeffaf puan kesintileri ve kazanımları',
-                        style: TextStyle(color: textSecondary, fontSize: 11),
-                      ),
-                    ],
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: match == null
+                ? BorderRadius.circular(20)
+                : const BorderRadius.vertical(bottom: Radius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 13, 12, 13),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.receipt_long_rounded,
+                    color: context.accentPrimary,
+                    size: 19,
                   ),
-                ),
-                IconButton(
-                  onPressed: () => setState(() => _isExpanded = !_isExpanded),
-                  icon: Icon(
-                    _isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Açık Puan Karnesi',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Puan kesintileri ve kazanımları',
+                          style: TextStyle(color: textSecondary, fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: textSecondary,
                   ),
-                  tooltip: _isExpanded ? 'Daralt' : 'Genişlet',
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
           // 3. Itemized Ledger Rows (Collapsible)
           if (_isExpanded) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               child: Column(
                 children: [
-                  // Universal OrganicScore factors
                   if (widget.scoreResult.factors.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -208,43 +224,44 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                       ),
                     )
                   else
-                    ...widget.scoreResult.factors.map((f) => _buildFactorTile(
-                          context,
-                          factor: f,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          borderColor: borderColor,
-                        )),
-
-                  // Personal Match adjustments
+                    ...widget.scoreResult.factors.map(
+                      (f) => _buildFactorTile(
+                        context,
+                        factor: f,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                      ),
+                    ),
                   if (match != null && match.personalFactors.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 6,
+                      ),
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Kişisel Hassasiyet Etkileri:',
+                        'Kişisel Hassasiyet Etkileri',
                         style: TextStyle(
-                          color: Colors.purpleAccent.shade100,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                          color: context.accentLavender,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
-                    ...match.personalFactors.map((f) => _buildPersonalFactorTile(
-                          context,
-                          factor: f,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          borderColor: borderColor,
-                        )),
+                    ...match.personalFactors.map(
+                      (f) => _buildPersonalFactorTile(
+                        context,
+                        factor: f,
+                        textPrimary: textPrimary,
+                        textSecondary: textSecondary,
+                      ),
+                    ),
                   ],
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -255,29 +272,30 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
     required ScoreFactor factor,
     required Color textPrimary,
     required Color textSecondary,
-    required Color borderColor,
   }) {
     final bool isBonus = factor.isPositive && factor.impact > 0;
     final bool isZeroNeutral = factor.impact == 0;
     final Color badgeColor = isBonus
-        ? AppColors.primaryEmerald
+        ? context.accentPrimary
         : isZeroNeutral
-            ? AppColors.primaryMint
-            : AppColors.dangerRed;
+            ? context.accentSecondary
+            : context.accentDanger;
+    final Color tileBg = isBonus || isZeroNeutral
+        ? context.pastelSageTint
+        : context.pastelBlushTint;
 
     final String impactText = isBonus
         ? '+${factor.impact}'
         : isZeroNeutral
-            ? '✓ Temiz'
+            ? 'Temiz'
             : '${factor.impact}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.05),
+        color: tileBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: badgeColor.withValues(alpha: 0.18)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,19 +303,19 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.15),
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               impactText,
               style: TextStyle(
                 color: badgeColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                fontSize: 11.5,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,20 +328,27 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                         style: TextStyle(
                           color: textPrimary,
                           fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                     if (factor.standardRef != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: borderColor.withValues(alpha: 0.3),
+                          color: context.surfaceColor,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           factor.standardRef!,
-                          style: TextStyle(color: textSecondary, fontSize: 9, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: textSecondary,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                   ],
@@ -331,7 +356,7 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                 const SizedBox(height: 2),
                 Text(
                   factor.description,
-                  style: TextStyle(color: textSecondary, fontSize: 11),
+                  style: TextStyle(color: textSecondary, fontSize: 11.5),
                 ),
               ],
             ),
@@ -346,18 +371,17 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
     required ScoreFactor factor,
     required Color textPrimary,
     required Color textSecondary,
-    required Color borderColor,
   }) {
     final bool isBonus = factor.isPositive && factor.impact >= 0;
-    final Color badgeColor = isBonus ? Colors.tealAccent.shade400 : Colors.deepOrangeAccent;
+    final Color badgeColor =
+        isBonus ? context.accentPrimary : context.accentWarm;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.purple.withValues(alpha: 0.06),
+        color: context.pastelLavenderTint,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.purple.withValues(alpha: 0.2)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,19 +389,19 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.15),
+              color: context.surfaceColor,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
               factor.impact > 0 ? '+${factor.impact}%' : '${factor.impact}%',
               style: TextStyle(
                 color: badgeColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                fontSize: 11.5,
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,13 +411,13 @@ class _TransparentScoreCardState extends State<TransparentScoreCard> {
                   style: TextStyle(
                     color: textPrimary,
                     fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   factor.description,
-                  style: TextStyle(color: textSecondary, fontSize: 11),
+                  style: TextStyle(color: textSecondary, fontSize: 11.5),
                 ),
               ],
             ),

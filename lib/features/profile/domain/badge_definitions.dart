@@ -192,10 +192,9 @@ class BadgeDefinitions {
   ];
 
   static BadgeItem? findById(String id) {
-    try {
-      return allBadges.firstWhere((b) => b.id == id);
-    } catch (_) {
-      return null;
+    for (final b in allBadges) {
+      if (b.id == id) return b;
     }
+    return null;
   }
 }

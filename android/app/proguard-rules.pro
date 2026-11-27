@@ -2,3 +2,17 @@
 -dontwarn com.google.mlkit.**
 -keep class com.google_mlkit_text_recognition.** { *; }
 -dontwarn com.google_mlkit_text_recognition.**
+-keep class com.google.android.gms.ads.** { *; }
+-dontwarn com.google.android.gms.ads.**
+-keep class com.google.android.gms.auth.** { *; }
+-dontwarn com.google.android.gms.auth.**
+-keep class com.google.android.gms.common.** { *; }
+-dontwarn com.google.android.gms.common.**
+-keep class dev.steenbakker.mobile_scanner.** { *; }
+-dontwarn dev.steenbakker.mobile_scanner.**
+-keep class com.tekartik.sqflite.** { *; }
+-dontwarn com.tekartik.sqflite.**
+-keep class io.flutter.plugins.** { *; }
+-dontwarn io.flutter.plugins.**
+-dontwarn javax.annotation.**
+-dontwarn com.google.errorprone.annotations.**

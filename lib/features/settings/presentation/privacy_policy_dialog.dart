@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/config/kilerce_contact_config.dart';
 import '../../../core/theme/app_theme.dart';
 
 class PrivacyPolicyDialog {
@@ -57,7 +58,7 @@ class PrivacyPolicyDialog {
                     _buildSectionTitle(context, '1. Veri Gizliliği İlkesi'),
                     _buildSectionBody(
                       context,
-                      'OrganicScore uygulaması olarak kişisel verilerinizin gizliliğine ve güvenliğine en üst düzeyde önem veriyoruz. Uygulamamız kişisel kimlik verilerinizi, adınızı veya iletişim bilgilerinizi kesinlikle toplamaz veya üçüncü taraflarla paylaşmaz.',
+                      'Kilerce uygulaması olarak kişisel verilerinizin gizliliğine ve güvenliğine en üst düzeyde önem veriyoruz. Uygulamamız kişisel kimlik verilerinizi, adınızı veya iletişim bilgilerinizi izniniz olmadan toplamaz veya üçüncü taraflarla paylaşmaz.',
                     ),
                     const SizedBox(height: 14),
                     _buildSectionTitle(context, '2. Kamera İzni Kullanımı'),
@@ -81,7 +82,7 @@ class PrivacyPolicyDialog {
                     _buildSectionTitle(context, '5. İletişim & Destek'),
                     _buildSectionBody(
                       context,
-                      'Her türlü soru, bildirim veya veri talepleriniz için destek@organicscore.app adresi üzerinden ekibimizle iletişime geçebilirsiniz.',
+                      'Her türlü soru, bildirim veya veri talepleriniz için ${KilerceContactConfig.supportEmail} adresi üzerinden ekibimizle iletişime geçebilirsiniz.',
                     ),
                     const SizedBox(height: 20),
                   ],

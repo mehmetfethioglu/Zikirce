@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/services/kilerce_backup_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../domain/google_auth_sync_service.dart';
 import '../domain/user_profile_service.dart';
@@ -232,80 +233,80 @@ class _GoogleAccountCardState extends State<GoogleAccountCard> {
     );
   }
 
-  void _handleOfflineShareBackup() {
-    final backupJson = UserProfileService.instance.exportBackupJson();
-    Share.share(
+  Future<void> _handleOfflineShareBackup() async {
+    final backupJson = await KilerceBackupService.exportFullBackupJson();
+    await Share.share(
       backupJson,
-      subject: 'OrganicScore Profil & Rozet Yedeği (${DateTime.now().toString().substring(0, 10)})',
+      subject: 'Kilerce Tam Yedeği (${DateTime.now().toString().substring(0, 10)})',
     );
   }
 
-  void _showOfflineRestoreDialog() {
+  Future<void> _showOfflineRestoreDialog() async {
     final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('JSON Yedeğinden Yükle', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Daha önce kopyaladığınız JSON yedek metnini buraya yapıştırın:',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: '{"app": "OrganicScore", ...}',
-                border: OutlineInputBorder(),
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: context.surfaceColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('JSON Yedeğinden Yükle', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Daha önce kopyaladığınız JSON yedek metnini buraya yapıştırın:',
+                style: TextStyle(fontSize: 12),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: '{"app": "Kilerce", ...}',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Vazgeç'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final jsonStr = controller.text.trim();
+                if (jsonStr.isNotEmpty) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final success = await KilerceBackupService.importFullBackupJson(jsonStr);
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    messenger.showSnackBar(
+                      SnackBar(
+                        backgroundColor: success ? AppColors.primaryEmerald : AppColors.dangerRed,
+                        content: Text(
+                          success
+                              ? 'Kiler, tarif ve profil verileriniz başarıyla geri yüklendi!'
+                              : 'Hata: Geçersiz yedekleme dosyası formatı.',
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryEmerald,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Geri Yükle'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.dispose();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final jsonStr = controller.text.trim();
-              if (jsonStr.isNotEmpty) {
-                final messenger = ScaffoldMessenger.of(context);
-                final success = await UserProfileService.instance.importBackupJson(jsonStr);
-                if (ctx.mounted) {
-                  controller.dispose();
-                  Navigator.pop(ctx);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      backgroundColor: success ? AppColors.primaryEmerald : AppColors.dangerRed,
-                      content: Text(
-                        success
-                            ? 'Profil ve rozetleriniz başarıyla geri yüklendi!'
-                            : 'Hata: Geçersiz yedekleme dosyası formatı.',
-                      ),
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryEmerald,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Geri Yükle'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   @override

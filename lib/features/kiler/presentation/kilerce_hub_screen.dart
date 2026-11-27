@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/kilerce_logo_mark.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../onboarding/domain/user_guide_service.dart';
+import '../../onboarding/presentation/kilerce_user_guide_screen.dart';
+import '../../profile/presentation/widgets/profile_avatar_menu_button.dart';
 import '../../recipes/domain/meal_module_notifier.dart';
 import '../../recipes/presentation/recipe_explorer_screen.dart';
 import '../../scanner/presentation/scanner_screen.dart';
-import '../../taklit_tagsis/presentation/taklit_tagsis_screen.dart';
 import '../domain/kiler_service.dart';
 import 'kiler_pantry_screen.dart';
 import 'shopping_and_profile_screen.dart';
@@ -20,8 +23,13 @@ class KilerceHubController {
 
 class KilerceHubScreen extends StatefulWidget {
   final int initialTabIndex;
+  final bool autoShowUserGuide;
 
-  const KilerceHubScreen({super.key, this.initialTabIndex = 0});
+  const KilerceHubScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.autoShowUserGuide = true,
+  });
 
   @override
   State<KilerceHubScreen> createState() => _KilerceHubScreenState();
@@ -35,7 +43,21 @@ class _KilerceHubScreenState extends State<KilerceHubScreen> {
     super.initState();
     _currentIndex = widget.initialTabIndex;
     KilerceHubController._tabSwitcher = _switchTab;
-    KilerService.instance.loadAll();
+    if (KilerService.instance.value.pantryItems.isEmpty &&
+        !KilerService.instance.value.isLoading) {
+      KilerService.instance.loadAll();
+    }
+    if (widget.autoShowUserGuide) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _maybeShowFirstLaunchGuide();
+      });
+    }
+  }
+
+  Future<void> _maybeShowFirstLaunchGuide() async {
+    final completed = await UserGuideService.instance.hasCompleted();
+    if (completed || !mounted) return;
+    await KilerceUserGuideScreen.show(context);
   }
 
   @override
@@ -84,7 +106,7 @@ class _KilerceHubScreenState extends State<KilerceHubScreen> {
         bottom: false,
         child: Column(
           children: [
-            _KilerceTopHudBar(
+            KilerceTopHudBar(
               currentIndex: _currentIndex,
               onTabSelected: _switchTab,
             ),
@@ -105,149 +127,70 @@ class _KilerceHubScreenState extends State<KilerceHubScreen> {
   }
 }
 
-class _KilerceTopHudBar extends StatelessWidget {
+class KilerceTopHudBar extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTabSelected;
 
-  const _KilerceTopHudBar({
+  const KilerceTopHudBar({
+    super.key,
     required this.currentIndex,
     required this.onTabSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDarkMode;
-
-    return ValueListenableBuilder<KilerState>(
-      valueListenable: KilerService.instance,
-      builder: (context, state, _) {
-        return Container(
-          padding: const EdgeInsets.fromLTRB(18, 10, 14, 10),
-          decoration: BoxDecoration(
-            color: Theme.of(context).scaffoldBackgroundColor,
-            border: Border(
-              bottom: BorderSide(color: context.cardBorderColor, width: 1),
-            ),
-          ),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => onTabSelected(0),
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(color: context.cardBorderColor, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => onTabSelected(0),
+            behavior: HitTestBehavior.opaque,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const KilerceLogoMark(
+                  size: 32,
+                  borderRadius: 10,
+                ),
+                const SizedBox(width: 7),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const KilerceLogoMark(
-                      size: 38,
-                      borderRadius: 11,
+                    Text(
+                      'Kilerce',
+                      style: TextStyle(
+                        color: context.textPrimaryColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Kilerce',
-                          style: TextStyle(
-                            color: context.textPrimaryColor,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                        const Text(
+                    Text(
+                      AppLocalizations.of(context)?.brandTagline ??
                           'BARKOD • DOLAP • TARİF',
-                          style: TextStyle(
-                            color: AppColors.primaryEmerald,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.7,
-                          ),
-                        ),
-                      ],
+                      style: TextStyle(
+                        color: context.accentPrimary,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const Spacer(),
-
-              // Pantry item count & health badge
-              GestureDetector(
-                onTap: () => onTabSelected(1),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryEmerald.withValues(alpha: 0.13),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppColors.primaryEmerald.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🥗', style: TextStyle(fontSize: 13)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '${state.pantryItems.length} Ürün • Skor ${state.averageHealthScore}',
-                        style: TextStyle(
-                          color: context.textPrimaryColor,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Ministry Taklit/Tagsis Button
-              IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const TaklitTagsisScreen(),
-                    ),
-                  );
-                },
-                tooltip: 'Bakanlık Taklit & Tağşiş Listesi',
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.dangerRed.withValues(alpha: 0.12),
-                  padding: const EdgeInsets.all(8),
-                  minimumSize: const Size(34, 34),
-                ),
-                icon: const Icon(
-                  Icons.gpp_maybe_rounded,
-                  color: AppColors.dangerRed,
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 4),
-
-              // Theme Toggle
-              IconButton(
-                onPressed: () => ThemeController.instance.setThemeMode(
-                  isDark ? ThemeMode.light : ThemeMode.dark,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: context.surfaceColor,
-                  padding: const EdgeInsets.all(8),
-                  minimumSize: const Size(34, 34),
-                ),
-                icon: Icon(
-                  isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  color: isDark ? AppColors.cautionGold : context.textPrimaryColor,
-                  size: 18,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+          const Spacer(),
+          const ProfileAvatarMenuButton(),
+        ],
+      ),
     );
   }
 }
@@ -291,7 +234,7 @@ class _KilerceBottomDock extends ConsumerWidget {
                     index: 0,
                     currentIndex: currentIndex,
                     icon: Icons.kitchen_rounded,
-                    label: 'Kilerim',
+                    label: AppLocalizations.of(context)?.tabPantry ?? 'Kilerim',
                     badgeText: rescueCount > 0 ? '$rescueCount' : null,
                     onTap: () => onTap(0),
                   ),
@@ -299,7 +242,7 @@ class _KilerceBottomDock extends ConsumerWidget {
                     index: 1,
                     currentIndex: currentIndex,
                     icon: Icons.restaurant_menu_rounded,
-                    label: 'Yemek & Tarif',
+                    label: AppLocalizations.of(context)?.tabRecipes ?? 'Yemek & Tarif',
                     badgeText: promptCount > 0 ? '$promptCount' : null,
                     onTap: () => onTap(1),
                   ),
@@ -307,14 +250,14 @@ class _KilerceBottomDock extends ConsumerWidget {
                     index: 2,
                     currentIndex: currentIndex,
                     icon: Icons.qr_code_scanner_rounded,
-                    label: 'Barkod & Analiz',
+                    label: AppLocalizations.of(context)?.tabScanner ?? 'Barkod & Analiz',
                     onTap: () => onTap(2),
                   ),
                   _DockTabItem(
                     index: 3,
                     currentIndex: currentIndex,
                     icon: Icons.shopping_cart_checkout_rounded,
-                    label: 'Alışveriş & Profil',
+                    label: AppLocalizations.of(context)?.tabShoppingProfile ?? 'Alışveriş & Profil',
                     badgeText: shoppingCount > 0 ? '$shoppingCount' : null,
                     onTap: () => onTap(3),
                   ),
@@ -348,67 +291,73 @@ class _DockTabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSelected = index == currentIndex;
-    final Color activeColor = AppColors.primaryEmerald;
+    final Color activeColor = context.accentPrimary;
     final Color inactiveColor = context.textSecondaryColor;
 
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withValues(alpha: 0.14)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? activeColor : inactiveColor,
-                  size: 22,
-                ),
-                if (badgeText != null)
-                  Positioned(
-                    right: -8,
-                    top: -5,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.cautionGold,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        badgeText!,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w900,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: badgeText != null ? '$label ($badgeText)' : label,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? context.pastelSageTint : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    icon,
+                    color: isSelected ? activeColor : inactiveColor,
+                    size: 22,
+                  ),
+                  if (badgeText != null)
+                    Positioned(
+                      right: -8,
+                      top: -5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.pastelPeachTint,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: context.accentWarm.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          badgeText!,
+                          style: TextStyle(
+                            color: context.accentWarm,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? activeColor : inactiveColor,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? activeColor : inactiveColor,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -3,8 +3,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../domain/recipe_models.dart';
 import 'recipe_visual_header.dart';
 
-/// Compact recipe summary card displaying critical visual, pantry-readiness,
-/// core nutrition metrics, and a direct calendar-add action.
+/// Editorial full-bleed recipe card keeping dish imagery and title front and center
+/// with minimal monochrome overlay icons and zero text clutter.
 class RecipeMatchCard extends StatelessWidget {
   final EvaluatedRecipeMatch match;
   final VoidCallback onTap;
@@ -21,245 +21,316 @@ class RecipeMatchCard extends StatelessWidget {
     this.isFavorite,
   });
 
+  static const Map<String, IconData> _categoryIcons = {
+    RecipeCategoryRegistry.soup: Icons.soup_kitchen_rounded,
+    RecipeCategoryRegistry.breakfast: Icons.egg_alt_rounded,
+    RecipeCategoryRegistry.meatFish: Icons.set_meal_rounded,
+    RecipeCategoryRegistry.vegOliveOil: Icons.eco_rounded,
+    RecipeCategoryRegistry.legumesGrains: Icons.rice_bowl_rounded,
+    RecipeCategoryRegistry.saladMeze: Icons.spa_rounded,
+    RecipeCategoryRegistry.healthyDessertKids: Icons.cake_rounded,
+  };
+
+  /// Returns the shared minimal monochrome icon for a recipe category.
+  static IconData iconForCategory(String category) =>
+      _categoryIcons[category] ?? Icons.restaurant_rounded;
+
   @override
   Widget build(BuildContext context) {
     final recipe = match.recipe;
     final effectiveFavorite = isFavorite ?? match.isFavorite;
-    final accentBorder = !match.isProfileSafe
-        ? AppColors.dangerRed.withValues(alpha: 0.5)
-        : match.preventsFoodWaste
-            ? AppColors.cautionGold.withValues(alpha: 0.48)
-            : match.isReadyToCook
-                ? AppColors.primaryEmerald.withValues(alpha: 0.42)
-                : null;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BioMinimalUi.cardDecoration(
-            context,
-            accentBorder: accentBorder,
-            radius: 20,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RecipeVisualHeader(
-                recipe: recipe,
-                height: 124,
-                combinedScore: match.combinedHealthScore,
-              ),
-              const SizedBox(height: 10),
-              _TitleAndFavoriteRow(
-                title: recipe.title,
-                isFavorite: effectiveFavorite,
-                onToggleFavorite: onToggleFavorite,
-              ),
-              const SizedBox(height: 4),
-              _CompactCriticalMetaRow(recipe: recipe),
-              const SizedBox(height: 10),
-              _BottomActionRow(
-                match: match,
-                onQuickAddToPlan: onQuickAddToPlan,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TitleAndFavoriteRow extends StatelessWidget {
-  final String title;
-  final bool isFavorite;
-  final VoidCallback? onToggleFavorite;
-
-  const _TitleAndFavoriteRow({
-    required this.title,
-    required this.isFavorite,
-    required this.onToggleFavorite,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: context.textPrimaryColor,
-              fontSize: 15.5,
-              fontWeight: FontWeight.w800,
-              height: 1.2,
-            ),
-          ),
-        ),
-        if (onToggleFavorite != null) ...[
-          const SizedBox(width: 8),
-          Tooltip(
-            message: isFavorite ? 'Favoriden Çıkar' : 'Favorilere Ekle',
-            child: InkWell(
-              onTap: onToggleFavorite,
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.all(5),
-                decoration: BoxDecoration(
-                  color: context.subtleSurfaceColor,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.cardBorderColor),
-                ),
-                child: Icon(
-                  isFavorite
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  size: 18,
-                  color: isFavorite
-                      ? AppColors.dangerRed
-                      : context.textSecondaryColor,
-                ),
-              ),
-            ),
-          ),
-        ] else if (isFavorite) ...[
-          const SizedBox(width: 6),
-          const Icon(
-            Icons.favorite_rounded,
-            size: 18,
-            color: AppColors.dangerRed,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _CompactCriticalMetaRow extends StatelessWidget {
-  final KilerRecipe recipe;
-
-  const _CompactCriticalMetaRow({required this.recipe});
-
-  @override
-  Widget build(BuildContext context) {
     final int minutes =
         recipe.totalMinutes > 0 ? recipe.totalMinutes : recipe.prepMinutes;
-    return Text(
-      '⏱️ $minutes dk  •  🔥 ${recipe.calories} kcal  •  💪 ${recipe.proteinGrams}g Prot.  •  📍 ${recipe.originCity}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: context.textSecondaryColor,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
+    final IconData categoryIcon = iconForCategory(recipe.category);
+
+    return Container(
+      height: 192,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: context.cardBorderColor, width: 1),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(21),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            RecipeVisualHeader(
+              recipe: recipe,
+              height: 192,
+              showOverlays: false,
+              borderRadius: BorderRadius.zero,
+            ),
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x28000000),
+                      Color(0x00000000),
+                      Color(0xD6060C0A),
+                    ],
+                    stops: [0.0, 0.42, 1.0],
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 13),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            recipe.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.2,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            '$minutes dk • ${recipe.calories} kcal',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.78),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  _GlassCircleBadge(
+                    tooltip: recipe.category,
+                    child: Icon(categoryIcon, color: Colors.white, size: 16),
+                  ),
+                  const SizedBox(width: 6),
+                  _PantryStatusDot(match: match),
+                  const Spacer(),
+                  _ScoreNumberPill(score: match.combinedHealthScore),
+                  if (onToggleFavorite != null) ...[
+                    const SizedBox(width: 6),
+                    _GlassCircleButton(
+                      tooltip: effectiveFavorite
+                          ? 'Favoriden Çıkar'
+                          : 'Favorilere Ekle',
+                      onTap: onToggleFavorite!,
+                      child: Icon(
+                        effectiveFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        size: 17,
+                        color: effectiveFavorite
+                            ? AppColors.dangerRed
+                            : Colors.white,
+                      ),
+                    ),
+                  ] else if (effectiveFavorite) ...[
+                    const SizedBox(width: 6),
+                    const _GlassCircleBadge(
+                      tooltip: 'Favori',
+                      child: Icon(
+                        Icons.favorite_rounded,
+                        size: 16,
+                        color: AppColors.dangerRed,
+                      ),
+                    ),
+                  ],
+                  if (onQuickAddToPlan != null) ...[
+                    const SizedBox(width: 6),
+                    Semantics(
+                      button: true,
+                      label: 'Takvime Ekle',
+                      child: _GlassCircleButton(
+                        tooltip: 'Takvime Ekle',
+                        onTap: onQuickAddToPlan!,
+                        child: const Icon(
+                          Icons.add_rounded,
+                          size: 19,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _BottomActionRow extends StatelessWidget {
+class _PantryStatusDot extends StatelessWidget {
   final EvaluatedRecipeMatch match;
-  final VoidCallback? onQuickAddToPlan;
 
-  const _BottomActionRow({
-    required this.match,
-    required this.onQuickAddToPlan,
-  });
+  const _PantryStatusDot({required this.match});
 
   @override
   Widget build(BuildContext context) {
-    final Color statusColor = !match.isProfileSafe
-        ? AppColors.dangerRed
-        : match.isReadyToCook
-            ? AppColors.primaryEmerald
-            : AppColors.cautionGold;
+    if (!match.isProfileSafe) {
+      final warningText = match.profileWarnings.isNotEmpty
+          ? match.profileWarnings.first
+          : 'Aile profili uyarısı';
+      return _GlassCircleBadge(
+        tooltip: warningText,
+        child: const Icon(
+          Icons.warning_amber_rounded,
+          color: Color(0xFFF87171),
+          size: 16,
+        ),
+      );
+    }
 
-    final String statusLabel = !match.isProfileSafe
-        ? '⚠️ Profil Uyarısı'
-        : match.isReadyToCook
-            ? '✅ Kilerde Hazır'
-            : '🛒 ${match.missingRequiredTags.length} Eksik';
+    if (match.isReadyToCook) {
+      return const _GlassCircleBadge(
+        tooltip: 'Kilerde hazır',
+        child: Icon(
+          Icons.check_circle_rounded,
+          color: AppColors.primaryEmerald,
+          size: 17,
+        ),
+      );
+    }
 
-    return Row(
-      children: [
-        Expanded(
-          child: Row(
-            children: [
-              Flexible(
-                child: _StatusBadgePill(
-                  label: statusLabel,
-                  color: statusColor,
-                ),
-              ),
-              if (match.preventsFoodWaste) ...[
-                const SizedBox(width: 6),
-                const _StatusBadgePill(
-                  label: '♻️',
-                  color: AppColors.cautionGold,
-                ),
-              ],
-            ],
+    final missingCount = match.missingRequiredTags.length;
+    return Tooltip(
+      message: '$missingCount malzeme eksik',
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0x78000000),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        ),
+        child: Text(
+          '-$missingCount',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.85),
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
           ),
         ),
-        if (onQuickAddToPlan != null) ...[
-          const SizedBox(width: 8),
-          ElevatedButton.icon(
-            onPressed: onQuickAddToPlan,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryEmerald,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            icon: const Icon(Icons.add_rounded, size: 17),
-            label: const Text(
-              'Takvime Ekle',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
 
-class _StatusBadgePill extends StatelessWidget {
-  final String label;
-  final Color color;
+class _ScoreNumberPill extends StatelessWidget {
+  final int score;
 
-  const _StatusBadgePill({
-    required this.label,
-    required this.color,
-  });
+  const _ScoreNumberPill({required this.score});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: color.withValues(alpha: 0.42)),
+        color: const Color(0x78000000),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
       child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
+        '$score',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11.5,
           fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassCircleBadge extends StatelessWidget {
+  final String tooltip;
+  final Widget child;
+
+  const _GlassCircleBadge({
+    required this.tooltip,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0x78000000),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _GlassCircleButton extends StatelessWidget {
+  final String tooltip;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _GlassCircleButton({
+    required this.tooltip,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: const Color(0x78000000),
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: child,
+          ),
         ),
       ),
     );

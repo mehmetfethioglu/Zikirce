@@ -1,0 +1,1 @@
+Kilerce v3.3.8: Simplified Ministry Blacklist cards and added a profile photo menu in the top bar for quick account & settings access. Morning reminders now alert you about missing ingredients for today's menu. Added a first-launch User Guide and a Recipe Photo Feedback option to share your own dish photos.

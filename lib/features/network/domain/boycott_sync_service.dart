@@ -38,7 +38,7 @@ class BoycottSyncService {
       // 304 Not Modified -> Local SQLite list is already up to date!
       if (response.statusCode == 304) {
         if (kDebugMode) {
-          print('BoycottSyncService: Boykot listesi güncel (304 Not Modified).');
+          debugPrint('BoycottSyncService: Boykot listesi güncel (304 Not Modified).');
         }
         return true;
       }
@@ -75,19 +75,39 @@ class BoycottSyncService {
         }
 
         if (kDebugMode) {
-          print('BoycottSyncService: ${items.length} boykot kaydı başarıyla senkronize edildi.');
+          debugPrint('BoycottSyncService: ${items.length} boykot kaydı başarıyla senkronize edildi.');
         }
         return true;
       }
     } catch (e) {
       if (kDebugMode) {
-        print('BoycottSyncService Sync Error: $e');
+        debugPrint('BoycottSyncService Sync Error: $e');
       }
     } finally {
       _isSyncing = false;
     }
 
     return false;
+  }
+
+  /// Replays a queued boycott dispute payload to the Cloudflare Edge Worker.
+  static Future<bool> replayQueuedBoycottReport(Map<String, dynamic> payload) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_boycottReportUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': 'KilerceApp/3.2',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('BoycottSyncService.replayQueuedBoycottReport error: $e');
+      return false;
+    }
   }
 
   /// Submits a user report / dispute (e.g. false positive like Eti Lifalif, or missing boycotted brand)
@@ -108,16 +128,21 @@ class BoycottSyncService {
       'reported_at': DateTime.now().millisecondsSinceEpoch,
     };
 
+    int? queuedRowId;
+    Database? db;
+
     // 1. Record locally in crowdsourced_queue for offline durability
     try {
-      final Database db = await DatabaseHelper().database;
-      await db.insert('crowdsourced_queue', {
+      db = await DatabaseHelper().database;
+      queuedRowId = await db.insert('crowdsourced_queue', {
         'type': 'BOYCOTT_REPORT',
         'barcode': barcode.isNotEmpty ? barcode : 'UNKNOWN',
         'payload_json': jsonEncode(payload),
         'status': 'PENDING',
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('BoycottSyncService.reportBoycottDispute queue insert error: $e');
+    }
 
     // 2. Transmit to Cloudflare Edge Worker
     try {
@@ -126,20 +151,27 @@ class BoycottSyncService {
             Uri.parse(_boycottReportUrl),
             headers: {
               'Content-Type': 'application/json',
-              'User-Agent': 'OrganicScoreApp/1.0',
+              'User-Agent': 'KilerceApp/3.2',
             },
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 6));
 
-      // Record contribution points & badge unlocks
       UserProfileService.instance.recordBoycottReport();
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        if (db != null && queuedRowId != null) {
+          await db.update(
+            'crowdsourced_queue',
+            {'status': 'SYNCED'},
+            where: 'id = ?',
+            whereArgs: [queuedRowId],
+          );
+        }
         return true;
       }
-    } catch (_) {
-      // Even if offline, local queue was stored so user earns recognition
+    } catch (e) {
+      debugPrint('BoycottSyncService.reportBoycottDispute post error: $e');
       UserProfileService.instance.recordBoycottReport();
     }
 

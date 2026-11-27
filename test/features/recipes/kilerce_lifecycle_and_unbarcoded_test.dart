@@ -78,6 +78,8 @@ void main() {
       '2. Uzun süre bekleyen ürünler isLongWaiting ile yakalanır ve kurtarma tariflerinde önceliklenir',
       () {
         final now = DateTime(2026, 11, 18, 10, 0);
+        PantryItem.clock = () => now;
+        addTearDown(() => PantryItem.clock = DateTime.now);
         final stagnantFridgeEgg = buildItem(
           id: 10,
           name: 'Köy Yumurtası',

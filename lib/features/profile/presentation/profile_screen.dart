@@ -1,4 +1,5 @@
 import '../../../core/services/changelog_service.dart';
+import '../../../core/services/kilerce_backup_service.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -882,45 +883,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // --- Modals & Handlers ---
 
-  void _showEditNameDialog(BuildContext context, String currentName) {
+  Future<void> _showEditNameDialog(BuildContext context, String currentName) async {
     final controller = TextEditingController(text: currentName);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Kullanıcı Adını Değiştir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Yeni adınız...',
-            border: OutlineInputBorder(),
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: context.surfaceColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Kullanıcı Adını Değiştir', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              hintText: 'Yeni adınız...',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Vazgeç'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newName = controller.text.trim();
+                if (newName.isNotEmpty) {
+                  UserProfileService.instance.updateDisplayName(newName);
+                }
+                Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryEmerald, foregroundColor: Colors.white),
+              child: const Text('Kaydet'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.dispose();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newName = controller.text.trim();
-              if (newName.isNotEmpty) {
-                UserProfileService.instance.updateDisplayName(newName);
-              }
-              controller.dispose();
-              Navigator.pop(ctx);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryEmerald, foregroundColor: Colors.white),
-            child: const Text('Kaydet'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   void _showAvatarPickerModal(BuildContext context) {
@@ -1457,80 +1458,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _handleOfflineShareBackup() {
-    final backupJson = UserProfileService.instance.exportBackupJson();
-    Share.share(
+  Future<void> _handleOfflineShareBackup() async {
+    final backupJson = await KilerceBackupService.exportFullBackupJson();
+    await Share.share(
       backupJson,
-      subject: 'OrganicScore Profil & Rozet Yedeği (${DateTime.now().toString().substring(0, 10)})',
+      subject: 'Kilerce Tam Yedeği (${DateTime.now().toString().substring(0, 10)})',
     );
   }
 
-  void _showOfflineRestoreDialog(BuildContext context) {
+  Future<void> _showOfflineRestoreDialog(BuildContext context) async {
     final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('JSON Yedeğinden Yükle', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Daha önce kopyaladığınız JSON yedek metnini buraya yapıştırın:',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: controller,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: '{"app": "OrganicScore", ...}',
-                border: OutlineInputBorder(),
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: context.surfaceColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('JSON Yedeğinden Yükle', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Daha önce kopyaladığınız JSON yedek metnini buraya yapıştırın:',
+                style: TextStyle(fontSize: 12),
               ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  hintText: '{"app": "Kilerce", ...}',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Vazgeç'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final jsonStr = controller.text.trim();
+                if (jsonStr.isNotEmpty) {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final success = await KilerceBackupService.importFullBackupJson(jsonStr);
+                  if (ctx.mounted) {
+                    Navigator.pop(ctx);
+                    messenger.showSnackBar(
+                      SnackBar(
+                        backgroundColor: success ? AppColors.primaryEmerald : AppColors.dangerRed,
+                        content: Text(
+                          success
+                              ? 'Kiler, tarif ve profil verileriniz başarıyla geri yüklendi!'
+                              : 'Hata: Geçersiz yedekleme dosyası formatı.',
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryEmerald,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Geri Yükle'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              controller.dispose();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Vazgeç'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final jsonStr = controller.text.trim();
-              if (jsonStr.isNotEmpty) {
-                final messenger = ScaffoldMessenger.of(context);
-                final success = await UserProfileService.instance.importBackupJson(jsonStr);
-                if (ctx.mounted) {
-                  controller.dispose();
-                  Navigator.pop(ctx);
-                  messenger.showSnackBar(
-                    SnackBar(
-                      backgroundColor: success ? AppColors.primaryEmerald : AppColors.dangerRed,
-                      content: Text(
-                        success
-                            ? 'Profil ve rozetleriniz başarıyla geri yüklendi!'
-                            : 'Hata: Geçersiz yedekleme dosyası formatı.',
-                      ),
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryEmerald,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Geri Yükle'),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Widget _buildChangelogTile(

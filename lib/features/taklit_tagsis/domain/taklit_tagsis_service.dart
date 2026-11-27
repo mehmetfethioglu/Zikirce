@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -220,7 +221,9 @@ class TaklitTagsisService {
           return item;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('TaklitTagsisService.checkTaklitTagsisStatus error: $e');
+    }
     return null;
   }
 
@@ -238,7 +241,8 @@ class TaklitTagsisService {
       );
 
       return results.map((row) => TaklitTagsisItem.fromMap(row)).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('TaklitTagsisService.searchDatabase error: $e');
       return [];
     }
   }
@@ -252,7 +256,8 @@ class TaklitTagsisService {
         orderBy: 'announced_at DESC',
       );
       return results.map((row) => TaklitTagsisItem.fromMap(row)).toList();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('TaklitTagsisService.getAllItems error: $e');
       return [];
     }
   }
@@ -337,7 +342,9 @@ class TaklitTagsisService {
       if (ts != null) {
         return DateTime.fromMillisecondsSinceEpoch(ts);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('TaklitTagsisService.getLastSyncDate error: $e');
+    }
     return null;
   }
 
@@ -445,7 +452,9 @@ class TaklitTagsisService {
           }
         }
       }
-    } catch (_) {} finally {
+    } catch (e) {
+      debugPrint('TaklitTagsisService._fetchFromMinistryDirectly error: $e');
+    } finally {
       client.close();
     }
     return items;
@@ -457,7 +466,7 @@ class TaklitTagsisService {
 
     // Step 1: Cloudflare Edge Proxy Check
     try {
-      final url = Uri.parse('https://organicscore-edge-proxy.workers.dev/api/taklit-tagsis');
+      final url = Uri.parse('https://organicscore.akarworks.workers.dev/api/taklit-tagsis');
       final response = await http.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
@@ -466,7 +475,9 @@ class TaklitTagsisService {
           items = decoded;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('TaklitTagsisService edge sync note: $e');
+    }
 
     // Step 2: Direct Ministry Fallback Scraper if Edge has no fresh data
     if (items.isEmpty) {
@@ -496,7 +507,9 @@ class TaklitTagsisService {
       await prefs.setInt(_prefLastSyncKey, DateTime.now().millisecondsSinceEpoch);
 
       return addedCount;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('TaklitTagsisService DB insert error: $e');
+    }
     return 0;
   }
 }

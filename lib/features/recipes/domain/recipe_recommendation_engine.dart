@@ -42,12 +42,16 @@ class RecipeRecommendationEngine {
         .trim();
   }
 
-  /// Builds a combined ID-to-recipe index including built-in and custom recipes.
+  /// Builds a combined ID-to-recipe index including built-in, custom, and cloud recipes.
   static Map<String, KilerRecipe> buildRecipeIndex({
     List<KilerRecipe> customRecipes = const [],
+    List<KilerRecipe> additionalRecipes = const [],
+    Map<String, String> builtinImageUrls = const {},
   }) {
     final Map<String, KilerRecipe> index = {
-      for (final recipe in catalog) recipe.id: recipe,
+      for (final recipe in additionalRecipes) recipe.id: recipe,
+      for (final recipe in catalog)
+        recipe.id: _applyBuiltinImageUrl(recipe, builtinImageUrls),
     };
     for (final custom in customRecipes) {
       index[custom.id] = custom;
@@ -55,7 +59,7 @@ class RecipeRecommendationEngine {
     return index;
   }
 
-  /// Evaluates built-in and custom recipes against the current Pantry state and active Family Profile.
+  /// Evaluates built-in, custom, and cloud recipes against the current Pantry state and active Family Profile.
   static List<EvaluatedRecipeMatch> evaluateAll({
     required List<PantryItem> pantryItems,
     FamilyProfile? activeProfile,
@@ -65,6 +69,8 @@ class RecipeRecommendationEngine {
     String? region,
     Set<String> favoriteIds = const {},
     List<KilerRecipe> customRecipes = const [],
+    List<KilerRecipe> additionalRecipes = const [],
+    Map<String, String> builtinImageUrls = const {},
     Map<String, int> cookCounts = const {},
   }) {
     final Set<String> availableTags =
@@ -80,7 +86,11 @@ class RecipeRecommendationEngine {
         .where((t) => t.isNotEmpty)
         .toList();
 
-    final List<KilerRecipe> allRecipes = _mergeCatalogWithCustom(customRecipes);
+    final List<KilerRecipe> allRecipes = _mergeCatalogWithCustom(
+      customRecipes,
+      additionalRecipes: additionalRecipes,
+      builtinImageUrls: builtinImageUrls,
+    );
     final List<EvaluatedRecipeMatch> evaluated = [];
 
     for (final recipe in allRecipes) {
@@ -149,6 +159,7 @@ class RecipeRecommendationEngine {
     FamilyProfile? activeProfile,
     Set<String> favoriteIds = const {},
     List<KilerRecipe> customRecipes = const [],
+    Map<String, String> builtinImageUrls = const {},
     int limit = 6,
   }) {
     if (pantryItems.isEmpty || limit <= 0) return const [];
@@ -158,6 +169,7 @@ class RecipeRecommendationEngine {
       filter: RecipeFilterTab.wasteSaver,
       favoriteIds: favoriteIds,
       customRecipes: customRecipes,
+      builtinImageUrls: builtinImageUrls,
     );
     rescueMatches.sort((a, b) {
       if (a.isReadyToCook != b.isReadyToCook) {
@@ -260,15 +272,42 @@ class RecipeRecommendationEngine {
     );
   }
 
-  static List<KilerRecipe> _mergeCatalogWithCustom(
-    List<KilerRecipe> customRecipes,
+  static KilerRecipe _applyBuiltinImageUrl(
+    KilerRecipe recipe,
+    Map<String, String> builtinImageUrls,
   ) {
-    if (customRecipes.isEmpty) return catalog;
-    final Set<String> customIds = customRecipes.map((e) => e.id).toSet();
-    return [
-      ...customRecipes,
-      ...catalog.where((r) => !customIds.contains(r.id)),
-    ];
+    if (builtinImageUrls.isEmpty) return recipe;
+    final existing = recipe.imageUrl?.trim();
+    if (existing != null && existing.isNotEmpty) return recipe;
+    final signed = builtinImageUrls[recipe.id]?.trim();
+    if (signed == null || signed.isEmpty) return recipe;
+    return recipe.copyWith(imageUrl: signed, photoCredit: 'Kilerce Stüdyo');
+  }
+
+  static List<KilerRecipe> _mergeCatalogWithCustom(
+    List<KilerRecipe> customRecipes, {
+    List<KilerRecipe> additionalRecipes = const [],
+    Map<String, String> builtinImageUrls = const {},
+  }) {
+    if (customRecipes.isEmpty &&
+        additionalRecipes.isEmpty &&
+        builtinImageUrls.isEmpty) {
+      return catalog;
+    }
+    final Set<String> seenIds = {};
+    final List<KilerRecipe> merged = [];
+    for (final custom in customRecipes) {
+      if (seenIds.add(custom.id)) merged.add(custom);
+    }
+    for (final base in catalog) {
+      if (seenIds.add(base.id)) {
+        merged.add(_applyBuiltinImageUrl(base, builtinImageUrls));
+      }
+    }
+    for (final extra in additionalRecipes) {
+      if (seenIds.add(extra.id)) merged.add(extra);
+    }
+    return merged;
   }
 
   static bool _matchesSearch(KilerRecipe recipe, List<String> queryTokens) {

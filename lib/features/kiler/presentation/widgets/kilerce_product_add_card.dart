@@ -47,6 +47,17 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
     return chains;
   }
 
+  String _shortZoneLabel(StorageZone zone) {
+    switch (zone) {
+      case StorageZone.fridge:
+        return 'Buzdolabı';
+      case StorageZone.pantry:
+        return 'Kiler';
+      case StorageZone.freezer:
+        return 'Dondurucu';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -78,9 +89,9 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${zone.emoji} "${widget.productName}"$qtySuffix ${zone.label}na kaydedildi!',
+          '"${widget.productName}"$qtySuffix ${_shortZoneLabel(zone)} alanına kaydedildi.',
         ),
-        backgroundColor: AppColors.primaryEmerald,
+        backgroundColor: context.accentPrimary,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -95,8 +106,8 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('🛒 "${widget.productName}" Alışveriş Listesine eklendi!'),
-        backgroundColor: AppColors.primaryMint,
+        content: Text('"${widget.productName}" alışveriş listesine eklendi.'),
+        backgroundColor: context.accentSecondary,
         duration: const Duration(seconds: 2),
       ),
     );
@@ -104,110 +115,92 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
 
   @override
   Widget build(BuildContext context) {
-    final surfaceColor = context.surfaceColor;
     final textPrimary = context.textPrimaryColor;
-    final textSecondary = context.textSecondaryColor;
     final borderColor = context.cardBorderColor;
     final activeZone = _selectedZone ?? StorageZone.pantry;
     final String? cleanQty = _cleanNetQuantity;
     final List<String> cleanChains = _cleanMarketChains;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surfaceColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.primaryEmerald.withValues(alpha: 0.45),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryEmerald.withValues(alpha: 0.08),
-            blurRadius: 12,
-          ),
-        ],
-      ),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BioMinimalUi.cardDecoration(context, radius: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.kitchen_rounded,
-                  color: AppColors.primaryEmerald,
-                  size: 20,
+              Text(
+                'Kilere Ekle',
+                style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Kilerce Akıllı Envanter',
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Bu ürünü aldınız mı? Dolaba ekleyin, uygun yemek tarifleri açılsın.',
-                      style: TextStyle(color: textSecondary, fontSize: 11.5),
-                    ),
-                  ],
+              if (cleanQty != null || cleanChains.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _KilerHeaderBadges(
+                    netQuantity: cleanQty,
+                    marketChains: cleanChains,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
-          if (cleanQty != null || cleanChains.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _KilerHeaderBadges(
-              netQuantity: cleanQty,
-              marketChains: cleanChains,
-            ),
-          ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: StorageZone.values.map((zone) {
               final isSelected = zone == activeZone;
               return Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  padding: EdgeInsets.only(
+                    right: zone == StorageZone.freezer ? 0 : 6,
+                  ),
                   child: InkWell(
-                    onTap: () => _addToPantry(zone),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 9),
+                    onTap: () => setState(() => _selectedZone = zone),
+                    borderRadius: BorderRadius.circular(12),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 9,
+                        horizontal: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primaryEmerald.withValues(alpha: 0.16)
-                            : Theme.of(context).scaffoldBackgroundColor,
-                        borderRadius: BorderRadius.circular(10),
+                            ? context.pastelSageTint
+                            : context.subtleSurfaceColor,
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: isSelected ? AppColors.primaryEmerald : borderColor,
+                          color: isSelected
+                              ? context.accentPrimary.withValues(alpha: 0.4)
+                              : borderColor,
                         ),
                       ),
-                      child: Column(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(zone.emoji, style: const TextStyle(fontSize: 16)),
-                          const SizedBox(height: 2),
-                          Text(
-                            zone.label.split(' ').first,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? AppColors.primaryEmerald
-                                  : textPrimary,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                          Icon(
+                            zone.icon,
+                            size: 15,
+                            color: isSelected
+                                ? context.accentPrimary
+                                : context.textSecondaryColor,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              _shortZoneLabel(zone),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? context.accentPrimary
+                                    : textPrimary,
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ],
@@ -226,9 +219,10 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
                 child: ElevatedButton.icon(
                   onPressed: () => _addToPantry(activeZone),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryEmerald,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: context.accentPrimary,
+                    foregroundColor: context.onAccentPrimary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -236,16 +230,14 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
                   icon: Icon(
                     _addedToPantry
                         ? Icons.check_circle_rounded
-                        : Icons.add_home_work_rounded,
+                        : Icons.add_rounded,
                     size: 18,
                   ),
                   label: Text(
-                    _addedToPantry
-                        ? 'Dolaba Kaydedildi (${activeZone.label.split(' ').first})'
-                        : '${activeZone.emoji} ${activeZone.label}na Ekle',
+                    _addedToPantry ? 'Kaydedildi' : 'Dolaba Ekle',
                     style: const TextStyle(
                       fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -253,12 +245,12 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
               const SizedBox(width: 8),
               Expanded(
                 flex: 2,
-                child: OutlinedButton.icon(
+                child: TextButton.icon(
                   onPressed: _addToShoppingList,
-                  style: OutlinedButton.styleFrom(
+                  style: TextButton.styleFrom(
+                    backgroundColor: context.subtleSurfaceColor,
                     foregroundColor: textPrimary,
-                    side: BorderSide(color: borderColor),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: const EdgeInsets.symmetric(vertical: 11),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -268,13 +260,13 @@ class _KilerceProductAddCardState extends State<KilerceProductAddCard> {
                         ? Icons.check_rounded
                         : Icons.add_shopping_cart_rounded,
                     size: 16,
-                    color: AppColors.primaryMint,
+                    color: context.accentSecondary,
                   ),
                   label: Text(
                     _addedToShopping ? 'Listede' : 'Listeye',
                     style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -299,20 +291,21 @@ class _KilerHeaderBadges extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 5,
+      runSpacing: 5,
+      alignment: WrapAlignment.end,
       children: [
         if (netQuantity != null)
           _KilerMetaPill(
-            icon: Icons.scale_rounded,
             label: netQuantity!,
-            accentColor: AppColors.primaryEmerald,
+            bgColor: context.pastelSageTint,
+            fgColor: context.accentPrimary,
           ),
-        ...marketChains.take(5).map(
+        ...marketChains.take(3).map(
               (String chain) => _KilerMetaPill(
-                icon: Icons.storefront_rounded,
                 label: chain,
-                accentColor: AppColors.primaryMint,
+                bgColor: context.subtleSurfaceColor,
+                fgColor: context.textSecondaryColor,
               ),
             ),
       ],
@@ -321,44 +314,31 @@ class _KilerHeaderBadges extends StatelessWidget {
 }
 
 class _KilerMetaPill extends StatelessWidget {
-  final IconData icon;
   final String label;
-  final Color accentColor;
+  final Color bgColor;
+  final Color fgColor;
 
   const _KilerMetaPill({
-    required this.icon,
     required this.label,
-    required this.accentColor,
+    required this.bgColor,
+    required this.fgColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = context.isDarkMode;
-    final Color textPrimary = context.textPrimaryColor;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: isDark ? 0.16 : 0.10),
+        color: bgColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: accentColor.withValues(alpha: 0.4),
-        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: accentColor),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: textPrimary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fgColor,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

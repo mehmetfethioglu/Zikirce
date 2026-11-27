@@ -1,0 +1,34 @@
+name = "kilerce-edge-api"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "RECIPES_DB"
+database_name = "kilerce-recipes-db"
+database_id = "2444e9d9-8da0-43e8-a607-455784d7de9c"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "RECIPE_MEDIA"
+bucket_name = "kilerce-recipe-media"
+
+[[kv_namespaces]]
+binding = "ORGANIC_SCORE_KV"
+id = "aa108e59b3384b32aca316ca8cdbabb4"
+
+[vars]
+FREE_DAILY_DETAIL_LIMIT = "5"
+FREE_IP_DAILY_DETAIL_LIMIT = "25"
+REWARD_ADS_REQUIRED = "3"
+REWARD_PRO_HOURS = "3"
+REWARD_DAILY_MAX_PASSES = "2"
+PRO_DAILY_AI_LIMIT = "20"
+SIGNED_MEDIA_TTL_SEC = "900"
+GEMINI_OCR_MODEL = "gemini-3.5-flash-lite"
+OCR_DAILY_LIMIT = "15"
+
+# Zorunlu Wrangler Secret Degiskenleri (deploy oncesi `npx wrangler secret put ...` ile eklenir):
+# - HMAC_SECRET: Mobil uygulama ile Worker arasindaki istek imzalama anahtari
+# - MEDIA_SIGNING_SECRET: Kisa omurlu /api/media/*.webp URL imzalama anahtari
+# - REVENUECAT_WEBHOOK_AUTH: RevenueCat Dashboard webhook Authorization Bearer token'i
+# - GEMINI_API_KEY: /api/analyze ve /api/ocr/* icin Google Gemini API anahtari

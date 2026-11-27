@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import '../../../core/services/kilerce_backup_service.dart';
 import 'user_profile_service.dart';
 
 /// Metadata model for cloud backup file located in Google Drive AppData
@@ -72,7 +73,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       if (kDebugMode) {
-        print('GoogleAuthSyncService.init error: $e');
+        debugPrint('GoogleAuthSyncService.init error: $e');
       }
     }
   }
@@ -108,7 +109,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       notifyListeners();
       final err = e.toString();
       if (kDebugMode) {
-        print('GoogleAuthSyncService.signIn error: $err');
+        debugPrint('GoogleAuthSyncService.signIn error: $err');
       }
       return GoogleAuthResult(
         isSuccess: false,
@@ -127,7 +128,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       if (kDebugMode) {
-        print('GoogleAuthSyncService.signOut error: $e');
+        debugPrint('GoogleAuthSyncService.signOut error: $e');
       }
     }
   }
@@ -145,7 +146,9 @@ class GoogleAuthSyncService extends ChangeNotifier {
         '&fields=files(id,name,modifiedTime,size)',
       );
 
-      final response = await http.get(uri, headers: headers);
+      final response = await http
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final List<dynamic>? files = data['files'] as List<dynamic>?;
@@ -169,7 +172,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('GoogleAuthSyncService.checkCloudBackup error: $e');
+        debugPrint('GoogleAuthSyncService.checkCloudBackup error: $e');
       }
     }
 
@@ -198,11 +201,13 @@ class GoogleAuthSyncService extends ChangeNotifier {
 
       final headers = await _currentUser!.authHeaders;
       final downloadUri = Uri.parse('https://www.googleapis.com/drive/v3/files/$fileId?alt=media');
-      final response = await http.get(downloadUri, headers: headers);
+      final response = await http
+          .get(downloadUri, headers: headers)
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
         final jsonStr = utf8.decode(response.bodyBytes);
-        final success = await UserProfileService.instance.importBackupJson(jsonStr);
+        final success = await KilerceBackupService.importFullBackupJson(jsonStr);
         if (success) {
           _lastSyncMessage = 'Buluttan başarıyla geri yüklendi';
         }
@@ -212,7 +217,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('GoogleAuthSyncService.restoreFromCloud error: $e');
+        debugPrint('GoogleAuthSyncService.restoreFromCloud error: $e');
       }
     }
 
@@ -234,7 +239,7 @@ class GoogleAuthSyncService extends ChangeNotifier {
       _isSyncing = true;
       notifyListeners();
 
-      final backupJson = UserProfileService.instance.exportBackupJson();
+      final backupJson = await KilerceBackupService.exportFullBackupJson();
       final headers = await _currentUser!.authHeaders;
 
       // Check if backup file already exists in AppData
@@ -248,11 +253,13 @@ class GoogleAuthSyncService extends ChangeNotifier {
         final updateHeaders = Map<String, String>.from(headers)
           ..['Content-Type'] = 'application/json; charset=utf-8';
 
-        final response = await http.patch(
-          updateUri,
-          headers: updateHeaders,
-          body: utf8.encode(backupJson),
-        );
+        final response = await http
+            .patch(
+              updateUri,
+              headers: updateHeaders,
+              body: utf8.encode(backupJson),
+            )
+            .timeout(const Duration(seconds: 15));
 
         if (response.statusCode == 200) {
           final now = DateTime.now().millisecondsSinceEpoch;
@@ -278,11 +285,13 @@ class GoogleAuthSyncService extends ChangeNotifier {
           'parents': ['appDataFolder'],
         });
 
-        final createResp = await http.post(
-          createUri,
-          headers: createHeaders,
-          body: metadataBody,
-        );
+        final createResp = await http
+            .post(
+              createUri,
+              headers: createHeaders,
+              body: metadataBody,
+            )
+            .timeout(const Duration(seconds: 12));
 
         if (createResp.statusCode == 200) {
           final createdData = jsonDecode(createResp.body) as Map<String, dynamic>;
@@ -296,11 +305,13 @@ class GoogleAuthSyncService extends ChangeNotifier {
             final mediaHeaders = Map<String, String>.from(headers)
               ..['Content-Type'] = 'application/json; charset=utf-8';
 
-            final mediaResp = await http.patch(
-              mediaUri,
-              headers: mediaHeaders,
-              body: utf8.encode(backupJson),
-            );
+            final mediaResp = await http
+                .patch(
+                  mediaUri,
+                  headers: mediaHeaders,
+                  body: utf8.encode(backupJson),
+                )
+                .timeout(const Duration(seconds: 15));
 
             if (mediaResp.statusCode == 200) {
               final now = DateTime.now().millisecondsSinceEpoch;

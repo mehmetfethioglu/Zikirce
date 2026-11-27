@@ -127,17 +127,11 @@ platform :ios do
       raise ex
     end
 
-    changelog_text = <<~CHANGELOG
-      Kilerce v3.2.2 (Build 16) TestFlight Sürümü:
-      • OrganicScore artık Kilerce! Barkod, market fişi (OCR) ve barkodsuz pazar/kasap girişiyle buzdolabı, kiler ve dondurucu yönetimi.
-      • Türkiye'nin 7 bölgesinden 100 tariflik ev mutfağı kataloğu ve eldeki malzemelerle akıllı şef önerileri.
-      • Helal/E-kodu temiz içerik analizi ve akıllı alışveriş listesi.
-
-      Kilerce v3.2.2 (Build 16) TestFlight:
-      • OrganicScore is now Kilerce! Manage your fridge, pantry, and freezer with barcode scan, receipt OCR, and unbarcoded market intake.
-      • 100-recipe Turkish home cuisine catalog across 7 regions with pantry-matched Smart Chef suggestions.
-      • Clean-label & E-number analysis and smart shopping list.
-    CHANGELOG
+    tr_notes_path = File.expand_path("../../docs/play_store_whats_new/whatsnew-tr-TR", __dir__)
+    en_notes_path = File.expand_path("../../docs/play_store_whats_new/whatsnew-en-US", __dir__)
+    tr_notes = File.exist?(tr_notes_path) ? File.read(tr_notes_path, encoding: "UTF-8").strip : "Kilerce v3.3.8 (Build 25) TestFlight Güncellemesi"
+    en_notes = File.exist?(en_notes_path) ? File.read(en_notes_path, encoding: "UTF-8").strip : "Kilerce v3.3.8 (Build 25) TestFlight Update"
+    changelog_text = "#{tr_notes}\n\n#{en_notes}"
 
     begin
       upload_to_testflight(

@@ -94,10 +94,10 @@ jobs:
           EOF
 
   build-ios:
-    name: Build iOS (macOS Apple Silicon) & Upload TestFlight
+    name: Build iOS (Xcode 27 / iOS 27 SDK - Apple Silicon) & Upload TestFlight
     needs: register-bundle-id
     if: ${{ github.event_name != 'workflow_dispatch' || (github.event.inputs.upload_only_run_id == '' && github.event.inputs.sync_aso_only != 'true') }}
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
@@ -115,18 +115,35 @@ jobs:
         with:
           channel: 'stable'
           cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-key: "flutter-xcode27-:os:-:channel:-:version:-:arch:-:hash:"
 
       - name: 3. Configure Flutter & Xcode environment
         run: |
+          XCODE27_APP=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$XCODE27_APP" ]; then
+            sudo xcode-select -s "$XCODE27_APP/Contents/Developer"
+          fi
           xcodebuild -version
+          IOS_SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version)
+          echo "Detected iOS SDK version: $IOS_SDK_VERSION"
+          IOS_SDK_MAJOR="${IOS_SDK_VERSION%%.*}"
+          if [ -z "$IOS_SDK_MAJOR" ] || [ "$IOS_SDK_MAJOR" -lt 27 ]; then
+            echo "ERROR: iOS SDK 27+ (Xcode 27+) is required to satisfy ITMS-90725; found $IOS_SDK_VERSION" >&2
+            exit 1
+          fi
           flutter config --no-enable-swift-package-manager
           flutter doctor -v
 
       - name: 4. Install dependencies and prepare Flutter iOS
+        env:
+          KILERCE_HMAC_SECRET: ${{ secrets.KILERCE_HMAC_SECRET }}
         run: |
           flutter pub get
-          flutter build ios --config-only --no-codesign
+          if [ -n "$KILERCE_HMAC_SECRET" ]; then
+            flutter build ios --release --config-only --no-codesign --dart-define="KILERCE_HMAC_SECRET=$KILERCE_HMAC_SECRET"
+          else
+            flutter build ios --release --config-only --no-codesign
+          fi
           cd ios
           pod install --repo-update
           cd ..
@@ -144,6 +161,17 @@ jobs:
           cd ios
           bundle install
           bundle exec fastlane beta
+
+      - name: 5b. Verify AppIcon & Info.plist inside Signed IPA
+        if: hashFiles('build/ios/ipa/Kilerce.ipa') != ''
+        run: |
+          TMP_IPA_DIR=$(mktemp -d)
+          unzip -q build/ios/ipa/Kilerce.ipa -d "$TMP_IPA_DIR"
+          APP_DIR=$(find "$TMP_IPA_DIR/Payload" -maxdepth 1 -name "*.app" | head -n 1)
+          echo "Inspecting app bundle: $APP_DIR"
+          ls -la "$APP_DIR/Assets.car"
+          plutil -p "$APP_DIR/Info.plist" | grep -E "CFBundleIcon|CFBundleShortVersionString|CFBundleVersion" || true
+          rm -rf "$TMP_IPA_DIR"
 
       - name: Print gym build log on failure
         if: failure()
@@ -204,10 +232,11 @@ jobs:
             --skip_waiting_for_build_processing true
 
   sync-ios-aso:
-    name: Sync App Store Connect ASO Metadata & TestFlight Notes
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.sync_aso_only == 'true' }}
+    name: Sync App Store Connect ASO, Version & Attach Build
+    needs: [build-ios]
+    if: ${{ always() && (needs.build-ios.result == 'success' || (github.event_name == 'workflow_dispatch' && github.event.inputs.sync_aso_only == 'true')) }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       APP_STORE_KEY_ID: ${{ secrets.APP_STORE_KEY_ID }}
       APP_STORE_ISSUER_ID: ${{ secrets.APP_STORE_ISSUER_ID }}
@@ -220,14 +249,17 @@ jobs:
       - name: 2. Install PyJWT, Cryptography & Requests
         run: pip install pyjwt cryptography requests
 
-      - name: 3. Sync Bilingual ASO Metadata, Categories, Version 3.2.2 & TestFlight Notes
+      - name: 3. Sync Bilingual ASO, Release Notes & Attach Build on App Store Connect
         run: |
           python3 - << 'EOF'
-          import os, sys, time, json, pathlib, jwt, requests
+          import os, re, sys, time, json, pathlib, jwt, requests
 
           key_id = os.environ["APP_STORE_KEY_ID"].strip()
           issuer_id = os.environ["APP_STORE_ISSUER_ID"].strip()
           private_key = os.environ["APP_STORE_PRIVATE_KEY"].strip()
+          if not key_id or not issuer_id or not private_key:
+              print("App Store Connect secrets missing; skipping ASO sync.")
+              sys.exit(0)
 
           def make_headers():
               now = int(time.time())
@@ -239,10 +271,25 @@ jobs:
               )
               return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
+          pubspec_text = pathlib.Path("pubspec.yaml").read_text(encoding="utf-8")
+          m_ver = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\+([0-9]+)", pubspec_text, re.MULTILINE)
+          if not m_ver:
+              print("ERROR: Could not parse version from pubspec.yaml")
+              sys.exit(1)
+
+          TARGET_VERSION = m_ver.group(1)
+          TARGET_BUILD = m_ver.group(2)
+          print(f"Resolved pubspec version: {TARGET_VERSION} (Build {TARGET_BUILD})")
+
+          tr_whatsnew_path = pathlib.Path("docs/play_store_whats_new/whatsnew-tr-TR")
+          en_whatsnew_path = pathlib.Path("docs/play_store_whats_new/whatsnew-en-US")
+          whatsnew_by_loc = {
+              "tr": tr_whatsnew_path.read_text(encoding="utf-8").strip() if tr_whatsnew_path.is_file() else f"Kilerce v{TARGET_VERSION} güncellemesi.",
+              "en-US": en_whatsnew_path.read_text(encoding="utf-8").strip() if en_whatsnew_path.is_file() else f"Kilerce v{TARGET_VERSION} update.",
+          }
+
           BASE = "https://api.appstoreconnect.apple.com/v1"
           BUNDLE_ID = "com.akarworks.kilerce"
-          TARGET_VERSION = "3.2.2"
-          TARGET_BUILD = "16"
 
           # Load ASO metadata files
           meta_root = pathlib.Path("ios/fastlane/metadata")
@@ -269,7 +316,7 @@ jobs:
           app_id = apps[0]["id"]
           print(f"APP_FOUND: id={app_id} name={apps[0]['attributes'].get('name')}")
 
-          # 2. Update editable App Store Version -> 3.2.2 + copyright
+          # 2. Update or create editable App Store Version -> TARGET_VERSION + copyright
           ver_r = requests.get(f"{BASE}/apps/{app_id}/appStoreVersions?filter[platform]=IOS", headers=make_headers())
           ver_r.raise_for_status()
           versions = ver_r.json().get("data", [])
@@ -288,24 +335,37 @@ jobs:
           if not target_version_id and editable_version:
               target_version_id = editable_version["id"]
 
-          if not target_version_id:
-              print("ERROR: No editable App Store Version found!")
-              sys.exit(1)
-
-          pv = requests.patch(
-              f"{BASE}/appStoreVersions/{target_version_id}",
-              headers=make_headers(),
-              json={
-                  "data": {
-                      "type": "appStoreVersions",
-                      "id": target_version_id,
-                      "attributes": {"versionString": TARGET_VERSION, "copyright": "2026 Akarworks"},
-                  }
-              },
-          )
-          print(f"PATCH appStoreVersions ({TARGET_VERSION}): {pv.status_code} {pv.text[:250] if pv.status_code >= 400 else ''}")
-          if pv.status_code >= 400:
-              sys.exit(1)
+          if target_version_id:
+              pv = requests.patch(
+                  f"{BASE}/appStoreVersions/{target_version_id}",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersions",
+                          "id": target_version_id,
+                          "attributes": {"versionString": TARGET_VERSION, "copyright": "2026 Akarworks"},
+                      }
+                  },
+              )
+              print(f"PATCH appStoreVersions ({TARGET_VERSION}): {pv.status_code} {pv.text[:250] if pv.status_code >= 400 else ''}")
+              if pv.status_code >= 400:
+                  sys.exit(1)
+          else:
+              cv = requests.post(
+                  f"{BASE}/appStoreVersions",
+                  headers=make_headers(),
+                  json={
+                      "data": {
+                          "type": "appStoreVersions",
+                          "attributes": {"platform": "IOS", "versionString": TARGET_VERSION, "copyright": "2026 Akarworks"},
+                          "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+                      }
+                  },
+              )
+              print(f"POST appStoreVersions ({TARGET_VERSION}): {cv.status_code} {cv.text[:250] if cv.status_code >= 400 else ''}")
+              if cv.status_code >= 400:
+                  sys.exit(1)
+              target_version_id = cv.json()["data"]["id"]
 
           # 3. Update AppInfo categories (FOOD_AND_DRINK + HEALTH_AND_FITNESS) & appInfoLocalizations (tr + en-US)
           ai_r = requests.get(f"{BASE}/apps/{app_id}/appInfos", headers=make_headers())
@@ -366,7 +426,7 @@ jobs:
               if resp.status_code >= 400:
                   sys.exit(1)
 
-          # 4. Update appStoreVersionLocalizations (tr + en-US)
+          # 4. Update appStoreVersionLocalizations (tr + en-US) including whatsNew (with 409 initial-release fallback)
           vloc_r = requests.get(f"{BASE}/appStoreVersions/{target_version_id}/appStoreVersionLocalizations", headers=make_headers())
           vloc_r.raise_for_status()
           existing_vloc = {x["attributes"]["locale"]: x["id"] for x in vloc_r.json().get("data", [])}
@@ -374,18 +434,25 @@ jobs:
 
           for loc_key, cfg in locales_cfg.items():
               matched = next((a for a in cfg["aliases"] if a in existing_vloc), None)
-              attrs = {
+              base_attrs = {
                   "keywords": cfg["keywords"],
                   "promotionalText": cfg["promotional_text"],
                   "description": cfg["description"],
               }
+              attrs_with_whatsnew = {**base_attrs, "whatsNew": whatsnew_by_loc.get(loc_key, "")}
               if matched:
                   lid = existing_vloc[matched]
                   resp = requests.patch(
                       f"{BASE}/appStoreVersionLocalizations/{lid}",
                       headers=make_headers(),
-                      json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": attrs}},
+                      json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": attrs_with_whatsnew}},
                   )
+                  if resp.status_code == 409:
+                      resp = requests.patch(
+                          f"{BASE}/appStoreVersionLocalizations/{lid}",
+                          headers=make_headers(),
+                          json={"data": {"type": "appStoreVersionLocalizations", "id": lid, "attributes": base_attrs}},
+                      )
                   print(f"PATCH appStoreVersionLocalization ({matched}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
               else:
                   resp = requests.post(
@@ -394,24 +461,51 @@ jobs:
                       json={
                           "data": {
                               "type": "appStoreVersionLocalizations",
-                              "attributes": {"locale": loc_key, **attrs},
+                              "attributes": {"locale": loc_key, **attrs_with_whatsnew},
                               "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}}},
                           }
                       },
                   )
+                  if resp.status_code == 409:
+                      resp = requests.post(
+                          f"{BASE}/appStoreVersionLocalizations",
+                          headers=make_headers(),
+                          json={
+                              "data": {
+                                  "type": "appStoreVersionLocalizations",
+                                  "attributes": {"locale": loc_key, **base_attrs},
+                                  "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": target_version_id}}},
+                              }
+                          },
+                      )
                   print(f"POST appStoreVersionLocalization ({loc_key}): {resp.status_code} {resp.text[:250] if resp.status_code >= 400 else ''}")
               if resp.status_code >= 400:
                   sys.exit(1)
 
-          # 5. Check Build 16 & update usesNonExemptEncryption + TestFlight betaBuildLocalizations
-          br = requests.get(f"{BASE}/builds?filter[app]={app_id}&filter[version]={TARGET_BUILD}&sort=-uploadedDate&limit=3", headers=make_headers())
-          br.raise_for_status()
-          builds = br.json().get("data", [])
-          if builds:
-              b = builds[0]
-              build_id = b["id"]
-              proc_state = b["attributes"].get("processingState")
-              print(f"Build {TARGET_BUILD} found: id={build_id} processingState={proc_state}")
+          # 5. Poll for Build TARGET_BUILD to become VALID, update encryption/TestFlight notes, and attach build to App Store Version
+          max_polls = 15 if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch" else 3
+          build_obj = None
+          for attempt in range(1, max_polls + 1):
+              br = requests.get(f"{BASE}/builds?filter[app]={app_id}&filter[version]={TARGET_BUILD}&sort=-uploadedDate&limit=3", headers=make_headers())
+              br.raise_for_status()
+              builds = br.json().get("data", [])
+              if builds:
+                  build_obj = builds[0]
+                  proc_state = build_obj["attributes"].get("processingState")
+                  print(f"Poll {attempt}/{max_polls}: Build {TARGET_BUILD} id={build_obj['id']} processingState={proc_state}")
+                  if proc_state == "VALID":
+                      break
+                  if proc_state in ("FAILED", "INVALID"):
+                      print(f"ERROR: Build {TARGET_BUILD} entered terminal state {proc_state}")
+                      break
+              else:
+                  print(f"Poll {attempt}/{max_polls}: Build {TARGET_BUILD} not yet visible in /v1/builds...")
+              if attempt < max_polls:
+                  time.sleep(30)
+
+          if build_obj:
+              build_id = build_obj["id"]
+              proc_state = build_obj["attributes"].get("processingState")
               if proc_state == "VALID":
                   enc = requests.patch(
                       f"{BASE}/builds/{build_id}",
@@ -420,21 +514,17 @@ jobs:
                   )
                   print(f"PATCH build usesNonExemptEncryption=False: {enc.status_code}")
 
-              beta_tr = (
-                  "Kilerce v3.2.2 (Build 16) TestFlight Sürümü:\n"
-                  "• Barkod, market fişi OCR ve 6 barkodsuz pazar/kasap kanalından buzdolabı, kiler ve dondurucu stok takibini test edin.\n"
-                  "• 7 bölgeden 100 Türk ev yemeği tarifinde kiler eşleşmesini, porsiyon ölçeklemeyi ve alışveriş listesi aktarımını kontrol edin.\n"
-                  "• E-kodu, Helal hassasiyeti ve temiz içerik puanlamasını inceleyin."
-              )
-              beta_en = (
-                  "Kilerce v3.2.2 (Build 16) TestFlight:\n"
-                  "• Test fridge, pantry, and freezer stock tracking via barcode scan, receipt OCR, and 6 unbarcoded market intake channels.\n"
-                  "• Explore 100 regional Turkish home recipes across 7 regions with pantry matching, portion scaling, and smart shopping list sync.\n"
-                  "• Verify E-number, Halal sensitivity, and clean-label food scoring."
-              )
+                  attach = requests.patch(
+                      f"{BASE}/appStoreVersions/{target_version_id}/relationships/build",
+                      headers=make_headers(),
+                      json={"data": {"type": "builds", "id": build_id}},
+                  )
+                  print(f"PATCH appStoreVersion build attachment ({TARGET_VERSION} <- build {TARGET_BUILD}): {attach.status_code} {attach.text[:250] if attach.status_code >= 400 else ''}")
+
               bloc_r = requests.get(f"{BASE}/builds/{build_id}/betaBuildLocalizations", headers=make_headers())
               existing_bloc = {x["attributes"]["locale"]: x["id"] for x in bloc_r.json().get("data", [])} if bloc_r.status_code == 200 else {}
-              for loc_code, loc_text in [("tr", beta_tr), ("en-US", beta_en)]:
+              for loc_code in ("tr", "en-US"):
+                  loc_text = whatsnew_by_loc[loc_code]
                   if loc_code in existing_bloc:
                       b_res = requests.patch(
                           f"{BASE}/betaBuildLocalizations/{existing_bloc[loc_code]}",
@@ -458,5 +548,5 @@ jobs:
           else:
               print(f"Build {TARGET_BUILD} not yet visible in /v1/builds (still queued for processing).")
 
-          print("=== APP STORE CONNECT ASO SYNC COMPLETE ===")
+          print("=== APP STORE CONNECT ASO & BUILD SYNC COMPLETE ===")
           EOF

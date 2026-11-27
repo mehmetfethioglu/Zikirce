@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
@@ -14,34 +16,12 @@ import '../../monetization/domain/subscription_service.dart';
 import '../../monetization/presentation/paywall_screen.dart';
 import '../../network/domain/edge_worker_sync_service.dart';
 import '../../network/domain/offline_fallback_manager.dart';
+import '../../ocr/domain/cloud_vision_ocr_service.dart';
 import '../../product/presentation/product_result_screen.dart';
 import '../../profile/domain/user_profile_service.dart';
 import '../../taklit_tagsis/domain/taklit_tagsis_service.dart';
 import '../../taklit_tagsis/presentation/taklit_tagsis_screen.dart';
-
-class ShowcaseProduct {
-  final String barcode;
-  final String name;
-  final String brand;
-  final int score;
-  final String category;
-  final int novaGroup;
-  final String boycottStatus;
-  final String description;
-  final List<String> badges;
-
-  ShowcaseProduct({
-    required this.barcode,
-    required this.name,
-    required this.brand,
-    required this.score,
-    required this.category,
-    required this.novaGroup,
-    required this.boycottStatus,
-    required this.description,
-    required this.badges,
-  });
-}
+import 'widgets/scanner_showcase_widgets.dart';
 
 class ScannerScreen extends StatefulWidget {
   final bool embeddedInHub;
@@ -63,9 +43,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
   FamilyProfile? _activeProfile;
   final TextEditingController _manualBarcodeController =
       TextEditingController();
+  Timer? _tagsisSyncTimer;
 
   List<ShowcaseProduct> _showcaseProducts = [];
-  int _selectedFilterIndex = 0; // 0: Temiz (80+), 1: NOVA 1 Doğal, 2: Tüm Ürünler, 3: Riskli (<50)
+  int _selectedFilterIndex = 0; // 0: Temiz 80+, 1: Doğal, 2: Tümü, 3: Riskli
   bool _isOcrProcessing = false;
   Map<String, int> _dbStats = const {
     'products': 0,
@@ -85,16 +66,19 @@ class _ScannerScreenState extends State<ScannerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ChangelogService.checkAndShowOnStartup(context);
     });
-    Future.delayed(const Duration(seconds: 3), () async {
+    _tagsisSyncTimer = Timer(const Duration(seconds: 3), () async {
       try {
         await TaklitTagsisService.syncLatestList();
         if (mounted) _loadDatabaseStats();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('ScannerScreen tagsis sync note: $e');
+      }
     });
   }
 
   @override
   void dispose() {
+    _tagsisSyncTimer?.cancel();
     _manualBarcodeController.dispose();
     EdgeWorkerSyncService.dispose();
     super.dispose();
@@ -108,12 +92,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
           _dbStats = stats;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ScannerScreen._loadDatabaseStats error: $e');
+    }
   }
 
   Future<void> _loadShowcaseProducts() async {
     try {
       final Database db = await DatabaseHelper().database;
+      final boycottRows = await db.query('boycott_brands');
       final results = await db.query(
         'offline_ai_snapshots',
         columns: ['barcode', 'product_name', 'brand', 'ai_summary_json'],
@@ -127,9 +114,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
         final String brand = row['brand'] as String? ?? '';
         final int score = summary['organic_score'] as int? ?? 50;
         final int nova = summary['nova_group'] as int? ?? 3;
-        final boycott = await OfflineFallbackManager.getBoycottStatus(
+        final boycott = OfflineFallbackManager.evaluateBoycottStatus(
           productName: name,
           brandName: brand,
+          boycottBrands: boycottRows,
         );
 
         final String boycottStatus = boycott['status_flag'] ?? 'CLEAR';
@@ -181,7 +169,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
           _showcaseProducts = list;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ScannerScreen._loadShowcaseProducts error: $e');
+    }
   }
 
   Future<void> _loadActiveProfile() async {
@@ -195,11 +185,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   List<ShowcaseProduct> get _filteredShowcaseProducts {
     switch (_selectedFilterIndex) {
-      case 0: // Temiz Seçimler (80+)
+      case 0: // Temiz 80+
         return _showcaseProducts.where((p) => p.score >= 80).toList();
       case 1: // Doğal (NOVA 1)
         return _showcaseProducts.where((p) => p.novaGroup == 1).toList();
-      case 3: // Dikkat / Düşük Puan (<50)
+      case 3: // Riskli (<50)
         return _showcaseProducts.where((p) => p.score < 50).toList();
       default: // Tümü
         return _showcaseProducts;
@@ -223,14 +213,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
           children: [
             const SizedBox(height: 12),
             Container(
-              width: 40,
+              width: 38,
               height: 4,
               decoration: BoxDecoration(
-                color: context.textSecondaryColor.withValues(alpha: 0.4),
+                color: context.textSecondaryColor.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -273,7 +263,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       height: 180,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: AppColors.primaryEmerald,
+                          color: context.accentPrimary,
                           width: 2.5,
                         ),
                         borderRadius: BorderRadius.circular(20),
@@ -295,31 +285,50 @@ class _ScannerScreenState extends State<ScannerScreen> {
       final picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: source,
-        imageQuality: 85,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 82,
       );
       if (image == null) {
         if (mounted) setState(() => _isOcrProcessing = false);
         return;
       }
 
-      final inputImage = InputImage.fromFilePath(image.path);
-      final textRecognizer =
-          TextRecognizer(script: TextRecognitionScript.latin);
-      final RecognizedText recognizedText =
-          await textRecognizer.processImage(inputImage);
-      await textRecognizer.close();
+      String rawText = '';
+      try {
+        final Uint8List bytes = await image.readAsBytes();
+        final cloudRes = await CloudVisionOcrService.instance
+            .analyzeProductLabelBytes(bytes, mode: 'INGREDIENTS');
+        if (cloudRes != null && cloudRes.ingredientsText.isNotEmpty) {
+          rawText = cloudRes.ingredientsText.trim();
+        }
+      } catch (e) {
+        debugPrint('ScannerScreen cloud OCR fallback note: $e');
+      }
+
+      if (rawText.isEmpty) {
+        final inputImage = InputImage.fromFilePath(image.path);
+        final textRecognizer =
+            TextRecognizer(script: TextRecognitionScript.latin);
+        try {
+          final RecognizedText recognizedText =
+              await textRecognizer.processImage(inputImage);
+          rawText = recognizedText.text.trim();
+        } finally {
+          await textRecognizer.close();
+        }
+      }
 
       if (!mounted) return;
       setState(() => _isOcrProcessing = false);
 
-      final String rawText = recognizedText.text.trim();
       if (rawText.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Fotoğrafta okunabilir içindekiler metni tespit edilemedi. Lütfen etiketi yakından çekin.',
+          SnackBar(
+            content: const Text(
+              'Fotoğrafta okunabilir içindekiler metni tespit edilemedi.',
             ),
-            backgroundColor: AppColors.dangerRed,
+            backgroundColor: context.accentDanger,
           ),
         );
         return;
@@ -340,7 +349,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Etiket okuma hatası: $e'),
-          backgroundColor: AppColors.dangerRed,
+          backgroundColor: context.accentDanger,
         ),
       );
     }
@@ -351,88 +360,103 @@ class _ScannerScreenState extends State<ScannerScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         decoration: BoxDecoration(
           color: context.surfaceColor,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(color: context.cardBorderColor),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'İçindekiler Etiketi OCR Analizi',
-              style: TextStyle(
-                color: context.textPrimaryColor,
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: context.textSecondaryColor.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Barkodu veritabanında olmayan ürünlerin "İçindekiler" kısmını fotoğraflayarak anında Helal, E-Kod ve sağlık analizi yapın.',
-              style: TextStyle(
-                color: context.textSecondaryColor,
-                fontSize: 12.5,
-                height: 1.4,
+              const SizedBox(height: 14),
+              Text(
+                'Etiket OCR Analizi',
+                style: TextStyle(
+                  color: context.textPrimaryColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _scanIngredientLabelViaOcr(ImageSource.camera);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryEmerald,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+              const SizedBox(height: 4),
+              Text(
+                'İçindekiler kısmını fotoğraflayarak anında katkı ve skor analizi yapın.',
+                style: TextStyle(
+                  color: context.textSecondaryColor,
+                  fontSize: 12.5,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _scanIngredientLabelViaOcr(ImageSource.camera);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: context.accentPrimary,
+                        foregroundColor: context.onAccentPrimary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                    ),
-                    icon: const Icon(Icons.camera_alt_rounded, size: 19),
-                    label: const Text(
-                      'Kamerayla Çek',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                      icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                      label: const Text(
+                        'Kamerayla Çek',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _scanIngredientLabelViaOcr(ImageSource.gallery);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: context.textPrimaryColor,
-                      side: BorderSide(color: context.cardBorderColor),
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _scanIngredientLabelViaOcr(ImageSource.gallery);
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.textPrimaryColor,
+                        side: BorderSide(color: context.cardBorderColor),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                    ),
-                    icon: const Icon(Icons.photo_library_outlined, size: 19),
-                    label: const Text(
-                      'Galeriden Seç',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text(
+                        'Galeriden Seç',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -464,26 +488,32 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     await SubscriptionService.instance.consumeScan();
     await UserProfileService.instance.recordScan(barcode: barcode);
+    if (!mounted) return;
     setState(() {});
 
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ProductResultScreen(
-            barcode: barcode,
-            ingredientsOcrText: null,
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductResultScreen(
+          barcode: barcode,
+          ingredientsOcrText: null,
         ),
-      );
-    }
+      ),
+    );
   }
 
-  Color _getScoreColor(int score) {
-    if (score >= 80) return AppColors.primaryEmerald;
-    if (score >= 60) return AppColors.primaryMint;
-    if (score >= 40) return AppColors.cautionGold;
-    return AppColors.dangerRed;
+  Color _getScoreColor(BuildContext context, int score) {
+    if (score >= 80) return context.accentPrimary;
+    if (score >= 60) return context.accentSecondary;
+    if (score >= 40) return context.accentWarm;
+    return context.accentDanger;
+  }
+
+  void _submitManualBarcode() {
+    final val = _manualBarcodeController.text.trim();
+    if (val.isNotEmpty) {
+      _navigateToScanResult(val);
+    }
   }
 
   @override
@@ -492,197 +522,124 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final textSecondary = context.textSecondaryColor;
     final filteredProducts = _filteredShowcaseProducts;
 
+    final String catalogLabel = _dbStats['products']! > 0
+        ? 'Katalog · ${_dbStats['products']}'
+        : 'Katalog';
+    final String tagsisLabel = _dbStats['taklit_tagsis']! > 0
+        ? 'İfşa · ${_dbStats['taklit_tagsis']}'
+        : 'İfşa Listesi';
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          BioMinimalUi.sectionHeader(
-            context,
-            overline: 'SAĞLIK ASİSTANI & HELAL REHBERİ',
-            title: 'Gıda & İçerik Denetimi',
-            trailing: GestureDetector(
-              onTap: () async {
-                if (widget.onOpenCharacterTab != null) {
-                  widget.onOpenCharacterTab!();
-                } else {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const FamilyProfilesScreen(),
-                    ),
-                  );
-                  _loadActiveProfile();
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 11,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryEmerald.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.primaryEmerald.withValues(alpha: 0.35),
+          // 1. Clean Minimal Header
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Barkod Analiz',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.verified_user_rounded,
-                      size: 14,
-                      color: AppColors.primaryEmerald,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      _activeProfile?.profileName ?? 'Filtre Ayarla',
-                      style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
+              ),
+              GestureDetector(
+                onTap: () async {
+                  if (widget.onOpenCharacterTab != null) {
+                    widget.onOpenCharacterTab!();
+                  } else {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const FamilyProfilesScreen(),
                       ),
+                    );
+                    _loadActiveProfile();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: context.pastelSageTint,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: context.accentPrimary.withValues(alpha: 0.25),
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.verified_user_outlined,
+                        size: 14,
+                        color: context.accentPrimary,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _activeProfile?.profileName ?? 'Profil',
+                        style: TextStyle(
+                          color: textPrimary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-          // =========================================================================
-          // HERO BARCODE & INGREDIENT OCR SCANNER CARD
-          // =========================================================================
+          // 2. Modern Pastel Hero Scan Card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BioMinimalUi.cardDecoration(context),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.pastelSageTint,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: context.accentPrimary.withValues(alpha: 0.22),
+              ),
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryEmerald.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(14),
+                Semantics(
+                  button: true,
+                  label: 'Kamerayla ürün barkodu tara',
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _openCameraScanner,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: context.accentPrimary,
+                        foregroundColor: context.onAccentPrimary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                      child: const Icon(
-                        Icons.fact_check_outlined,
-                        color: AppColors.primaryEmerald,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Barkod veya İçindekiler Analizi',
-                            style: TextStyle(
-                              color: textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'E-kodları, Helal açısından şüpheli katkıları, NOVA işlenme derecesini ve Bakanlık ifşa kayıtlarını anında sorgulayın.',
-                            style: TextStyle(
-                              color: textSecondary,
-                              fontSize: 12,
-                              height: 1.35,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Primary Action Row: Camera Barcode + Camera OCR Label
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: _openCameraScanner,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primaryEmerald,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          icon: const Icon(
-                            Icons.qr_code_scanner_rounded,
-                            size: 20,
-                          ),
-                          label: const Text(
-                            'Barkod Tara',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
+                      icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+                      label: const Text(
+                        'Barkod Tara',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 5,
-                      child: SizedBox(
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isOcrProcessing ? null : _showOcrSourceSheet,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: textPrimary,
-                            side: BorderSide(
-                              color: AppColors.primaryEmerald
-                                  .withValues(alpha: 0.55),
-                              width: 1.4,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          icon: _isOcrProcessing
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppColors.primaryEmerald,
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.document_scanner_outlined,
-                                  size: 18,
-                                  color: AppColors.primaryEmerald,
-                                ),
-                          label: const Text(
-                            'Etiket Okut (OCR)',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-
-                // Inline Barcode Input
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -690,49 +647,88 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         controller: _manualBarcodeController,
                         style: TextStyle(color: textPrimary, fontSize: 13.5),
                         decoration: InputDecoration(
-                          hintText: 'Barkod numarası girin (örn. 8690504011200)...',
+                          hintText: 'Barkod no gir...',
                           hintStyle: TextStyle(
                             color: textSecondary,
                             fontSize: 12.5,
                           ),
                           filled: true,
-                          fillColor: context.subtleSurfaceColor,
+                          fillColor: context.surfaceColor,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14,
-                            vertical: 11,
+                            vertical: 12,
                           ),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: context.cardBorderColor,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: context.cardBorderColor,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(
+                              color: context.accentPrimary,
+                            ),
+                          ),
+                          suffixIcon: IconButton(
+                            onPressed: _submitManualBarcode,
+                            icon: Icon(
+                              Icons.arrow_forward_rounded,
+                              color: context.accentPrimary,
+                              size: 20,
+                            ),
                           ),
                         ),
-                        onSubmitted: (val) {
-                          if (val.trim().isNotEmpty) {
-                            _navigateToScanResult(val.trim());
-                          }
-                        },
+                        onSubmitted: (_) => _submitManualBarcode(),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () {
-                        if (_manualBarcodeController.text.trim().isNotEmpty) {
-                          _navigateToScanResult(
-                            _manualBarcodeController.text.trim(),
-                          );
-                        }
-                      },
-                      style: IconButton.styleFrom(
-                        backgroundColor: context.subtleSurfaceColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    Semantics(
+                      button: true,
+                      label: 'Ürün içindekiler etiketini kamera veya galeriden oku',
+                      child: SizedBox(
+                        height: 46,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _isOcrProcessing ? null : _showOcrSourceSheet,
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: context.surfaceColor,
+                            foregroundColor: textPrimary,
+                            side: BorderSide(color: context.cardBorderColor),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          icon: _isOcrProcessing
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: context.accentLavender,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.document_scanner_outlined,
+                                  size: 18,
+                                  color: context.accentLavender,
+                                ),
+                          label: const Text(
+                            'OCR',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                      ),
-                      icon: const Icon(
-                        Icons.arrow_forward_rounded,
-                        color: AppColors.primaryEmerald,
-                        size: 20,
                       ),
                     ),
                   ],
@@ -741,31 +737,27 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ),
           ),
 
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          // =========================================================================
-          // REAL SQLITE DATABASE COUNTERS & QUICK ACCESS STRIP
-          // =========================================================================
+          // 3. Slim Utility Strip
           Row(
             children: [
               Expanded(
-                child: _buildUtilityPill(
-                  context,
+                child: ScannerUtilityPill(
                   icon: Icons.inventory_2_outlined,
-                  label: _dbStats['products']! > 0
-                      ? '${_dbStats['products']} Kayıtlı Ürün'
-                      : 'Ürün Kataloğu',
+                  label: catalogLabel,
+                  iconColor: context.accentPrimary,
+                  iconBgColor: context.pastelSageTint,
                   onTap: () => _openAllProductsModal(context),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildUtilityPill(
-                  context,
+                child: ScannerUtilityPill(
                   icon: Icons.gavel_rounded,
-                  label: _dbStats['taklit_tagsis']! > 0
-                      ? '${_dbStats['taklit_tagsis']} Bakanlık İfşa'
-                      : 'Bakanlık İfşa',
+                  label: tagsisLabel,
+                  iconColor: context.accentDanger,
+                  iconBgColor: context.pastelBlushTint,
                   onTap: () {
                     Navigator.push(
                       context,
@@ -778,10 +770,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildUtilityPill(
-                  context,
+                child: ScannerUtilityPill(
                   icon: Icons.add_circle_outline_rounded,
                   label: 'Ürün Bildir',
+                  iconColor: context.accentLavender,
+                  iconBgColor: context.pastelLavenderTint,
                   onTap: () =>
                       CrowdsourceDialog.showProductContributionModal(context),
                 ),
@@ -789,16 +782,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
             ],
           ),
 
-          const SizedBox(height: 22),
+          const SizedBox(height: 20),
 
-          // =========================================================================
-          // CLEAN & HALAL DISCOVERY SECTION WITH REAL FILTERS
-          // =========================================================================
+          // 4. Simplified Product Discovery Section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Veritabanı Ürün İncelemesi',
+                'Öne Çıkan Ürünler',
                 style: TextStyle(
                   color: textPrimary,
                   fontSize: 16,
@@ -807,12 +798,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
               ),
               GestureDetector(
                 onTap: () => _openAllProductsModal(context),
-                child: const Text(
-                  'Tümünü Ara',
+                child: Text(
+                  'Tümü',
                   style: TextStyle(
-                    color: AppColors.primaryEmerald,
+                    color: context.accentPrimary,
                     fontSize: 12.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -825,13 +816,29 @@ class _ScannerScreenState extends State<ScannerScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildFilterChip(0, 'Temiz Seçimler (80+)'),
+                ScannerFilterChip(
+                  label: 'Temiz 80+',
+                  selected: _selectedFilterIndex == 0,
+                  onTap: () => setState(() => _selectedFilterIndex = 0),
+                ),
                 const SizedBox(width: 8),
-                _buildFilterChip(1, 'Doğal (NOVA 1)'),
+                ScannerFilterChip(
+                  label: 'Doğal',
+                  selected: _selectedFilterIndex == 1,
+                  onTap: () => setState(() => _selectedFilterIndex = 1),
+                ),
                 const SizedBox(width: 8),
-                _buildFilterChip(2, 'Tüm Ürünler'),
+                ScannerFilterChip(
+                  label: 'Tümü',
+                  selected: _selectedFilterIndex == 2,
+                  onTap: () => setState(() => _selectedFilterIndex = 2),
+                ),
                 const SizedBox(width: 8),
-                _buildFilterChip(3, 'Düşük Puan / Katkılı (<50)'),
+                ScannerFilterChip(
+                  label: 'Riskli',
+                  selected: _selectedFilterIndex == 3,
+                  onTap: () => setState(() => _selectedFilterIndex = 3),
+                ),
               ],
             ),
           ),
@@ -852,182 +859,18 @@ class _ScannerScreenState extends State<ScannerScreen> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: filteredProducts.take(12).length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final item = filteredProducts[index];
-                final scoreColor = _getScoreColor(item.score);
-
-                return GestureDetector(
+                final scoreColor = _getScoreColor(context, item.score);
+                return ShowcaseProductTile(
+                  item: item,
+                  scoreColor: scoreColor,
                   onTap: () => _openProductDetails(item.barcode),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BioMinimalUi.cardDecoration(
-                      context,
-                      radius: 18,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: scoreColor.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: scoreColor.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${item.score}',
-                              style: TextStyle(
-                                color: scoreColor,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    item.brand,
-                                    style: TextStyle(
-                                      color: textSecondary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: context.subtleSurfaceColor,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(
-                                      item.badges.first,
-                                      style: TextStyle(
-                                        color: item.novaGroup <= 2
-                                            ? AppColors.primaryEmerald
-                                            : AppColors.cautionGold,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                item.name,
-                                style: TextStyle(
-                                  color: textPrimary,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                item.description,
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 11.5,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: textSecondary,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                  ),
                 );
               },
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(int index, String label) {
-    final bool selected = _selectedFilterIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _selectedFilterIndex = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primaryEmerald.withValues(alpha: 0.15)
-              : context.subtleSurfaceColor,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected
-                ? AppColors.primaryEmerald
-                : context.cardBorderColor,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected
-                ? AppColors.primaryEmerald
-                : context.textSecondaryColor,
-            fontSize: 11.5,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUtilityPill(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-        decoration: BioMinimalUi.cardDecoration(context, radius: 16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 15, color: AppColors.primaryEmerald),
-            const SizedBox(width: 5),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: context.textPrimaryColor,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1080,6 +923,7 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
   Future<void> _loadProducts() async {
     try {
       final Database db = await DatabaseHelper().database;
+      final boycottRows = await db.query('boycott_brands');
       final results = await db.query(
         'offline_ai_snapshots',
         columns: ['barcode', 'product_name', 'brand', 'ai_summary_json'],
@@ -1091,9 +935,10 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
         final summary = jsonDecode(row['ai_summary_json'] as String);
         final String name = row['product_name'] as String? ?? 'Ürün';
         final String brand = row['brand'] as String? ?? '';
-        final boycott = await OfflineFallbackManager.getBoycottStatus(
+        final boycott = OfflineFallbackManager.evaluateBoycottStatus(
           productName: name,
           brandName: brand,
+          boycottBrands: boycottRows,
         );
         final String boycottStatus = boycott['status_flag'] ?? 'CLEAR';
         if (boycottStatus == 'FLAGGED' || boycottStatus == 'CAUTION') {
@@ -1121,7 +966,8 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('AllProductsCatalogModal._loadProducts error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -1142,11 +988,11 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
     });
   }
 
-  Color _getScoreColor(int score) {
-    if (score >= 80) return AppColors.primaryEmerald;
-    if (score >= 60) return AppColors.primaryMint;
-    if (score >= 40) return AppColors.cautionGold;
-    return AppColors.dangerRed;
+  Color _getScoreColor(BuildContext context, int score) {
+    if (score >= 80) return context.accentPrimary;
+    if (score >= 60) return context.accentSecondary;
+    if (score >= 40) return context.accentWarm;
+    return context.accentDanger;
   }
 
   @override
@@ -1167,21 +1013,21 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
         children: [
           const SizedBox(height: 12),
           Container(
-            width: 40,
+            width: 38,
             height: 4,
             decoration: BoxDecoration(
-              color: textSecondary.withValues(alpha: 0.3),
+              color: textSecondary.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    'Kayıtlı Ürün Veritabanı (${_allProducts.length})',
+                    'Ürün Kataloğu (${_allProducts.length})',
                     style: TextStyle(
                       color: textPrimary,
                       fontSize: 18,
@@ -1205,22 +1051,22 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
               decoration: InputDecoration(
                 hintText: 'Ürün adı, marka veya barkod ara...',
                 hintStyle: TextStyle(
-                  color: textSecondary.withValues(alpha: 0.7),
+                  color: textSecondary.withValues(alpha: 0.75),
                   fontSize: 13,
                 ),
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.search,
-                  color: AppColors.primaryEmerald,
+                  color: context.accentPrimary,
                 ),
                 isDense: true,
                 filled: true,
                 fillColor: context.subtleSurfaceColor,
                 contentPadding: const EdgeInsets.symmetric(
-                  vertical: 10,
+                  vertical: 11,
                   horizontal: 14,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -1229,9 +1075,9 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
           const Divider(height: 1),
           Expanded(
             child: _isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
-                      color: AppColors.primaryEmerald,
+                      color: context.accentPrimary,
                     ),
                   )
                 : _filteredProducts.isEmpty
@@ -1252,6 +1098,7 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
                         itemBuilder: (context, index) {
                           final item = _filteredProducts[index];
                           final int score = item['organic_score'] as int;
+                          final scoreColor = _getScoreColor(context, score);
                           return ListTile(
                             onTap: () => widget.onProductSelected(
                               item['barcode'] as String,
@@ -1261,20 +1108,19 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
                               vertical: 4,
                             ),
                             leading: Container(
-                              width: 42,
-                              height: 42,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
-                                color: _getScoreColor(score)
-                                    .withValues(alpha: 0.14),
+                                color: scoreColor.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Center(
                                 child: Text(
                                   '$score',
                                   style: TextStyle(
-                                    color: _getScoreColor(score),
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 15,
+                                    color: scoreColor,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14.5,
                                   ),
                                 ),
                               ),
@@ -1290,15 +1136,17 @@ class _AllProductsCatalogModalState extends State<_AllProductsCatalogModal> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              '${item['brand']} • ${item['verdict']}',
+                              '${item['brand']} · ${item['verdict']}',
                               style: TextStyle(
                                 color: textSecondary,
                                 fontSize: 11.5,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             trailing: Icon(
-                              Icons.arrow_forward_ios,
-                              size: 13,
+                              Icons.chevron_right_rounded,
+                              size: 18,
                               color: textSecondary,
                             ),
                           );

@@ -1,15 +1,101 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/database/database_helper.dart';
+import '../../product/domain/alternative_recommendation_engine.dart';
 import '../../scoring/domain/organic_score_calculator.dart';
 import 'offline_fallback_manager.dart';
 
 class OpenFoodFactsService {
+  static const List<String> _processedFoodBlocklist = [
+    'sucuk',
+    'salam',
+    'sosis',
+    'cikolata',
+    'biskuvi',
+    'gofret',
+    'cips',
+    'kraker',
+    'kek',
+    'pasta',
+    'seker',
+    'gevrek',
+    'susam',
+    'sos',
+    'surup',
+    'arom',
+    'tatli',
+    'dondurma',
+    'kola',
+    'gazoz',
+    'enerji',
+    'krem',
+    'bar',
+    'karisim',
+    'hazir',
+    'pogaca',
+    'borek',
+    'margar',
+  ];
+
+  static const List<String> _pureNaturalKeywords = [
+    'zeytinyagi',
+    'sizma zeytinyagi',
+    'makarna',
+    'yulaf',
+    'yulaf ezmesi',
+    'mercimek',
+    'kirmizi mercimek',
+    'yesil mercimek',
+    'nohut',
+    'fasulye',
+    'kuru fasulye',
+    'bulgur',
+    'un',
+    'tam bugday unu',
+    'irmik',
+    'pirinc',
+    'su',
+    'maden suyu',
+    'sut',
+    'yogurt',
+    'cay',
+    'bal',
+    'yumurta',
+  ];
+
+  /// Word-boundary aware check that avoids false positives like "Sucuk" matching "su"
+  /// or "Sütlü Çikolata" matching "süt".
+  static bool isPureNaturalFoodName(
+    String productName, {
+    String ingredientsText = '',
+  }) {
+    final String normName = OfflineFallbackManager.normalizeForMatching(productName);
+    if (normName.isEmpty) return false;
+
+    final String normIng = OfflineFallbackManager.normalizeForMatching(ingredientsText);
+    final String combined = '$normName $normIng';
+
+    for (final String blocked in _processedFoodBlocklist) {
+      if (combined.contains(blocked)) {
+        return false;
+      }
+    }
+
+    for (final String keyword in _pureNaturalKeywords) {
+      final RegExp pattern = RegExp('(^|\\s)${RegExp.escape(keyword)}(\\s|\$)');
+      if (pattern.hasMatch(normName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static Future<ProductAnalysisResponse?> fetchProductByBarcode(String barcode) async {
     try {
       final url = Uri.parse('https://world.openfoodfacts.org/api/v2/product/$barcode.json');
       final headers = {
-        'User-Agent': 'OrganicScoreApp - Mobile - Version 2.0 (contact@organicscore.app)',
+        'User-Agent': 'KilerceApp - Mobile - Version 3.2 (contact@organicscore.app)',
         'Accept': 'application/json',
       };
       final response = await http.get(url, headers: headers).timeout(const Duration(seconds: 7));
@@ -48,23 +134,8 @@ class OpenFoodFactsService {
               lowerIng.contains('palm') ||
               lowerIng.contains('tatlandırıcı');
 
-          final bool isPureNatural = lowerName.contains('zeytinyağ') ||
-              lowerName.contains('makarna') ||
-              lowerName.contains('yulaf') ||
-              lowerName.contains('mercimek') ||
-              lowerName.contains('nohut') ||
-              lowerName.contains('fasulye') ||
-              lowerName.contains('bulgur') ||
-              lowerName.contains('un') ||
-              lowerName.contains('irmik') ||
-              lowerName.contains('pirinç') ||
-              lowerName.contains('su') ||
-              lowerName.contains('maden suyu') ||
-              lowerName.contains('süt') ||
-              lowerName.contains('yoğurt') ||
-              lowerName.contains('çay') ||
-              lowerName.contains('bal') ||
-              lowerName.contains('yumurta');
+          final bool isPureNatural = !hasENumbers &&
+              isPureNaturalFoodName(name, ingredientsText: ingredientsText);
 
           final bool isIncomplete = !hasNutrition && !hasIngredients && !isPureNatural;
 
@@ -88,7 +159,9 @@ class OpenFoodFactsService {
             );
           }
 
-          final int adjustedNovaGroup = isPureNatural ? (lowerName.contains('zeytinyağ') ? 2 : 1) : novaGroup;
+          final int adjustedNovaGroup = isPureNatural
+              ? (lowerName.contains('zeytinyağ') || lowerName.contains('zeytinyag') ? 2 : 1)
+              : novaGroup;
 
           final scoreResult = OrganicScoreCalculator.calculate(
             riskLevels: hasENumbers ? ['MODERATE'] : ['LOW'],
@@ -100,7 +173,25 @@ class OpenFoodFactsService {
             novaGroup: adjustedNovaGroup,
           );
 
-          // Automatically cache into offline SQLite snapshots for instant subsequent scans
+          final boycottEval = await OfflineFallbackManager.getBoycottStatus(
+            productName: name,
+            brandName: brand,
+          );
+          final String boycottStatus = boycottEval['status_flag'] ?? 'CLEAR';
+          final String boycottReason = boycottEval['reason'] ?? 'Open Food Facts veritabanından canlı doğrulandı.';
+
+          final RecommendationResult recResult = AlternativeRecommendationEngine.getRecommendations(
+            currentBarcode: barcode,
+            currentProductName: name,
+            currentBrand: brand,
+            currentScore: scoreResult.overallScore,
+            currentBoycottStatus: boycottStatus,
+            rawIngredients: ingredientsText,
+          );
+          final List<Map<String, String>> dynamicAlternatives = recResult.alternatives
+              .map((a) => {'name': a.name, 'brand': a.brand, 'reason': a.reason})
+              .toList();
+
           try {
             await DatabaseHelper().saveSnapshot(
               barcode: barcode,
@@ -111,22 +202,13 @@ class OpenFoodFactsService {
                 'nova_group': adjustedNovaGroup,
                 'verdict': scoreResult.novaVerdict,
                 'summary': '$brand üreticisine ait $name. ${ingredientsText.isNotEmpty ? "İçindekiler: $ingredientsText" : "Doğrulanmış açık veri kaydı."}',
-                'warnings': sugar > 15 ? ['Yüksek Şeker İçeriği (100g)'] : [],
-                'alternatives': [
-                  {
-                    'name': 'Doğal & Ev Yapımı Alternatif',
-                    'brand': 'Temiz Tarif',
-                    'reason': 'Katkısız ve rafine şekersiz ev yapımı hazırlama önerisi'
-                  },
-                  {
-                    'name': 'Torku Yerli Üretim Seçenek',
-                    'brand': 'Torku',
-                    'reason': 'Glikoz şurupsuz, katı palm yağı içermeyen yerli üretici'
-                  }
-                ]
+                'warnings': sugar > 15 ? ['Yüksek Şeker İçeriği (100g)'] : <String>[],
+                'alternatives': dynamicAlternatives,
               },
             );
-          } catch (_) {}
+          } catch (e) {
+            debugPrint('OpenFoodFactsService.saveSnapshot error ($barcode): $e');
+          }
 
           return ProductAnalysisResponse(
             barcode: barcode,
@@ -134,38 +216,24 @@ class OpenFoodFactsService {
             brand: brand.isNotEmpty ? brand : 'Doğrulanmış Marka',
             organicScore: scoreResult.overallScore,
             scoreCategory: scoreResult.ratingCategory,
-            novaGroup: novaGroup,
+            novaGroup: adjustedNovaGroup,
             novaVerdict: scoreResult.novaVerdict,
-            boycottStatus: 'CLEAR',
-            boycottReason: 'Open Food Facts veritabanından canlı doğrulandı.',
+            boycottStatus: boycottStatus,
+            boycottReason: boycottReason,
             aiSummary: '$brand üreticisine ait $name. ${ingredientsText.isNotEmpty ? "İçindekiler: $ingredientsText" : "Besin değerleri açık veritabanı ile eşleşti."}',
             warnings: sugar > 15 ? ['Yüksek Şeker İçeriği (100g)'] : [],
-            alternatives: [
-              {
-                'name': 'Doğal & Ev Yapımı Alternatif',
-                'brand': 'Temiz Tarif',
-                'reason': 'Katkısız ve rafine şekersiz ev yapımı hazırlama önerisi'
-              },
-              {
-                'name': 'Torku Yerli Üretim Seçenek',
-                'brand': 'Torku',
-                'reason': 'Glikoz şurupsuz, katı palm yağı içermeyen yerli üretici'
-              },
-              {
-                'name': 'Eti %100 Yulaf Ezmesi',
-                'brand': 'Eti',
-                'reason': 'Katkısız ve koruyucusuz tam tahıllı alternatif'
-              }
-            ],
+            alternatives: dynamicAlternatives,
             source: ScanDataSource.onlineCloudWorker,
             statusBadgeText: '🌐 Canlı Mod: Open Food Facts & Cloud AI Analizi',
             isDataIncomplete: false,
+            ingredientsText: ingredientsText,
           );
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('OpenFoodFactsService.fetchProductByBarcode error ($barcode): $e');
+    }
 
     return null;
   }
 }
-

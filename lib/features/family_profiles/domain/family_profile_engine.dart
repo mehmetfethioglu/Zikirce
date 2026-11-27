@@ -47,7 +47,9 @@ class FamilyProfile {
         if (parsedSens is Map<String, dynamic>) {
           sens = PersonalSensitivityConfig.fromMap(parsedSens);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('FamilyProfile.fromMap sensitivity_json decode error: $e');
+      }
     } else {
       // Inferred defaults from existing profile restrictions if sensitivity_json wasn't set
       if (resList.contains('HIGH_SUGAR')) {

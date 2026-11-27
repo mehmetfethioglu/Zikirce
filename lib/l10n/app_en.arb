@@ -1,0 +1,21 @@
+{
+  "@@locale": "en",
+  "appTitle": "Kilerce: Pantry, Barcode & Recipes",
+  "brandTagline": "BARCODE • PANTRY • RECIPES",
+  "tabPantry": "My Pantry",
+  "tabRecipes": "Meals & Recipes",
+  "tabScanner": "Barcode & Scan",
+  "tabShoppingProfile": "Shopping & Profile",
+  "pantrySummaryBadge": "{count} Items • Score {score}",
+  "@pantrySummaryBadge": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "score": { "type": "int" }
+    }
+  },
+  "taklitTagsisTooltip": "Ministry Food Fraud Blacklist",
+  "expiryAlertTitle": "Expiry Reminders",
+  "expiryAlertSubtitle": "Daily reminder for pantry items nearing expiration",
+  "backupSuccessMessage": "Pantry, recipe, and profile data backed up",
+  "restoreSuccessMessage": "All Kilerce data restored"
+}

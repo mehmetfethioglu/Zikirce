@@ -78,7 +78,9 @@ class EdgeWorkerSyncService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         offSuccess = true;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('EdgeWorkerSyncService OFF upload error ($barcode): $e');
+    }
 
     // 2. Submit to Cloudflare Worker & KV Cache
     try {
@@ -97,7 +99,7 @@ class EdgeWorkerSyncService {
         Uri.parse(_edgeWorkerUrl),
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'OrganicScoreApp/1.0',
+          'User-Agent': 'KilerceApp/3.2',
         },
         body: jsonEncode(workerPayload),
       ).timeout(const Duration(seconds: 6));
@@ -105,7 +107,9 @@ class EdgeWorkerSyncService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         workerSuccess = true;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('EdgeWorkerSyncService worker upload error ($barcode): $e');
+    }
 
     if (offSuccess || workerSuccess) {
       UserProfileService.instance.recordContribution();
@@ -131,11 +135,31 @@ class EdgeWorkerSyncService {
 
       for (var row in pendingRows) {
         final int id = row['id'] as int;
+        final String rowType = (row['type'] as String? ?? 'PRODUCT').toUpperCase();
         final String barcode = row['barcode'] as String? ?? '';
         final String payloadStr = row['payload_json'] as String? ?? '{}';
 
         try {
           final Map<String, dynamic> payload = jsonDecode(payloadStr);
+
+          if (rowType == 'BOYCOTT_REPORT') {
+            final bool synced = await BoycottSyncService.replayQueuedBoycottReport(payload);
+            if (synced) {
+              await db.update(
+                'crowdsourced_queue',
+                {'status': 'SYNCED'},
+                where: 'id = ?',
+                whereArgs: [id],
+              );
+              syncedCount++;
+            }
+            continue;
+          }
+
+          if (rowType == 'OWNERSHIP_UPDATE' || rowType == 'ALTERNATIVE_SUGGESTION') {
+            continue;
+          }
+
           final String name = payload['product_name'] as String? ?? '';
           final String brand = payload['brand'] as String? ?? '';
           final String ingText = payload['ingredients_text'] as String? ?? '';

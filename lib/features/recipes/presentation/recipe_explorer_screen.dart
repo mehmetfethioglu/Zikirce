@@ -149,24 +149,28 @@ class _ModeSegmentedHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Tooltip(
-          message: 'Kendi Ev Tarifini Ekle',
-          child: InkWell(
-            onTap: onOpenCustomForm,
-            borderRadius: BorderRadius.circular(14),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
-              decoration: BoxDecoration(
-                color: AppColors.primaryEmerald.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppColors.primaryEmerald.withValues(alpha: 0.45),
+        Semantics(
+          button: true,
+          label: 'Özel ev tarifi ekle',
+          child: Tooltip(
+            message: 'Kendi Ev Tarifini Ekle',
+            child: InkWell(
+              onTap: onOpenCustomForm,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 11),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryEmerald.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppColors.primaryEmerald.withValues(alpha: 0.45),
+                  ),
                 ),
-              ),
-              child: const Icon(
-                Icons.post_add_rounded,
-                size: 20,
-                color: AppColors.primaryEmerald,
+                child: const Icon(
+                  Icons.post_add_rounded,
+                  size: 20,
+                  color: AppColors.primaryEmerald,
+                ),
               ),
             ),
           ),
@@ -256,6 +260,12 @@ class _ExploreTabBody extends ConsumerWidget {
     final isLoading = ref.watch(
       mealModuleNotifierProvider.select((s) => s.isLoading),
     );
+    final isCloudLoading = ref.watch(
+      mealModuleNotifierProvider.select((s) => s.isCloudLoading),
+    );
+    final cloudHasMore = ref.watch(
+      mealModuleNotifierProvider.select((s) => s.cloudHasMore),
+    );
     final currentWeekMondayIso = ref.watch(
       mealModuleNotifierProvider.select((s) => s.currentWeekMondayIso),
     );
@@ -302,6 +312,9 @@ class _ExploreTabBody extends ConsumerWidget {
           readyNowCount: readyNowCount,
           wasteSaverCount: wasteSaverCount,
           isLoading: isLoading,
+          isCloudLoading: isCloudLoading,
+          cloudHasMore: cloudHasMore,
+          onLoadMoreCloud: notifier.loadMoreCloudRecipes,
           rescueItems: kilerState.rescueCandidateItems,
           wasteRescueMatches: wasteRescueMatches,
           onBatchAddPantryItems: KilerService.instance.addBatchDraftItems,

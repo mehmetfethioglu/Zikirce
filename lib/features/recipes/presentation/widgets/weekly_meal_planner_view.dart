@@ -1,10 +1,10 @@
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/kilerce_logo_mark.dart';
 import '../../domain/recipe_models.dart';
 import 'kitchen_checkin_sheets.dart';
+import 'recipe_match_card.dart';
+import 'recipe_visual_header.dart';
 
 /// Weekly meal planner view with week navigation, smart preset generator,
 /// 7-day selector, daily nutrition summary, overview/detail toggle, and 4 meal slots.
@@ -110,110 +110,121 @@ class _WeeklyMealPlannerViewState extends State<WeeklyMealPlannerView> {
     final summary = state.dailySummaryFor(state.selectedDateIso, pantryTags);
     final hasEntries = state.weekEntries.isNotEmpty;
 
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+    return Stack(
       children: [
-        if (state.activePrompts.isNotEmpty) ...[
-          KitchenDailyAssistantBanner(
-            prompts: state.activePrompts,
-            onAddPromptMissingToShopping: widget.onAddPromptMissingToShopping,
-            onBoughtPromptMissingToPantry:
-                widget.onBoughtPromptMissingToPantry,
-            onSnoozePromptMissing: widget.onSnoozePromptMissing,
-            onConfirmPromptCooked: widget.onConfirmPromptCooked,
-            onPostponePromptPlanned: widget.onPostponePromptPlanned,
-            onSkipPromptPlanned: widget.onSkipPromptPlanned,
-            onOpenUnplannedPrompt: widget.onOpenUnplannedPrompt,
-            onSkipUnplannedPrompt: widget.onSkipUnplannedPrompt,
+        ListView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            8,
+            16,
+            state.activePrompts.isNotEmpty ? 92 : 28,
           ),
-          const SizedBox(height: 10),
-        ],
-        _WeekNavigatorBar(
-          monday: monday,
-          onPreviousWeek: widget.onPreviousWeek,
-          onNextWeek: widget.onNextWeek,
-          onGoToCurrentWeek: widget.onGoToCurrentWeek,
-        ),
-        const SizedBox(height: 10),
-        if (!hasEntries || _showPlannerSetup) ...[
-          _SmartPlannerConfigCard(
-            selectedPreset: state.selectedPreset,
-            planServings: state.planServings,
-            isLoading: state.isLoading,
-            onPresetChanged: widget.onPresetChanged,
-            onServingsChanged: widget.onServingsChanged,
-            onGenerateSmartWeek: () {
-              if (_showPlannerSetup) {
-                setState(() => _showPlannerSetup = false);
-              }
-              widget.onGenerateSmartWeek();
-            },
-          ),
-          const SizedBox(height: 10),
-        ],
-        if (hasEntries) ...[
-          _CompactPlannerToolbar(
-            showSetup: _showPlannerSetup,
-            gapsCount: state.weeklyShoppingGaps.length,
-            onToggleSetup: () =>
-                setState(() => _showPlannerSetup = !_showPlannerSetup),
-            onTransferMissing: state.weeklyShoppingGaps.isNotEmpty
-                ? widget.onTransferMissingToShopping
-                : null,
-            onShareWeek: widget.onShareWeek,
-            onClearWeek: () => _confirmClearWeek(context),
-          ),
-          const SizedBox(height: 10),
-        ],
-        _SevenDayStrip(
-          days: days,
-          selectedDateIso: state.selectedDateIso,
-          todayIso: todayIso,
-          countForDate: state.entriesCountForDate,
-          onSelectDate: widget.onSelectDate,
-        ),
-        const SizedBox(height: 10),
-        _DailySummaryAndModeCard(
-          selectedDate: selectedDate,
-          summary: summary,
-          showFullWeekOverview: state.showFullWeekOverview,
-          onToggleOverview: widget.onToggleOverview,
-        ),
-        const SizedBox(height: 10),
-        if (state.showFullWeekOverview)
-          _FullWeekOverviewSection(
-            days: days,
-            state: state,
-            onSelectDayDetail: (iso) {
-              widget.onSelectDate(iso);
-              widget.onToggleOverview(false);
-            },
-          )
-        else
-          ...MealSlot.values.map(
-            (slot) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _MealSlotSectionCard(
-                slot: slot,
-                entries: state.entriesForDateAndSlot(
-                  state.selectedDateIso,
-                  slot,
-                ),
-                recipeById: state.recipeById,
-                pantryTags: pantryTags,
-                onAddMeal: () =>
-                    widget.onAddMealToSlot(state.selectedDateIso, slot),
-                onQuickConsumeSlot: widget.onQuickConsumeSlot != null
-                    ? () => widget.onQuickConsumeSlot!(
-                          state.selectedDateIso,
-                          slot,
-                        )
-                    : null,
-                onMarkCooked: widget.onMarkEntryCooked,
-                onRemoveEntry: widget.onRemoveEntry,
-                onOpenRecipe: widget.onOpenRecipe,
+          children: [
+            _WeekNavigatorBar(
+              monday: monday,
+              onPreviousWeek: widget.onPreviousWeek,
+              onNextWeek: widget.onNextWeek,
+              onGoToCurrentWeek: widget.onGoToCurrentWeek,
+            ),
+            const SizedBox(height: 10),
+            if (!hasEntries || _showPlannerSetup) ...[
+              _SmartPlannerConfigCard(
+                selectedPreset: state.selectedPreset,
+                planServings: state.planServings,
+                isLoading: state.isLoading,
+                onPresetChanged: widget.onPresetChanged,
+                onServingsChanged: widget.onServingsChanged,
+                onGenerateSmartWeek: () {
+                  if (_showPlannerSetup) {
+                    setState(() => _showPlannerSetup = false);
+                  }
+                  widget.onGenerateSmartWeek();
+                },
               ),
+              const SizedBox(height: 10),
+            ],
+            if (hasEntries) ...[
+              _CompactPlannerToolbar(
+                showSetup: _showPlannerSetup,
+                gapsCount: state.weeklyShoppingGaps.length,
+                onToggleSetup: () =>
+                    setState(() => _showPlannerSetup = !_showPlannerSetup),
+                onTransferMissing: state.weeklyShoppingGaps.isNotEmpty
+                    ? widget.onTransferMissingToShopping
+                    : null,
+                onShareWeek: widget.onShareWeek,
+                onClearWeek: () => _confirmClearWeek(context),
+              ),
+              const SizedBox(height: 10),
+            ],
+            _SevenDayStrip(
+              days: days,
+              selectedDateIso: state.selectedDateIso,
+              todayIso: todayIso,
+              countForDate: state.entriesCountForDate,
+              onSelectDate: widget.onSelectDate,
+            ),
+            const SizedBox(height: 10),
+            _DailySummaryAndModeCard(
+              selectedDate: selectedDate,
+              summary: summary,
+              showFullWeekOverview: state.showFullWeekOverview,
+              onToggleOverview: widget.onToggleOverview,
+            ),
+            const SizedBox(height: 10),
+            if (state.showFullWeekOverview)
+              _FullWeekOverviewSection(
+                days: days,
+                state: state,
+                onSelectDayDetail: (iso) {
+                  widget.onSelectDate(iso);
+                  widget.onToggleOverview(false);
+                },
+              )
+            else
+              ...MealSlot.values.map(
+                (slot) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _MealSlotSectionCard(
+                    slot: slot,
+                    entries: state.entriesForDateAndSlot(
+                      state.selectedDateIso,
+                      slot,
+                    ),
+                    recipeById: state.recipeById,
+                    pantryTags: pantryTags,
+                    onAddMeal: () =>
+                        widget.onAddMealToSlot(state.selectedDateIso, slot),
+                    onQuickConsumeSlot: widget.onQuickConsumeSlot != null
+                        ? () => widget.onQuickConsumeSlot!(
+                              state.selectedDateIso,
+                              slot,
+                            )
+                        : null,
+                    onMarkCooked: widget.onMarkEntryCooked,
+                    onRemoveEntry: widget.onRemoveEntry,
+                    onOpenRecipe: widget.onOpenRecipe,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        if (state.activePrompts.isNotEmpty)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: KitchenDailyAssistantFab(
+              prompts: state.activePrompts,
+              onAddPromptMissingToShopping: widget.onAddPromptMissingToShopping,
+              onBoughtPromptMissingToPantry:
+                  widget.onBoughtPromptMissingToPantry,
+              onSnoozePromptMissing: widget.onSnoozePromptMissing,
+              onConfirmPromptCooked: widget.onConfirmPromptCooked,
+              onPostponePromptPlanned: widget.onPostponePromptPlanned,
+              onSkipPromptPlanned: widget.onSkipPromptPlanned,
+              onOpenUnplannedPrompt: widget.onOpenUnplannedPrompt,
+              onSkipUnplannedPrompt: widget.onSkipUnplannedPrompt,
             ),
           ),
       ],
@@ -497,35 +508,44 @@ class _CompactPlannerToolbar extends StatelessWidget {
       decoration: BioMinimalUi.cardDecoration(context, radius: 16),
       child: Row(
         children: [
-          OutlinedButton.icon(
-            onPressed: onToggleSetup,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primaryEmerald,
-              backgroundColor: showSetup
-                  ? AppColors.primaryEmerald.withValues(alpha: 0.14)
-                  : null,
-              side: BorderSide(
-                color: AppColors.primaryEmerald.withValues(alpha: 0.55),
+          Flexible(
+            child: OutlinedButton.icon(
+              onPressed: onToggleSetup,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primaryEmerald,
+                backgroundColor: showSetup
+                    ? AppColors.primaryEmerald.withValues(alpha: 0.14)
+                    : null,
+                side: BorderSide(
+                  color: AppColors.primaryEmerald.withValues(alpha: 0.55),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(11),
+              icon: Icon(
+                showSetup
+                    ? Icons.expand_less_rounded
+                    : Icons.auto_awesome_rounded,
+                size: 15,
               ),
-            ),
-            icon: Icon(
-              showSetup ? Icons.expand_less_rounded : Icons.auto_awesome_rounded,
-              size: 15,
-            ),
-            label: Text(
-              showSetup ? 'Kapat' : '✨ Otomatik Plan',
-              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
+              label: Text(
+                showSetup ? 'Kapat' : 'Otomatik Plan',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Expanded(
-            child: OutlinedButton.icon(
+            child: OutlinedButton(
               onPressed: onTransferMissing,
               style: OutlinedButton.styleFrom(
                 foregroundColor: gapsCount > 0
@@ -543,15 +563,23 @@ class _CompactPlannerToolbar extends StatelessWidget {
                   borderRadius: BorderRadius.circular(11),
                 ),
               ),
-              icon: const Icon(Icons.add_shopping_cart_rounded, size: 15),
-              label: Text(
-                '🛒 Eksikler ($gapsCount)',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.add_shopping_cart_rounded, size: 14),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      'Eksikler ($gapsCount)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -559,14 +587,22 @@ class _CompactPlannerToolbar extends StatelessWidget {
           IconButton(
             onPressed: onShareWeek,
             tooltip: 'Paylaş',
-            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(30, 30),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             color: AppColors.primaryEmerald,
             icon: const Icon(Icons.share_rounded, size: 19),
           ),
           IconButton(
             onPressed: onClearWeek,
             tooltip: 'Haftayı Temizle',
-            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(30, 30),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             color: AppColors.dangerRed,
             icon: const Icon(Icons.delete_sweep_rounded, size: 19),
           ),
@@ -753,23 +789,42 @@ class _DailySummaryAndModeCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _SummaryStat(
-                    label: 'Kalori',
-                    value: '${summary.totalCalories} kcal',
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _SummaryStat(
+                        label: 'Kalori',
+                        value: '${summary.totalCalories} kcal',
+                      ),
+                    ),
                   ),
-                  _SummaryStat(
-                    label: 'Protein',
-                    value: '${summary.totalProtein} g',
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _SummaryStat(
+                        label: 'Protein',
+                        value: '${summary.totalProtein} g',
+                      ),
+                    ),
                   ),
-                  _SummaryStat(
-                    label: 'Lif',
-                    value: '${summary.totalFiber} g',
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _SummaryStat(
+                        label: 'Lif',
+                        value: '${summary.totalFiber} g',
+                      ),
+                    ),
                   ),
-                  _SummaryStat(
-                    label: 'Ort. Skor',
-                    value: '${summary.averageCleanScore}/100',
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _SummaryStat(
+                        label: 'Ort. Skor',
+                        value: '${summary.averageCleanScore}/100',
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1097,8 +1152,10 @@ class _MealSlotSectionCard extends StatelessWidget {
               ),
             )
           else ...[
-            const SizedBox(height: 8),
-            ...entries.map((entry) {
+            const SizedBox(height: 10),
+            ...entries.asMap().entries.map((indexed) {
+              final entry = indexed.value;
+              final isLast = indexed.key == entries.length - 1;
               final recipe = recipeById[entry.recipeId];
               final missingCount = recipe == null
                   ? 0
@@ -1107,14 +1164,17 @@ class _MealSlotSectionCard extends StatelessWidget {
                       .length;
               final isReady = recipe != null && missingCount == 0;
 
-              return _MealEntryTile(
-                entry: entry,
-                recipe: recipe,
-                isReadyInPantry: isReady,
-                missingCount: missingCount,
-                onOpen: () => onOpenRecipe(entry.recipeId),
-                onMarkCooked: () => onMarkCooked(entry),
-                onRemove: () => onRemoveEntry(entry),
+              return Padding(
+                padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                child: _MealEntryTile(
+                  entry: entry,
+                  recipe: recipe,
+                  isReadyInPantry: isReady,
+                  missingCount: missingCount,
+                  onOpen: () => onOpenRecipe(entry.recipeId),
+                  onMarkCooked: () => onMarkCooked(entry),
+                  onRemove: () => onRemoveEntry(entry),
+                ),
               );
             }),
           ],
@@ -1145,248 +1205,313 @@ class _MealEntryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = recipe?.title ?? entry.recipeId;
-    final minutes = recipe == null
+    final KilerRecipe? resolvedRecipe = recipe;
+    final title = resolvedRecipe?.title ?? entry.recipeId;
+    final minutes = resolvedRecipe == null
         ? 0
-        : (recipe!.totalMinutes > 0
-            ? recipe!.totalMinutes
-            : recipe!.prepMinutes);
+        : (resolvedRecipe.totalMinutes > 0
+            ? resolvedRecipe.totalMinutes
+            : resolvedRecipe.prepMinutes);
+    final String subtitleText = resolvedRecipe != null
+        ? '${entry.servings} kişilik • $minutes dk • ${resolvedRecipe.scaledCalories(entry.servings)} kcal'
+        : '${entry.servings} kişilik';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      height: 172,
       decoration: BoxDecoration(
-        color: entry.isCooked
-            ? AppColors.primaryEmerald.withValues(alpha: 0.08)
-            : context.subtleSurfaceColor,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(21),
         border: Border.all(
           color: entry.isCooked
-              ? AppColors.primaryEmerald.withValues(alpha: 0.4)
+              ? AppColors.primaryEmerald.withValues(alpha: 0.85)
               : context.cardBorderColor,
+          width: entry.isCooked ? 1.5 : 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: onOpen,
-            borderRadius: BorderRadius.circular(10),
-            child: Row(
-              children: [
-                _MealEntryThumbnail(recipe: recipe),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: context.textPrimaryColor,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      if (recipe != null)
-                        Text(
-                          '${entry.servings} kişilik • ⏱️ $minutes dk • 🔥 ${recipe!.scaledCalories(entry.servings)} kcal',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: context.textSecondaryColor,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      else
-                        Text(
-                          '${entry.servings} kişilik',
-                          style: TextStyle(
-                            color: context.textSecondaryColor,
-                            fontSize: 11,
-                          ),
-                        ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (resolvedRecipe != null)
+              RecipeVisualHeader(
+                recipe: resolvedRecipe,
+                height: 172,
+                showOverlays: false,
+                borderRadius: BorderRadius.zero,
+              )
+            else
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF10241C),
+                      Color(0xFF0A1410),
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: AppColors.primaryEmerald,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: (isReadyInPantry
-                          ? AppColors.primaryEmerald
-                          : AppColors.cautionGold)
-                      .withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  recipe == null
-                      ? '🛒 Eksik Var'
-                      : isReadyInPantry
-                          ? '✅ Kilerde Tam'
-                          : '⚠️ $missingCount Eksik',
-                  style: TextStyle(
-                    color: isReadyInPantry
-                        ? AppColors.primaryEmerald
-                        : AppColors.cautionGold,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
+                child: Center(
+                  child: KilerceLogoMark(
+                    size: 52,
+                    borderRadius: 14,
+                    showShadow: false,
                   ),
                 ),
               ),
-              const Spacer(),
-              if (entry.isCooked)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x28000000),
+                      Color(0x00000000),
+                      Color(0xD6060C0A),
+                    ],
+                    stops: [0.0, 0.42, 1.0],
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryEmerald.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 14,
-                        color: AppColors.primaryEmerald,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onOpen,
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.2,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            subtitleText,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.80),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(width: 4),
-                      Text(
-                        'Pişirildi',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 10,
+              left: 10,
+              right: 10,
+              child: Row(
+                children: [
+                  if (resolvedRecipe != null) ...[
+                    _MealOverlayCircleBadge(
+                      tooltip: resolvedRecipe.category,
+                      child: Icon(
+                        RecipeMatchCard.iconForCategory(resolvedRecipe.category),
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  if (resolvedRecipe != null && isReadyInPantry)
+                    const _MealOverlayCircleBadge(
+                      tooltip: 'Kilerde hazır',
+                      child: Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.primaryEmerald,
+                        size: 17,
+                      ),
+                    )
+                  else if (resolvedRecipe != null && missingCount > 0)
+                    _MealOverlayPill(
+                      tooltip: '$missingCount malzeme eksik',
+                      child: Text(
+                        '-$missingCount',
                         style: TextStyle(
-                          color: AppColors.primaryEmerald,
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    const _MealOverlayCircleBadge(
+                      tooltip: 'Tarif bilgisi yok',
+                      child: Icon(
+                        Icons.shopping_cart_outlined,
+                        color: Colors.white70,
+                        size: 15,
+                      ),
+                    ),
+                  const Spacer(),
+                  if (resolvedRecipe != null) ...[
+                    _MealOverlayPill(
+                      child: Text(
+                        '${resolvedRecipe.baseHealthScore}',
+                        style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 11.5,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                    ],
-                  ),
-                )
-              else
-                ElevatedButton.icon(
-                  onPressed: onMarkCooked,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryEmerald,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
                     ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  icon: const Icon(Icons.soup_kitchen_rounded, size: 14),
-                  label: const Text(
-                    'Pişirdim',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
+                    const SizedBox(width: 6),
+                  ],
+                  Semantics(
+                    button: true,
+                    label: entry.isCooked ? 'Pişirildi' : 'Pişirdim',
+                    child: _MealOverlayCircleButton(
+                      tooltip: entry.isCooked ? 'Pişirildi' : 'Pişirdim',
+                      backgroundColor: entry.isCooked
+                          ? AppColors.primaryEmerald.withValues(alpha: 0.92)
+                          : const Color(0x78000000),
+                      onTap: onMarkCooked,
+                      child: Icon(
+                        entry.isCooked
+                            ? Icons.check_rounded
+                            : Icons.local_dining_rounded,
+                        size: entry.isCooked ? 18 : 16,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-              const SizedBox(width: 6),
-              IconButton(
-                onPressed: onRemove,
-                tooltip: 'Planlanan Öğünü Sil',
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  size: 19,
-                  color: AppColors.dangerRed,
-                ),
+                  const SizedBox(width: 6),
+                  Semantics(
+                    button: true,
+                    label: 'Planlanan Öğünü Sil',
+                    child: _MealOverlayCircleButton(
+                      tooltip: 'Planlanan Öğünü Sil',
+                      backgroundColor: const Color(0x78000000),
+                      onTap: onRemove,
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 17,
+                        color: Colors.white.withValues(alpha: 0.90),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _MealEntryThumbnail extends StatelessWidget {
-  final KilerRecipe? recipe;
+class _MealOverlayCircleBadge extends StatelessWidget {
+  final String tooltip;
+  final Widget child;
 
-  const _MealEntryThumbnail({required this.recipe});
+  const _MealOverlayCircleBadge({
+    required this.tooltip,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final localPath = recipe?.localImagePath?.trim();
-    if (!kIsWeb &&
-        localPath != null &&
-        localPath.isNotEmpty &&
-        File(localPath).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.file(
-          File(localPath),
-          width: 46,
-          height: 46,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const _MealThumbnailFallback(),
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        width: 30,
+        height: 30,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0x78000000),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         ),
-      );
-    }
-
-    final imageUrl = recipe?.imageUrl?.trim();
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          imageUrl,
-          width: 46,
-          height: 46,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const _MealThumbnailFallback(),
-        ),
-      );
-    }
-
-    final assetPath = recipe?.imageAsset?.trim();
-    if (assetPath != null && assetPath.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Image.asset(
-          assetPath,
-          width: 46,
-          height: 46,
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => const _MealThumbnailFallback(),
-        ),
-      );
-    }
-    return const _MealThumbnailFallback();
+        child: child,
+      ),
+    );
   }
 }
 
-class _MealThumbnailFallback extends StatelessWidget {
-  const _MealThumbnailFallback();
+class _MealOverlayPill extends StatelessWidget {
+  final String? tooltip;
+  final Widget child;
+
+  const _MealOverlayPill({
+    this.tooltip,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const KilerceLogoMark(
-      size: 46,
-      borderRadius: 12,
-      showShadow: false,
+    final pill = Container(
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0x78000000),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: child,
+    );
+    if (tooltip == null) return pill;
+    return Tooltip(message: tooltip!, child: pill);
+  }
+}
+
+class _MealOverlayCircleButton extends StatelessWidget {
+  final String tooltip;
+  final Color backgroundColor;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _MealOverlayCircleButton({
+    required this.tooltip,
+    required this.backgroundColor,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: backgroundColor,
+        shape: const CircleBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            width: 32,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            ),
+            child: child,
+          ),
+        ),
+      ),
     );
   }
 }

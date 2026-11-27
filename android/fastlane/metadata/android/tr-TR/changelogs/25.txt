@@ -1,0 +1,1 @@
+Kilerce v3.3.8: Bakanlık Kara Listesi kartları sadeleştirildi; üst çubuğa profil fotoğrafı ve hızlı hesap/ayar menüsü eklendi. Bugünkü menüde eksik malzeme varsa sabah bildirimle hatırlatma aktif edildi. İlk açılış için Kullanım Kılavuzu ve temsili yemek görselleri yerine kendi tarif fotoğrafınızı gönderebileceğiniz Geri Bildirim bölümü eklendi.

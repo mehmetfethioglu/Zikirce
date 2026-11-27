@@ -33,18 +33,21 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties.getProperty("keyAlias") ?: "upload"
-            keyPassword = keystoreProperties.getProperty("keyPassword") ?: "organicscore_akarworks_2026"
-            storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) } ?: file("upload-keystore.jks")
-            storePassword = keystoreProperties.getProperty("storePassword") ?: "organicscore_akarworks_2026"
+            keyAlias = keystoreProperties.getProperty("keyAlias") ?: System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword = keystoreProperties.getProperty("keyPassword") ?: System.getenv("ANDROID_KEY_PASSWORD")
+            val storeFilePath = keystoreProperties.getProperty("storeFile") ?: System.getenv("ANDROID_STORE_FILE")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+            }
+            storePassword = keystoreProperties.getProperty("storePassword") ?: System.getenv("ANDROID_STORE_PASSWORD")
         }
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
