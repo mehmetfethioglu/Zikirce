@@ -27,7 +27,7 @@ dependencies:
   google_sign_in: ^6.2.2
   crypto: ^3.0.6
   path_provider: ^2.1.5
-  purchases_flutter: ^8.10.2
+  purchases_flutter: ^11.0.6
 
 dev_dependencies:
   flutter_test:

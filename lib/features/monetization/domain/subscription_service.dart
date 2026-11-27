@@ -469,7 +469,7 @@ class SubscriptionService {
         );
       }
 
-      await rc.Purchases.purchasePackage(targetPkg);
+      await rc.Purchases.purchase(rc.PurchaseParams.package(targetPkg));
       final bool isActive = await syncRevenueCatCustomerInfo();
       unawaited(syncCloudEntitlement());
       if (isActive) {
