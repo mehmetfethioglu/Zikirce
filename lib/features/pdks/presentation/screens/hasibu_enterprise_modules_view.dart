@@ -401,6 +401,8 @@ class PreAccountingPayrollSummaryView extends ConsumerWidget {
                       DailyAttendanceState.onLeave ||
                       DailyAttendanceState.sickReport =>
                         'İZİNLİ / RAPORLU',
+                      DailyAttendanceState.publicHoliday => 'RESMİ TATİL (UBGT)',
+                      DailyAttendanceState.weeklyOff => 'HAFTA TATİLİ',
                       DailyAttendanceState.terminated => 'İŞTEN AYRILDI',
                       DailyAttendanceState.notYetHired => 'KADRO DIŞI',
                     },

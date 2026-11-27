@@ -20,8 +20,10 @@ class MainActivity : FlutterActivity() {
     private val printChannel = "com.akarworks.hasibu/print"
     private val filesChannel = "com.akarworks.hasibu/files"
     private val requestPickImage = 43701
+    private val requestPickDocument = 43702
     private var activePrintWebView: WebView? = null
     private var pendingImagePickResult: MethodChannel.Result? = null
+    private var pendingDocumentPickResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -104,24 +106,53 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, filesChannel)
             .setMethodCallHandler { call, result ->
-                if (call.method == "pickImageFile") {
-                    if (pendingImagePickResult != null) {
-                        result.error("PICK_IN_PROGRESS", "Zaten bir dosya seçici açık.", null)
-                        return@setMethodCallHandler
-                    }
-                    try {
-                        pendingImagePickResult = result
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "image/*"
+                when (call.method) {
+                    "pickImageFile" -> {
+                        if (pendingImagePickResult != null) {
+                            result.error("PICK_IN_PROGRESS", "Zaten bir görsel seçici açık.", null)
+                            return@setMethodCallHandler
                         }
-                        startActivityForResult(intent, requestPickImage)
-                    } catch (e: Exception) {
-                        pendingImagePickResult = null
-                        result.error("PICK_ERROR", e.message, null)
+                        try {
+                            pendingImagePickResult = result
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "image/*"
+                            }
+                            startActivityForResult(intent, requestPickImage)
+                        } catch (e: Exception) {
+                            pendingImagePickResult = null
+                            result.error("PICK_ERROR", e.message, null)
+                        }
                     }
-                } else {
-                    result.notImplemented()
+                    "pickDocumentFile" -> {
+                        if (pendingDocumentPickResult != null) {
+                            result.error("PICK_IN_PROGRESS", "Zaten bir evrak seçici açık.", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            pendingDocumentPickResult = result
+                            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "*/*"
+                                putExtra(
+                                    Intent.EXTRA_MIME_TYPES,
+                                    arrayOf(
+                                        "application/pdf",
+                                        "image/*",
+                                        "application/msword",
+                                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                        "text/csv",
+                                        "text/plain"
+                                    )
+                                )
+                            }
+                            startActivityForResult(intent, requestPickDocument)
+                        } catch (e: Exception) {
+                            pendingDocumentPickResult = null
+                            result.error("PICK_ERROR", e.message, null)
+                        }
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }
@@ -129,9 +160,12 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != requestPickImage) return
-        val pending = pendingImagePickResult
-        pendingImagePickResult = null
+        val isImage = requestCode == requestPickImage
+        val isDocument = requestCode == requestPickDocument
+        if (!isImage && !isDocument) return
+
+        val pending = if (isImage) pendingImagePickResult else pendingDocumentPickResult
+        if (isImage) pendingImagePickResult = null else pendingDocumentPickResult = null
         if (pending == null) return
 
         if (resultCode != Activity.RESULT_OK || data?.data == null) {
@@ -142,8 +176,10 @@ class MainActivity : FlutterActivity() {
         val uri = data.data!!
         try {
             val mime = contentResolver.getType(uri)
-            val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: "png"
-            val outFile = File(cacheDir, "hasibu_picked_logo_${System.currentTimeMillis()}.$ext")
+            val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime)
+                ?: if (isImage) "png" else "pdf"
+            val prefix = if (isImage) "hasibu_picked_logo" else "hasibu_picked_doc"
+            val outFile = File(cacheDir, "${prefix}_${System.currentTimeMillis()}.$ext")
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(outFile).use { output ->
                     input.copyTo(output)
@@ -154,7 +190,7 @@ class MainActivity : FlutterActivity() {
             }
             pending.success(outFile.absolutePath)
         } catch (e: Exception) {
-            android.util.Log.w("MainActivity", "pickImageFile copy failed: ${e.message}")
+            android.util.Log.w("MainActivity", "file pick copy failed: ${e.message}")
             pending.error("PICK_ERROR", e.message, null)
         }
     }

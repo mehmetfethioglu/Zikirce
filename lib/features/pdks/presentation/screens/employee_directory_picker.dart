@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/utils/turkish_search.dart';
 import '../../domain/pdks_models.dart';
-import 'hasibu_settings_view.dart';
+import '../widgets/employee_profile_avatar.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 enum EmployeeDirectoryFilter {
   active,

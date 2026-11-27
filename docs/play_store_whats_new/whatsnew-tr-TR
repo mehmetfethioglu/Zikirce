@@ -1,5 +1,5 @@
-v1.0.17 Yenilikleri:
-• A4 Yazdırma: Personel kartları, listeler, canlı yoklama, devam/devamsızlık ve izin raporları için önizlemeli çıktı alma.
-• Canlı Arama Düzeltmesi: Arama metni silinince listenin anında güncellenmesi, temizle butonu ve Türkçe karakter (İ/ı/ğ/ü/ş/ö/ç) uyumu.
-• Logo & İlk Kurulum: Dosyadan logo seçme/uygulama düzeltildi; ilk yönetici girişinde işletme adı ve logo ekleme eklendi.
-• Bulut & Köprü: Google Drive şube kutusu ve oturum şeffaflığı iyileştirildi.
+v1.0.18 Yenilikleri:
+• Güvenli GPS Yoklama: QR giriş kaldırıldı; personel oturumu şube & kendi adına GPS'e kilitlendi, varsayılan PIN açığı kapatıldı.
+• Gelişmiş Puantaj: Yarım gün/saatlik izin (0.5g), Arefe, hafta tatili (HT)/bayram (BM) mesaisi, 2024–2030 dini bayramlar ve 4857 uyarıları.
+• Rotasyon & Terminal: Tarih bazlı vardiya atama ve terminal saat/kadro eşitleme.
+• Toplu CSV & KVKK: Toplu aktarım, KVKK maskeleme, mobil evrak seçici ve aylık özet.

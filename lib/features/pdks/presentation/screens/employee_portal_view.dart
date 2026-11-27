@@ -5,7 +5,10 @@ import '../../domain/pdks_models.dart';
 import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'hasibu_print_preview_dialog.dart';
-import 'hasibu_settings_view.dart';
+import 'employee_history_dossier_dialog.dart';
+import 'pdks_operational_dialogs.dart';
+import '../widgets/employee_profile_avatar.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 enum _PortalEmploymentFilter { active, terminated, all }
 
@@ -759,6 +762,8 @@ class _PortalWorkspaceContent extends ConsumerWidget {
           employee: emp,
           isSeparated: isSeparated,
         ),
+        const SizedBox(height: 14),
+        _PortalMonthlyPuantajCard(current: current),
         const SizedBox(height: 14),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -1954,6 +1959,138 @@ class _PortalHrRequestsCard extends StatelessWidget {
         HrRequestStatus.approved => const Color(0xFF059669),
         HrRequestStatus.rejected => const Color(0xFFDC2626),
       };
+}
+
+class _PortalMonthlyPuantajCard extends ConsumerWidget {
+  final EmployeeDailyStatus current;
+
+  const _PortalMonthlyPuantajCard({required this.current});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pal = HasibuPalette.of(context);
+    final state = ref.watch(pdksDashboardProvider);
+    final notifier = ref.read(pdksDashboardProvider.notifier);
+    final parsed = Employee.parseDateKey(state.selectedDate) ?? DateTime.now();
+    final rows = notifier.buildMonthlyPuantajMatrix(
+      year: parsed.year,
+      month: parsed.month,
+      branchId: current.branch.id,
+      searchQuery: current.employee.cardNo,
+    );
+    final myRow = rows
+        .where((r) => r.employee.id == current.employee.id)
+        .firstOrNull;
+    if (myRow == null) return const SizedBox.shrink();
+
+    return Container(
+      key: const ValueKey('portal_monthly_puantaj_summary_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: pal.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: pal.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Aylık Kişisel Puantaj Özeti (${parsed.year}-${parsed.month.toString().padLeft(2, '0')})',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: pal.textPrimary,
+                ),
+              ),
+              Text(
+                'Aktif Vardiya: ${current.shift.name} (${current.shift.startTime}-${current.shift.endTime})',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: pal.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              _PortalPillBadge(
+                label: 'Çalışılan: ${myRow.workedDays}g',
+                bg: const Color(0xFF059669).withValues(alpha: 0.13),
+                fg: const Color(0xFF059669),
+              ),
+              _PortalPillBadge(
+                label: 'Geç: ${myRow.lateDays}g',
+                bg: const Color(0xFFD97706).withValues(alpha: 0.13),
+                fg: const Color(0xFFD97706),
+              ),
+              _PortalPillBadge(
+                label: 'FM: +${myRow.totalOvertimeMinutes} dk',
+                bg: const Color(0xFF047857).withValues(alpha: 0.13),
+                fg: const Color(0xFF047857),
+              ),
+              _PortalPillBadge(
+                label: 'İzin/Rapor: ${myRow.leaveDays + myRow.sickDays}g',
+                bg: const Color(0xFF0284C7).withValues(alpha: 0.13),
+                fg: const Color(0xFF0284C7),
+              ),
+              _PortalPillBadge(
+                label: 'Devamsız: ${myRow.absentDays}g',
+                bg: const Color(0xFFDC2626).withValues(alpha: 0.13),
+                fg: const Color(0xFFDC2626),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              for (final cell in myRow.cells)
+                Container(
+                  width: 30,
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  decoration: BoxDecoration(
+                    color: pal.subtle,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: pal.border),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        '${cell.day}',
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: pal.textMuted,
+                        ),
+                      ),
+                      Text(
+                        cell.code,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: pal.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PortalPillBadge extends StatelessWidget {

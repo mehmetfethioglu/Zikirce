@@ -469,7 +469,8 @@ enum VerifyMethod {
   card('Kart'),
   password('Şifre'),
   mobileQr('Şube QR'),
-  mobileGps('GPS Geofence');
+  mobileGps('GPS Geofence'),
+  manual('Manuel Kayıt');
 
   final String label;
   const VerifyMethod(this.label);
@@ -502,6 +503,8 @@ enum DailyAttendanceState {
   late('Geç Geldi'),
   onLeave('İzinli'),
   sickReport('Raporlu'),
+  publicHoliday('Resmi Tatil'),
+  weeklyOff('Hafta Tatili'),
   absent('Devamsız'),
   terminated('İşten Ayrıldı'),
   notYetHired('İşe Başlamadı');
@@ -512,6 +515,53 @@ enum DailyAttendanceState {
   bool get isNonActiveEmployment =>
       this == DailyAttendanceState.terminated ||
       this == DailyAttendanceState.notYetHired;
+
+  bool get isScheduledOffDay =>
+      this == DailyAttendanceState.publicHoliday ||
+      this == DailyAttendanceState.weeklyOff;
+}
+
+@immutable
+class PublicHoliday {
+  final String id;
+  final String dateKey; // YYYY-MM-DD
+  final String name;
+  final bool isHalfDay;
+
+  const PublicHoliday({
+    required this.id,
+    required this.dateKey,
+    required this.name,
+    this.isHalfDay = false,
+  });
+
+  PublicHoliday copyWith({
+    String? id,
+    String? dateKey,
+    String? name,
+    bool? isHalfDay,
+  }) {
+    return PublicHoliday(
+      id: id ?? this.id,
+      dateKey: dateKey ?? this.dateKey,
+      name: name ?? this.name,
+      isHalfDay: isHalfDay ?? this.isHalfDay,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'dateKey': dateKey,
+        'name': name,
+        'isHalfDay': isHalfDay,
+      };
+
+  factory PublicHoliday.fromJson(Map<String, dynamic> json) => PublicHoliday(
+        id: json['id'] as String? ?? '',
+        dateKey: json['dateKey'] as String? ?? '',
+        name: json['name'] as String? ?? 'Resmi Tatil',
+        isHalfDay: json['isHalfDay'] as bool? ?? false,
+      );
 }
 
 enum HasibuThemeMode {
@@ -848,6 +898,10 @@ class ShiftPlan {
   final String startTime; // HH:mm
   final String endTime; // HH:mm
   final int toleranceMinutes;
+  final int breakMinutes;
+  final int overtimeThresholdMinutes;
+  final int roundingMinutes; // 0, 5, 15
+  final List<int> weeklyOffDays; // ISO weekday: 1=Pzt .. 7=Paz
 
   const ShiftPlan({
     required this.id,
@@ -855,7 +909,39 @@ class ShiftPlan {
     required this.startTime,
     required this.endTime,
     this.toleranceMinutes = 15,
+    this.breakMinutes = 0,
+    this.overtimeThresholdMinutes = 15,
+    this.roundingMinutes = 0,
+    this.weeklyOffDays = const <int>[],
   });
+
+  static List<int> parseWeeklyOffDaysCsv(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const <int>[];
+    final set = <int>{};
+    for (final part in raw.split(',')) {
+      final parsed = int.tryParse(part.trim());
+      if (parsed != null && parsed >= 1 && parsed <= 7) {
+        set.add(parsed);
+      }
+    }
+    final list = set.toList()..sort();
+    return List<int>.unmodifiable(list);
+  }
+
+  static String toWeeklyOffDaysCsv(Iterable<int> days) {
+    final unique = days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
+    return unique.join(',');
+  }
+
+  bool get isNightShift {
+    final sp = startTime.split(':');
+    final ep = endTime.split(':');
+    final sh = int.tryParse(sp.isNotEmpty ? sp[0] : '8') ?? 8;
+    final sm = int.tryParse(sp.length > 1 ? sp[1] : '0') ?? 0;
+    final eh = int.tryParse(ep.isNotEmpty ? ep[0] : '18') ?? 18;
+    final em = int.tryParse(ep.length > 1 ? ep[1] : '0') ?? 0;
+    return (eh * 60 + em) <= (sh * 60 + sm);
+  }
 
   /// Gece vardiyası (örn. 19:00 - 07:00) dahil planlanan vardiya süresi (dakika).
   int get plannedDurationMinutes {
@@ -879,6 +965,10 @@ class ShiftPlan {
     String? startTime,
     String? endTime,
     int? toleranceMinutes,
+    int? breakMinutes,
+    int? overtimeThresholdMinutes,
+    int? roundingMinutes,
+    List<int>? weeklyOffDays,
   }) {
     return ShiftPlan(
       id: id ?? this.id,
@@ -886,6 +976,11 @@ class ShiftPlan {
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       toleranceMinutes: toleranceMinutes ?? this.toleranceMinutes,
+      breakMinutes: breakMinutes ?? this.breakMinutes,
+      overtimeThresholdMinutes:
+          overtimeThresholdMinutes ?? this.overtimeThresholdMinutes,
+      roundingMinutes: roundingMinutes ?? this.roundingMinutes,
+      weeklyOffDays: weeklyOffDays ?? this.weeklyOffDays,
     );
   }
 
@@ -895,15 +990,40 @@ class ShiftPlan {
         'startTime': startTime,
         'endTime': endTime,
         'toleranceMinutes': toleranceMinutes,
+        'breakMinutes': breakMinutes,
+        'overtimeThresholdMinutes': overtimeThresholdMinutes,
+        'roundingMinutes': roundingMinutes,
+        'weeklyOffDays': weeklyOffDays,
       };
 
-  factory ShiftPlan.fromJson(Map<String, dynamic> json) => ShiftPlan(
-        id: json['id'] as int,
-        name: json['name'] as String,
-        startTime: json['startTime'] as String? ?? '08:00',
-        endTime: json['endTime'] as String? ?? '18:00',
-        toleranceMinutes: json['toleranceMinutes'] as int? ?? 15,
-      );
+  factory ShiftPlan.fromJson(Map<String, dynamic> json) {
+    final rawDays = json['weeklyOffDays'];
+    final List<int> parsedDays;
+    if (rawDays is Iterable) {
+      parsedDays = rawDays
+          .map((e) => e is num ? e.toInt() : int.tryParse(e.toString()) ?? 0)
+          .where((d) => d >= 1 && d <= 7)
+          .toSet()
+          .toList()
+        ..sort();
+    } else if (rawDays is String) {
+      parsedDays = parseWeeklyOffDaysCsv(rawDays);
+    } else {
+      parsedDays = const <int>[];
+    }
+    return ShiftPlan(
+      id: json['id'] as int,
+      name: json['name'] as String,
+      startTime: json['startTime'] as String? ?? '08:00',
+      endTime: json['endTime'] as String? ?? '18:00',
+      toleranceMinutes: (json['toleranceMinutes'] as num?)?.toInt() ?? 15,
+      breakMinutes: (json['breakMinutes'] as num?)?.toInt() ?? 0,
+      overtimeThresholdMinutes:
+          (json['overtimeThresholdMinutes'] as num?)?.toInt() ?? 15,
+      roundingMinutes: (json['roundingMinutes'] as num?)?.toInt() ?? 0,
+      weeklyOffDays: List<int>.unmodifiable(parsedDays),
+    );
+  }
 }
 
 @immutable
@@ -920,11 +1040,18 @@ class Employee {
   final bool sgkActive;
   final int annualLeaveEntitlement;
   final int usedAnnualLeave;
+  final double? usedAnnualLeaveExact;
   final double kpiScore;
   final String password;
   final List<HasibuModule> allowedModules;
   final String? photoPath;
   final HasibuThemeMode themeMode;
+  final String? nationalId;
+  final String? phone;
+  final String? email;
+  final String? iban;
+  final String? probationEndDate; // YYYY-MM-DD
+  final int? weeklyOffDay; // ISO weekday 1..7
 
   const Employee({
     required this.id,
@@ -939,11 +1066,18 @@ class Employee {
     this.sgkActive = true,
     this.annualLeaveEntitlement = 14,
     this.usedAnnualLeave = 0,
+    this.usedAnnualLeaveExact,
     this.kpiScore = 92.0,
     this.password = '1234',
     this.allowedModules = const <HasibuModule>[HasibuModule.employeePortal],
     this.photoPath,
     this.themeMode = HasibuThemeMode.light,
+    this.nationalId,
+    this.phone,
+    this.email,
+    this.iban,
+    this.probationEndDate,
+    this.weeklyOffDay,
   });
 
   static DateTime? parseDateKey(String? raw) {
@@ -991,6 +1125,20 @@ class Employee {
   }
 
   bool get isSeparatedNow => isSeparatedAt();
+
+  double get usedAnnualLeaveDays =>
+      usedAnnualLeaveExact ?? usedAnnualLeave.toDouble();
+
+  double get remainingAnnualLeaveDays =>
+      (annualLeaveEntitlement - usedAnnualLeaveDays).clamp(0.0, 365.0);
+
+  String get formattedRemainingAnnualLeave {
+    final rem = remainingAnnualLeaveDays;
+    if ((rem - rem.roundToDouble()).abs() < 0.01) {
+      return rem.round().toString();
+    }
+    return rem.toStringAsFixed(1);
+  }
 
   int get remainingAnnualLeave =>
       (annualLeaveEntitlement - usedAnnualLeave).clamp(0, 365);
@@ -1065,11 +1213,18 @@ class Employee {
     bool? sgkActive,
     int? annualLeaveEntitlement,
     int? usedAnnualLeave,
+    double? Function()? usedAnnualLeaveExact,
     double? kpiScore,
     String? password,
     List<HasibuModule>? allowedModules,
     String? Function()? photoPath,
     HasibuThemeMode? themeMode,
+    String? Function()? nationalId,
+    String? Function()? phone,
+    String? Function()? email,
+    String? Function()? iban,
+    String? Function()? probationEndDate,
+    int? Function()? weeklyOffDay,
   }) {
     return Employee(
       id: id ?? this.id,
@@ -1085,11 +1240,22 @@ class Employee {
       annualLeaveEntitlement:
           annualLeaveEntitlement ?? this.annualLeaveEntitlement,
       usedAnnualLeave: usedAnnualLeave ?? this.usedAnnualLeave,
+      usedAnnualLeaveExact: usedAnnualLeaveExact != null
+          ? usedAnnualLeaveExact()
+          : this.usedAnnualLeaveExact,
       kpiScore: kpiScore ?? this.kpiScore,
       password: password ?? this.password,
       allowedModules: allowedModules ?? this.allowedModules,
       photoPath: photoPath != null ? photoPath() : this.photoPath,
       themeMode: themeMode ?? this.themeMode,
+      nationalId: nationalId != null ? nationalId() : this.nationalId,
+      phone: phone != null ? phone() : this.phone,
+      email: email != null ? email() : this.email,
+      iban: iban != null ? iban() : this.iban,
+      probationEndDate: probationEndDate != null
+          ? probationEndDate()
+          : this.probationEndDate,
+      weeklyOffDay: weeklyOffDay != null ? weeklyOffDay() : this.weeklyOffDay,
     );
   }
 
@@ -1106,11 +1272,18 @@ class Employee {
         'sgkActive': sgkActive,
         'annualLeaveEntitlement': annualLeaveEntitlement,
         'usedAnnualLeave': usedAnnualLeave,
+        'usedAnnualLeaveExact': usedAnnualLeaveDays,
         'kpiScore': kpiScore,
         'password': password,
         'allowedModules': HasibuModule.toCsv(allowedModules),
         'photoPath': photoPath,
         'themeMode': themeMode.name,
+        'nationalId': nationalId,
+        'phone': phone,
+        'email': email,
+        'iban': iban,
+        'probationEndDate': normalizeDateKey(probationEndDate),
+        'weeklyOffDay': weeklyOffDay,
       };
 
   factory Employee.fromJson(Map<String, dynamic> json) => Employee(
@@ -1126,12 +1299,20 @@ class Employee {
         sgkActive: json['sgkActive'] as bool? ?? true,
         annualLeaveEntitlement: json['annualLeaveEntitlement'] as int? ?? 14,
         usedAnnualLeave: json['usedAnnualLeave'] as int? ?? 0,
+        usedAnnualLeaveExact:
+            (json['usedAnnualLeaveExact'] as num?)?.toDouble(),
         kpiScore: (json['kpiScore'] as num?)?.toDouble() ?? 90.0,
         password: json['password'] as String? ?? '1234',
         allowedModules:
             HasibuModule.parseCsv(json['allowedModules'] as String?),
         photoPath: json['photoPath'] as String?,
         themeMode: HasibuThemeMode.fromName(json['themeMode'] as String?),
+        nationalId: json['nationalId'] as String?,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        iban: json['iban'] as String?,
+        probationEndDate: normalizeDateKey(json['probationEndDate'] as String?),
+        weeklyOffDay: (json['weeklyOffDay'] as num?)?.toInt(),
       );
 }
 
@@ -1249,6 +1430,10 @@ class LeaveRecord {
   final String date; // YYYY-MM-DD
   final LeaveType leaveType;
   final String note;
+  final bool isHalfDay;
+  final double? durationHours;
+  final String? startTime; // HH:mm
+  final String? endTime; // HH:mm
 
   const LeaveRecord({
     required this.id,
@@ -1256,7 +1441,33 @@ class LeaveRecord {
     required this.date,
     required this.leaveType,
     required this.note,
+    this.isHalfDay = false,
+    this.durationHours,
+    this.startTime,
+    this.endTime,
   });
+
+  double get effectiveLeaveDays {
+    if (isHalfDay) return 0.5;
+    if (durationHours != null && durationHours! > 0 && durationHours! < 8) {
+      return (durationHours! / 8.0).clamp(0.05, 1.0);
+    }
+    return 1.0;
+  }
+
+  String get formattedScopeLabel {
+    if (isHalfDay) return 'Yarım Gün';
+    if (durationHours != null && durationHours! > 0) {
+      final hStr = durationHours! == durationHours!.roundToDouble()
+          ? durationHours!.round().toString()
+          : durationHours!.toStringAsFixed(1);
+      if ((startTime ?? '').isNotEmpty && (endTime ?? '').isNotEmpty) {
+        return '$hStr saat ($startTime-$endTime)';
+      }
+      return '$hStr saat';
+    }
+    return 'Tam Gün';
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -1264,6 +1475,10 @@ class LeaveRecord {
         'date': date,
         'leaveType': leaveType.code,
         'note': note,
+        'isHalfDay': isHalfDay,
+        'durationHours': durationHours,
+        'startTime': startTime,
+        'endTime': endTime,
       };
 
   factory LeaveRecord.fromJson(Map<String, dynamic> json) => LeaveRecord(
@@ -1272,6 +1487,10 @@ class LeaveRecord {
         date: json['date'] as String,
         leaveType: LeaveType.fromCode(json['leaveType'] as int? ?? 5),
         note: json['note'] as String? ?? '',
+        isHalfDay: json['isHalfDay'] as bool? ?? false,
+        durationHours: (json['durationHours'] as num?)?.toDouble(),
+        startTime: json['startTime'] as String?,
+        endTime: json['endTime'] as String?,
       );
 }
 
@@ -1297,12 +1516,16 @@ class EmployeeDailyStatus {
   final AttendanceLog? lastCheckOut;
   final List<AttendanceLog> allLogsOfDay;
   final LeaveRecord? leaveRecord;
+  final PublicHoliday? publicHoliday;
   final int lateMinutes;
   final int workedMinutes;
+  final int breakDeductedMinutes;
   final int overtimeMinutes;
   final int earlyLeaveMinutes;
   final bool hasMissingCheckOut;
   final int duplicateScansFiltered;
+  final bool isHolidayWork;
+  final bool isWeeklyOffWork;
 
   const EmployeeDailyStatus({
     required this.employee,
@@ -1314,12 +1537,16 @@ class EmployeeDailyStatus {
     this.lastCheckOut,
     this.allLogsOfDay = const <AttendanceLog>[],
     this.leaveRecord,
+    this.publicHoliday,
     this.lateMinutes = 0,
     this.workedMinutes = 0,
+    this.breakDeductedMinutes = 0,
     this.overtimeMinutes = 0,
     this.earlyLeaveMinutes = 0,
     this.hasMissingCheckOut = false,
     this.duplicateScansFiltered = 0,
+    this.isHolidayWork = false,
+    this.isWeeklyOffWork = false,
   });
 
   String get workedDurationFormatted {
@@ -1337,6 +1564,7 @@ enum PersonnelDocumentCategory {
   saglikRaporu('İşe Giriş Sağlık Raporu', true),
   ikametgahBelgesi('İkametgah / Yerleşim Yeri Belgesi', true),
   isSozlesmesi('Belirsiz Süreli İş Sözleşmesi & KVKK', true),
+  kvkkBiyometrikRiza('KVKK Biyometrik Yüz Tanıma Açık Rıza', false),
   diplomaSertifika('Diploma / Ustalık & Hijyen Belgesi', false),
   digerEvrak('Diğer Resmi Evrak / Tutanak', false);
 
@@ -1364,6 +1592,7 @@ class PersonnelDocument {
   final String filePath; // Dijital kopya dosya yolu (.pdf, .jpg, .png vb.)
   final String uploadDate; // YYYY-MM-DD
   final String notes;
+  final String? expiryDate; // YYYY-MM-DD (İSG, Sağlık Raporu vb. süreli belgeler)
 
   const PersonnelDocument({
     required this.id,
@@ -1373,7 +1602,28 @@ class PersonnelDocument {
     required this.filePath,
     required this.uploadDate,
     this.notes = '',
+    this.expiryDate,
   });
+
+  String? get normalizedExpiryDate => Employee.normalizeDateKey(expiryDate);
+
+  int? daysUntilExpiryAt([DateTime? referenceDate]) {
+    final exp = Employee.parseDateKey(expiryDate);
+    if (exp == null) return null;
+    final raw = referenceDate ?? DateTime.now();
+    final ref = DateTime(raw.year, raw.month, raw.day);
+    return exp.difference(ref).inDays;
+  }
+
+  bool isExpiredAt([DateTime? referenceDate]) {
+    final days = daysUntilExpiryAt(referenceDate);
+    return days != null && days < 0;
+  }
+
+  bool isExpiringSoonAt({DateTime? referenceDate, int withinDays = 30}) {
+    final days = daysUntilExpiryAt(referenceDate);
+    return days != null && days >= 0 && days <= withinDays;
+  }
 
   PersonnelDocument copyWith({
     String? id,
@@ -1383,6 +1633,7 @@ class PersonnelDocument {
     String? filePath,
     String? uploadDate,
     String? notes,
+    String? Function()? expiryDate,
   }) {
     return PersonnelDocument(
       id: id ?? this.id,
@@ -1392,6 +1643,7 @@ class PersonnelDocument {
       filePath: filePath ?? this.filePath,
       uploadDate: uploadDate ?? this.uploadDate,
       notes: notes ?? this.notes,
+      expiryDate: expiryDate != null ? expiryDate() : this.expiryDate,
     );
   }
 
@@ -1403,6 +1655,7 @@ class PersonnelDocument {
         'filePath': filePath,
         'uploadDate': uploadDate,
         'notes': notes,
+        'expiryDate': normalizedExpiryDate,
       };
 
   factory PersonnelDocument.fromJson(Map<String, dynamic> json) =>
@@ -1415,6 +1668,7 @@ class PersonnelDocument {
         filePath: json['filePath'] as String? ?? '',
         uploadDate: json['uploadDate'] as String? ?? '2026-10-20',
         notes: json['notes'] as String? ?? '',
+        expiryDate: Employee.normalizeDateKey(json['expiryDate'] as String?),
       );
 }
 
@@ -1426,11 +1680,15 @@ class EmployeeHistoryDayEntry {
   final AttendanceLog? lastCheckOut;
   final List<AttendanceLog> allLogs;
   final LeaveRecord? leaveRecord;
+  final PublicHoliday? publicHoliday;
   final int lateMinutes;
   final int workedMinutes;
+  final int breakDeductedMinutes;
   final int overtimeMinutes;
   final int earlyLeaveMinutes;
   final bool hasMissingCheckOut;
+  final bool isHolidayWork;
+  final bool isWeeklyOffWork;
 
   const EmployeeHistoryDayEntry({
     required this.dateKey,
@@ -1439,11 +1697,15 @@ class EmployeeHistoryDayEntry {
     this.lastCheckOut,
     this.allLogs = const <AttendanceLog>[],
     this.leaveRecord,
+    this.publicHoliday,
     this.lateMinutes = 0,
     this.workedMinutes = 0,
+    this.breakDeductedMinutes = 0,
     this.overtimeMinutes = 0,
     this.earlyLeaveMinutes = 0,
     this.hasMissingCheckOut = false,
+    this.isHolidayWork = false,
+    this.isWeeklyOffWork = false,
   });
 
   String get workedDurationFormatted {
@@ -1703,6 +1965,183 @@ class EmployeeAttendancePeriodSummary {
       ? 0.0
       : ((presentDays + onLeaveDays) / totalDays) * 100.0;
 }
+
+enum PdksAlertSeverity {
+  critical('Kritik'),
+  warning('Uyarı'),
+  info('Bilgi');
+
+  final String label;
+  const PdksAlertSeverity(this.label);
+}
+
+enum PdksAlertCategory {
+  consecutiveAbsence('Ardışık Devamsızlık (4857 Md. 25/II-g)'),
+  documentExpiry('Süreli Özlük Evrakı'),
+  probationEnding('Deneme Süresi Bitişi'),
+  missingCheckOut('Eksik Çıkış Kaydı'),
+  nightShiftLimitExceeded('Gece 7,5 Saat Sınırı (4857 Md. 69)'),
+  weeklyOvertimeLimit('Haftalık 45 Saat / FM Uyarısı (4857 Md. 41)');
+
+  final String label;
+  const PdksAlertCategory(this.label);
+}
+
+@immutable
+class ShiftAssignment {
+  final String id;
+  final int employeeId;
+  final int shiftId;
+  final String validFrom; // YYYY-MM-DD
+  final String? validTo; // YYYY-MM-DD
+  final String note;
+
+  const ShiftAssignment({
+    required this.id,
+    required this.employeeId,
+    required this.shiftId,
+    required this.validFrom,
+    this.validTo,
+    this.note = '',
+  });
+
+  bool appliesTo(String dateKey) {
+    final fromNorm = Employee.normalizeDateKey(validFrom);
+    if (fromNorm == null) return false;
+    if (dateKey.compareTo(fromNorm) < 0) return false;
+    final toNorm = Employee.normalizeDateKey(validTo);
+    if (toNorm != null && dateKey.compareTo(toNorm) > 0) return false;
+    return true;
+  }
+
+  ShiftAssignment copyWith({
+    String? id,
+    int? employeeId,
+    int? shiftId,
+    String? validFrom,
+    String? Function()? validTo,
+    String? note,
+  }) {
+    return ShiftAssignment(
+      id: id ?? this.id,
+      employeeId: employeeId ?? this.employeeId,
+      shiftId: shiftId ?? this.shiftId,
+      validFrom: validFrom ?? this.validFrom,
+      validTo: validTo != null ? validTo() : this.validTo,
+      note: note ?? this.note,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'employeeId': employeeId,
+        'shiftId': shiftId,
+        'validFrom': Employee.normalizeDateKey(validFrom) ?? validFrom,
+        'validTo': Employee.normalizeDateKey(validTo),
+        'note': note,
+      };
+
+  factory ShiftAssignment.fromJson(Map<String, dynamic> json) =>
+      ShiftAssignment(
+        id: json['id'] as String? ?? '',
+        employeeId: (json['employeeId'] as num?)?.toInt() ?? 0,
+        shiftId: (json['shiftId'] as num?)?.toInt() ?? 1,
+        validFrom: Employee.normalizeDateKey(json['validFrom'] as String?) ??
+            '2026-01-01',
+        validTo: Employee.normalizeDateKey(json['validTo'] as String?),
+        note: json['note'] as String? ?? '',
+      );
+}
+
+@immutable
+class PdksProactiveAlert {
+  final String id;
+  final PdksAlertCategory category;
+  final PdksAlertSeverity severity;
+  final int employeeId;
+  final String employeeCardNo;
+  final String employeeName;
+  final String title;
+  final String detail;
+  final String dateKey;
+
+  const PdksProactiveAlert({
+    required this.id,
+    required this.category,
+    required this.severity,
+    required this.employeeId,
+    required this.employeeCardNo,
+    required this.employeeName,
+    required this.title,
+    required this.detail,
+    required this.dateKey,
+  });
+}
+
+@immutable
+class MonthlyPuantajDayCell {
+  final int day;
+  final String dateKey;
+  final String code; // X, G, FM, HT, BM, İ, R, T, B, D, -
+  final DailyAttendanceState state;
+  final int workedMinutes;
+  final int lateMinutes;
+  final int overtimeMinutes;
+  final bool isHolidayWork;
+  final bool isWeeklyOffWork;
+
+  const MonthlyPuantajDayCell({
+    required this.day,
+    required this.dateKey,
+    required this.code,
+    required this.state,
+    this.workedMinutes = 0,
+    this.lateMinutes = 0,
+    this.overtimeMinutes = 0,
+    this.isHolidayWork = false,
+    this.isWeeklyOffWork = false,
+  });
+}
+
+@immutable
+class MonthlyPuantajRow {
+  final Employee employee;
+  final Branch branch;
+  final Department department;
+  final ShiftPlan shift;
+  final int year;
+  final int month;
+  final List<MonthlyPuantajDayCell> cells;
+  final int workedDays;
+  final int lateDays;
+  final int absentDays;
+  final int leaveDays;
+  final int sickDays;
+  final int offAndHolidayDays;
+  final int totalWorkedMinutes;
+  final int totalLateMinutes;
+  final int totalOvertimeMinutes;
+
+  const MonthlyPuantajRow({
+    required this.employee,
+    required this.branch,
+    required this.department,
+    required this.shift,
+    required this.year,
+    required this.month,
+    required this.cells,
+    required this.workedDays,
+    required this.lateDays,
+    required this.absentDays,
+    required this.leaveDays,
+    required this.sickDays,
+    required this.offAndHolidayDays,
+    required this.totalWorkedMinutes,
+    required this.totalLateMinutes,
+    required this.totalOvertimeMinutes,
+  });
+}
+
 
 
 

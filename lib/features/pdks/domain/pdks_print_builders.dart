@@ -758,4 +758,95 @@ class HasibuPrintBuilders {
   static String _kpiBox(String value, String label) {
     return '<div class="kpi-box"><div class="kpi-val">${escapeHtml(value)}</div><div class="kpi-lbl">${escapeHtml(label)}</div></div>';
   }
+
+  /// 4857 İş Kanunu uyumlu, 1–31 gün detaylı, işveren + personel ıslak imza kutulu
+  /// aylık puantaj onay çizelgesi üretir.
+  static PrintableDocument buildMonthlyPuantajSignatureDocument({
+    required CompanySettings companySettings,
+    required MonthlyPuantajRow row,
+    DateTime? printedAt,
+  }) {
+    final now = printedAt ?? DateTime.now();
+    final emp = row.employee;
+    final periodLabel = '${row.month.toString().padLeft(2, '0')}/${row.year}';
+
+    String formatDuration(int mins) {
+      if (mins <= 0) return '-';
+      final h = mins ~/ 60;
+      final m = mins % 60;
+      return m > 0 ? '${h}s ${m}dk' : '${h}s';
+    }
+
+    final bodyBuf = StringBuffer()
+      ..writeln('<div class="info-grid">')
+      ..writeln(_infoCell('Personel', '${emp.fullName} (#${emp.cardNo})'))
+      ..writeln(_infoCell('Şube / Bölüm', '${row.branch.name} / ${row.department.name}'))
+      ..writeln(_infoCell('Dönem / Vardiya', '$periodLabel • ${row.shift.name} (${row.shift.startTime}-${row.shift.endTime})'))
+      ..writeln('</div>')
+      ..writeln('<div class="kpi-row">')
+      ..writeln(_kpiBox('${row.workedDays}', 'Çalışılan Gün'))
+      ..writeln(_kpiBox('${row.lateDays}', 'Geç Kalma (Gün)'))
+      ..writeln(_kpiBox('${row.leaveDays}', 'İzinli Gün'))
+      ..writeln(_kpiBox('${row.sickDays}', 'Raporlu Gün'))
+      ..writeln(_kpiBox('${row.offAndHolidayDays}', 'Tatil / UBGT'))
+      ..writeln(_kpiBox('${row.absentDays}', 'Devamsız Gün'))
+      ..writeln(_kpiBox(formatDuration(row.totalWorkedMinutes), 'Toplam Çalışma'))
+      ..writeln(_kpiBox('+${row.totalOvertimeMinutes} dk', 'Fazla Mesai'))
+      ..writeln('</div>')
+      ..writeln(
+        '<table><thead><tr>'
+        '<th>Gün</th><th>Tarih</th><th>Kod</th><th>Durum</th>'
+        '<th>Çalışma</th><th>Gecikme</th><th>Fazla Mesai</th>'
+        '</tr></thead><tbody>',
+      );
+
+    for (final cell in row.cells) {
+      bodyBuf.writeln(
+        '<tr>'
+        '<td>${cell.day}</td>'
+        '<td>${escapeHtml(_formatDisplayDateOrDash(cell.dateKey))}</td>'
+        '<td><strong>${escapeHtml(cell.code)}</strong></td>'
+        '<td>${escapeHtml(cell.state.label)}</td>'
+        '<td>${escapeHtml(formatDuration(cell.workedMinutes))}</td>'
+        '<td>${cell.lateMinutes > 0 ? "+${cell.lateMinutes} dk" : "-"}</td>'
+        '<td>${cell.overtimeMinutes > 0 ? "+${cell.overtimeMinutes} dk" : "-"}</td>'
+        '</tr>',
+      );
+    }
+
+    bodyBuf
+      ..writeln('</tbody></table>')
+      ..writeln(
+        '<p style="font-size:10.5px;color:#475569;margin-top:8px;">'
+        'Yukarıdaki $periodLabel dönemine ait günlük giriş-çıkış, fazla mesai, izin ve tatil puantaj kayıtlarını '
+        'incelediğimi ve doğruluğunu kabul ettiğimi beyan ederim.</p>',
+      )
+      ..writeln('<div class="signatures">')
+      ..writeln('<div class="sig-box">Personel Adı Soyadı &amp; İmza<br/>(${escapeHtml(emp.fullName)})</div>')
+      ..writeln('<div class="sig-box">Birim / Şube Sorumlusu<br/>(İmza)</div>')
+      ..writeln('<div class="sig-box">İK / İşveren Onayı<br/>(Kaşe &amp; İmza)</div>')
+      ..writeln('</div>');
+
+    final summary = StringBuffer()
+      ..writeln('${companySettings.companyName} — AYLIK PUANTAJ İMZA ÇİZELGESİ ($periodLabel)')
+      ..writeln('Personel: ${emp.fullName} (#${emp.cardNo}) • ${row.branch.name} / ${row.department.name}')
+      ..writeln('Çalışılan: ${row.workedDays}g | Geç: ${row.lateDays}g | İzin: ${row.leaveDays}g | Rapor: ${row.sickDays}g | Tatil: ${row.offAndHolidayDays}g | Devamsız: ${row.absentDays}g')
+      ..writeln('Toplam Net Çalışma: ${formatDuration(row.totalWorkedMinutes)} • Fazla Mesai: +${row.totalOvertimeMinutes} dk');
+
+    return PrintableDocument(
+      jobName: 'Aylik_Puantaj_${emp.cardNo}_${row.year}_${row.month.toString().padLeft(2, '0')}',
+      title: 'Aylık Puantaj & İmza Çizelgesi ($periodLabel)',
+      subtitle: '${emp.fullName} (#${emp.cardNo}) • ${row.branch.name}',
+      htmlContent: _wrapA4HtmlDocument(
+        companySettings: companySettings,
+        documentTitle: 'Aylık Personel Puantaj & İmza Çizelgesi ($periodLabel)',
+        subtitle: '${emp.fullName} (#${emp.cardNo}) • ${row.branch.name} / ${row.department.name}',
+        bodyHtml: bodyBuf.toString(),
+        landscape: false,
+        printedAt: now,
+      ),
+      plainTextSummary: summary.toString(),
+      landscape: false,
+    );
+  }
 }

@@ -18,9 +18,12 @@ class TenfeiZkClient {
   static const int cmdExit = 1001;
   static const int cmdEnableDevice = 1002;
   static const int cmdDisableDevice = 1003;
+  static const int cmdSetUser = 8;
   static const int cmdUserTempRrq = 9;
+  static const int cmdDeleteUser = 18;
   static const int fctUser = 5;
   static const int cmdAuth = 1102;
+  static const int cmdSetTime = 202;
   static const int cmdAckOk = 2000;
   static const int cmdAckUnauth = 2005;
   static const int cmdPrepareData = 1500;
@@ -311,6 +314,74 @@ class TenfeiZkClient {
       }
 
       return decodeUserBuffer(rawUsers);
+    } finally {
+      if (openedHere) {
+        await disconnect();
+      }
+    }
+  }
+
+  /// Terminal sistem saatini Hasibu sunucu/istemci saatiyle senkronize eder (`CMD_SET_TIME`).
+  Future<bool> syncDeviceTime([DateTime? targetTime]) async {
+    final bool openedHere = !_isConnected;
+    if (openedHere) {
+      await connect();
+    }
+    try {
+      final dt = targetTime ?? DateTime.now();
+      final payload = Uint8List(4);
+      ByteData.sublistView(payload).setUint32(0, encodeZkTime(dt), Endian.little);
+      final resp = await _sendCommand(cmdSetTime, payload);
+      return resp.command == cmdAckOk;
+    } finally {
+      if (openedHere) {
+        await disconnect();
+      }
+    }
+  }
+
+  /// İşten ayrılan personeli Tenfei D35 / ZKTeco terminalinden UID ile siler (`CMD_DELETE_USER`).
+  Future<bool> deleteDeviceUserByUid(int uid) async {
+    if (uid <= 0) return false;
+    final bool openedHere = !_isConnected;
+    if (openedHere) {
+      await connect();
+    }
+    try {
+      final payload = Uint8List(2);
+      ByteData.sublistView(payload).setUint16(0, uid, Endian.little);
+      final resp = await _sendCommand(cmdDeleteUser, payload);
+      return resp.command == cmdAckOk;
+    } finally {
+      if (openedHere) {
+        await disconnect();
+      }
+    }
+  }
+
+  /// Yeni/güncel personeli Tenfei D35 / ZKTeco cihazına yazar (`CMD_SET_USER`, 72 bayt).
+  Future<bool> upsertDeviceUser({
+    required int uid,
+    required String cardNo,
+    required String fullName,
+    int role = 0,
+  }) async {
+    if (uid <= 0) return false;
+    final bool openedHere = !_isConnected;
+    if (openedHere) {
+      await connect();
+    }
+    try {
+      final frame = Uint8List(72);
+      final bd = ByteData.sublistView(frame);
+      bd.setUint16(0, uid, Endian.little);
+      frame[2] = role & 0xFF;
+      final nameBytes = encodeCp1254(fullName.trim().toUpperCase(), 24);
+      frame.setRange(11, 35, nameBytes);
+      final pinBytes = encodeCp1254(cardNo.trim(), 24);
+      frame.setRange(48, 72, pinBytes);
+      final resp = await _sendCommand(cmdSetUser, frame);
+      return resp.command == cmdAckOk;
     } finally {
       if (openedHere) {
         await disconnect();
@@ -730,6 +801,35 @@ class TenfeiZkClient {
       );
     }
     return logs;
+  }
+
+  /// Unicode Türkçe metni sabit uzunluklu Windows-1254 bayt dizisine kodlar.
+  static Uint8List encodeCp1254(String text, int fixedLength) {
+    final out = Uint8List(fixedLength);
+    var idx = 0;
+    for (final rune in text.runes) {
+      if (idx >= fixedLength) break;
+      final ch = String.fromCharCode(rune);
+      final int byteVal;
+      switch (ch) {
+        case 'Ğ':
+          byteVal = 0xD0;
+        case 'İ':
+          byteVal = 0xDD;
+        case 'Ş':
+          byteVal = 0xDE;
+        case 'ğ':
+          byteVal = 0xF0;
+        case 'ı':
+          byteVal = 0xFD;
+        case 'ş':
+          byteVal = 0xFE;
+        default:
+          byteVal = rune <= 0xFF ? rune : 0x3F;
+      }
+      out[idx++] = byteVal;
+    }
+    return out;
   }
 
   /// Windows-1254 (Türkçe) bayt dizisini Unicode metne çözer.

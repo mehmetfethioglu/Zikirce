@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/security/hasibu_security_service.dart';
 import '../features/pdks/domain/pdks_models.dart';
 import '../features/pdks/domain/pdks_print_builders.dart';
 import '../features/pdks/presentation/providers/pdks_providers.dart';
@@ -377,12 +376,12 @@ class _MobileTopHeaderSection extends ConsumerWidget {
                   key: const ValueKey('mobile_qr_gps_checkin_button'),
                   visualDensity: VisualDensity.compact,
                   avatar: const Icon(
-                    Icons.qr_code_scanner_rounded,
+                    Icons.my_location_rounded,
                     size: 15,
                     color: Color(0xFF10B981),
                   ),
                   label: const Text(
-                    'Saha QR/GPS Giriş',
+                    'Saha GPS Giriş',
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
@@ -426,26 +425,22 @@ class _MobileTopHeaderSection extends ConsumerWidget {
     );
   }
 
-  /// [HW-06] Mobil konumda `position.isMocked` (Sahte GPS) ve Dinamik TOTP QR kontrolü yapar.
+  /// [HW-06] Mobil konumda `position.isMocked` (Sahte GPS) kontrolü yapar.
   static Future<String> submitMobilePositionCheckIn({
     required WidgetRef ref,
     required Employee employee,
     required Branch branch,
     required bool isCheckIn,
     required MobileGpsPosition position,
-    String? totpQrCode,
   }) async {
     return ref.read(pdksDashboardProvider.notifier).recordBranchMobileCheckIn(
           employee: employee,
           branch: branch,
-          source: totpQrCode != null && totpQrCode.trim().isNotEmpty
-              ? AttendanceSource.mobileQr
-              : AttendanceSource.mobileGps,
+          source: AttendanceSource.mobileGps,
           isCheckIn: isCheckIn,
           currentLat: position.latitude,
           currentLng: position.longitude,
           isMockedGps: position.isMocked,
-          qrPayload: totpQrCode,
         );
   }
 
@@ -459,18 +454,13 @@ class _MobileTopHeaderSection extends ConsumerWidget {
     Branch selectedBranch = state.branches.first;
     bool isCheckIn = true;
     bool simulateMockedGps = false;
-    final totpCode =
-        HasibuSecurityService.generateTotpCode(selectedBranch.qrSecret);
-    final qrCtrl = TextEditingController(text: totpCode);
 
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final currentTotp =
-              HasibuSecurityService.generateTotpCode(selectedBranch.qrSecret);
           return AlertDialog(
-            title: const Text('Mobil Saha QR / GPS Yoklama (TOTP + Anti-Spoof)'),
+            title: const Text('Mobil Saha GPS Yoklama (Geofence + Anti-Spoof)'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -491,20 +481,8 @@ class _MobileTopHeaderSection extends ConsumerWidget {
                             setDialogState(() {
                               selectedBranch =
                                   state.branches.firstWhere((b) => b.id == v);
-                              qrCtrl.text =
-                                  HasibuSecurityService.generateTotpCode(
-                                selectedBranch.qrSecret,
-                              );
                             });
                           },
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: qrCtrl,
-                    decoration: InputDecoration(
-                      labelText: '30sn Dinamik TOTP QR Kodu',
-                      helperText: 'Aktif Şube TOTP: $currentTotp (max 60sn)',
-                    ),
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile(
@@ -542,7 +520,6 @@ class _MobileTopHeaderSection extends ConsumerWidget {
                     branch: selectedBranch,
                     isCheckIn: isCheckIn,
                     position: position,
-                    totpQrCode: qrCtrl.text.trim(),
                   );
                   if (dialogCtx.mounted) {
                     Navigator.of(dialogCtx).pop();
@@ -558,7 +535,6 @@ class _MobileTopHeaderSection extends ConsumerWidget {
         },
       ),
     );
-    qrCtrl.dispose();
   }
 }
 
@@ -963,6 +939,8 @@ class _MobileComfortableEmployeeCard extends ConsumerWidget {
       DailyAttendanceState.late => const Color(0xFFD97706),
       DailyAttendanceState.onLeave => const Color(0xFF0284C7),
       DailyAttendanceState.sickReport => const Color(0xFF7C3AED),
+      DailyAttendanceState.publicHoliday => const Color(0xFF0EA5E9),
+      DailyAttendanceState.weeklyOff => const Color(0xFF6366F1),
       DailyAttendanceState.absent => const Color(0xFFDC2626),
       DailyAttendanceState.terminated => const Color(0xFF64748B),
       DailyAttendanceState.notYetHired => const Color(0xFF94A3B8),
@@ -1082,6 +1060,8 @@ class _MobileCompactEmployeeTile extends ConsumerWidget {
       DailyAttendanceState.late => const Color(0xFFD97706),
       DailyAttendanceState.onLeave => const Color(0xFF0284C7),
       DailyAttendanceState.sickReport => const Color(0xFF7C3AED),
+      DailyAttendanceState.publicHoliday => const Color(0xFF0EA5E9),
+      DailyAttendanceState.weeklyOff => const Color(0xFF6366F1),
       DailyAttendanceState.absent => const Color(0xFFDC2626),
       DailyAttendanceState.terminated => const Color(0xFF64748B),
       DailyAttendanceState.notYetHired => const Color(0xFF94A3B8),

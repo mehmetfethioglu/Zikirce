@@ -55,7 +55,7 @@ import UniformTypeIdentifiers
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     )
     filesChannel.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "pickImageFile" else {
+      guard call.method == "pickImageFile" || call.method == "pickDocumentFile" else {
         result(FlutterMethodNotImplemented)
         return
       }
@@ -67,6 +67,7 @@ import UniformTypeIdentifiers
         result(FlutterError(code: "PICK_IN_PROGRESS", message: "Zaten bir dosya seçici açık.", details: nil))
         return
       }
+      let isDocument = call.method == "pickDocumentFile"
       DispatchQueue.main.async {
         let sceneRootVc = UIApplication.shared.connectedScenes
           .compactMap { $0 as? UIWindowScene }
@@ -78,7 +79,10 @@ import UniformTypeIdentifiers
           return
         }
         self.pendingImagePickResult = result
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.image], asCopy: true)
+        let types: [UTType] = isDocument
+          ? [.pdf, .image, .plainText, .commaSeparatedText, .data]
+          : [.image]
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
         picker.delegate = self
         picker.allowsMultipleSelection = false
         rootVc.present(picker, animated: true)

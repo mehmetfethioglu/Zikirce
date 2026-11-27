@@ -10,6 +10,7 @@ import '../../features/pdks/domain/pdks_models.dart';
 import '../security/hasibu_security_service.dart';
 import '../security/license_guard_service.dart';
 import 'hasibu_accounting_dao.dart';
+import 'hasibu_pdks_schedule_dao.dart';
 
 /// Piri-Query: İndekslenmiş, sıfır veri kayıplı yerel SQLCipher (AES-256) motoru ve
 /// Zikirce_ modeli Google Drive bulut uzlaştırma (reconciliation) katmanı.
@@ -25,6 +26,7 @@ class HasibuDatabase {
       keyHex: encryptionKeyHex,
     );
     _initSchema();
+    initPdksScheduleSchema();
     initAccountingSchema();
     _seedIfEmpty();
     seedAccountingIfEmpty();
@@ -40,6 +42,7 @@ class HasibuDatabase {
 
   static Future<HasibuDatabase> openDefault() async {
     await HasibuSecurityService.ensureSqlCipherNativeLibraryLoadedAsync();
+    await HasibuSecurityService.ensureHmacIntegrityKeyLoaded();
     final keyHex = await HasibuSecurityService.getOrCreateDatabaseKeyHex();
     try {
       final dir = await getApplicationSupportDirectory();
@@ -49,10 +52,19 @@ class HasibuDatabase {
         final db = sqlite3.open(dbFile.path);
         return HasibuDatabase._(db, encryptionKeyHex: keyHex);
       } catch (openErr) {
-        // Eski anahtarla şifrelenmiş veya şifresiz kalmış dosya varsa temizleyip yeniden oluştur
-        debugPrint('HasibuDatabase.openDefault ilk deneme hatası: $openErr. Yeniden oluşturuluyor.');
+        // Eski anahtarla şifrelenmiş veya bozuk dosya varsa silmeden önce .bak yedeği al
+        debugPrint('HasibuDatabase.openDefault ilk deneme hatası: $openErr. Yedek alınıp yeniden oluşturuluyor.');
         try {
           if (dbFile.existsSync()) {
+            final backupPath = p.join(
+              dir.path,
+              'hasibu_pdks_v2.corrupt.${DateTime.now().millisecondsSinceEpoch}.bak',
+            );
+            try {
+              dbFile.copySync(backupPath);
+            } catch (copyErr) {
+              debugPrint('HasibuDatabase: Bozuk DB yedeği alınamadı: $copyErr');
+            }
             dbFile.deleteSync();
           }
         } catch (delErr) {
@@ -116,7 +128,11 @@ class HasibuDatabase {
         name TEXT NOT NULL,
         start_time TEXT NOT NULL,
         end_time TEXT NOT NULL,
-        tolerance_minutes INTEGER NOT NULL DEFAULT 15
+        tolerance_minutes INTEGER NOT NULL DEFAULT 15,
+        break_minutes INTEGER NOT NULL DEFAULT 0,
+        overtime_threshold_minutes INTEGER NOT NULL DEFAULT 15,
+        rounding_minutes INTEGER NOT NULL DEFAULT 0,
+        weekly_off_days TEXT NOT NULL DEFAULT ''
       );
 
       CREATE TABLE IF NOT EXISTS departments (
@@ -143,7 +159,13 @@ class HasibuDatabase {
         password TEXT NOT NULL DEFAULT '1234',
         allowed_modules TEXT NOT NULL DEFAULT 'employeePortal',
         photo_path TEXT,
-        theme_mode TEXT NOT NULL DEFAULT 'light'
+        theme_mode TEXT NOT NULL DEFAULT 'light',
+        national_id TEXT,
+        phone TEXT,
+        email TEXT,
+        iban TEXT,
+        probation_end_date TEXT,
+        weekly_off_day INTEGER
       );
 
       CREATE INDEX IF NOT EXISTS idx_employees_card_no ON employees(card_no);
@@ -170,7 +192,11 @@ class HasibuDatabase {
         employee_id INTEGER NOT NULL,
         date_key TEXT NOT NULL,
         leave_code INTEGER NOT NULL,
-        note TEXT NOT NULL DEFAULT ''
+        note TEXT NOT NULL DEFAULT '',
+        is_half_day INTEGER NOT NULL DEFAULT 0,
+        duration_hours REAL,
+        start_time TEXT,
+        end_time TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_leave_date_emp
@@ -183,7 +209,8 @@ class HasibuDatabase {
         title TEXT NOT NULL,
         file_path TEXT NOT NULL,
         upload_date TEXT NOT NULL,
-        notes TEXT NOT NULL DEFAULT ''
+        notes TEXT NOT NULL DEFAULT '',
+        expiry_date TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_emp_docs_emp_id
@@ -255,40 +282,232 @@ class HasibuDatabase {
         ON app_users(username);
     ''');
 
-    // Mevcut veritabanı yükseltmesi (migration)
-    for (final colSql in <String>[
-      "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'",
-      "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'",
-      "ALTER TABLE company_settings ADD COLUMN admin_password_updated INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'",
-      "ALTER TABLE company_settings ADD COLUMN sync_gmail_account TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE company_settings ADD COLUMN sync_folder_path TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE company_settings ADD COLUMN logo_path TEXT",
-      "ALTER TABLE company_settings ADD COLUMN logo_data_base64 TEXT",
-      "ALTER TABLE company_settings ADD COLUMN admin_theme_mode TEXT NOT NULL DEFAULT 'light'",
-      "ALTER TABLE company_settings ADD COLUMN license_token TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE company_settings ADD COLUMN last_verified_timestamp INTEGER NOT NULL DEFAULT 0",
-      "ALTER TABLE company_settings ADD COLUMN hardware_fingerprint TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_enabled INTEGER NOT NULL DEFAULT 1",
-      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_minutes INTEGER NOT NULL DEFAULT 30",
-      "ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_on_change INTEGER NOT NULL DEFAULT 1",
-      "ALTER TABLE company_settings ADD COLUMN cloud_profile_id TEXT NOT NULL DEFAULT 'default'",
-      "ALTER TABLE company_settings ADD COLUMN cloud_profile_label TEXT NOT NULL DEFAULT 'Ana İşletme Kasası'",
-      "ALTER TABLE branches ADD COLUMN terminal_comm_key TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE branches ADD COLUMN qr_secret TEXT NOT NULL DEFAULT 'HSB-TOTP-SECRET-2026'",
-      "ALTER TABLE attendance_logs ADD COLUMN integrity_hash TEXT NOT NULL DEFAULT ''",
-      "ALTER TABLE employees ADD COLUMN exit_date TEXT",
-      "ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT '1234'",
-      "ALTER TABLE employees ADD COLUMN allowed_modules TEXT NOT NULL DEFAULT 'employeePortal'",
-      "ALTER TABLE employees ADD COLUMN photo_path TEXT",
-      "ALTER TABLE employees ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'light'",
-      "ALTER TABLE app_users ADD COLUMN allowed_branch_ids TEXT NOT NULL DEFAULT ''",
+    // Mevcut veritabanı yükseltmesi (PRAGMA table_info ile yalnızca eksik kolonlar eklenir)
+    final tableColumnsCache = <String, Set<String>>{};
+    for (final m in const <({String table, String column, String sql})>[
+      (
+        table: 'company_settings',
+        column: 'admin_username',
+        sql: "ALTER TABLE company_settings ADD COLUMN admin_username TEXT NOT NULL DEFAULT 'admin'"
+      ),
+      (
+        table: 'company_settings',
+        column: 'admin_password',
+        sql: "ALTER TABLE company_settings ADD COLUMN admin_password TEXT NOT NULL DEFAULT '123'"
+      ),
+      (
+        table: 'company_settings',
+        column: 'admin_password_updated',
+        sql: 'ALTER TABLE company_settings ADD COLUMN admin_password_updated INTEGER NOT NULL DEFAULT 0'
+      ),
+      (
+        table: 'company_settings',
+        column: 'default_employee_pin',
+        sql: "ALTER TABLE company_settings ADD COLUMN default_employee_pin TEXT NOT NULL DEFAULT '1234'"
+      ),
+      (
+        table: 'company_settings',
+        column: 'sync_gmail_account',
+        sql: "ALTER TABLE company_settings ADD COLUMN sync_gmail_account TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'company_settings',
+        column: 'sync_folder_path',
+        sql: "ALTER TABLE company_settings ADD COLUMN sync_folder_path TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'company_settings',
+        column: 'logo_path',
+        sql: 'ALTER TABLE company_settings ADD COLUMN logo_path TEXT'
+      ),
+      (
+        table: 'company_settings',
+        column: 'logo_data_base64',
+        sql: 'ALTER TABLE company_settings ADD COLUMN logo_data_base64 TEXT'
+      ),
+      (
+        table: 'company_settings',
+        column: 'admin_theme_mode',
+        sql: "ALTER TABLE company_settings ADD COLUMN admin_theme_mode TEXT NOT NULL DEFAULT 'light'"
+      ),
+      (
+        table: 'company_settings',
+        column: 'license_token',
+        sql: "ALTER TABLE company_settings ADD COLUMN license_token TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'company_settings',
+        column: 'last_verified_timestamp',
+        sql: 'ALTER TABLE company_settings ADD COLUMN last_verified_timestamp INTEGER NOT NULL DEFAULT 0'
+      ),
+      (
+        table: 'company_settings',
+        column: 'hardware_fingerprint',
+        sql: "ALTER TABLE company_settings ADD COLUMN hardware_fingerprint TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'company_settings',
+        column: 'auto_cloud_backup_enabled',
+        sql: 'ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_enabled INTEGER NOT NULL DEFAULT 1'
+      ),
+      (
+        table: 'company_settings',
+        column: 'auto_cloud_backup_minutes',
+        sql: 'ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_minutes INTEGER NOT NULL DEFAULT 30'
+      ),
+      (
+        table: 'company_settings',
+        column: 'auto_cloud_backup_on_change',
+        sql: 'ALTER TABLE company_settings ADD COLUMN auto_cloud_backup_on_change INTEGER NOT NULL DEFAULT 1'
+      ),
+      (
+        table: 'company_settings',
+        column: 'cloud_profile_id',
+        sql: "ALTER TABLE company_settings ADD COLUMN cloud_profile_id TEXT NOT NULL DEFAULT 'default'"
+      ),
+      (
+        table: 'company_settings',
+        column: 'cloud_profile_label',
+        sql: "ALTER TABLE company_settings ADD COLUMN cloud_profile_label TEXT NOT NULL DEFAULT 'Ana İşletme Kasası'"
+      ),
+      (
+        table: 'branches',
+        column: 'terminal_comm_key',
+        sql: "ALTER TABLE branches ADD COLUMN terminal_comm_key TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'branches',
+        column: 'qr_secret',
+        sql: "ALTER TABLE branches ADD COLUMN qr_secret TEXT NOT NULL DEFAULT 'HSB-TOTP-SECRET-2026'"
+      ),
+      (
+        table: 'attendance_logs',
+        column: 'integrity_hash',
+        sql: "ALTER TABLE attendance_logs ADD COLUMN integrity_hash TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'employees',
+        column: 'exit_date',
+        sql: 'ALTER TABLE employees ADD COLUMN exit_date TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'password',
+        sql: "ALTER TABLE employees ADD COLUMN password TEXT NOT NULL DEFAULT '1234'"
+      ),
+      (
+        table: 'employees',
+        column: 'allowed_modules',
+        sql: "ALTER TABLE employees ADD COLUMN allowed_modules TEXT NOT NULL DEFAULT 'employeePortal'"
+      ),
+      (
+        table: 'employees',
+        column: 'photo_path',
+        sql: 'ALTER TABLE employees ADD COLUMN photo_path TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'theme_mode',
+        sql: "ALTER TABLE employees ADD COLUMN theme_mode TEXT NOT NULL DEFAULT 'light'"
+      ),
+      (
+        table: 'app_users',
+        column: 'allowed_branch_ids',
+        sql: "ALTER TABLE app_users ADD COLUMN allowed_branch_ids TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'shifts',
+        column: 'break_minutes',
+        sql: 'ALTER TABLE shifts ADD COLUMN break_minutes INTEGER NOT NULL DEFAULT 0'
+      ),
+      (
+        table: 'shifts',
+        column: 'overtime_threshold_minutes',
+        sql: 'ALTER TABLE shifts ADD COLUMN overtime_threshold_minutes INTEGER NOT NULL DEFAULT 15'
+      ),
+      (
+        table: 'shifts',
+        column: 'rounding_minutes',
+        sql: 'ALTER TABLE shifts ADD COLUMN rounding_minutes INTEGER NOT NULL DEFAULT 0'
+      ),
+      (
+        table: 'shifts',
+        column: 'weekly_off_days',
+        sql: "ALTER TABLE shifts ADD COLUMN weekly_off_days TEXT NOT NULL DEFAULT ''"
+      ),
+      (
+        table: 'employees',
+        column: 'national_id',
+        sql: 'ALTER TABLE employees ADD COLUMN national_id TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'phone',
+        sql: 'ALTER TABLE employees ADD COLUMN phone TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'email',
+        sql: 'ALTER TABLE employees ADD COLUMN email TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'iban',
+        sql: 'ALTER TABLE employees ADD COLUMN iban TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'probation_end_date',
+        sql: 'ALTER TABLE employees ADD COLUMN probation_end_date TEXT'
+      ),
+      (
+        table: 'employees',
+        column: 'weekly_off_day',
+        sql: 'ALTER TABLE employees ADD COLUMN weekly_off_day INTEGER'
+      ),
+      (
+        table: 'employees',
+        column: 'used_annual_leave_days',
+        sql: 'ALTER TABLE employees ADD COLUMN used_annual_leave_days REAL'
+      ),
+      (
+        table: 'leave_records',
+        column: 'is_half_day',
+        sql: 'ALTER TABLE leave_records ADD COLUMN is_half_day INTEGER NOT NULL DEFAULT 0'
+      ),
+      (
+        table: 'leave_records',
+        column: 'duration_hours',
+        sql: 'ALTER TABLE leave_records ADD COLUMN duration_hours REAL'
+      ),
+      (
+        table: 'leave_records',
+        column: 'start_time',
+        sql: 'ALTER TABLE leave_records ADD COLUMN start_time TEXT'
+      ),
+      (
+        table: 'leave_records',
+        column: 'end_time',
+        sql: 'ALTER TABLE leave_records ADD COLUMN end_time TEXT'
+      ),
+      (
+        table: 'employee_documents',
+        column: 'expiry_date',
+        sql: 'ALTER TABLE employee_documents ADD COLUMN expiry_date TEXT'
+      ),
     ]) {
+      final cols = tableColumnsCache.putIfAbsent(m.table, () {
+        final info = _db.select('PRAGMA table_info(${m.table})');
+        return {
+          for (final row in info) (row['name'] as String).toLowerCase(),
+        };
+      });
+      if (cols.contains(m.column.toLowerCase())) continue;
       try {
-        _db.execute(colSql);
+        _db.execute(m.sql);
+        cols.add(m.column.toLowerCase());
       } catch (e) {
-        // Kolon zaten mevcut ise migrasyonu atla
-        debugPrint('HasibuDatabase migrasyon adımı atlandı ($colSql): $e');
+        debugPrint('HasibuDatabase migrasyon hatası (${m.sql}): $e');
       }
     }
   }
@@ -729,6 +948,12 @@ class HasibuDatabase {
             startTime: r['start_time'] as String,
             endTime: r['end_time'] as String,
             toleranceMinutes: r['tolerance_minutes'] as int,
+            breakMinutes: (r['break_minutes'] as int?) ?? 0,
+            overtimeThresholdMinutes:
+                (r['overtime_threshold_minutes'] as int?) ?? 15,
+            roundingMinutes: (r['rounding_minutes'] as int?) ?? 0,
+            weeklyOffDays:
+                ShiftPlan.parseWeeklyOffDaysCsv(r['weekly_off_days'] as String?),
           ),
         )
         .toList(growable: false);
@@ -737,8 +962,8 @@ class HasibuDatabase {
   void upsertShift(ShiftPlan s) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO shifts
-      (id, name, start_time, end_time, tolerance_minutes)
-      VALUES (?, ?, ?, ?, ?)
+      (id, name, start_time, end_time, tolerance_minutes, break_minutes, overtime_threshold_minutes, rounding_minutes, weekly_off_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       s.id,
@@ -746,6 +971,10 @@ class HasibuDatabase {
       s.startTime.trim(),
       s.endTime.trim(),
       s.toleranceMinutes.clamp(0, 240),
+      s.breakMinutes.clamp(0, 240),
+      s.overtimeThresholdMinutes.clamp(0, 240),
+      s.roundingMinutes.clamp(0, 60),
+      ShiftPlan.toWeeklyOffDaysCsv(s.weeklyOffDays),
     ]);
     stmt.dispose();
   }
@@ -824,6 +1053,8 @@ class HasibuDatabase {
             sgkActive: (r['sgk_active'] as int) == 1,
             annualLeaveEntitlement: r['annual_leave_entitlement'] as int,
             usedAnnualLeave: r['used_annual_leave'] as int,
+            usedAnnualLeaveExact:
+                (r['used_annual_leave_days'] as num?)?.toDouble(),
             kpiScore: (r['kpi_score'] as num).toDouble(),
             password: (r['password'] as String?)?.isNotEmpty == true
                 ? r['password'] as String
@@ -832,6 +1063,13 @@ class HasibuDatabase {
                 HasibuModule.parseCsv(r['allowed_modules'] as String?),
             photoPath: r['photo_path'] as String?,
             themeMode: HasibuThemeMode.fromName(r['theme_mode'] as String?),
+            nationalId: r['national_id'] as String?,
+            phone: r['phone'] as String?,
+            email: r['email'] as String?,
+            iban: r['iban'] as String?,
+            probationEndDate:
+                Employee.normalizeDateKey(r['probation_end_date'] as String?),
+            weeklyOffDay: (r['weekly_off_day'] as num?)?.toInt(),
           ),
         )
         .toList(growable: false);
@@ -844,9 +1082,10 @@ class HasibuDatabase {
 
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO employees
-      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, exit_date, sgk_active, annual_leave_entitlement, used_annual_leave, kpi_score, password, allowed_modules, photo_path, theme_mode)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, card_no, full_name, title, department_id, branch_id, shift_id, hire_date, exit_date, sgk_active, annual_leave_entitlement, used_annual_leave, used_annual_leave_days, kpi_score, password, allowed_modules, photo_path, theme_mode, national_id, phone, email, iban, probation_end_date, weekly_off_day)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
+    final exactLeaveDays = e.usedAnnualLeaveDays;
     stmt.execute([
       e.id,
       e.cardNo.trim().padLeft(5, '0'),
@@ -859,12 +1098,21 @@ class HasibuDatabase {
       e.normalizedExitDate,
       e.sgkActive ? 1 : 0,
       e.annualLeaveEntitlement,
-      e.usedAnnualLeave,
+      exactLeaveDays.round(),
+      exactLeaveDays,
       e.kpiScore,
       hashedPassword,
       HasibuModule.toCsv(e.allowedModules),
       e.photoPath?.trim().isEmpty == true ? null : e.photoPath?.trim(),
       e.themeMode.name,
+      e.nationalId?.trim().isEmpty == true ? null : e.nationalId?.trim(),
+      e.phone?.trim().isEmpty == true ? null : e.phone?.trim(),
+      e.email?.trim().isEmpty == true ? null : e.email?.trim(),
+      e.iban?.trim().isEmpty == true ? null : e.iban?.trim(),
+      Employee.normalizeDateKey(e.probationEndDate),
+      (e.weeklyOffDay != null && e.weeklyOffDay! >= 1 && e.weeklyOffDay! <= 7)
+          ? e.weeklyOffDay
+          : null,
     ]);
     stmt.dispose();
   }
@@ -1425,6 +1673,10 @@ class HasibuDatabase {
         date: r['date_key'] as String,
         leaveType: LeaveType.fromCode(r['leave_code'] as int),
         note: r['note'] as String,
+        isHalfDay: (r['is_half_day'] as int? ?? 0) == 1,
+        durationHours: (r['duration_hours'] as num?)?.toDouble(),
+        startTime: r['start_time'] as String?,
+        endTime: r['end_time'] as String?,
       );
 
   List<LeaveRecord> getLeaveRecordsForDate(String dateKey) {
@@ -1456,28 +1708,19 @@ class HasibuDatabase {
     }
   }
 
-  List<LeaveRecord> getAllLeaveRecords() {
-    final rows = _db.select(
-      'SELECT * FROM leave_records ORDER BY date_key DESC LIMIT 200',
-    );
-    return rows
-        .map(
-          (r) => LeaveRecord(
-            id: r['id'] as String,
-            employeeId: r['employee_id'] as int,
-            date: r['date_key'] as String,
-            leaveType: LeaveType.fromCode(r['leave_code'] as int),
-            note: r['note'] as String,
-          ),
-        )
-        .toList(growable: false);
+  List<LeaveRecord> getAllLeaveRecords({int? limit}) {
+    final sql = limit != null && limit > 0
+        ? 'SELECT * FROM leave_records ORDER BY date_key DESC LIMIT $limit'
+        : 'SELECT * FROM leave_records ORDER BY date_key DESC';
+    final rows = _db.select(sql);
+    return rows.map(_mapLeaveRecordRow).toList(growable: false);
   }
 
   void upsertLeaveRecord(LeaveRecord record) {
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO leave_records
-      (id, employee_id, date_key, leave_code, note)
-      VALUES (?, ?, ?, ?, ?)
+      (id, employee_id, date_key, leave_code, note, is_half_day, duration_hours, start_time, end_time)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       record.id,
@@ -1485,6 +1728,10 @@ class HasibuDatabase {
       record.date,
       record.leaveType.code,
       record.note,
+      record.isHalfDay ? 1 : 0,
+      record.durationHours,
+      record.startTime?.trim().isEmpty == true ? null : record.startTime?.trim(),
+      record.endTime?.trim().isEmpty == true ? null : record.endTime?.trim(),
     ]);
     stmt.dispose();
   }
@@ -1495,47 +1742,36 @@ class HasibuDatabase {
     stmt.dispose();
   }
 
-  List<LeaveRecord> getLeaveRecordsForEmployee(int employeeId) {
-    final stmt = _db.prepare('''
-      SELECT * FROM leave_records
-      WHERE employee_id = ?
-      ORDER BY date_key DESC
-      LIMIT 200
-    ''');
-    final rows = stmt.select([employeeId]);
-    final list = rows
-        .map(
-          (r) => LeaveRecord(
-            id: r['id'] as String,
-            employeeId: r['employee_id'] as int,
-            date: r['date_key'] as String,
-            leaveType: LeaveType.fromCode(r['leave_code'] as int),
-            note: r['note'] as String,
-          ),
-        )
-        .toList(growable: false);
-    stmt.dispose();
-    return list;
+  List<LeaveRecord> getLeaveRecordsForEmployee(int employeeId, {int? limit}) {
+    final sql = limit != null && limit > 0
+        ? 'SELECT * FROM leave_records WHERE employee_id = ? ORDER BY date_key DESC LIMIT $limit'
+        : 'SELECT * FROM leave_records WHERE employee_id = ? ORDER BY date_key DESC';
+    final stmt = _db.prepare(sql);
+    try {
+      final rows = stmt.select([employeeId]);
+      return rows.map(_mapLeaveRecordRow).toList(growable: false);
+    } finally {
+      stmt.dispose();
+    }
   }
+
+  PersonnelDocument _mapPersonnelDocumentRow(Map<String, Object?> r) =>
+      PersonnelDocument(
+        id: r['id'] as String,
+        employeeId: r['employee_id'] as int,
+        category: PersonnelDocumentCategory.fromName(r['category'] as String?),
+        title: r['title'] as String,
+        filePath: r['file_path'] as String,
+        uploadDate: r['upload_date'] as String,
+        notes: r['notes'] as String? ?? '',
+        expiryDate: Employee.normalizeDateKey(r['expiry_date'] as String?),
+      );
 
   List<PersonnelDocument> getAllPersonnelDocuments() {
     final rows = _db.select(
       'SELECT * FROM employee_documents ORDER BY upload_date DESC, id DESC',
     );
-    return rows
-        .map(
-          (r) => PersonnelDocument(
-            id: r['id'] as String,
-            employeeId: r['employee_id'] as int,
-            category:
-                PersonnelDocumentCategory.fromName(r['category'] as String?),
-            title: r['title'] as String,
-            filePath: r['file_path'] as String,
-            uploadDate: r['upload_date'] as String,
-            notes: r['notes'] as String? ?? '',
-          ),
-        )
-        .toList(growable: false);
+    return rows.map(_mapPersonnelDocumentRow).toList(growable: false);
   }
 
   List<PersonnelDocument> getDocumentsForEmployee(int employeeId) {
@@ -1544,23 +1780,12 @@ class HasibuDatabase {
       WHERE employee_id = ?
       ORDER BY upload_date DESC, id DESC
     ''');
-    final rows = stmt.select([employeeId]);
-    final list = rows
-        .map(
-          (r) => PersonnelDocument(
-            id: r['id'] as String,
-            employeeId: r['employee_id'] as int,
-            category:
-                PersonnelDocumentCategory.fromName(r['category'] as String?),
-            title: r['title'] as String,
-            filePath: r['file_path'] as String,
-            uploadDate: r['upload_date'] as String,
-            notes: r['notes'] as String? ?? '',
-          ),
-        )
-        .toList(growable: false);
-    stmt.dispose();
-    return list;
+    try {
+      final rows = stmt.select([employeeId]);
+      return rows.map(_mapPersonnelDocumentRow).toList(growable: false);
+    } finally {
+      stmt.dispose();
+    }
   }
 
   void upsertPersonnelDocument(PersonnelDocument doc) {
@@ -1569,8 +1794,8 @@ class HasibuDatabase {
         HasibuSecurityService.normalizeAndEncryptDocumentOnDisk(doc.filePath);
     final stmt = _db.prepare('''
       INSERT OR REPLACE INTO employee_documents
-      (id, employee_id, category, title, file_path, upload_date, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      (id, employee_id, category, title, file_path, upload_date, notes, expiry_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ''');
     stmt.execute([
       doc.id.trim(),
@@ -1580,6 +1805,7 @@ class HasibuDatabase {
       encryptedDocPath,
       doc.uploadDate.trim(),
       doc.notes.trim(),
+      Employee.normalizeDateKey(doc.expiryDate),
     ]);
     stmt.dispose();
   }
@@ -1926,20 +2152,12 @@ class HasibuDatabase {
         .toList(growable: false);
 
     final leaves = allLeavesRows
-        .map(
-          (r) => LeaveRecord(
-            id: r['id'] as String,
-            employeeId: r['employee_id'] as int,
-            date: r['date_key'] as String,
-            leaveType: LeaveType.fromCode(r['leave_code'] as int),
-            note: r['note'] as String,
-          ).toJson(),
-        )
+        .map((r) => _mapLeaveRecordRow(r).toJson())
         .toList(growable: false);
 
     final companySettings = getCompanySettings();
     return <String, dynamic>{
-      'schemaVersion': 5,
+      'schemaVersion': 6,
       'vaultRole': 'master_vault',
       'exportedAt': DateTime.now().toIso8601String(),
       'deviceName': deviceName,
@@ -1955,6 +2173,10 @@ class HasibuDatabase {
       'appUsers': getAppUsers().map((e) => e.toJson()).toList(growable: false),
       'attendanceLogs': logs,
       'leaveRecords': leaves,
+      'publicHolidays':
+          getPublicHolidays().map((e) => e.toJson()).toList(growable: false),
+      'shiftAssignments':
+          getShiftAssignments().map((e) => e.toJson()).toList(growable: false),
       'personnelDocuments': getAllPersonnelDocuments()
           .map((e) => e.toJson())
           .toList(growable: false),
@@ -2018,6 +2240,8 @@ class HasibuDatabase {
         for (final table in const <String>[
           'attendance_logs',
           'leave_records',
+          'public_holidays',
+          'employee_shift_assignments',
           'employee_documents',
           'hr_requests',
           'employees',
@@ -2137,6 +2361,26 @@ class HasibuDatabase {
             LeaveRecord.fromJson(Map<String, dynamic>.from(item)),
           );
           leaveRecordsCount++;
+        }
+      }
+
+      final rawHolidays =
+          snapshot['publicHolidays'] as List<dynamic>? ?? const [];
+      for (final item in rawHolidays) {
+        if (item is Map) {
+          upsertPublicHoliday(
+            PublicHoliday.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+
+      final rawAssignments =
+          snapshot['shiftAssignments'] as List<dynamic>? ?? const [];
+      for (final item in rawAssignments) {
+        if (item is Map) {
+          upsertShiftAssignment(
+            ShiftAssignment.fromJson(Map<String, dynamic>.from(item)),
+          );
         }
       }
 
@@ -2280,6 +2524,8 @@ class HasibuDatabase {
     _db.execute('BEGIN TRANSACTION;');
     try {
       for (final table in const <String>[
+        'public_holidays',
+        'employee_shift_assignments',
         'attendance_logs',
         'leave_records',
         'employee_documents',

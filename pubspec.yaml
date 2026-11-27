@@ -1,7 +1,7 @@
 name: hasibu
 description: "Hasibu - Çok Şubeli Kurumsal PDKS, Yüz Okutma Terminali, QR/GPS Yoklama, Vardiya, İzin ve Dijital Özlük Platformu"
 publish_to: 'none'
-version: 1.0.17+18
+version: 1.0.18+19
 
 environment:
   sdk: ^3.5.0
@@ -48,7 +48,7 @@ msix_config:
   display_name: Hasibu
   publisher_display_name: Akarworks
   identity_name: com.akarworks.hasibu
-  msix_version: 1.0.17.0
+  msix_version: 1.0.18.0
   logo_path: assets/icon/hasibu_icon.png
   architecture: arm64
   capabilities: internetClient

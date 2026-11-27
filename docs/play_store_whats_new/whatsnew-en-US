@@ -1,5 +1,5 @@
-What's new in v1.0.17:
-• A4 Printing: Preview and print personnel cards, staff lists, live attendance, period attendance, and leave reports across devices.
-• Live Search Fix: Clearing the search box immediately restores the full list with a clear button and Turkish character normalization.
-• Company Logo & First Setup: Fixed file-based logo selection and added company name/logo setup to the first admin login.
-• Cloud & Bridge: Improved Google Drive branch inbox listing and session feedback.
+What's new in v1.0.18:
+• Secure GPS Attendance: Removed QR check-in; locked staff to own branch & anti-spoof GPS, closed default PIN bypass.
+• Attendance & Compliance: Half-day/hourly leave (0.5d), eve half-days, weekend (HT)/holiday (BM) overtime, 2024–2030 holidays & 7.5h/45h alerts.
+• Shift Rotation & Terminal: Date-ranged shift rotation and two-way terminal clock/staff sync.
+• Bulk CSV & Privacy: Bulk import/assign, ID/IBAN masking, mobile picker & monthly summary.

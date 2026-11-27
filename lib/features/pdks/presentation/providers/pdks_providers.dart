@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/hasibu_database.dart';
+import '../../../../core/database/hasibu_pdks_schedule_dao.dart';
 import '../../../../core/security/hasibu_security_service.dart';
 import '../../../../core/security/license_guard_service.dart';
 import '../../../../core/services/company_logo_service.dart';
@@ -14,10 +15,16 @@ import '../../../../core/services/google_drive_sync_service.dart';
 import '../../../../core/services/hasibu_print_service.dart';
 import '../../../../core/services/login_preferences_service.dart';
 import '../../../../core/services/password_recovery_service.dart';
-import '../../../../core/utils/turkish_search.dart';
 import '../../data/tenfei_zk_client.dart';
 import '../../data/workplace_seed_data.dart';
+import '../../domain/attendance_evaluation_engine.dart';
+import '../../domain/attendance_report_engine.dart';
+import '../../domain/employee_bulk_import_engine.dart';
+import '../../domain/mobile_checkin_gateway.dart';
 import '../../domain/pdks_models.dart';
+import 'pdks_dashboard_state.dart';
+
+export 'pdks_dashboard_state.dart';
 
 final hasibuDatabaseProvider = Provider<HasibuDatabase>((ref) {
   final db = HasibuDatabase.inMemory();
@@ -33,6 +40,10 @@ final companyLogoPickerGatewayProvider = Provider<CompanyLogoPickerGateway>((
   ref,
 ) {
   return PlatformCompanyLogoPickerGateway();
+});
+
+final mobileLocationGatewayProvider = Provider<MobileLocationGateway>((ref) {
+  return const BranchFallbackLocationGateway();
 });
 
 final googleDriveSyncServiceProvider = Provider<GoogleDriveSyncService>((ref) {
@@ -58,399 +69,6 @@ final passwordRecoveryServiceProvider = Provider<PasswordRecoveryService>((ref) 
   final gateway = ref.watch(passwordRecoveryEmailGatewayProvider);
   return PasswordRecoveryService(emailGateway: gateway);
 });
-
-enum AdminLoginOutcome {
-  authenticated,
-  requiresInitialPasswordUpdate,
-  failed,
-}
-
-@immutable
-class UnifiedLoginResult {
-  final AdminLoginOutcome outcome;
-  final UserRole? resolvedRole;
-  final String resolvedUsername;
-
-  const UnifiedLoginResult({
-    required this.outcome,
-    this.resolvedRole,
-    this.resolvedUsername = '',
-  });
-}
-
-@immutable
-class PdksDashboardState {
-  final AuthSession authSession;
-  final HasibuModule activeModule;
-  final CompanySettings companySettings;
-  final String selectedDate; // YYYY-MM-DD
-  final int? selectedBranchId; // null => Tüm Şubeler
-  final DailyAttendanceState? selectedStateFilter; // null => Tümü
-  final PdksAnomalyFilter selectedAnomalyFilter;
-  final String searchQuery;
-  final List<Branch> branches;
-  final List<ShiftPlan> shifts;
-  final List<Department> departments;
-  final List<EmployeeDailyStatus> dailyStatuses;
-  final List<LeaveRecord> allLeaveRecords;
-  final List<PersonnelDocument> allPersonnelDocuments;
-  final List<HrRequest> allHrRequests;
-  final bool isPollingTerminal;
-  final bool? lastTerminalReachable;
-  final bool autoPollEnabled;
-  final int autoPollMinutes;
-  final String terminalStatusMessage;
-  final DriveSyncStatus syncStatus;
-  final String activeSelfServiceCardNo;
-  final bool isReadOnlySubscriptionLocked;
-  final bool isClockTampered;
-  final String licenseStatusMessage;
-  final List<AttendanceLog> tamperedAttendanceLogs;
-  final List<AuditLogEntry> auditLogs;
-  final int mockGpsAnomalyCount;
-  final String? lastMockGpsAlert;
-  final List<AppUserAccount> appUsers;
-  final List<CloudBackupProfileInfo> availableCloudBackups;
-  final List<BranchInboxDeviceStatus> branchInboxStatuses;
-  final bool isCloudBusy;
-  final CloudRestoreSummary? lastRestoreSummary;
-
-  const PdksDashboardState({
-    this.authSession = const AuthSession(),
-    this.activeModule = HasibuModule.pdksHr,
-    this.companySettings = const CompanySettings(),
-    required this.selectedDate,
-    this.selectedBranchId,
-    this.selectedStateFilter,
-    this.selectedAnomalyFilter = PdksAnomalyFilter.all,
-    this.searchQuery = '',
-    this.branches = const <Branch>[],
-    this.shifts = const <ShiftPlan>[],
-    this.departments = const <Department>[],
-    this.dailyStatuses = const <EmployeeDailyStatus>[],
-    this.allLeaveRecords = const <LeaveRecord>[],
-    this.allPersonnelDocuments = const <PersonnelDocument>[],
-    this.allHrRequests = const <HrRequest>[],
-    this.isPollingTerminal = false,
-    this.lastTerminalReachable,
-    this.autoPollEnabled = true,
-    this.autoPollMinutes = 5,
-    this.terminalStatusMessage = 'PDKS Terminali hazır',
-    this.syncStatus = const DriveSyncStatus(),
-    this.activeSelfServiceCardNo = kDebugMode ? '00064' : '',
-    this.isReadOnlySubscriptionLocked = false,
-    this.isClockTampered = false,
-    this.licenseStatusMessage = 'Lisans aktif',
-    this.tamperedAttendanceLogs = const <AttendanceLog>[],
-    this.auditLogs = const <AuditLogEntry>[],
-    this.mockGpsAnomalyCount = 0,
-    this.lastMockGpsAlert,
-    this.appUsers = const <AppUserAccount>[],
-    this.availableCloudBackups = const <CloudBackupProfileInfo>[],
-    this.branchInboxStatuses = const <BranchInboxDeviceStatus>[],
-    this.isCloudBusy = false,
-    this.lastRestoreSummary,
-  });
-
-  /// [LIC-05] Sistem Salt-Okunur (Read-Only) Abonelik Sonu veya Saat Manipülasyonu Kilidinde mi?
-  bool get isCommercialWriteLocked =>
-      isReadOnlySubscriptionLocked || isClockTampered;
-
-  List<int> get effectiveBranchScopeIds => authSession.isAuthenticated
-      ? authSession.effectiveScopedBranchIds
-      : const <int>[];
-
-  int? get effectiveBranchScopeId => effectiveBranchScopeIds.length == 1
-      ? effectiveBranchScopeIds.first
-      : null;
-
-  bool get isBranchScoped => effectiveBranchScopeIds.isNotEmpty;
-
-  bool get isSingleBranchScoped => effectiveBranchScopeIds.length == 1;
-
-  bool canAccessBranch(int branchId) =>
-      !isBranchScoped || effectiveBranchScopeIds.contains(branchId);
-
-  int? get effectiveSelectedBranchId {
-    final scoped = effectiveBranchScopeIds;
-    if (scoped.length == 1) return scoped.first;
-    if (scoped.length > 1) {
-      return (selectedBranchId != null && scoped.contains(selectedBranchId))
-          ? selectedBranchId
-          : null;
-    }
-    return selectedBranchId;
-  }
-
-  /// Kalıcı Google Bulut / Drive oturumu aktif mi?
-  bool get isGoogleCloudConnected =>
-      syncStatus.connectedGmail.trim().isNotEmpty &&
-      (syncStatus.isTrulySynced ||
-          syncStatus.isCloudApiVerified ||
-          syncStatus.isDriveFolderMirrored);
-
-  List<PersonnelDocument> documentsForEmployee(int employeeId) =>
-      allPersonnelDocuments
-          .where((d) => d.employeeId == employeeId)
-          .toList(growable: false);
-
-  List<HrRequest> requestsForEmployee(int employeeId) => allHrRequests
-      .where((r) => r.employeeId == employeeId)
-      .toList(growable: false);
-
-  int get pendingHrRequestsCount =>
-      allHrRequests.where((r) => r.status == HrRequestStatus.pending).length;
-
-  bool hasMissingMandatoryDocuments(int employeeId) {
-    final mandatoryCount = PersonnelDocumentCategory.values
-        .where((c) => c.isMandatory)
-        .length;
-    final uploadedMandatory = allPersonnelDocuments
-        .where((d) => d.employeeId == employeeId && d.category.isMandatory)
-        .map((d) => d.category)
-        .toSet()
-        .length;
-    return uploadedMandatory < mandatoryCount;
-  }
-
-  int get totalCount => filteredByBranch.length;
-
-  /// Aktif oturumdaki kullanıcının (Yönetici, Yetkili Kullanıcı veya Personel) kendine özgü tema seçimi.
-  HasibuThemeMode get activeThemeMode {
-    if (authSession.isAuthenticated && authSession.appUserId != null) {
-      for (final u in appUsers) {
-        if (u.id == authSession.appUserId) {
-          return u.themeMode;
-        }
-      }
-    }
-    if (authSession.isAuthenticated &&
-        authSession.role == UserRole.employee &&
-        authSession.employeeCardNo != null) {
-      for (final s in dailyStatuses) {
-        if (s.employee.cardNo == authSession.employeeCardNo) {
-          return s.employee.themeMode;
-        }
-      }
-    }
-    return companySettings.adminThemeMode;
-  }
-
-  List<EmployeeDailyStatus> get allFilteredByBranch {
-    final scoped = effectiveBranchScopeIds;
-    final branchFilter = effectiveSelectedBranchId;
-    if (branchFilter != null) {
-      return dailyStatuses
-          .where((s) => s.branch.id == branchFilter)
-          .toList(growable: false);
-    }
-    if (scoped.isNotEmpty) {
-      return dailyStatuses
-          .where((s) => scoped.contains(s.branch.id))
-          .toList(growable: false);
-    }
-    return dailyStatuses;
-  }
-
-  List<EmployeeDailyStatus> get filteredByBranch => allFilteredByBranch
-      .where((s) => !s.state.isNonActiveEmployment)
-      .toList(growable: false);
-
-  int get terminatedCount => allFilteredByBranch
-      .where((s) => s.state == DailyAttendanceState.terminated)
-      .length;
-
-  int get presentCount => filteredByBranch
-      .where(
-        (s) =>
-            s.state == DailyAttendanceState.present ||
-            s.state == DailyAttendanceState.late,
-      )
-      .length;
-
-  int get lateCount => filteredByBranch
-      .where((s) => s.state == DailyAttendanceState.late)
-      .length;
-
-  int get absentCount => filteredByBranch
-      .where((s) => s.state == DailyAttendanceState.absent)
-      .length;
-
-  int get onLeaveCount => filteredByBranch
-      .where((s) => s.state == DailyAttendanceState.onLeave)
-      .length;
-
-  int get sickReportCount => filteredByBranch
-      .where((s) => s.state == DailyAttendanceState.sickReport)
-      .length;
-
-  int get missingCheckOutCount =>
-      filteredByBranch.where((s) => s.hasMissingCheckOut).length;
-
-  int get overtimeStaffCount =>
-      filteredByBranch.where((s) => s.overtimeMinutes > 0).length;
-
-  int get totalOvertimeMinutes =>
-      filteredByBranch.fold<int>(0, (sum, s) => sum + s.overtimeMinutes);
-
-  int get earlyLeaveCount =>
-      filteredByBranch.where((s) => s.earlyLeaveMinutes > 0).length;
-
-  int get missingDocsStaffCount => filteredByBranch
-      .where((s) => hasMissingMandatoryDocuments(s.employee.id))
-      .length;
-
-  int get statutoryLeaveMismatchCount => filteredByBranch
-      .where((s) => s.employee.hasStatutoryLeaveMismatch)
-      .length;
-
-  List<EmployeeDailyStatus> get visibleStatuses {
-    final source = selectedStateFilter == DailyAttendanceState.terminated
-        ? allFilteredByBranch
-        : filteredByBranch;
-    return source.where((item) {
-      if (selectedStateFilter != null && item.state != selectedStateFilter) {
-        return false;
-      }
-      switch (selectedAnomalyFilter) {
-        case PdksAnomalyFilter.all:
-          break;
-        case PdksAnomalyFilter.missingCheckOut:
-          if (!item.hasMissingCheckOut) return false;
-        case PdksAnomalyFilter.overtime:
-          if (item.overtimeMinutes <= 0) return false;
-        case PdksAnomalyFilter.earlyLeave:
-          if (item.earlyLeaveMinutes <= 0) return false;
-        case PdksAnomalyFilter.missingDocs:
-          if (!hasMissingMandatoryDocuments(item.employee.id)) return false;
-      }
-      final q = normalizeTurkishSearch(searchQuery);
-      if (q.isNotEmpty) {
-        return matchesTurkishSearch(item.employee.fullName, q) ||
-            matchesTurkishSearch(item.employee.cardNo, q) ||
-            matchesTurkishSearch(item.department.name, q) ||
-            matchesTurkishSearch(item.employee.title, q);
-      }
-      return true;
-    }).toList(growable: false);
-  }
-
-  PdksDashboardState copyWith({
-    AuthSession? authSession,
-    HasibuModule? activeModule,
-    CompanySettings? companySettings,
-    String? selectedDate,
-    int? Function()? selectedBranchId,
-    DailyAttendanceState? Function()? selectedStateFilter,
-    PdksAnomalyFilter? selectedAnomalyFilter,
-    String? searchQuery,
-    List<Branch>? branches,
-    List<ShiftPlan>? shifts,
-    List<Department>? departments,
-    List<EmployeeDailyStatus>? dailyStatuses,
-    List<LeaveRecord>? allLeaveRecords,
-    List<PersonnelDocument>? allPersonnelDocuments,
-    List<HrRequest>? allHrRequests,
-    bool? isPollingTerminal,
-    bool? Function()? lastTerminalReachable,
-    bool? autoPollEnabled,
-    int? autoPollMinutes,
-    String? terminalStatusMessage,
-    DriveSyncStatus? syncStatus,
-    String? activeSelfServiceCardNo,
-    bool? isReadOnlySubscriptionLocked,
-    bool? isClockTampered,
-    String? licenseStatusMessage,
-    List<AttendanceLog>? tamperedAttendanceLogs,
-    List<AuditLogEntry>? auditLogs,
-    int? mockGpsAnomalyCount,
-    String? Function()? lastMockGpsAlert,
-    List<AppUserAccount>? appUsers,
-    List<CloudBackupProfileInfo>? availableCloudBackups,
-    List<BranchInboxDeviceStatus>? branchInboxStatuses,
-    bool? isCloudBusy,
-    CloudRestoreSummary? Function()? lastRestoreSummary,
-  }) {
-    return PdksDashboardState(
-      authSession: authSession ?? this.authSession,
-      activeModule: activeModule ?? this.activeModule,
-      companySettings: companySettings ?? this.companySettings,
-      selectedDate: selectedDate ?? this.selectedDate,
-      selectedBranchId:
-          selectedBranchId != null ? selectedBranchId() : this.selectedBranchId,
-      selectedStateFilter: selectedStateFilter != null
-          ? selectedStateFilter()
-          : this.selectedStateFilter,
-      selectedAnomalyFilter:
-          selectedAnomalyFilter ?? this.selectedAnomalyFilter,
-      searchQuery: searchQuery ?? this.searchQuery,
-      branches: branches ?? this.branches,
-      shifts: shifts ?? this.shifts,
-      departments: departments ?? this.departments,
-      dailyStatuses: dailyStatuses ?? this.dailyStatuses,
-      allLeaveRecords: allLeaveRecords ?? this.allLeaveRecords,
-      allPersonnelDocuments:
-          allPersonnelDocuments ?? this.allPersonnelDocuments,
-      allHrRequests: allHrRequests ?? this.allHrRequests,
-      isPollingTerminal: isPollingTerminal ?? this.isPollingTerminal,
-      lastTerminalReachable: lastTerminalReachable != null
-          ? lastTerminalReachable()
-          : this.lastTerminalReachable,
-      autoPollEnabled: autoPollEnabled ?? this.autoPollEnabled,
-      autoPollMinutes: autoPollMinutes ?? this.autoPollMinutes,
-      terminalStatusMessage:
-          terminalStatusMessage ?? this.terminalStatusMessage,
-      syncStatus: syncStatus ?? this.syncStatus,
-      activeSelfServiceCardNo:
-          activeSelfServiceCardNo ?? this.activeSelfServiceCardNo,
-      isReadOnlySubscriptionLocked:
-          isReadOnlySubscriptionLocked ?? this.isReadOnlySubscriptionLocked,
-      isClockTampered: isClockTampered ?? this.isClockTampered,
-      licenseStatusMessage: licenseStatusMessage ?? this.licenseStatusMessage,
-      tamperedAttendanceLogs:
-          tamperedAttendanceLogs ?? this.tamperedAttendanceLogs,
-      auditLogs: auditLogs ?? this.auditLogs,
-      mockGpsAnomalyCount: mockGpsAnomalyCount ?? this.mockGpsAnomalyCount,
-      lastMockGpsAlert:
-          lastMockGpsAlert != null ? lastMockGpsAlert() : this.lastMockGpsAlert,
-      appUsers: appUsers ?? this.appUsers,
-      availableCloudBackups:
-          availableCloudBackups ?? this.availableCloudBackups,
-      branchInboxStatuses: branchInboxStatuses ?? this.branchInboxStatuses,
-      isCloudBusy: isCloudBusy ?? this.isCloudBusy,
-      lastRestoreSummary: lastRestoreSummary != null
-          ? lastRestoreSummary()
-          : this.lastRestoreSummary,
-    );
-  }
-}
-
-@immutable
-class TerminalPullSummary {
-  final bool anyReachable;
-  final int targetTerminalCount;
-  final int reachableTerminalCount;
-  final int totalFetched;
-  final int newInserted;
-  final int logsCountForSelectedDate;
-  final String selectedDateAfterPull;
-  final String? latestPulledDateKey;
-  final List<String> branchMessages;
-  final DateTime pulledAt;
-
-  const TerminalPullSummary({
-    required this.anyReachable,
-    required this.targetTerminalCount,
-    required this.reachableTerminalCount,
-    required this.totalFetched,
-    required this.newInserted,
-    required this.logsCountForSelectedDate,
-    required this.selectedDateAfterPull,
-    required this.latestPulledDateKey,
-    required this.branchMessages,
-    required this.pulledAt,
-  });
-}
 
 class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
   final HasibuDatabase _db;
@@ -1305,13 +923,12 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         );
         return false;
       }
-      final expectedPassword =
-          emp.password.trim().isNotEmpty ? emp.password.trim() : fallbackPin;
+      final expectedPassword = emp.password.trim();
 
-      // [DB-04] Tuzlanmış PBKDF2/Argon2id hash doğrulaması
-      final isPasswordValid =
-          HasibuSecurityService.verifyPassword(pin.trim(), expectedPassword) ||
-              HasibuSecurityService.verifyPassword(pin.trim(), fallbackPin);
+      // [DB-04] Tuzlanmış PBKDF2/Argon2id hash doğrulaması (yalnızca şifresi boşsa varsayılan PIN geçerlidir)
+      final isPasswordValid = expectedPassword.isNotEmpty
+          ? HasibuSecurityService.verifyPassword(pin.trim(), expectedPassword)
+          : HasibuSecurityService.verifyPassword(pin.trim(), fallbackPin);
 
       if (isPasswordValid) {
         final modules = HasibuModule.filterActive(emp.allowedModules);
@@ -1326,11 +943,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
             displayName: emp.fullName,
             role: UserRole.employee,
             employeeCardNo: emp.cardNo,
+            scopedBranchId: emp.branchId,
+            scopedBranchIds: <int>[emp.branchId],
             allowedModules: modules,
           ),
           activeSelfServiceCardNo: emp.cardNo,
           activeModule: modules.first,
-          selectedBranchId: () => null,
+          selectedBranchId: () => emp.branchId,
         );
         refreshDashboard();
         return true;
@@ -1382,12 +1001,23 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final companySettings = _db.getCompanySettings();
     final branches = _db.getBranches();
     final shifts = _db.getShifts();
+    final shiftAssignments = _db.getShiftAssignments();
     final departments = _db.getDepartments();
     _db.ensureEmployeesForUnregisteredLogCards();
     final employees = _db.getEmployees();
-    final logs = _db.getAttendanceLogsForDate(state.selectedDate);
+
+    final prevDateKey =
+        AttendanceEvaluationEngine.previousDateKey(state.selectedDate);
+    final nextDateKey =
+        AttendanceEvaluationEngine.nextDateKey(state.selectedDate);
+    final alertStartKey = formatDateKey(
+      (Employee.parseDateKey(state.selectedDate) ?? DateTime.now())
+          .subtract(const Duration(days: 5)),
+    );
+    final recentLogs = _db.getAttendanceLogsInDateRange(alertStartKey, nextDateKey);
     final leaves = _db.getLeaveRecordsForDate(state.selectedDate);
     final allLeaves = _db.getAllLeaveRecords();
+    final publicHolidays = _db.getPublicHolidays();
     final allDocs = _db.getAllPersonnelDocuments();
     final allRequests = _db.getAllHrRequests();
     final appUsers = _db.getAppUsers();
@@ -1416,10 +1046,13 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     final deptMap = {for (final d in departments) d.id: d};
     final shiftMap = {for (final s in shifts) s.id: s};
     final leaveMap = {for (final l in leaves) l.employeeId: l};
+    final holidayByDate = {for (final h in publicHolidays) h.dateKey: h};
 
-    final logsByCard = <String, List<AttendanceLog>>{};
-    for (final log in logs) {
-      logsByCard.putIfAbsent(log.cardNo, () => <AttendanceLog>[]).add(log);
+    final logsByCardDate = <String, List<AttendanceLog>>{};
+    for (final log in recentLogs) {
+      logsByCardDate
+          .putIfAbsent('${log.cardNo}|${log.dateKey}', () => <AttendanceLog>[])
+          .add(log);
     }
 
     final scopedBranchIds = state.effectiveBranchScopeIds;
@@ -1447,23 +1080,47 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
             .toList(growable: false)
         : departments;
 
+    final fallbackBranch = branches.isNotEmpty
+        ? branches.first
+        : WorkplaceSeedData.branches.first;
+    final fallbackShift =
+        shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first;
+
+    final assignmentsByEmp = <int, List<ShiftAssignment>>{};
+    for (final a in shiftAssignments) {
+      assignmentsByEmp
+          .putIfAbsent(a.employeeId, () => <ShiftAssignment>[])
+          .add(a);
+    }
+
     final statuses = <EmployeeDailyStatus>[];
     for (final emp in visibleEmployees) {
-      final branch = branchMap[emp.branchId] ??
-          (branches.isNotEmpty
-              ? branches.first
-              : WorkplaceSeedData.branches.first);
+      final branch = branchMap[emp.branchId] ?? fallbackBranch;
       final dept = deptMap[emp.departmentId] ??
           const Department(id: 1, name: 'GENEL', branchId: 1);
-      final shift = shiftMap[emp.shiftId] ??
-          (shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first);
-      final empLogs = logsByCard[emp.cardNo] ?? const <AttendanceLog>[];
+      final shift = AttendanceEvaluationEngine.resolveShiftForDate(
+        employee: emp,
+        dateKey: state.selectedDate,
+        shiftMap: shiftMap,
+        fallbackShift: fallbackShift,
+        shiftAssignments: assignmentsByEmp[emp.id] ?? const <ShiftAssignment>[],
+      );
+      final empLogs = logsByCardDate['${emp.cardNo}|${state.selectedDate}'] ??
+          const <AttendanceLog>[];
+      final prevLogs = logsByCardDate['${emp.cardNo}|$prevDateKey'] ??
+          const <AttendanceLog>[];
+      final nextLogs = logsByCardDate['${emp.cardNo}|$nextDateKey'] ??
+          const <AttendanceLog>[];
       final leave = leaveMap[emp.id];
+      final holiday = holidayByDate[state.selectedDate];
 
-      final eval = _evaluateDayLogs(
+      final eval = AttendanceEvaluationEngine.evaluateDay(
         rawDayLogs: empLogs,
+        previousDayLogs: prevLogs,
+        nextDayLogs: nextLogs,
         shift: shift,
         leave: leave,
+        publicHoliday: holiday,
         employee: emp,
         dateKey: state.selectedDate,
       );
@@ -1479,12 +1136,16 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           lastCheckOut: eval.lastOut,
           allLogsOfDay: empLogs,
           leaveRecord: leave,
+          publicHoliday: holiday,
           lateMinutes: eval.lateMinutes,
           workedMinutes: eval.workedMinutes,
+          breakDeductedMinutes: eval.breakDeductedMinutes,
           overtimeMinutes: eval.overtimeMinutes,
           earlyLeaveMinutes: eval.earlyLeaveMinutes,
           hasMissingCheckOut: eval.hasMissingCheckOut,
           duplicateScansFiltered: eval.duplicateScansFiltered,
+          isHolidayWork: eval.isHolidayWork,
+          isWeeklyOffWork: eval.isWeeklyOffWork,
         ),
       );
     }
@@ -1568,6 +1229,25 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       visibleAppUsers = appUsers;
     }
 
+    final visibleShiftAssignments = scopedBranchIdSet.isNotEmpty
+        ? shiftAssignments
+            .where((a) => scopedEmployeeIds.contains(a.employeeId))
+            .toList(growable: false)
+        : shiftAssignments;
+
+    final proactiveAlerts = AttendanceReportEngine.buildProactiveAlerts(
+      anchorDateKey: state.selectedDate,
+      todayStatuses: statuses,
+      employees: visibleEmployees,
+      recentLogs: recentLogs,
+      recentLeaves: visibleLeaves,
+      holidays: holidayByDate,
+      documents: visibleDocs,
+      shiftMap: shiftMap,
+      fallbackShift: fallbackShift,
+      shiftAssignments: visibleShiftAssignments,
+    );
+
     final int? Function()? nextSelectedBranchId;
     if (scopedBranchIds.length == 1) {
       nextSelectedBranchId = () => scopedBranchIds.first;
@@ -1595,11 +1275,14 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       selectedBranchId: nextSelectedBranchId,
       branches: visibleBranches,
       shifts: shifts,
+      shiftAssignments: visibleShiftAssignments,
       departments: visibleDepartments,
       dailyStatuses: statuses,
       allLeaveRecords: visibleLeaves,
+      publicHolidays: publicHolidays,
       allPersonnelDocuments: visibleDocs,
       allHrRequests: visibleRequests,
+      proactiveAlerts: proactiveAlerts,
       appUsers: visibleAppUsers,
       branchInboxStatuses: visibleInboxStatuses,
       activeSelfServiceCardNo: nextSelfServiceCardNo,
@@ -1610,175 +1293,6 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       tamperedAttendanceLogs: visibleTamperedLogs,
       auditLogs: visibleAuditLogs,
     );
-  }
-
-  /// Anti-Passback (15 dk mükerrer okuma filtresi) + Fazla Mesai / Erken Çıkış / Eksik Çıkış motoru.
-  static ({
-    DailyAttendanceState state,
-    AttendanceLog? firstIn,
-    AttendanceLog? lastOut,
-    int lateMinutes,
-    int workedMinutes,
-    int overtimeMinutes,
-    int earlyLeaveMinutes,
-    bool hasMissingCheckOut,
-    int duplicateScansFiltered,
-  }) _evaluateDayLogs({
-    required List<AttendanceLog> rawDayLogs,
-    required ShiftPlan shift,
-    required LeaveRecord? leave,
-    Employee? employee,
-    String? dateKey,
-  }) {
-    if (rawDayLogs.isEmpty) {
-      final DailyAttendanceState st;
-      if (leave != null && leave.leaveType != LeaveType.devamsiz) {
-        if (leave.leaveType == LeaveType.saglikRaporu) {
-          st = DailyAttendanceState.sickReport;
-        } else {
-          st = DailyAttendanceState.onLeave;
-        }
-      } else if (employee != null &&
-          dateKey != null &&
-          employee.isTerminatedOn(dateKey)) {
-        st = DailyAttendanceState.terminated;
-      } else if (employee != null &&
-          dateKey != null &&
-          employee.isBeforeHireDate(dateKey)) {
-        st = DailyAttendanceState.notYetHired;
-      } else {
-        st = DailyAttendanceState.absent;
-      }
-      return (
-        state: st,
-        firstIn: null,
-        lastOut: null,
-        lateMinutes: 0,
-        workedMinutes: 0,
-        overtimeMinutes: 0,
-        earlyLeaveMinutes: 0,
-        hasMissingCheckOut: false,
-        duplicateScansFiltered: 0,
-      );
-    }
-
-    final sorted = List<AttendanceLog>.from(rawDayLogs)
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-    // 15 dakika içerisindeki aynı yönlü veya ardışık mükerrer okumaları filtrele (Anti-Passback Debounce)
-    final debounced = <AttendanceLog>[];
-    int duplicatesFiltered = 0;
-    for (final log in sorted) {
-      if (debounced.isEmpty) {
-        debounced.add(log);
-        continue;
-      }
-      final prev = debounced.last;
-      final diffMins = log.timestamp.difference(prev.timestamp).inMinutes.abs();
-      if (diffMins < 15 && log.isCheckIn == prev.isCheckIn) {
-        duplicatesFiltered++;
-        continue;
-      }
-      debounced.add(log);
-    }
-
-    final explicitIns =
-        debounced.where((l) => l.isCheckIn).toList(growable: false);
-    final explicitOuts =
-        debounced.where((l) => !l.isCheckIn).toList(growable: false);
-
-    final AttendanceLog firstIn =
-        explicitIns.isNotEmpty ? explicitIns.first : debounced.first;
-
-    AttendanceLog? lastOut;
-    if (explicitOuts.isNotEmpty) {
-      final candidate = explicitOuts.last;
-      if (candidate.id != firstIn.id &&
-          candidate.timestamp.isAfter(firstIn.timestamp)) {
-        lastOut = candidate;
-      }
-    } else if (debounced.length > 1) {
-      final candidate = debounced.last;
-      if (candidate.id != firstIn.id &&
-          candidate.timestamp.difference(firstIn.timestamp).inMinutes >= 30) {
-        lastOut = candidate;
-      }
-    }
-
-    final int lateMins = _calculateLateMinutes(
-      firstIn.timestamp,
-      shift.startTime,
-      shift.toleranceMinutes,
-    );
-    final DailyAttendanceState dailyState = lateMins > 0
-        ? DailyAttendanceState.late
-        : DailyAttendanceState.present;
-
-    int workedMins = 0;
-    int overtimeMins = 0;
-    int earlyLeaveMins = 0;
-    final bool missingOut = lastOut == null;
-
-    if (lastOut != null) {
-      workedMins =
-          lastOut.timestamp.difference(firstIn.timestamp).inMinutes.clamp(0, 1440);
-
-      final endParts = shift.endTime.split(':');
-      final int eh = int.tryParse(endParts[0]) ?? 18;
-      final int em = endParts.length > 1 ? (int.tryParse(endParts[1]) ?? 0) : 0;
-      DateTime shiftEnd = DateTime(
-        firstIn.timestamp.year,
-        firstIn.timestamp.month,
-        firstIn.timestamp.day,
-        eh,
-        em,
-      );
-      // Gece vardiyası (örn. 19:00 -> 07:00) için bitiş ertesi gündür
-      final startParts = shift.startTime.split(':');
-      final int sh = int.tryParse(startParts[0]) ?? 8;
-      if (eh < sh) {
-        shiftEnd = shiftEnd.add(const Duration(days: 1));
-      }
-
-      final outDiff = lastOut.timestamp.difference(shiftEnd).inMinutes;
-      if (outDiff >= 15) {
-        overtimeMins = outDiff;
-      } else if (outDiff < -shift.toleranceMinutes) {
-        earlyLeaveMins = (-outDiff);
-      }
-    }
-
-    return (
-      state: dailyState,
-      firstIn: firstIn,
-      lastOut: lastOut,
-      lateMinutes: lateMins,
-      workedMinutes: workedMins,
-      overtimeMinutes: overtimeMins,
-      earlyLeaveMinutes: earlyLeaveMins,
-      hasMissingCheckOut: missingOut,
-      duplicateScansFiltered: duplicatesFiltered,
-    );
-  }
-
-  static int _calculateLateMinutes(
-    DateTime checkIn,
-    String shiftStartHhMm,
-    int toleranceMinutes,
-  ) {
-    final parts = shiftStartHhMm.split(':');
-    final int sh = int.tryParse(parts[0]) ?? 6;
-    final int sm = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
-    final shiftStart = DateTime(
-      checkIn.year,
-      checkIn.month,
-      checkIn.day,
-      sh,
-      sm,
-    );
-    final diff = checkIn.difference(shiftStart).inMinutes;
-    if (diff <= toleranceMinutes) return 0;
-    return diff;
   }
 
   void setSelectedDate(String dateKey) {
@@ -2389,7 +1903,119 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         lastTerminalReachable: () => diag.isReachable,
         terminalStatusMessage: diag.message,
       );
-      return diag;
+    return diag;
+    } finally {
+      await client.dispose();
+    }
+  }
+
+  /// Şubedeki Tenfei D35 / ZKTeco terminalinin saatini sistem saatiyle eşitler.
+  Future<String> syncBranchTerminalClock(int branchId) async {
+    if (state.isCommercialWriteLocked) {
+      return 'Salt-okunur kilitli modda terminal saati değiştirilemez.';
+    }
+    if (!_isBranchAllowed(branchId)) {
+      return 'Yetki kapsamınız dışındaki şube terminaline erişilemez.';
+    }
+    final branch = _db.getBranches().where((b) => b.id == branchId).firstOrNull;
+    if (branch == null || !branch.hasTerminal || (branch.terminalIp ?? '').trim().isEmpty) {
+      return 'Şube için aktif terminal IP adresi tanımlı değil.';
+    }
+    final client = TenfeiZkClient(
+      host: branch.terminalIp!.trim(),
+      port: branch.terminalPort,
+      branchId: branch.id,
+      machineNo: branch.machineNo,
+      commKey: branch.terminalCommKey,
+    );
+    try {
+      final ok = await client.syncDeviceTime();
+      if (ok) {
+        final actor = state.authSession.username.isEmpty
+            ? 'admin'
+            : state.authSession.username;
+        _db.appendAuditLog(
+          actorEmployeeId: actor,
+          actionType: 'TERMINAL_CLOCK_SYNCED',
+          targetRecordId: 'branch_${branch.id}',
+          oldValue: '${branch.terminalIp}:${branch.terminalPort}',
+          newValue: DateTime.now().toIso8601String(),
+        );
+        refreshDashboard();
+        return '✓ ${branch.name} terminal saati sistem saatiyle eşitlendi.';
+      }
+      return '${branch.name} terminal saati güncellenemedi (ACK alınamadı).';
+    } catch (e) {
+      return '${branch.name} terminal saat eşitleme hatası: $e';
+    } finally {
+      await client.dispose();
+    }
+  }
+
+  /// Şube kadrosunu (aktif ekleme, işten ayrılanları silme) terminalle eşitler.
+  Future<String> syncEmployeesToBranchTerminal(int branchId) async {
+    if (state.isCommercialWriteLocked) {
+      return 'Salt-okunur kilitli modda terminal kadrosu değiştirilemez.';
+    }
+    if (!_isBranchAllowed(branchId)) {
+      return 'Yetki kapsamınız dışındaki şube terminaline erişilemez.';
+    }
+    final branch = _db.getBranches().where((b) => b.id == branchId).firstOrNull;
+    if (branch == null || !branch.hasTerminal || (branch.terminalIp ?? '').trim().isEmpty) {
+      return 'Şube için aktif terminal IP adresi tanımlı değil.';
+    }
+    final branchEmployees = _db
+        .getEmployees()
+        .where((e) => e.branchId == branchId)
+        .toList(growable: false);
+    final client = TenfeiZkClient(
+      host: branch.terminalIp!.trim(),
+      port: branch.terminalPort,
+      branchId: branch.id,
+      machineNo: branch.machineNo,
+      commKey: branch.terminalCommKey,
+    );
+    try {
+      await client.connect();
+      final deviceUsers = await client.fetchDeviceUsers();
+      final deviceUidByCard = <String, int>{
+        for (final u in deviceUsers) u.cardNo: u.uid,
+      };
+      int pushed = 0;
+      int removed = 0;
+      for (final emp in branchEmployees) {
+        final card = emp.cardNo.trim().padLeft(5, '0');
+        final existingUid = deviceUidByCard[card];
+        if (emp.isSeparatedNow) {
+          if (existingUid != null && await client.deleteDeviceUserByUid(existingUid)) {
+            removed++;
+          }
+        } else {
+          final uid = existingUid ?? (int.tryParse(card) ?? emp.id);
+          if (uid > 0 &&
+              await client.upsertDeviceUser(
+                uid: uid,
+                cardNo: card,
+                fullName: emp.fullName,
+              )) {
+            pushed++;
+          }
+        }
+      }
+      final actor = state.authSession.username.isEmpty
+          ? 'admin'
+          : state.authSession.username;
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'TERMINAL_STAFF_SYNCED',
+        targetRecordId: 'branch_${branch.id}',
+        oldValue: 'deviceUsers=${deviceUsers.length}',
+        newValue: 'pushed=$pushed, removed=$removed',
+      );
+      refreshDashboard();
+      return '✓ ${branch.name} terminal kadrosu eşitlendi ($pushed gönderildi, $removed ayrılan silindi).';
+    } catch (e) {
+      return '${branch.name} kadro eşitleme hatası: $e';
     } finally {
       await client.dispose();
     }
@@ -2426,6 +2052,78 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     await _pushAutoBackupOnChange('Hasibu Vardiya Yönetimi');
   }
 
+  /// Tarih bazlı vardiya ataması / rotasyon kaydı ekler veya günceller.
+  Future<void> saveShiftAssignment(ShiftAssignment assignment) async {
+    if (state.isCommercialWriteLocked) return;
+    if (!_isEmployeeInScope(assignment.employeeId)) return;
+    _db.upsertShiftAssignment(assignment);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'SHIFT_ASSIGNMENT_SAVED',
+      targetRecordId: 'emp_${assignment.employeeId}',
+      oldValue: '-',
+      newValue:
+          'shift=${assignment.shiftId} (${assignment.validFrom}..${assignment.validTo ?? "DEVAM"})',
+    );
+    refreshDashboard();
+    await _pushAutoBackupOnChange('Hasibu Vardiya Rotasyonu');
+  }
+
+  Future<void> deleteShiftAssignment(String assignmentId) async {
+    if (state.isCommercialWriteLocked) return;
+    _db.deleteShiftAssignment(assignmentId);
+    refreshDashboard();
+    await _pushAutoBackupOnChange('Hasibu Vardiya Rotasyonu');
+  }
+
+  /// Resmi tatil (UBGT) kaydı ekler veya günceller.
+  Future<void> savePublicHoliday(PublicHoliday holiday) async {
+    if (state.isCommercialWriteLocked) return;
+    _db.upsertPublicHoliday(holiday);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'PUBLIC_HOLIDAY_SAVED',
+      targetRecordId: holiday.dateKey,
+      oldValue: '-',
+      newValue: '${holiday.dateKey} (${holiday.name})',
+    );
+    refreshDashboard();
+    await _pushAutoBackupOnChange('Hasibu Resmi Tatil Takvimi');
+  }
+
+  Future<void> deletePublicHoliday(String holidayId) async {
+    if (state.isCommercialWriteLocked) return;
+    _db.deletePublicHoliday(holidayId);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'PUBLIC_HOLIDAY_DELETED',
+      targetRecordId: holidayId,
+      oldValue: holidayId,
+      newValue: 'DELETED',
+    );
+    refreshDashboard();
+    await _pushAutoBackupOnChange('Hasibu Resmi Tatil Takvimi');
+  }
+
+  Future<int> seedTurkeyOfficialHolidays(int year) async {
+    if (state.isCommercialWriteLocked) return 0;
+    final added = _db.seedTurkeyOfficialHolidays(year);
+    if (added > 0) {
+      refreshDashboard();
+      await _pushAutoBackupOnChange('Hasibu Resmi Tatil Takvimi');
+    }
+    return added;
+  }
+
   /// Departman / Üretim Bölümü ekler veya günceller.
   Future<void> saveDepartment(Department dept) async {
     if (!_isBranchAllowed(dept.branchId)) return;
@@ -2448,36 +2146,228 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       return;
     }
     _db.upsertEmployee(employee);
+    if (previous != null && previous.shiftId != employee.shiftId) {
+      final existingAssignments = _db.getShiftAssignments(employeeId: employee.id);
+      final effectiveFrom = state.selectedDate;
+      final prevDay = AttendanceEvaluationEngine.previousDateKey(effectiveFrom);
+      if (existingAssignments.isEmpty &&
+          previous.hireDate.compareTo(prevDay) <= 0) {
+        _db.upsertShiftAssignment(
+          ShiftAssignment(
+            id: 'sa_hist_${employee.id}_${previous.hireDate}_${previous.shiftId}',
+            employeeId: employee.id,
+            shiftId: previous.shiftId,
+            validFrom: previous.hireDate,
+            validTo: prevDay,
+            note: 'Önceki vardiya geçmişi (otomatik koruma)',
+          ),
+        );
+      } else {
+        for (final a in existingAssignments) {
+          if (a.validTo == null && a.validFrom.compareTo(effectiveFrom) < 0) {
+            _db.upsertShiftAssignment(a.copyWith(validTo: () => prevDay));
+          }
+        }
+      }
+      _db.upsertShiftAssignment(
+        ShiftAssignment(
+          id: 'sa_${employee.id}_${effectiveFrom}_${employee.shiftId}',
+          employeeId: employee.id,
+          shiftId: employee.shiftId,
+          validFrom: effectiveFrom,
+          note: 'Vardiya değişikliği',
+        ),
+      );
+    }
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    final normalizedCard = employee.cardNo.trim().padLeft(5, '0');
     if (previous == null ||
         previous.hireDate != employee.hireDate ||
         previous.normalizedExitDate != employee.normalizedExitDate) {
-      final actor = state.authSession.username.isEmpty
-          ? 'admin'
-          : state.authSession.username;
       _db.appendAuditLog(
         actorEmployeeId: actor,
         actionType: 'EMPLOYEE_EMPLOYMENT_DATES_UPDATED',
-        targetRecordId: employee.cardNo.trim().padLeft(5, '0'),
+        targetRecordId: normalizedCard,
         oldValue: previous == null
             ? 'NEW_EMPLOYEE'
             : 'hireDate=${previous.hireDate}, exitDate=${previous.normalizedExitDate ?? "AKTIF"}',
         newValue:
             'hireDate=${employee.hireDate}, exitDate=${employee.normalizedExitDate ?? "AKTIF"}',
       );
+    } else {
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'EMPLOYEE_SAVED',
+        targetRecordId: normalizedCard,
+        oldValue: '${previous.fullName} (branch=${previous.branchId}, shift=${previous.shiftId})',
+        newValue: '${employee.fullName} (branch=${employee.branchId}, shift=${employee.shiftId})',
+      );
     }
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Personel Yönetimi');
   }
 
+  /// Excel/CSV metninden toplu personel kartı içe aktarır.
+  Future<EmployeeCsvImportResult> importEmployeesFromCsv(String rawCsv) async {
+    if (state.isCommercialWriteLocked) {
+      return const EmployeeCsvImportResult(
+        validEmployees: <Employee>[],
+        warnings: <String>['Salt-okunur kilitli modda toplu içe aktarım yapılamaz.'],
+        skippedExistingCount: 0,
+        totalRowsRead: 0,
+      );
+    }
+    final existing = _db.getEmployees();
+    final branches = _isBranchScoped
+        ? _db.getBranches().where((b) => _isBranchAllowed(b.id)).toList(growable: false)
+        : _db.getBranches();
+    final departments = _db.getDepartments();
+    final shifts = _db.getShifts();
+
+    final parsed = EmployeeBulkImportEngine.parseEmployeeCsv(
+      rawCsv,
+      branches: branches,
+      departments: departments,
+      shifts: shifts,
+      existingEmployees: existing,
+      defaultHireDate: state.selectedDate,
+    );
+
+    final allowedToInsert = parsed.validEmployees
+        .where((e) => _isBranchAllowed(e.branchId))
+        .toList(growable: false);
+
+    if (allowedToInsert.isNotEmpty) {
+      for (final emp in allowedToInsert) {
+        _db.upsertEmployee(emp);
+      }
+      final actor = state.authSession.username.isEmpty
+          ? 'admin'
+          : state.authSession.username;
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'EMPLOYEES_BULK_IMPORTED',
+        targetRecordId: 'count_${allowedToInsert.length}',
+        oldValue: 'existing=${existing.length}',
+        newValue: 'imported=${allowedToInsert.length}',
+      );
+      refreshDashboard();
+      await _pushAutoBackupOnChange('Hasibu Toplu Personel Aktarımı');
+    }
+
+    return EmployeeCsvImportResult(
+      validEmployees: allowedToInsert,
+      warnings: parsed.warnings,
+      skippedExistingCount: parsed.skippedExistingCount,
+      totalRowsRead: parsed.totalRowsRead,
+    );
+  }
+
+  /// Seçili personellere toplu vardiya, şube veya bölüm ataması yapar.
+  Future<int> bulkAssignEmployees({
+    required List<int> employeeIds,
+    int? shiftId,
+    int? branchId,
+    int? departmentId,
+    String? effectiveDateKey,
+  }) async {
+    if (state.isCommercialWriteLocked || employeeIds.isEmpty) return 0;
+    if (branchId != null && !_isBranchAllowed(branchId)) return 0;
+    final idSet = employeeIds.toSet();
+    final employees = _db.getEmployees();
+    final effectiveFrom = effectiveDateKey ?? state.selectedDate;
+    final prevDay = AttendanceEvaluationEngine.previousDateKey(effectiveFrom);
+    int updated = 0;
+
+    for (final emp in employees) {
+      if (!idSet.contains(emp.id)) continue;
+      if (!_isBranchAllowed(emp.branchId)) continue;
+      final nextEmp = emp.copyWith(
+        shiftId: shiftId ?? emp.shiftId,
+        branchId: branchId ?? emp.branchId,
+        departmentId: departmentId ?? emp.departmentId,
+      );
+      _db.upsertEmployee(nextEmp);
+      if (shiftId != null && shiftId != emp.shiftId) {
+        final existingAssignments = _db.getShiftAssignments(employeeId: emp.id);
+        if (existingAssignments.isEmpty && emp.hireDate.compareTo(prevDay) <= 0) {
+          _db.upsertShiftAssignment(
+            ShiftAssignment(
+              id: 'sa_hist_${emp.id}_${emp.hireDate}_${emp.shiftId}',
+              employeeId: emp.id,
+              shiftId: emp.shiftId,
+              validFrom: emp.hireDate,
+              validTo: prevDay,
+              note: 'Toplu atama öncesi vardiya',
+            ),
+          );
+        }
+        _db.upsertShiftAssignment(
+          ShiftAssignment(
+            id: 'sa_bulk_${emp.id}_${effectiveFrom}_$shiftId',
+            employeeId: emp.id,
+            shiftId: shiftId,
+            validFrom: effectiveFrom,
+            note: 'Toplu vardiya ataması',
+          ),
+        );
+      }
+      updated++;
+    }
+
+    if (updated > 0) {
+      final actor = state.authSession.username.isEmpty
+          ? 'admin'
+          : state.authSession.username;
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: 'EMPLOYEES_BULK_ASSIGNED',
+        targetRecordId: 'count_$updated',
+        oldValue: '-',
+        newValue:
+            'shift=${shiftId ?? "-"}, branch=${branchId ?? "-"}, dept=${departmentId ?? "-"}',
+      );
+      refreshDashboard();
+      await _pushAutoBackupOnChange('Hasibu Toplu Personel Atama');
+    }
+    return updated;
+  }
+
   Future<void> deleteEmployee(int employeeId) async {
     if (!_isEmployeeInScope(employeeId)) return;
+    final target = _db
+        .getEmployees()
+        .where((e) => e.id == employeeId)
+        .firstOrNull;
     _db.deleteEmployee(employeeId);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'EMPLOYEE_DELETED',
+      targetRecordId: target?.cardNo ?? employeeId.toString(),
+      oldValue: target?.fullName ?? 'id=$employeeId',
+      newValue: 'DELETED',
+    );
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Personel Yönetimi');
   }
 
+  /// `HH:mm` (00:00 - 23:59) saat biçimini katı olarak doğrular.
+  static ({int hour, int minute})? parseStrictTimeHhMm(String raw) {
+    final match = RegExp(r'^\s*([01]?\d|2[0-3]):([0-5]\d)\s*$').firstMatch(raw);
+    if (match == null) return null;
+    final h = int.tryParse(match.group(1)!);
+    final m = int.tryParse(match.group(2)!);
+    if (h == null || m == null) return null;
+    return (hour: h, minute: m);
+  }
+
   /// Personel hareketini (Giriş veya Çıkış saatini) manuel ekler veya düzeltir.
-  Future<void> saveOrUpdateAttendanceLog({
+  Future<bool> saveOrUpdateAttendanceLog({
     String? existingLogId,
     required Employee employee,
     required String dateKey, // YYYY-MM-DD
@@ -2485,20 +2375,38 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     required bool isCheckIn,
     AttendanceSource source = AttendanceSource.manual,
     VerifyMethod verifyMethod = VerifyMethod.face,
+    String? note,
+    bool writeAuditLog = true,
   }) async {
-    if (!_isBranchAllowed(employee.branchId)) return;
-    final dParts = dateKey.split('-');
-    final tParts = timeHhMm.split(':');
+    if (state.isCommercialWriteLocked) return false;
+    if (!_isBranchAllowed(employee.branchId)) return false;
+
+    final parsedTime = parseStrictTimeHhMm(timeHhMm);
+    if (parsedTime == null) return false;
+
+    final parsedDate = Employee.parseDateKey(dateKey);
+    if (parsedDate == null) return false;
+
     final dt = DateTime(
-      int.tryParse(dParts[0]) ?? 2026,
-      dParts.length > 1 ? (int.tryParse(dParts[1]) ?? 1) : 1,
-      dParts.length > 2 ? (int.tryParse(dParts[2]) ?? 1) : 1,
-      int.tryParse(tParts[0]) ?? 8,
-      tParts.length > 1 ? (int.tryParse(tParts[1]) ?? 0) : 0,
+      parsedDate.year,
+      parsedDate.month,
+      parsedDate.day,
+      parsedTime.hour,
+      parsedTime.minute,
     );
+
+    final existing =
+        existingLogId != null ? _db.getAttendanceLogById(existingLogId) : null;
 
     final String logId = existingLogId ??
         '${employee.branchId}_${employee.cardNo}_${dt.year}${dt.month.toString().padLeft(2, '0')}${dt.day.toString().padLeft(2, '0')}_${dt.hour.toString().padLeft(2, '0')}${dt.minute.toString().padLeft(2, '0')}_${isCheckIn ? "IN" : "OUT"}';
+
+    final integrityHash = HasibuSecurityService.computeAttendanceIntegrityHash(
+      cardNo: employee.cardNo,
+      timestamp: dt,
+      isCheckIn: isCheckIn,
+      verifyMethod: verifyMethod.name,
+    );
 
     final log = AttendanceLog(
       id: logId,
@@ -2509,23 +2417,72 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       isCheckIn: isCheckIn,
       source: source,
       verifyMethod: verifyMethod,
+      integrityHash: integrityHash,
     );
 
     _db.upsertAttendanceLog(log);
+
+    if (writeAuditLog) {
+      final actor = state.authSession.username.isEmpty
+          ? 'admin'
+          : state.authSession.username;
+      final cleanNote = (note ?? '').trim();
+      _db.appendAuditLog(
+        actorEmployeeId: actor,
+        actionType: existing != null
+            ? 'MANUAL_ATTENDANCE_UPDATED'
+            : 'MANUAL_ATTENDANCE_ADDED',
+        targetRecordId: logId,
+        oldValue: existing == null
+            ? 'NONE'
+            : '${existing.dateKey} ${existing.timeFormatted} ${existing.isCheckIn ? "IN" : "OUT"}',
+        newValue:
+            '${log.dateKey} ${log.timeFormatted} ${log.isCheckIn ? "IN" : "OUT"}${cleanNote.isNotEmpty ? " ($cleanNote)" : ""}',
+      );
+    }
+
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Hareket Düzeltme');
+    return true;
+  }
+
+  /// Yetki kapsamındaki personelin belirli bir tarihteki tüm yoklama hareketlerini kronolojik döndürür.
+  List<AttendanceLog> getAttendanceLogsForEmployeeOnDate(
+    String cardNo,
+    String dateKey,
+  ) {
+    if (_isBranchScoped && !_isCardInScope(cardNo)) {
+      return const <AttendanceLog>[];
+    }
+    final logs = _db
+        .getAttendanceLogsForDate(dateKey)
+        .where((l) => l.cardNo == cardNo)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return List<AttendanceLog>.unmodifiable(logs);
   }
 
   Future<void> deleteAttendanceLog(String logId) async {
-    if (_isBranchScoped) {
-      final existing = _db.getAttendanceLogById(logId);
-      if (existing == null ||
-          (!_isBranchAllowed(existing.branchId) &&
-              !_isCardInScope(existing.cardNo))) {
-        return;
-      }
+    if (state.isCommercialWriteLocked) return;
+    final existing = _db.getAttendanceLogById(logId);
+    if (existing == null) return;
+    if (_isBranchScoped &&
+        !_isBranchAllowed(existing.branchId) &&
+        !_isCardInScope(existing.cardNo)) {
+      return;
     }
     _db.deleteAttendanceLog(logId);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'MANUAL_ATTENDANCE_DELETED',
+      targetRecordId: logId,
+      oldValue:
+          '${existing.cardNo} ${existing.dateKey} ${existing.timeFormatted} ${existing.isCheckIn ? "IN" : "OUT"}',
+      newValue: 'DELETED',
+    );
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Hareket Düzeltme');
   }
@@ -2550,6 +2507,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       checkInTime: checkInTime,
       checkOutTime: checkOutTime,
       replaceExistingForDay: replaceExistingForDay,
+    );
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'BULK_MANUAL_ATTENDANCE_APPLIED',
+      targetRecordId: dateKey,
+      oldValue: 'replace=$replaceExistingForDay',
+      newValue:
+          'employees=${scopedEmployees.length}, affected=$affected, in=${checkInTime ?? "-"}, out=${checkOutTime ?? "-"}',
     );
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu Toplu Hareket Düzeltme');
@@ -2985,8 +2953,8 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     );
   }
 
-  /// Cihaz olmayan şubelerde (Devteyşti, Yenişehir, Karaköprü) Mobil QR (30sn TOTP) veya
-  /// Konum (GPS Geofence + Sahte GPS Kontrolü) doğrulaması ile personel giriş-çıkış kaydı oluşturur.
+  /// Cihaz olmayan şubelerde Konum (GPS Geofence + Sahte GPS Kontrolü) doğrulaması ile
+  /// personel giriş-çıkış kaydı oluşturur (QR kod yoklama güvenlik nedeniyle kaldırılmıştır).
   Future<String> recordBranchMobileCheckIn({
     required Employee employee,
     required Branch branch,
@@ -2996,10 +2964,23 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     double? currentLng,
     String? qrPayload,
     bool isMockedGps = false,
+    bool isSimulatedFallback = false,
     DateTime? verificationNow,
   }) async {
+    if (source == AttendanceSource.mobileQr) {
+      return 'QR kod ile yoklama özelliği kaldırılmıştır. Lütfen yüz okutma terminali veya GPS konum yoklamasını kullanın.';
+    }
     if (!_isBranchAllowed(branch.id) || !_isBranchAllowed(employee.branchId)) {
       return 'Yetki kapsamınız dışındaki şube veya personel için yoklama kaydı oluşturulamaz.';
+    }
+    if (state.authSession.role == UserRole.employee) {
+      final sessionCard = state.authSession.employeeCardNo?.trim() ?? '';
+      if (employee.cardNo != sessionCard || branch.id != employee.branchId) {
+        return 'Personel oturumunda yalnızca kendi adınıza ve kendi şubenizde yoklama kaydı oluşturabilirsiniz.';
+      }
+      if (isSimulatedFallback) {
+        return 'Gerçek GPS sensörü doğrulanamadığı için personel konum girişi reddedildi.';
+      }
     }
     // [HW-06] Sahte GPS (position.isMocked) Kontrolü
     if (isMockedGps) {
@@ -3019,22 +3000,6 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         auditLogs: _db.getAuditLogs(limit: 200),
       );
       return alertMsg;
-    }
-
-    // [HW-05] Dinamik 30 sn TOTP (HMAC-SHA1) QR Doğrulaması (60 sn üzeri reddedilir)
-    if (source == AttendanceSource.mobileQr &&
-        qrPayload != null &&
-        qrPayload.trim().isNotEmpty) {
-      final qrCheck = HasibuSecurityService.verifyDynamicBranchQrPayload(
-        qrPayload: qrPayload,
-        expectedBranchId: branch.id.toString(),
-        qrSecret: branch.qrSecret,
-        now: verificationNow,
-        maxAgeSeconds: 60,
-      );
-      if (!qrCheck.isValid) {
-        return 'QR Reddedildi: ${qrCheck.reason}';
-      }
     }
 
     if (source == AttendanceSource.mobileGps &&
@@ -3061,9 +3026,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       now.minute,
       now.second,
     );
-    final verifyMethod = source == AttendanceSource.mobileQr
-        ? VerifyMethod.mobileQr
-        : VerifyMethod.mobileGps;
+    const verifyMethod = VerifyMethod.mobileGps;
 
     final log = AttendanceLog(
       id: '${branch.id}_${employee.cardNo}_${logTime.millisecondsSinceEpoch}',
@@ -3088,35 +3051,93 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     return '${employee.fullName} için ${branch.name} şubesinde ${source.label} ile ${isCheckIn ? "GİRİŞ" : "ÇIKIŞ"} kaydedildi.';
   }
 
-  /// Devamsız personeli İzinli (Yıllık, Ücretli, Mazeret) veya Raporlu olarak işaretler
-  /// ve Google Drive üzerinden tüm cihazlarla senkronize eder.
+  static double _annualLeaveCost(LeaveRecord? record) {
+    if (record == null || record.leaveType != LeaveType.yillikIzin) return 0.0;
+    return record.effectiveLeaveDays;
+  }
+
+  void _applyAnnualLeaveDelta(int employeeId, double delta) {
+    if (delta.abs() < 0.001) return;
+    final emp = _db
+        .getEmployees()
+        .where((e) => e.id == employeeId)
+        .firstOrNull;
+    if (emp == null) return;
+    final nextExact = (emp.usedAnnualLeaveDays + delta).clamp(0.0, 365.0);
+    final roundedExact = (nextExact * 20).round() / 20.0;
+    if ((roundedExact - emp.usedAnnualLeaveDays).abs() < 0.001 &&
+        roundedExact.round() == emp.usedAnnualLeave) {
+      return;
+    }
+    _db.upsertEmployee(
+      emp.copyWith(
+        usedAnnualLeave: roundedExact.round(),
+        usedAnnualLeaveExact: () => roundedExact,
+      ),
+    );
+  }
+
+  /// Devamsız personeli İzinli (Yıllık, Ücretli, Mazeret, Saatlik/Yarım Gün) veya Raporlu olarak işaretler
+  /// ve yıllık izin bakiyesini otomatik günceller.
   Future<void> assignLeaveOrReport({
     required int employeeId,
     required LeaveType leaveType,
     required String note,
     String? customDateKey,
+    bool isHalfDay = false,
+    double? durationHours,
+    String? startTime,
+    String? endTime,
   }) async {
     if (!_isEmployeeInScope(employeeId)) return;
     final targetDate = customDateKey ?? state.selectedDate;
+    final recordId = 'leave_${employeeId}_$targetDate';
+    final previous = _db
+        .getLeaveRecordsForEmployee(employeeId)
+        .where((r) => r.id == recordId)
+        .firstOrNull;
     final record = LeaveRecord(
-      id: 'leave_${employeeId}_$targetDate',
+      id: recordId,
       employeeId: employeeId,
       date: targetDate,
       leaveType: leaveType,
       note: note.trim().isEmpty ? leaveType.label : note.trim(),
+      isHalfDay: isHalfDay,
+      durationHours: durationHours,
+      startTime: startTime,
+      endTime: endTime,
     );
     _db.upsertLeaveRecord(record);
+    _applyAnnualLeaveDelta(
+      employeeId,
+      _annualLeaveCost(record) - _annualLeaveCost(previous),
+    );
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'LEAVE_ASSIGNED',
+      targetRecordId: recordId,
+      oldValue: previous?.leaveType.label ?? 'NONE',
+      newValue: '${leaveType.label} (${record.formattedScopeLabel})',
+    );
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu İK Yönetimi');
   }
 
-  /// Başlangıç ve bitiş tarihleri arasındaki tüm günler için toplu izin/rapor kaydı oluşturur.
+  /// Başlangıç ve bitiş tarihleri arasındaki iş günleri için toplu izin/rapor kaydı oluşturur.
   Future<int> assignLeaveDateRange({
     required int employeeId,
     required DateTime startDate,
     required DateTime endDate,
     required LeaveType leaveType,
     required String note,
+    bool excludeOffDaysAndHolidays = true,
+    bool isHalfDay = false,
+    double? durationHours,
+    String? startTime,
+    String? endTime,
   }) async {
     if (!_isEmployeeInScope(employeeId)) return 0;
     final DateTime normalizedStart =
@@ -3125,40 +3146,103 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         DateTime(endDate.year, endDate.month, endDate.day);
     if (normalizedEnd.isBefore(normalizedStart)) return 0;
 
-    int daysCount = 0;
+    final emp = _db
+        .getEmployees()
+        .where((e) => e.id == employeeId)
+        .firstOrNull;
+    final shifts = _db.getShifts();
+    final shift = shifts.firstWhere(
+      (s) => s.id == (emp?.shiftId ?? 1),
+      orElse: () =>
+          shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first,
+    );
+    final holidayKeys = {
+      for (final h in _db.getPublicHolidays())
+        if (!h.isHalfDay) h.dateKey,
+    };
+    final existingById = {
+      for (final r in _db.getLeaveRecordsForEmployee(employeeId)) r.id: r,
+    };
+    final bool isMultiDay = normalizedEnd.isAfter(normalizedStart);
+
+    double daysCount = 0;
+    double annualDelta = 0.0;
     DateTime cursor = normalizedStart;
     while (!cursor.isAfter(normalizedEnd) && daysCount <= 90) {
-      final dKey =
-          '${cursor.year.toString().padLeft(4, '0')}-${cursor.month.toString().padLeft(2, '0')}-${cursor.day.toString().padLeft(2, '0')}';
+      final dKey = formatDateKey(cursor);
+      if (isMultiDay && excludeOffDaysAndHolidays) {
+        final isOff = holidayKeys.contains(dKey) ||
+            AttendanceEvaluationEngine.isScheduledWeeklyOffDay(
+              employee: emp,
+              shift: shift,
+              dateKey: dKey,
+            );
+        if (isOff) {
+          cursor = cursor.add(const Duration(days: 1));
+          continue;
+        }
+      }
+      final recordId = 'leave_${employeeId}_$dKey';
+      final previous = existingById[recordId];
       final rec = LeaveRecord(
-        id: 'leave_${employeeId}_$dKey',
+        id: recordId,
         employeeId: employeeId,
         date: dKey,
         leaveType: leaveType,
         note: note.trim().isEmpty ? leaveType.label : note.trim(),
+        isHalfDay: isHalfDay,
+        durationHours: durationHours,
+        startTime: startTime,
+        endTime: endTime,
       );
       _db.upsertLeaveRecord(rec);
-      daysCount++;
+      annualDelta += _annualLeaveCost(rec) - _annualLeaveCost(previous);
+      daysCount += 1;
       cursor = cursor.add(const Duration(days: 1));
     }
 
+    _applyAnnualLeaveDelta(employeeId, annualDelta);
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'LEAVE_RANGE_ASSIGNED',
+      targetRecordId: 'emp_$employeeId',
+      oldValue: '${formatDateKey(normalizedStart)}..${formatDateKey(normalizedEnd)}',
+      newValue: '${leaveType.label} (${daysCount.round()} gün)',
+    );
+
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu İK İzin/Rapor Yönetimi');
-    return daysCount;
+    return daysCount.round();
   }
 
   Future<void> deleteLeaveRecord(String leaveId) async {
-    if (_isBranchScoped) {
-      LeaveRecord? target;
-      for (final rec in _db.getAllLeaveRecords()) {
-        if (rec.id == leaveId) {
-          target = rec;
-          break;
-        }
+    LeaveRecord? target;
+    for (final rec in _db.getAllLeaveRecords()) {
+      if (rec.id == leaveId) {
+        target = rec;
+        break;
       }
-      if (target == null || !_isEmployeeInScope(target.employeeId)) return;
     }
+    if (target == null) return;
+    if (_isBranchScoped && !_isEmployeeInScope(target.employeeId)) return;
     _db.deleteLeaveRecord(leaveId);
+    final refund = _annualLeaveCost(target);
+    if (refund > 0) {
+      _applyAnnualLeaveDelta(target.employeeId, -refund);
+    }
+    final actor = state.authSession.username.isEmpty
+        ? 'admin'
+        : state.authSession.username;
+    _db.appendAuditLog(
+      actorEmployeeId: actor,
+      actionType: 'LEAVE_DELETED',
+      targetRecordId: leaveId,
+      oldValue: '${target.date} ${target.leaveType.label}',
+      newValue: 'DELETED',
+    );
     refreshDashboard();
     await _pushAutoBackupOnChange('Hasibu İK İzin/Rapor Yönetimi');
   }
@@ -3170,12 +3254,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
     final logs = _db.getAttendanceLogsForEmployee(emp.cardNo);
     final leaves = _db.getLeaveRecordsForEmployee(emp.id);
-    final shift = state.shifts.firstWhere(
-      (s) => s.id == emp.shiftId,
-      orElse: () => state.shifts.isNotEmpty
-          ? state.shifts.first
-          : WorkplaceSeedData.shifts.first,
-    );
+    final holidayByDate = {
+      for (final h in _db.getPublicHolidays()) h.dateKey: h,
+    };
+    final shiftMap = {for (final s in state.shifts) s.id: s};
+    final empAssignments = _db.getShiftAssignments(employeeId: emp.id);
+    final defaultShift = shiftMap[emp.shiftId] ??
+        (state.shifts.isNotEmpty
+            ? state.shifts.first
+            : WorkplaceSeedData.shifts.first);
 
     final logsByDate = <String, List<AttendanceLog>>{};
     for (final l in logs) {
@@ -3197,12 +3284,29 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       final dayLogs = List<AttendanceLog>.from(
         logsByDate[dKey] ?? const <AttendanceLog>[],
       )..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      final prevLogs =
+          logsByDate[AttendanceEvaluationEngine.previousDateKey(dKey)] ??
+              const <AttendanceLog>[];
+      final nextLogs =
+          logsByDate[AttendanceEvaluationEngine.nextDateKey(dKey)] ??
+              const <AttendanceLog>[];
       final lv = leaveByDate[dKey];
+      final holiday = holidayByDate[dKey];
+      final dayShift = AttendanceEvaluationEngine.resolveShiftForDate(
+        employee: emp,
+        dateKey: dKey,
+        shiftMap: shiftMap,
+        fallbackShift: defaultShift,
+        shiftAssignments: empAssignments,
+      );
 
-      final eval = _evaluateDayLogs(
+      final eval = AttendanceEvaluationEngine.evaluateDay(
         rawDayLogs: dayLogs,
-        shift: shift,
+        previousDayLogs: prevLogs,
+        nextDayLogs: nextLogs,
+        shift: dayShift,
         leave: lv,
+        publicHoliday: holiday,
         employee: emp,
         dateKey: dKey,
       );
@@ -3215,11 +3319,15 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           lastCheckOut: eval.lastOut,
           allLogs: dayLogs,
           leaveRecord: lv,
+          publicHoliday: holiday,
           lateMinutes: eval.lateMinutes,
           workedMinutes: eval.workedMinutes,
+          breakDeductedMinutes: eval.breakDeductedMinutes,
           overtimeMinutes: eval.overtimeMinutes,
           earlyLeaveMinutes: eval.earlyLeaveMinutes,
           hasMissingCheckOut: eval.hasMissingCheckOut,
+          isHolidayWork: eval.isHolidayWork,
+          isWeeklyOffWork: eval.isWeeklyOffWork,
         ),
       );
     }
@@ -3239,6 +3347,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
       isCheckIn: false,
       source: AttendanceSource.manual,
       verifyMethod: VerifyMethod.password,
+      writeAuditLog: false,
     );
     // [AUD-02] "1-Tıkla Eksik Çıkış Tamamlama" işlemini otomatik olarak audit_logs tablosuna yazdır
     _db.appendAuditLog(
@@ -3402,6 +3511,17 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
           actionSummary =
               '${request.employeeName} için ${request.targetDate} $timeStr ${request.isCheckInCorrection ? "Giriş" : "Çıkış"} hareketi onaylanıp eklendi.';
         }
+      } else if (request.type == HrRequestType.overtimeApproval) {
+        final mins = request.overtimeMinutes;
+        _db.appendAuditLog(
+          actorEmployeeId: actor,
+          actionType: 'OVERTIME_REQUEST_APPROVED',
+          targetRecordId: request.employeeCardNo,
+          oldValue: 'pending',
+          newValue: '${request.targetDate} (+$mins dk onaylı FM)',
+        );
+        actionSummary =
+            '${request.employeeName} için ${request.targetDate} tarihli +$mins dk fazla mesai talebi onaylandı.';
       }
     }
 
@@ -3456,34 +3576,10 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     }
     final rows =
         onlyVisible ? state.visibleStatuses : state.filteredByBranch;
-    final buf = StringBuffer();
-    buf.writeln(
-      'Tarih;Kart No;Ad Soyad;Şube;Bölüm;Vardiya;İlk Giriş;Son Çıkış;Net Çalışma (Dk);Gecikme (Dk);Fazla Mesai (Dk);Erken Çıkış (Dk);Eksik Çıkış;Durum;Doğrulama',
+    return AttendanceReportEngine.generateDailyPuantajCsv(
+      selectedDate: state.selectedDate,
+      rows: rows,
     );
-    for (final item in rows) {
-      final inStr = item.firstCheckIn?.timeFormatted ?? '-';
-      final outStr = item.lastCheckOut?.timeFormatted ?? '-';
-      final verifyStr = item.firstCheckIn?.verifyMethod.label ??
-          (item.leaveRecord?.leaveType.label ?? '-');
-      buf.writeln(
-        '${state.selectedDate};'
-        '${item.employee.cardNo};'
-        '${item.employee.fullName};'
-        '${item.branch.name};'
-        '${item.department.name};'
-        '${item.shift.startTime}-${item.shift.endTime};'
-        '$inStr;'
-        '$outStr;'
-        '${item.workedMinutes};'
-        '${item.lateMinutes};'
-        '${item.overtimeMinutes};'
-        '${item.earlyLeaveMinutes};'
-        '${item.hasMissingCheckOut ? "EVET" : "HAYIR"};'
-        '${item.state.label};'
-        '$verifyStr',
-      );
-    }
-    return buf.toString();
   }
 
   /// Seçili tarih aralığı için tüm personellerin devam, geç kalma, izin, rapor ve devamsızlık özetini hesaplar.
@@ -3497,10 +3593,12 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
     bool onlyWithLates = false,
     bool excludeSundays = false,
   }) {
-    final parsedStart =
-        DateTime.tryParse(startDateKey) ?? DateTime.tryParse(state.selectedDate) ?? DateTime.now();
+    final parsedStart = DateTime.tryParse(startDateKey) ??
+        DateTime.tryParse(state.selectedDate) ??
+        DateTime.now();
     final parsedEnd = DateTime.tryParse(endDateKey) ?? parsedStart;
-    var rangeStart = DateTime(parsedStart.year, parsedStart.month, parsedStart.day);
+    var rangeStart =
+        DateTime(parsedStart.year, parsedStart.month, parsedStart.day);
     var rangeEnd = DateTime(parsedEnd.year, parsedEnd.month, parsedEnd.day);
     if (rangeStart.isAfter(rangeEnd)) {
       final tmp = rangeStart;
@@ -3513,170 +3611,130 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
 
     final startKey = formatDateKey(rangeStart);
     final endKey = formatDateKey(rangeEnd);
+    final prevStartKey = AttendanceEvaluationEngine.previousDateKey(startKey);
+    final nextEndKey = AttendanceEvaluationEngine.nextDateKey(endKey);
 
-    final employees = _db.getEmployees();
+    final employees = _db
+        .getEmployees()
+        .where((e) => _isBranchAllowed(e.branchId))
+        .toList(growable: false);
     final branches = _db.getBranches();
     final departments = _db.getDepartments();
     final shifts = _db.getShifts();
-    final logs = _db.getAttendanceLogsInDateRange(startKey, endKey);
+    final shiftAssignments = _db.getShiftAssignments();
+    final logs = _db.getAttendanceLogsInDateRange(prevStartKey, nextEndKey);
     final leaves = _db.getLeaveRecordsInDateRange(startKey, endKey);
-
-    final branchMap = {for (final b in branches) b.id: b};
-    final deptMap = {for (final d in departments) d.id: d};
-    final shiftMap = {for (final s in shifts) s.id: s};
-
-    final logsByCardDate = <String, List<AttendanceLog>>{};
-    for (final log in logs) {
-      final key = '${log.cardNo}|${log.dateKey}';
-      logsByCardDate.putIfAbsent(key, () => <AttendanceLog>[]).add(log);
-    }
-
-    final leavesByEmpDate = <String, LeaveRecord>{};
-    for (final leave in leaves) {
-      leavesByEmpDate['${leave.employeeId}|${leave.date}'] = leave;
-    }
-
-    final dayKeys = <({DateTime date, String key})>[];
-    for (var cursor = rangeStart;
-        !cursor.isAfter(rangeEnd);
-        cursor = cursor.add(const Duration(days: 1))) {
-      dayKeys.add((date: cursor, key: formatDateKey(cursor)));
-    }
+    final holidayByDate = {
+      for (final h in _db.getPublicHolidaysInDateRange(startKey, endKey))
+        h.dateKey: h,
+    };
 
     final int? effectiveFilterBranchId =
         (branchId != null && _isBranchAllowed(branchId))
             ? branchId
             : (_scopedBranchIds.length == 1 ? _scopedBranchIds.first : null);
-    final q = normalizeTurkishSearch(searchQuery);
-    final results = <EmployeeAttendancePeriodSummary>[];
 
-    for (final emp in employees) {
-      if (!_isBranchAllowed(emp.branchId)) continue;
-      if (effectiveFilterBranchId != null &&
-          emp.branchId != effectiveFilterBranchId) {
-        continue;
-      }
-      if (departmentId != null && emp.departmentId != departmentId) continue;
+    return AttendanceReportEngine.buildAttendancePeriodReport(
+      startDateKey: startKey,
+      endDateKey: endKey,
+      employees: employees,
+      branchMap: {for (final b in branches) b.id: b},
+      deptMap: {for (final d in departments) d.id: d},
+      shiftMap: {for (final s in shifts) s.id: s},
+      fallbackBranch: branches.isNotEmpty
+          ? branches.first
+          : WorkplaceSeedData.branches.first,
+      fallbackShift:
+          shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first,
+      logsWithBoundaryDays: logs,
+      leaves: leaves,
+      holidayByDate: holidayByDate,
+      shiftAssignments: shiftAssignments,
+      filterBranchId: effectiveFilterBranchId,
+      departmentId: departmentId,
+      searchQuery: searchQuery,
+      onlyWithAbsences: onlyWithAbsences,
+      onlyWithLates: onlyWithLates,
+      excludeSundays: excludeSundays,
+    );
+  }
 
-      final branch = branchMap[emp.branchId] ??
-          (branches.isNotEmpty
-              ? branches.first
-              : WorkplaceSeedData.branches.first);
-      final dept = deptMap[emp.departmentId] ??
-          const Department(id: 1, name: 'GENEL', branchId: 1);
-      final shift = shiftMap[emp.shiftId] ??
-          (shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first);
+  /// Seçili ay için 1–31 günlük PDKS puantaj matrisini üretir.
+  List<MonthlyPuantajRow> buildMonthlyPuantajMatrix({
+    required int year,
+    required int month,
+    int? branchId,
+    int? departmentId,
+    String searchQuery = '',
+  }) {
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    final startKey = formatDateKey(DateTime(year, month, 1));
+    final endKey = formatDateKey(DateTime(year, month, daysInMonth));
+    final prevStartKey = AttendanceEvaluationEngine.previousDateKey(startKey);
+    final nextEndKey = AttendanceEvaluationEngine.nextDateKey(endKey);
 
-      if (q.isNotEmpty) {
-        final matched = matchesTurkishSearch(emp.fullName, q) ||
-            matchesTurkishSearch(emp.cardNo, q) ||
-            matchesTurkishSearch(dept.name, q);
-        if (!matched) continue;
-      }
+    final employees = _db
+        .getEmployees()
+        .where((e) => _isBranchAllowed(e.branchId))
+        .toList(growable: false);
+    final branches = _db.getBranches();
+    final departments = _db.getDepartments();
+    final shifts = _db.getShifts();
+    final shiftAssignments = _db.getShiftAssignments();
+    final logs = _db.getAttendanceLogsInDateRange(prevStartKey, nextEndKey);
+    final leaves = _db.getLeaveRecordsInDateRange(startKey, endKey);
+    final holidayByDate = {
+      for (final h in _db.getPublicHolidaysInDateRange(startKey, endKey))
+        h.dateKey: h,
+    };
 
-      int totalDays = 0;
-      int presentDays = 0;
-      int onTimeDays = 0;
-      int lateDays = 0;
-      int totalLateMinutes = 0;
-      int absentDays = 0;
-      int onLeaveDays = 0;
-      int sickReportDays = 0;
-      int missingCheckOutDays = 0;
-      int totalWorkedMinutes = 0;
-      int totalOvertimeMinutes = 0;
-      int totalEarlyLeaveMinutes = 0;
-      final absentDateKeys = <String>[];
+    final int? effectiveFilterBranchId =
+        (branchId != null && _isBranchAllowed(branchId))
+            ? branchId
+            : (_scopedBranchIds.length == 1 ? _scopedBranchIds.first : null);
 
-      for (final day in dayKeys) {
-        final empLogs =
-            logsByCardDate['${emp.cardNo}|${day.key}'] ?? const <AttendanceLog>[];
-        final leave = leavesByEmpDate['${emp.id}|${day.key}'];
+    return AttendanceReportEngine.buildMonthlyPuantajMatrix(
+      year: year,
+      month: month,
+      employees: employees,
+      branchMap: {for (final b in branches) b.id: b},
+      deptMap: {for (final d in departments) d.id: d},
+      shiftMap: {for (final s in shifts) s.id: s},
+      fallbackBranch: branches.isNotEmpty
+          ? branches.first
+          : WorkplaceSeedData.branches.first,
+      fallbackShift:
+          shifts.isNotEmpty ? shifts.first : WorkplaceSeedData.shifts.first,
+      logsWithBoundaryDays: logs,
+      leaves: leaves,
+      holidayByDate: holidayByDate,
+      shiftAssignments: shiftAssignments,
+      filterBranchId: effectiveFilterBranchId,
+      departmentId: departmentId,
+      searchQuery: searchQuery,
+    );
+  }
 
-        if (excludeSundays &&
-            day.date.weekday == DateTime.sunday &&
-            empLogs.isEmpty &&
-            leave == null) {
-          continue;
-        }
-
-        final eval = _evaluateDayLogs(
-          rawDayLogs: empLogs,
-          shift: shift,
-          leave: leave,
-          employee: emp,
-          dateKey: day.key,
-        );
-
-        if (eval.state.isNonActiveEmployment) {
-          continue;
-        }
-
-        totalDays++;
-
-        switch (eval.state) {
-          case DailyAttendanceState.present:
-            presentDays++;
-            onTimeDays++;
-          case DailyAttendanceState.late:
-            presentDays++;
-            lateDays++;
-          case DailyAttendanceState.absent:
-            absentDays++;
-            absentDateKeys.add(day.key);
-          case DailyAttendanceState.onLeave:
-            onLeaveDays++;
-          case DailyAttendanceState.sickReport:
-            sickReportDays++;
-          case DailyAttendanceState.terminated:
-          case DailyAttendanceState.notYetHired:
-            break;
-        }
-
-        totalLateMinutes += eval.lateMinutes;
-        totalWorkedMinutes += eval.workedMinutes;
-        totalOvertimeMinutes += eval.overtimeMinutes;
-        totalEarlyLeaveMinutes += eval.earlyLeaveMinutes;
-        if (eval.hasMissingCheckOut) {
-          missingCheckOutDays++;
-        }
-      }
-
-      if (totalDays == 0) continue;
-      if (onlyWithAbsences && absentDays <= 0) continue;
-      if (onlyWithLates && lateDays <= 0) continue;
-
-      results.add(
-        EmployeeAttendancePeriodSummary(
-          employee: emp,
-          department: dept,
-          branch: branch,
-          shift: shift,
-          totalDays: totalDays,
-          presentDays: presentDays,
-          onTimeDays: onTimeDays,
-          lateDays: lateDays,
-          totalLateMinutes: totalLateMinutes,
-          absentDays: absentDays,
-          onLeaveDays: onLeaveDays,
-          sickReportDays: sickReportDays,
-          missingCheckOutDays: missingCheckOutDays,
-          totalWorkedMinutes: totalWorkedMinutes,
-          totalOvertimeMinutes: totalOvertimeMinutes,
-          totalEarlyLeaveMinutes: totalEarlyLeaveMinutes,
-          absentDateKeys: List<String>.unmodifiable(absentDateKeys),
-        ),
-      );
-    }
-
-    results.sort((a, b) {
-      final absCmp = b.absentDays.compareTo(a.absentDays);
-      if (absCmp != 0) return absCmp;
-      final lateCmp = b.lateDays.compareTo(a.lateDays);
-      if (lateCmp != 0) return lateCmp;
-      return a.employee.fullName.compareTo(b.employee.fullName);
-    });
-    return results;
+  String generateMonthlyPuantajCsv({
+    required int year,
+    required int month,
+    int? branchId,
+    int? departmentId,
+    String searchQuery = '',
+  }) {
+    if (state.isCommercialWriteLocked) return '';
+    final rows = buildMonthlyPuantajMatrix(
+      year: year,
+      month: month,
+      branchId: branchId,
+      departmentId: departmentId,
+      searchQuery: searchQuery,
+    );
+    return AttendanceReportEngine.generateMonthlyPuantajCsv(
+      rows,
+      year: year,
+      month: month,
+    );
   }
 
   /// Seçili tarih aralığındaki Devam / Devamsızlık Raporunu Excel uyumlu (; ayraçlı) CSV olarak üretir.
@@ -3717,11 +3775,11 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
               .map((d) => formatDisplayDate(d, includeTodayBadge: false))
               .join(', ');
       buf.writeln(
-        '$rangeLabel;'
-        '${row.employee.cardNo};'
-        '${row.employee.fullName};'
-        '${row.branch.name};'
-        '${row.department.name};'
+        '${AttendanceReportEngine.sanitizeCsvCell(rangeLabel)};'
+        '${AttendanceReportEngine.sanitizeCsvCell(row.employee.cardNo)};'
+        '${AttendanceReportEngine.sanitizeCsvCell(row.employee.fullName)};'
+        '${AttendanceReportEngine.sanitizeCsvCell(row.branch.name)};'
+        '${AttendanceReportEngine.sanitizeCsvCell(row.department.name)};'
         '${row.totalDays};'
         '${row.presentDays};'
         '${row.onTimeDays};'
@@ -3734,7 +3792,7 @@ class PdksDashboardNotifier extends StateNotifier<PdksDashboardState> {
         '$workedHours;'
         '${row.totalOvertimeMinutes};'
         '%$rateStr;'
-        '$absentDatesStr',
+        '${AttendanceReportEngine.sanitizeCsvCell(absentDatesStr)}',
       );
     }
     return buf.toString();

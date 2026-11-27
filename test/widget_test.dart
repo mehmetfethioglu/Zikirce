@@ -537,7 +537,7 @@ void main() {
     expect(find.text('Hareket Düzeltme'), findsOneWidget);
     expect(find.text('İK Talepleri & Uyum'), findsOneWidget);
     expect(find.text('Yüz Okutma Terminali'), findsOneWidget);
-    expect(find.text('Şube QR / GPS Yoklama'), findsOneWidget);
+    expect(find.text('Şube GPS Yoklama'), findsOneWidget);
     expect(find.text('Personel Portalı'), findsOneWidget);
     expect(find.text('Personel & Bölüm'), findsOneWidget);
     expect(find.text('Mesai & Vardiya'), findsOneWidget);

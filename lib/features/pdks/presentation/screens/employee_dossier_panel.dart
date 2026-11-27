@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/pdks_models.dart';
 import '../providers/pdks_providers.dart';
-import 'hasibu_settings_view.dart';
+import '../widgets/employee_profile_avatar.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 enum _DossierFilter { all, missing, uploaded }
 
@@ -385,7 +386,9 @@ class _EmployeeDossierPanelState extends ConsumerState<EmployeeDossierPanel> {
                   for (final doc in empDocs)
                     _UploadedDossierDocCard(
                       doc: doc,
-                      onOpen: (Platform.isWindows &&
+                      onOpen: ((Platform.isWindows ||
+                                  Platform.isMacOS ||
+                                  Platform.isLinux) &&
                               doc.filePath.isNotEmpty &&
                               File(doc.filePath).existsSync())
                           ? () async {
@@ -474,14 +477,49 @@ class _UploadedDossierDocCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${doc.category.label} • ${doc.uploadDate} • $fileName'
+                  '${doc.normalizedExpiryDate != null ? " • Bitiş: ${doc.normalizedExpiryDate}" : ""}'
                   '${doc.notes.isNotEmpty ? " • ${doc.notes}" : ""}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 11.5,
-                    color: pal.textSecondary,
+                    color: doc.isExpiredAt()
+                        ? const Color(0xFFDC2626)
+                        : (doc.isExpiringSoonAt()
+                            ? const Color(0xFFD97706)
+                            : pal.textSecondary),
                   ),
                 ),
+                if (doc.normalizedExpiryDate != null &&
+                    (doc.isExpiredAt() || doc.isExpiringSoonAt())) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    key: ValueKey('dossier_expiry_badge_${doc.id}'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (doc.isExpiredAt()
+                              ? const Color(0xFFDC2626)
+                              : const Color(0xFFD97706))
+                          .withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      doc.isExpiredAt()
+                          ? 'SÜRESİ DOLDU (${doc.normalizedExpiryDate})'
+                          : 'SÜRE YAKLAŞIYOR (${doc.daysUntilExpiryAt()} gün)',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: doc.isExpiredAt()
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFFD97706),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -525,6 +563,7 @@ class _AddDossierDocumentDialogState
   late final TextEditingController _titleCtrl;
   late final TextEditingController _pathCtrl;
   late final TextEditingController _notesCtrl;
+  late final TextEditingController _expiryDateCtrl;
   bool _saving = false;
 
   @override
@@ -534,6 +573,7 @@ class _AddDossierDocumentDialogState
     _titleCtrl = TextEditingController(text: widget.initialCategory.label);
     _pathCtrl = TextEditingController();
     _notesCtrl = TextEditingController();
+    _expiryDateCtrl = TextEditingController();
   }
 
   @override
@@ -541,12 +581,13 @@ class _AddDossierDocumentDialogState
     _titleCtrl.dispose();
     _pathCtrl.dispose();
     _notesCtrl.dispose();
+    _expiryDateCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _pickFile() async {
     try {
-      final picked = await EmployeeProfileAvatar.pickDocumentFromDesktop();
+      final picked = await EmployeeProfileAvatar.pickDocumentFromDevice();
       if (picked != null && mounted) {
         setState(() => _pathCtrl.text = picked);
       }
@@ -582,6 +623,7 @@ class _AddDossierDocumentDialogState
         filePath: path,
         uploadDate: state.selectedDate,
         notes: _notesCtrl.text.trim(),
+        expiryDate: Employee.normalizeDateKey(_expiryDateCtrl.text.trim()),
       );
 
       await notifier.savePersonnelDocument(doc);
@@ -670,20 +712,51 @@ class _AddDossierDocumentDialogState
                       ),
                     ),
                   ),
-                  if (Platform.isWindows) ...[
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: OutlinedButton.icon(
-                        onPressed: _saving ? null : _pickFile,
-                        icon: const Icon(Icons.attach_file_rounded, size: 17),
-                        label: const Text('Seç'),
-                      ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _pickFile,
+                      icon: const Icon(Icons.attach_file_rounded, size: 17),
+                      label: const Text('Seç'),
                     ),
-                  ],
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('dossier_doc_expiry_field'),
+                controller: _expiryDateCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Geçerlilik Bitiş Tarihi (Opsiyonel)',
+                  hintText: 'YYYY-AA-GG (İSG / Sağlık Raporu)',
+                  suffixIcon: IconButton(
+                    tooltip: 'Takvimden Seç',
+                    icon: const Icon(Icons.event_rounded, size: 18),
+                    onPressed: () async {
+                      final now = DateTime.now();
+                      final initial =
+                          Employee.parseDateKey(_expiryDateCtrl.text.trim()) ??
+                              now.add(const Duration(days: 365));
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: initial,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2040),
+                      );
+                      if (picked != null && mounted) {
+                        setState(() {
+                          _expiryDateCtrl.text =
+                              '${picked.year.toString().padLeft(4, '0')}-'
+                              '${picked.month.toString().padLeft(2, '0')}-'
+                              '${picked.day.toString().padLeft(2, '0')}';
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
               TextField(
                 key: const ValueKey('dossier_doc_notes_field'),
                 controller: _notesCtrl,

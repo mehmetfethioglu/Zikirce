@@ -8,7 +8,9 @@ import '../../domain/pdks_models.dart';
 import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'hasibu_print_preview_dialog.dart';
-import 'hasibu_settings_view.dart';
+import 'employee_history_dossier_dialog.dart';
+import '../widgets/employee_profile_avatar.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 /// Çok Günlü Personel Devam / Devamsızlık, Geç Kalma ve İzin Analiz Raporu Ekranı.
 class AttendanceAbsenceReportView extends ConsumerStatefulWidget {

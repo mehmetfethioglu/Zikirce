@@ -2,9 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Uygulamanın güncel sürüm sabitleri (`pubspec.yaml` ile eşgüdümlü).
-const String hasibuAppVersion = '1.0.17';
-const int hasibuAppBuildNumber = 18;
-const String hasibuFullVersionLabel = 'v1.0.17 (Build 18)';
+const String hasibuAppVersion = '1.0.18';
+const int hasibuAppBuildNumber = 19;
+const String hasibuFullVersionLabel = 'v1.0.18 (Build 19)';
 
 /// Tekil sürüm notu kaydı.
 @immutable
@@ -30,6 +30,19 @@ class HasibuReleaseNoteEntry {
 
 /// Kronolojik olarak güncelden eskiye Hasibu sürüm notları listesi.
 const List<HasibuReleaseNoteEntry> hasibuReleaseNotesRegistry = [
+  HasibuReleaseNoteEntry(
+    version: '1.0.18',
+    buildNumber: 19,
+    releaseDate: '26.11.2026',
+    title: 'PDKS Güvenlik Sertleştirmesi, Gelişmiş Puantaj, Vardiya Rotasyonu & Toplu İşlemler',
+    categoryTag: 'Güvenlik & PDKS Motoru',
+    highlights: [
+      'Güvenlik & GPS Yoklama: QR kod ile yoklama kaldırıldı; çalışan oturumlarında şube kilidi, kendi adına GPS doğrulaması ve kişisel şifreli hesaplarda varsayılan PIN kalkanı devreye alındı.',
+      'Gelişmiş Puantaj & 4857 Uyum: Yarım gün/saatlik izin (0.5 gün hassasiyet), Arefe yarım gün, hafta tatili (HT) ve bayram (BM) mesaisi, 2024–2030 dini bayramlar ve gece 7,5 / haftalık 45 saat uyarıları eklendi.',
+      'Vardiya Rotasyonu & Çift Yönlü Terminal: Tarih bazlı vardiya atama takvimi ile Tenfei D35/ZKTeco saat eşitleme ve kadro gönderme/ayrılan silme komutları eklendi.',
+      'Toplu CSV & KVKK: Toplu CSV personel aktarımı, toplu vardiya/şube atama, KVKK T.C./IBAN maskeleme, mobil evrak seçici ve Personel Portalı aylık puantaj özeti eklendi.',
+    ],
+  ),
   HasibuReleaseNoteEntry(
     version: '1.0.17',
     buildNumber: 18,

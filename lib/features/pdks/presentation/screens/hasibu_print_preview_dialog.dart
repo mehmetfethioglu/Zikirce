@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/services/hasibu_print_service.dart';
 import '../providers/pdks_providers.dart';
-import 'hasibu_settings_view.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 /// Personel kartları, listeler ve raporlar için ortak yazdırma önizleme ve çıktı penceresi.
 Future<void> showHasibuPrintPreviewDialog(

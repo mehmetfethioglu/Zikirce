@@ -149,6 +149,62 @@ class HasibuSecurityService {
     return generated;
   }
 
+  /// Kalıcı 256-bit HMAC bütünlük anahtarını güvenli depodan yükler veya oluşturur.
+  static Future<String> getOrCreateHmacSecretKey() async {
+    final cached = _memoryKeyCache[hmacSecretStorageSlot];
+    if (cached != null && cached.length == 64) {
+      return cached;
+    }
+    try {
+      final existing = await _secureStorage
+          .read(key: hmacSecretStorageSlot)
+          .timeout(const Duration(milliseconds: 1200));
+      if (existing != null && existing.trim().length == 64) {
+        _memoryKeyCache[hmacSecretStorageSlot] = existing.trim();
+        return existing.trim();
+      }
+      final generated = generateRandom256BitHexKey();
+      await _secureStorage
+          .write(key: hmacSecretStorageSlot, value: generated)
+          .timeout(const Duration(milliseconds: 1200));
+      _memoryKeyCache[hmacSecretStorageSlot] = generated;
+      return generated;
+    } catch (e) {
+      lastSecurityWarning = e.toString();
+      final fallback = _memoryKeyCache[hmacSecretStorageSlot] ??
+          crypto.sha256
+              .convert(utf8.encode('hasibu-hmac-integrity-fallback-v1'))
+              .toString();
+      _memoryKeyCache[hmacSecretStorageSlot] = fallback;
+      return fallback;
+    }
+  }
+
+  static Future<void> ensureHmacIntegrityKeyLoaded() async {
+    await getOrCreateHmacSecretKey();
+  }
+
+  /// KVKK: T.C. Kimlik Numarasını `123*****890` biçiminde maskeler.
+  static String maskNationalId(String? raw) {
+    final clean = (raw ?? '').trim();
+    if (clean.isEmpty) return '-';
+    if (clean.length <= 4) return '*' * clean.length;
+    if (clean.length <= 6) {
+      return '${clean.substring(0, 1)}${'*' * (clean.length - 2)}${clean.substring(clean.length - 1)}';
+    }
+    return '${clean.substring(0, 3)}${'*' * (clean.length - 6)}${clean.substring(clean.length - 3)}';
+  }
+
+  /// KVKK: IBAN bilgisini `TR** **** **** **** 1234` biçiminde maskeler.
+  static String maskIban(String? raw) {
+    final compact = (raw ?? '').replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    if (compact.isEmpty) return '-';
+    if (compact.length <= 6) return '*' * compact.length;
+    final prefix = compact.substring(0, 2);
+    final suffix = compact.substring(compact.length - 4);
+    return '$prefix** **** **** **** $suffix';
+  }
+
   /// [DB-02] & [DB-03] Açılışta veritabanını SQLCipher AES-256 `PRAGMA key` ile bağlar.
   static void applySqlCipherPragma(Database db, {String? keyHex}) {
     ensureSqlCipherNativeLibraryLoaded();
@@ -899,9 +955,13 @@ class HasibuSecurityService {
   }) {
     final canonical =
         '$previousHash|$id|$actorEmployeeId|$actionType|$targetRecordId|$oldValue|$newValue|${timestamp.toIso8601String()}';
+    final cachedKey = _memoryKeyCache[hmacSecretStorageSlot];
+    final keyMaterial = (cachedKey != null && cachedKey.trim().isNotEmpty)
+        ? 'hasibu-audit-chain-v1:${cachedKey.trim()}'
+        : 'hasibu-audit-chain-v1';
     final hmac = crypto.Hmac(
       crypto.sha256,
-      utf8.encode('hasibu-audit-chain-v1'),
+      utf8.encode(keyMaterial),
     );
     return hmac.convert(utf8.encode(canonical)).toString();
   }

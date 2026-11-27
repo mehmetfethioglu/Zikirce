@@ -6,7 +6,8 @@ import '../../domain/pdks_print_builders.dart';
 import '../providers/pdks_providers.dart';
 import 'employee_directory_picker.dart';
 import 'hasibu_print_preview_dialog.dart';
-import 'hasibu_settings_view.dart';
+import '../widgets/employee_profile_avatar.dart';
+import '../widgets/hasibu_theme_palette.dart';
 
 /// İzinli ve Raporlu Personel Bilgilerini Girme / Yönetme Ekranı.
 /// Personel Portalı tarzı aramalı sol rehber (masaüstü) ve yapışkan seçici/bottom-sheet
@@ -26,11 +27,16 @@ class _LeavesAndReportsSettingsViewState
   int? _branchFilterId;
   LeaveType _selectedLeaveType = LeaveType.yillikIzin;
   bool _showAllEmployeesRecords = false;
+  String _leaveScope = 'full';
+  bool _excludeOffDaysAndHolidays = true;
 
   late final TextEditingController _searchCtrl;
   late final TextEditingController _startDateCtrl;
   late final TextEditingController _endDateCtrl;
   late final TextEditingController _noteCtrl;
+  late final TextEditingController _durationHoursCtrl;
+  late final TextEditingController _startTimeCtrl;
+  late final TextEditingController _endTimeCtrl;
 
   @override
   void initState() {
@@ -40,6 +46,9 @@ class _LeavesAndReportsSettingsViewState
     _startDateCtrl = TextEditingController(text: date);
     _endDateCtrl = TextEditingController(text: date);
     _noteCtrl = TextEditingController();
+    _durationHoursCtrl = TextEditingController(text: '2.0');
+    _startTimeCtrl = TextEditingController(text: '09:00');
+    _endTimeCtrl = TextEditingController(text: '11:00');
   }
 
   @override
@@ -48,6 +57,9 @@ class _LeavesAndReportsSettingsViewState
     _startDateCtrl.dispose();
     _endDateCtrl.dispose();
     _noteCtrl.dispose();
+    _durationHoursCtrl.dispose();
+    _startTimeCtrl.dispose();
+    _endTimeCtrl.dispose();
     super.dispose();
   }
 
@@ -114,7 +126,7 @@ class _LeavesAndReportsSettingsViewState
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '${emp.remainingAnnualLeave}g',
+        '${emp.formattedRemainingAnnualLeave}g',
         style: TextStyle(
           fontSize: 10.5,
           fontWeight: FontWeight.w800,
@@ -270,7 +282,7 @@ class _LeavesAndReportsSettingsViewState
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          'Kalan: ${selectedEmp.remainingAnnualLeave} Gün',
+                          'Kalan: ${selectedEmp.formattedRemainingAnnualLeave} Gün',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w800,
@@ -293,7 +305,7 @@ class _LeavesAndReportsSettingsViewState
                   const SizedBox(height: 6),
                   Text(
                     'Yıllık İzin Hakkı: ${selectedEmp.annualLeaveEntitlement} Gün • '
-                    'Kullanılan: ${selectedEmp.usedAnnualLeave} Gün',
+                    'Kullanılan: ${selectedEmp.usedAnnualLeaveDays % 1 == 0 ? selectedEmp.usedAnnualLeaveDays.round() : selectedEmp.usedAnnualLeaveDays.toStringAsFixed(1)} Gün',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: pal.textSecondary,
@@ -323,6 +335,42 @@ class _LeavesAndReportsSettingsViewState
                       color: pal.textPrimary,
                     ),
                   ),
+                  if (_selectedLeaveType == LeaveType.yillikIzin &&
+                      selectedEmp.remainingAnnualLeave <= 0) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      key: const ValueKey('leaves_zero_balance_warning'),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD97706).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color:
+                              const Color(0xFFD97706).withValues(alpha: 0.45),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 17,
+                            color: Color(0xFFD97706),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Kalan yıllık izin bakiyesi 0 veya eksi! Kayıt oluşturulursa bakiye aşımı (avans izin) işlenir.',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 6,
@@ -342,6 +390,72 @@ class _LeavesAndReportsSettingsViewState
                         ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  SegmentedButton<String>(
+                    key: const ValueKey('leaves_scope_selector'),
+                    segments: const [
+                      ButtonSegment<String>(
+                        value: 'full',
+                        label: Text('Tam Gün'),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'half',
+                        label: Text('Yarım Gün'),
+                      ),
+                      ButtonSegment<String>(
+                        value: 'hourly',
+                        label: Text('Saatlik'),
+                      ),
+                    ],
+                    selected: {_leaveScope},
+                    onSelectionChanged: (sel) {
+                      if (sel.isNotEmpty) {
+                        setState(() => _leaveScope = sel.first);
+                      }
+                    },
+                  ),
+                  if (_leaveScope == 'hourly') ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('leaves_duration_hours_field'),
+                            controller: _durationHoursCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Süre (Saat)',
+                              hintText: '2.0',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('leaves_start_time_field'),
+                            controller: _startTimeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Başlangıç Saati',
+                              hintText: '09:00',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('leaves_end_time_field'),
+                            controller: _endTimeCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Bitiş Saati',
+                              hintText: '11:00',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   LayoutBuilder(
                     builder: (ctx, box) {
@@ -426,7 +540,28 @@ class _LeavesAndReportsSettingsViewState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Hafta Tatili & Resmi Tatilleri Hariç Tut',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: pal.textPrimary,
+                          ),
+                        ),
+                      ),
+                      Switch(
+                        key: const ValueKey('leaves_exclude_off_days_switch'),
+                        value: _excludeOffDaysAndHolidays,
+                        onChanged: (val) =>
+                            setState(() => _excludeOffDaysAndHolidays = val),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
                   TextField(
                     controller: _noteCtrl,
                     decoration: const InputDecoration(
@@ -448,6 +583,16 @@ class _LeavesAndReportsSettingsViewState
                           final end =
                               DateTime.tryParse(_endDateCtrl.text.trim()) ??
                                   start;
+                          final isHalfDay = _leaveScope == 'half';
+                          final isHourly = _leaveScope == 'hourly';
+                          final double? durationHours = isHourly
+                              ? (double.tryParse(
+                                    _durationHoursCtrl.text
+                                        .trim()
+                                        .replaceAll(',', '.'),
+                                  ) ??
+                                  2.0)
+                              : (isHalfDay ? 4.0 : null);
                           final count = await ref
                               .read(pdksDashboardProvider.notifier)
                               .assignLeaveDateRange(
@@ -456,6 +601,14 @@ class _LeavesAndReportsSettingsViewState
                                 endDate: end,
                                 leaveType: _selectedLeaveType,
                                 note: _noteCtrl.text,
+                                excludeOffDaysAndHolidays:
+                                    _excludeOffDaysAndHolidays,
+                                isHalfDay: isHalfDay,
+                                durationHours: durationHours,
+                                startTime:
+                                    isHourly ? _startTimeCtrl.text.trim() : null,
+                                endTime:
+                                    isHourly ? _endTimeCtrl.text.trim() : null,
                               );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -609,6 +762,7 @@ class _LeavesAndReportsSettingsViewState
                   ),
                   subtitle: Text(
                     '${PdksDashboardNotifier.formatDisplayDate(rec.date, includeTodayBadge: false)}'
+                    '${rec.formattedScopeLabel.isNotEmpty ? " • ${rec.formattedScopeLabel}" : ""}'
                     '${rec.note.trim().isNotEmpty ? " • ${rec.note}" : ""}',
                     style: TextStyle(fontSize: 11.5, color: pal.textSecondary),
                   ),
