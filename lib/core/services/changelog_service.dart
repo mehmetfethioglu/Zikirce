@@ -48,11 +48,39 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 26;
-  static const String currentVersionName = '3.3.9';
+  static const int currentVersionCode = 27;
+  static const String currentVersionName = '3.3.10';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 27,
+      versionName: '3.3.10',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Kesintisiz Tarif Görselleri & Otomatik Yenileme',
+          titleEn: 'Reliable Dish Photos & Auto-Refresh',
+          descTr:
+              'Tarif görselleri için 24 saatlik imzalı bağlantılar ve otomatik yeniden deneme eklendi; görsellerin logoya düşmesi giderildi.',
+          descEn:
+              'Added 24-hour signed media links and automatic retry/refresh so recipe dish photos load reliably.',
+          icon: Icons.photo_library_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Ultra Hızlı Bulut Tarif Eşleştirme',
+          titleEn: 'Ultra-Fast Cloud Recipe Matching',
+          descTr:
+              '23.933+ tariflik kiler eşleştirme indeksi optimize edilerek daha hızlı ve kesintisiz çalışması sağlandı.',
+          descEn:
+              'Optimized the 23,933+ recipe pantry matching index for faster and more reliable cloud results.',
+          icon: Icons.speed_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 26,
       versionName: '3.3.9',

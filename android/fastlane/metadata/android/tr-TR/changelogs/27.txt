@@ -1,0 +1,1 @@
+Kilerce v3.3.10: Tarif görsellerinin yüklenmemesi sorunu giderildi; 24 saatlik imzalı görsel önbelleği ve otomatik yenileme eklendi. Saate göre dinamik Tarif Keşfet sıralaması ve çok daha hızlı bulut kiler eşleştirmesi ile keyifli kullanımlar!

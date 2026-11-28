@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import worker from '../worker.js';
 import { resetRecipeCachesForTesting } from '../src/recipes_api.js';
-import { hmacSha256Hex } from '../src/security.js';
+import { hmacSha256Hex, resetRateLimitForTesting } from '../src/security.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,6 +168,7 @@ function seedSampleRecipes(d1) {
 
 async function createTestEnv(overrides = {}) {
   resetRecipeCachesForTesting();
+  resetRateLimitForTesting();
   const d1 = new MockD1Database();
   seedSampleRecipes(d1);
   const r2 = new MockR2Bucket();
@@ -1068,6 +1069,116 @@ test('recipes search caches raw D1 results across repeated queries and serves HI
   const res2 = await worker.fetch(await signedRequest('/api/recipes/search?q=karnıyarık&limit=10'), env);
   assert.equal(res2.status, 200);
   assert.equal(res2.headers.get('X-Kilerce-Cache'), 'HIT-MEM');
+  const data2 = await res2.json();
+  assert.equal(data2.items.length, 1);
+  assert.ok(data2.items[0].image_url.includes('/api/media/'));
+  assert.equal(dbAllCalls, 1);
+});
+
+test('match-pantry uses R2 compact index to avoid recipe_ingredients scans and caches preview rows in RAM', async () => {
+  const env = await createTestEnv();
+  const compactPayload = {
+    v: 1,
+    cats: ['Sebze & Zeytinyağlı', 'Çorba'],
+    tags: ['patlican', 'kiyma', 'domates', 'sogan', 'kirmizi_mercimek', 'havuc'],
+    recipes: [
+      ['kilerce_karniyarik', 0, 96, [0, 1, 2, 3]],
+      ['kilerce_mercimek_corbasi', 1, 92, [4, 3, 5]],
+    ],
+  };
+  env.RECIPE_MEDIA.putObject(
+    'pantry_idx/v1/compact_index.json',
+    Buffer.from(JSON.stringify(compactPayload)),
+    'application/json',
+  );
+
+  const executedSqls = [];
+  const baseDb = env.RECIPES_DB;
+  env.RECIPES_DB = {
+    prepare(sql) {
+      executedSqls.push(sql);
+      return baseDb.prepare(sql);
+    },
+  };
+
+  const req1 = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['patlican', 'kiyma', 'domates', 'sogan'],
+      expiring_tags: ['kiyma'],
+      limit: 20,
+      offset: 0,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const res1 = await worker.fetch(req1, env);
+  assert.equal(res1.status, 200);
+  assert.equal(res1.headers.get('X-Kilerce-Cache'), 'R2-IDX-D1');
+  const data1 = await res1.json();
+  assert.equal(data1.items.length, 2);
+  assert.equal(data1.items[0].id, 'kilerce_karniyarik');
+  assert.deepEqual(data1.items[0].expiring_matched_tags, ['kiyma']);
+  assert.equal(executedSqls.length, 1);
+  assert.equal(executedSqls[0].includes('recipe_ingredients'), false);
+  assert.ok(executedSqls[0].includes('WHERE r.id IN'));
+
+  // Second call hits RAM preview row cache with 0 D1 queries
+  const req2 = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['patlican', 'kiyma', 'domates', 'sogan'],
+      kilerce_category: 'Sebze & Zeytinyağlı',
+      limit: 20,
+      offset: 0,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const res2 = await worker.fetch(req2, env);
+  assert.equal(res2.status, 200);
+  assert.equal(res2.headers.get('X-Kilerce-Cache'), 'R2-IDX-MEM');
+  const data2 = await res2.json();
+  assert.equal(data2.items.length, 1);
+  assert.equal(data2.items[0].id, 'kilerce_karniyarik');
+  assert.equal(executedSqls.length, 1);
+});
+
+test('recipes search hits HIT-KV across cold isolate memory resets with 0 D1 calls', async () => {
+  const env = await createTestEnv();
+  let dbAllCalls = 0;
+  const baseDb = env.RECIPES_DB;
+  env.RECIPES_DB = {
+    prepare(sql) {
+      const stmt = baseDb.prepare(sql);
+      const wrapStmt = (s) => ({
+        bind(...args) {
+          return wrapStmt(s.bind(...args));
+        },
+        first() {
+          return s.first();
+        },
+        async all() {
+          dbAllCalls += 1;
+          return s.all();
+        },
+        run() {
+          return s.run();
+        },
+      });
+      return wrapStmt(stmt);
+    },
+  };
+
+  const res1 = await worker.fetch(await signedRequest('/api/recipes/search?q=karnıyarık&limit=10'), env);
+  assert.equal(res1.status, 200);
+  assert.equal(res1.headers.get('X-Kilerce-Cache'), 'MISS');
+  assert.equal(dbAllCalls, 1);
+
+  // Simulate new isolate cold start (memory cleared, KV preserved)
+  resetRecipeCachesForTesting();
+
+  const res2 = await worker.fetch(await signedRequest('/api/recipes/search?q=karnıyarık&limit=10'), env);
+  assert.equal(res2.status, 200);
+  assert.equal(res2.headers.get('X-Kilerce-Cache'), 'HIT-KV');
   const data2 = await res2.json();
   assert.equal(data2.items.length, 1);
   assert.ok(data2.items[0].image_url.includes('/api/media/'));

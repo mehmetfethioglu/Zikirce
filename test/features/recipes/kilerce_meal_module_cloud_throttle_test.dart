@@ -87,7 +87,9 @@ class _FakeMealModuleRepository implements MealModuleRepository {
 class _CountingCloudGateway implements KilerceCloudRecipeGateway {
   int matchPantryCalls = 0;
   int searchRecipesCalls = 0;
+  int signMediaBatchCalls = 0;
   bool nextHasMore = false;
+  bool returnEmptyMedia = false;
 
   static KilerRecipe _sampleRecipe(String id, String category) => KilerRecipe(
         id: id,
@@ -163,8 +165,14 @@ class _CountingCloudGateway implements KilerceCloudRecipeGateway {
   }
 
   @override
-  Future<Map<String, String>> signMediaBatch(List<String> relPaths) async =>
-      const {};
+  Future<Map<String, String>> signMediaBatch(List<String> relPaths) async {
+    signMediaBatchCalls++;
+    if (returnEmptyMedia) return const {};
+    return {
+      for (final p in relPaths)
+        p: 'https://kilerce-edge-api.kilerce.workers.dev/api/media/$p?exp=$signMediaBatchCalls&sig=test',
+    };
+  }
 }
 
 PantryItem _pantryItem({
@@ -363,6 +371,54 @@ void main() {
 
       await notifier.loadMoreCloudRecipes();
       expect(gateway.matchPantryCalls, equals(1));
+    });
+
+    test('builtin recipe photos retry on tab activation after failure and refresh after 12 hours', () async {
+      final kiler = ValueNotifier<KilerState>(const KilerState());
+      final gateway = _CountingCloudGateway()..returnEmptyMedia = true;
+      DateTime now = DateTime(2026, 11, 28, 10, 0);
+      final notifier = MealModuleNotifier(
+        repository: _FakeMealModuleRepository(),
+        loadActiveProfile: () async => null,
+        kilerListenable: kiler,
+        onBatchAddDrafts: (_) async => 0,
+        onQuickConsume: (_, _) async => (updatedCount: 0, finishedCount: 0),
+        onAddMissingToShopping: (_, _) async => 0,
+        cloudGateway: gateway,
+        nowProvider: () => now,
+        autoLoad: false,
+        isRecipesTabActive: false,
+      );
+      addTearDown(notifier.dispose);
+
+      await notifier.loadAll();
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.signMediaBatchCalls, equals(1));
+      expect(notifier.state.builtinSignedImageUrls, isEmpty);
+
+      // Network recovers -> switching to Recipes tab retries hydration
+      gateway.returnEmptyMedia = false;
+      notifier.setRecipesTabActive(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.signMediaBatchCalls, equals(2));
+      expect(notifier.state.builtinSignedImageUrls, isNotEmpty);
+      final firstSigned = notifier.state.builtinSignedImageUrls['menemen'];
+      expect(firstSigned, contains('exp=2'));
+
+      // Switching away and back within 12 hours does NOT re-sign
+      notifier.setRecipesTabActive(false);
+      now = now.add(const Duration(hours: 6));
+      notifier.setRecipesTabActive(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.signMediaBatchCalls, equals(2));
+
+      // After 12+ hours, re-opening Recipes tab refreshes signed URLs
+      notifier.setRecipesTabActive(false);
+      now = now.add(const Duration(hours: 7));
+      notifier.setRecipesTabActive(true);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.signMediaBatchCalls, equals(3));
+      expect(notifier.state.builtinSignedImageUrls['menemen'], contains('exp=3'));
     });
   });
 }

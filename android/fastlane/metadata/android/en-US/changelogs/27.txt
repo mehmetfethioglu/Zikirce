@@ -1,0 +1,1 @@
+Kilerce v3.3.10: Fixed recipe dish images falling back to the app logo by adding 24-hour signed media links and automatic retry/refresh. Includes time-of-day dynamic Recipe Explore sorting and ultra-fast cloud pantry matching!

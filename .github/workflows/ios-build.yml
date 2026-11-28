@@ -139,11 +139,13 @@ jobs:
           KILERCE_HMAC_SECRET: ${{ secrets.KILERCE_HMAC_SECRET }}
         run: |
           flutter pub get
-          if [ -n "$KILERCE_HMAC_SECRET" ]; then
-            flutter build ios --release --config-only --no-codesign --dart-define="KILERCE_HMAC_SECRET=$KILERCE_HMAC_SECRET"
-          else
-            flutter build ios --release --config-only --no-codesign
+          CLEAN_HMAC=$(printf '%s' "$KILERCE_HMAC_SECRET" | tr -d '\r\n' | sed -E 's/^[[:space:]]*(KILERCE_)?HMAC_SECRET[[:space:]]*=[[:space:]]*//' | sed -E "s/^[[:space:]\"']+|[[:space:]\"']+$//g")
+          if [ -z "$CLEAN_HMAC" ]; then
+            echo "ERROR: GitHub Secret KILERCE_HMAC_SECRET is missing! Add it in Repo Settings -> Secrets -> Actions so iOS TestFlight can sign Cloudflare Worker requests." >&2
+            exit 1
           fi
+          echo "Verified KILERCE_HMAC_SECRET length: ${#CLEAN_HMAC} chars"
+          flutter build ios --release --config-only --no-codesign --dart-define="KILERCE_HMAC_SECRET=$CLEAN_HMAC"
           cd ios
           pod install --repo-update
           cd ..

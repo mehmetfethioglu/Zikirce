@@ -548,9 +548,13 @@ class _DiskCachedRecipeImageState extends State<_DiskCachedRecipeImage> {
   @override
   void didUpdateWidget(covariant _DiskCachedRecipeImage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (RecipeImageDiskCache.canonicalCacheKey(oldWidget.imageUrl) !=
-        RecipeImageDiskCache.canonicalCacheKey(widget.imageUrl)) {
+    final bool keyChanged =
+        RecipeImageDiskCache.canonicalCacheKey(oldWidget.imageUrl) !=
+            RecipeImageDiskCache.canonicalCacheKey(widget.imageUrl);
+    if (keyChanged) {
       _cachedFile = null;
+      _resolveImage();
+    } else if (_cachedFile == null && oldWidget.imageUrl != widget.imageUrl) {
       _resolveImage();
     }
   }

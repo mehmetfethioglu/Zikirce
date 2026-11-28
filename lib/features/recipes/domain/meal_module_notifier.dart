@@ -69,6 +69,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   static const int _maxCloudCacheEntries = 24;
   static const Duration _pantryRefreshDebounce = Duration(milliseconds: 800);
   static const Duration _searchRefreshDebounce = Duration(milliseconds: 400);
+  static const Duration _builtinPhotosTtl = Duration(hours: 12);
 
   final MealModuleRepository _repository;
   final ActiveProfileLoader _loadActiveProfile;
@@ -92,6 +93,8 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   bool _isRecipesTabActive;
   bool _cloudRefreshDirty = false;
   RecipeDaypart? _lastEvaluatedDaypart;
+  DateTime? _builtinPhotosHydratedAt;
+  bool _isHydratingBuiltinPhotos = false;
 
   RecipeDaypart get currentDaypart => RecipeDaypart.fromDateTime(_nowProvider());
 
@@ -186,6 +189,9 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     }
     if (_lastEvaluatedDaypart != currentDaypart) {
       _commitDerivedState(state);
+    }
+    if (_cloudGateway != null) {
+      unawaited(_hydrateBuiltinRecipePhotos());
     }
     if ((wasActive && !_cloudRefreshDirty) ||
         _cloudGateway == null ||
@@ -1272,9 +1278,17 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
 
   Future<void> _hydrateBuiltinRecipePhotos() async {
     final gateway = _cloudGateway;
-    if (gateway == null || !mounted || state.builtinSignedImageUrls.isNotEmpty) {
+    if (gateway == null || !mounted || _isHydratingBuiltinPhotos) {
       return;
     }
+    final bool hasFresh = state.builtinSignedImageUrls.isNotEmpty &&
+        _builtinPhotosHydratedAt != null &&
+        _nowProvider().difference(_builtinPhotosHydratedAt!) < _builtinPhotosTtl;
+    if (hasFresh) {
+      return;
+    }
+
+    _isHydratingBuiltinPhotos = true;
     try {
       final urlsByRelPath = await gateway.signMediaBatch(
         kilerceBuiltinRecipeR2Paths.values.toSet().toList(),
@@ -1290,11 +1304,14 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       }
       if (byRecipeId.isEmpty) return;
 
+      _builtinPhotosHydratedAt = _nowProvider();
       _commitDerivedState(
         state.copyWith(builtinSignedImageUrls: byRecipeId),
       );
     } catch (e) {
       debugPrint('MealModuleNotifier._hydrateBuiltinRecipePhotos error: $e');
+    } finally {
+      _isHydratingBuiltinPhotos = false;
     }
   }
 

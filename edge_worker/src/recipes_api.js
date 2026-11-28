@@ -21,11 +21,14 @@ const MAX_SQL_STAPLE_FALLBACK_TAGS = 8;
 
 const MEM_CACHE_TTL_MS = 15 * 60 * 1000;
 const MEM_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
-const EDGE_CACHE_TTL_SEC = 1800;
-const EDGE_DETAIL_CACHE_TTL_SEC = 3600;
 const MAX_MEM_PANTRY_ENTRIES = 200;
 const MAX_MEM_SEARCH_ENTRIES = 200;
 const MAX_MEM_DETAIL_ENTRIES = 300;
+const MAX_MEM_PREVIEW_ROWS = 2500;
+const MEM_PREVIEW_ROW_TTL_MS = 60 * 60 * 1000;
+const KV_CACHE_TTL_SEC = 86400;
+const PANTRY_INDEX_R2_KEY = 'pantry_idx/v1/compact_index.json';
+const MAX_PANTRY_CANDIDATES = 220;
 
 const HIGH_FREQ_STAPLE_TAGS = new Set([
   'sumak_isot',
@@ -45,11 +48,17 @@ const HIGH_FREQ_STAPLE_TAGS = new Set([
 const _memPantryCache = new Map();
 const _memSearchCache = new Map();
 const _memDetailCache = new Map();
+const _memPreviewRowCache = new Map();
+let _compactPantryIndex = null;
+let _compactPantryIndexPromise = null;
 
 export function resetRecipeCachesForTesting() {
   _memPantryCache.clear();
   _memSearchCache.clear();
   _memDetailCache.clear();
+  _memPreviewRowCache.clear();
+  _compactPantryIndex = null;
+  _compactPantryIndexPromise = null;
 }
 
 function getMemCache(map, key, nowMs = Date.now()) {
@@ -89,41 +98,110 @@ async function sha256HexShort(text) {
     .slice(0, 32);
 }
 
-function getEdgeCache() {
-  return typeof caches !== 'undefined' && caches?.default ? caches.default : null;
-}
-
-async function readEdgeJsonCache(cachePath) {
-  const cache = getEdgeCache();
-  if (!cache) return null;
+async function readKvJsonCache(env, key) {
+  if (!env?.ORGANIC_SCORE_KV) return null;
   try {
-    const resp = await cache.match(`https://kilerce-cache.internal/${cachePath}`);
-    if (!resp || !resp.ok) return null;
-    return await resp.json();
+    const raw = await env.ORGANIC_SCORE_KV.get(key);
+    if (typeof raw !== 'string' || !raw) return null;
+    return safeJsonParse(raw);
   } catch {
     return null;
   }
 }
 
-async function writeEdgeJsonCache(cachePath, payload, ttlSec, ctx) {
-  const cache = getEdgeCache();
-  if (!cache) return;
+async function writeKvJsonCache(env, key, payload, ttlSec, ctx) {
+  if (!env?.ORGANIC_SCORE_KV) return;
   try {
-    const resp = new Response(JSON.stringify(payload), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': `public, max-age=${ttlSec}`,
-      },
+    const putPromise = env.ORGANIC_SCORE_KV.put(key, JSON.stringify(payload), {
+      expirationTtl: ttlSec,
     });
-    const putPromise = cache.put(`https://kilerce-cache.internal/${cachePath}`, resp);
     if (ctx && typeof ctx.waitUntil === 'function') {
       ctx.waitUntil(putPromise.catch(() => {}));
     } else {
       await putPromise;
     }
   } catch {
-    // Best-effort edge cache write
+    // Best-effort KV cache write; daily KV limits must never cause HTTP 500
   }
+}
+
+async function loadCompactPantryIndex(env) {
+  if (_compactPantryIndex) return _compactPantryIndex;
+  if (!env?.RECIPE_MEDIA) return null;
+  if (_compactPantryIndexPromise) return _compactPantryIndexPromise;
+
+  _compactPantryIndexPromise = (async () => {
+    try {
+      const obj = await env.RECIPE_MEDIA.get(PANTRY_INDEX_R2_KEY);
+      if (!obj) return null;
+      const raw = typeof obj.json === 'function'
+        ? await obj.json()
+        : await new Response(obj.body).json();
+      if (
+        !raw ||
+        !Array.isArray(raw.cats) ||
+        !Array.isArray(raw.tags) ||
+        !Array.isArray(raw.recipes)
+      ) {
+        return null;
+      }
+      const catIndexByName = new Map(raw.cats.map((c, i) => [c, i]));
+      const tagIndexByName = new Map(raw.tags.map((t, i) => [t, i]));
+      _compactPantryIndex = {
+        cats: raw.cats,
+        tags: raw.tags,
+        catIndexByName,
+        tagIndexByName,
+        recipes: raw.recipes,
+      };
+      return _compactPantryIndex;
+    } catch {
+      return null;
+    } finally {
+      _compactPantryIndexPromise = null;
+    }
+  })();
+
+  return _compactPantryIndexPromise;
+}
+
+async function fetchPreviewRowsByIds(env, ids, nowMs = Date.now()) {
+  const rowsById = new Map();
+  const missingIds = [];
+
+  for (const id of ids) {
+    const cached = getMemCache(_memPreviewRowCache, id, nowMs);
+    if (cached) {
+      rowsById.set(id, cached);
+    } else {
+      missingIds.push(id);
+    }
+  }
+
+  if (missingIds.length > 0 && env?.RECIPES_DB) {
+    const placeholders = missingIds.map(() => '?').join(', ');
+    const sql = `
+      SELECT ${PREVIEW_COLUMNS}
+      FROM recipes r
+      WHERE r.id IN (${placeholders})
+    `;
+    const result = await env.RECIPES_DB.prepare(sql).bind(...missingIds).all();
+    for (const row of result?.results || []) {
+      if (row?.id) {
+        rowsById.set(row.id, row);
+        setMemCache(
+          _memPreviewRowCache,
+          row.id,
+          row,
+          MEM_PREVIEW_ROW_TTL_MS,
+          MAX_MEM_PREVIEW_ROWS,
+          nowMs,
+        );
+      }
+    }
+  }
+
+  return { rowsById, d1FetchedCount: missingIds.length };
 }
 
 function selectQueryTags(pantryTags, expiringSet) {
@@ -250,16 +328,16 @@ export async function handleRecipesSearch(request, env, corsHeaders, ctx) {
   const nowMs = Date.now();
   let cacheStatus = 'MISS';
   let rawRows = getMemCache(_memSearchCache, cacheKey, nowMs);
-  let edgeCachePath = null;
+  let kvCacheKey = null;
 
   if (rawRows) {
     cacheStatus = 'HIT-MEM';
   } else {
-    edgeCachePath = `v1/search/${await sha256HexShort(cacheKey)}`;
-    const edgeCached = await readEdgeJsonCache(edgeCachePath);
-    if (Array.isArray(edgeCached)) {
-      rawRows = edgeCached;
-      cacheStatus = 'HIT-EDGE';
+    kvCacheKey = `srch_v1:${await sha256HexShort(cacheKey)}`;
+    const kvCached = await readKvJsonCache(env, kvCacheKey);
+    if (Array.isArray(kvCached)) {
+      rawRows = kvCached;
+      cacheStatus = 'HIT-KV';
       setMemCache(_memSearchCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_SEARCH_ENTRIES, nowMs);
     }
   }
@@ -318,8 +396,8 @@ export async function handleRecipesSearch(request, env, corsHeaders, ctx) {
 
     rawRows = result?.results || [];
     setMemCache(_memSearchCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_SEARCH_ENTRIES, nowMs);
-    if (edgeCachePath) {
-      await writeEdgeJsonCache(edgeCachePath, rawRows, EDGE_CACHE_TTL_SEC, ctx);
+    if (kvCacheKey) {
+      await writeKvJsonCache(env, kvCacheKey, rawRows, KV_CACHE_TTL_SEC, ctx);
     }
   }
 
@@ -370,22 +448,128 @@ export async function handlePantryMatch(request, env, corsHeaders, rawBody, ctx)
   const kilerceCat = typeof body.kilerce_category === 'string' ? body.kilerce_category.trim() : '';
   const limit = Math.max(1, Math.min(MAX_LIST_LIMIT, Number(body.limit) || 20));
   const offset = Math.max(0, Math.min(MAX_PANTRY_OFFSET, Number(body.offset) || 0));
+  const nowMs = Date.now();
+
+  const compactIndex = await loadCompactPantryIndex(env);
+  if (compactIndex) {
+    const pantryTagIds = new Set();
+    for (const t of pantryTags) {
+      const tid = compactIndex.tagIndexByName.get(t);
+      if (tid !== undefined) pantryTagIds.add(tid);
+    }
+    const expiringTagIds = new Set();
+    for (const t of expiringSet) {
+      const tid = compactIndex.tagIndexByName.get(t);
+      if (tid !== undefined) expiringTagIds.add(tid);
+    }
+
+    let targetCatIdx = -1;
+    if (kilerceCat) {
+      const resolvedCatIdx = compactIndex.catIndexByName.get(kilerceCat);
+      if (resolvedCatIdx === undefined) {
+        return jsonResponse({
+          offset,
+          limit,
+          total_candidates: 0,
+          has_more: false,
+          items: [],
+        }, 200, corsHeaders, { 'X-Kilerce-Cache': 'R2-IDX-MEM' });
+      }
+      targetCatIdx = resolvedCatIdx;
+    }
+
+    if (pantryTagIds.size === 0) {
+      return jsonResponse({
+        offset,
+        limit,
+        total_candidates: 0,
+        has_more: false,
+        items: [],
+      }, 200, corsHeaders, { 'X-Kilerce-Cache': 'R2-IDX-MEM' });
+    }
+
+    const scored = [];
+    const indexRecipes = compactIndex.recipes;
+    for (let i = 0; i < indexRecipes.length; i++) {
+      const entry = indexRecipes[i];
+      if (targetCatIdx !== -1 && entry[1] !== targetCatIdx) continue;
+      const reqTagIds = entry[3];
+      if (!Array.isArray(reqTagIds) || reqTagIds.length === 0) continue;
+
+      let matchedCount = 0;
+      let expiringMatchedCount = 0;
+      for (let j = 0; j < reqTagIds.length; j++) {
+        const tid = reqTagIds[j];
+        if (pantryTagIds.has(tid)) {
+          matchedCount++;
+          if (expiringTagIds.has(tid)) {
+            expiringMatchedCount++;
+          }
+        }
+      }
+      if (matchedCount === 0) continue;
+
+      const missingCount = reqTagIds.length - matchedCount;
+      const ratio = matchedCount / reqTagIds.length;
+      const qualityScore = Number(entry[2]) || 0;
+      const rankScore =
+        Math.round(ratio * 100) +
+        expiringMatchedCount * 18 +
+        (missingCount === 0 ? 40 : 0) +
+        (qualityScore * 0.25);
+
+      scored.push({ id: entry[0], rankScore, qualityScore });
+    }
+
+    scored.sort((a, b) => (b.rankScore - a.rankScore) || (b.qualityScore - a.qualityScore));
+    const totalCandidates = Math.min(scored.length, MAX_PANTRY_CANDIDATES);
+    const pageEntries = scored.slice(offset, Math.min(offset + limit, totalCandidates));
+    const pageIds = pageEntries.map((e) => e.id);
+
+    const { rowsById, d1FetchedCount } = await fetchPreviewRowsByIds(env, pageIds, nowMs);
+    const items = [];
+    for (const entry of pageEntries) {
+      const row = rowsById.get(entry.id);
+      if (!row) continue;
+      const reqTags = parseJsonArray(row.required_tags_json);
+      const matchedTags = reqTags.filter((t) => pantrySet.has(t));
+      const missingTags = reqTags.filter((t) => !pantrySet.has(t));
+      const expiringMatched = matchedTags.filter((t) => expiringSet.has(t));
+      const ratio = reqTags.length > 0 ? matchedTags.length / reqTags.length : 1;
+      items.push(
+        await formatPreviewCard(request, env, row, {
+          match_ratio: Number(ratio.toFixed(2)),
+          matched_tags: matchedTags,
+          missing_tags: missingTags,
+          expiring_matched_tags: expiringMatched,
+        }),
+      );
+    }
+
+    const cacheStatus = d1FetchedCount === 0 ? 'R2-IDX-MEM' : 'R2-IDX-D1';
+    return jsonResponse({
+      offset,
+      limit,
+      total_candidates: totalCandidates,
+      has_more: offset + limit < totalCandidates,
+      items,
+    }, 200, corsHeaders, { 'X-Kilerce-Cache': cacheStatus });
+  }
 
   const queryTags = selectQueryTags(pantryTags, expiringSet);
   const cacheKey = `${kilerceCat}|${queryTags.join(',')}`;
-  const nowMs = Date.now();
   let cacheStatus = 'MISS';
   let rawRows = getMemCache(_memPantryCache, cacheKey, nowMs);
-  let edgeCachePath = null;
+  let kvCacheKey = null;
 
   if (rawRows) {
     cacheStatus = 'HIT-MEM';
   } else {
-    edgeCachePath = `v1/pantry-match/${await sha256HexShort(cacheKey)}`;
-    const edgeCached = await readEdgeJsonCache(edgeCachePath);
-    if (Array.isArray(edgeCached)) {
-      rawRows = edgeCached;
-      cacheStatus = 'HIT-EDGE';
+    kvCacheKey = `pm_v1:${await sha256HexShort(cacheKey)}`;
+    const kvCached = await readKvJsonCache(env, kvCacheKey);
+    if (Array.isArray(kvCached)) {
+      rawRows = kvCached;
+      cacheStatus = 'HIT-KV';
       setMemCache(_memPantryCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_PANTRY_ENTRIES, nowMs);
     }
   }
@@ -435,8 +619,8 @@ export async function handlePantryMatch(request, env, corsHeaders, rawBody, ctx)
     const result = await env.RECIPES_DB.prepare(sql).bind(...bindings).all();
     rawRows = result?.results || [];
     setMemCache(_memPantryCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_PANTRY_ENTRIES, nowMs);
-    if (edgeCachePath) {
-      await writeEdgeJsonCache(edgeCachePath, rawRows, EDGE_CACHE_TTL_SEC, ctx);
+    if (kvCacheKey) {
+      await writeKvJsonCache(env, kvCacheKey, rawRows, KV_CACHE_TTL_SEC, ctx);
     }
   }
 
@@ -503,10 +687,10 @@ export async function handleRecipeDetail(request, env, corsHeaders, recipeId, ct
   const nowMs = Date.now();
   let row = getMemCache(_memDetailCache, cleanId, nowMs);
   if (!row) {
-    const edgeCachePath = `v1/detail/${await sha256HexShort(cleanId)}`;
-    const edgeCached = await readEdgeJsonCache(edgeCachePath);
-    if (edgeCached && typeof edgeCached === 'object' && edgeCached.id === cleanId) {
-      row = edgeCached;
+    const kvDetailKey = `dtl_v1:${cleanId}`;
+    const kvCached = await readKvJsonCache(env, kvDetailKey);
+    if (kvCached && typeof kvCached === 'object' && kvCached.id === cleanId) {
+      row = kvCached;
       setMemCache(_memDetailCache, cleanId, row, MEM_DETAIL_CACHE_TTL_MS, MAX_MEM_DETAIL_ENTRIES, nowMs);
     } else {
       row = await env.RECIPES_DB
@@ -515,7 +699,7 @@ export async function handleRecipeDetail(request, env, corsHeaders, recipeId, ct
         .first();
       if (row) {
         setMemCache(_memDetailCache, cleanId, row, MEM_DETAIL_CACHE_TTL_MS, MAX_MEM_DETAIL_ENTRIES, nowMs);
-        await writeEdgeJsonCache(edgeCachePath, row, EDGE_DETAIL_CACHE_TTL_SEC, ctx);
+        await writeKvJsonCache(env, kvDetailKey, row, KV_CACHE_TTL_SEC, ctx);
       }
     }
   }
