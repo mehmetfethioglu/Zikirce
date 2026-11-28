@@ -48,11 +48,39 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 27;
-  static const String currentVersionName = '3.3.10';
+  static const int currentVersionCode = 28;
+  static const String currentVersionName = '3.3.11';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 28,
+      versionName: '3.3.11',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.bugFix,
+          titleTr: 'Google ile Giriş & Bulut Yedekleme Düzeltmesi',
+          titleEn: 'Google Sign-In & Cloud Backup Fix',
+          descTr:
+              'Android ve iOS cihazlarda Google hesabı bağlantısı ve Google Drive yedekleme kararlılığı giderildi; iOS OAuth yönlendirmesi eklendi.',
+          descEn:
+              'Fixed Google account sign-in and Google Drive backup reliability across Android and iOS, including iOS UIScene OAuth redirect handling.',
+          icon: Icons.cloud_done_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Daha Net Bağlantı & Oturum Geri Bildirimleri',
+          titleEn: 'Clearer Auth & Sync Error Feedback',
+          descTr:
+              'Oturum açma ve bulut eşitleme sırasındaki hata mesajları sadeleştirilip daha anlaşılır hale getirildi.',
+          descEn:
+              'Improved sign-in and cloud sync error messages for clearer troubleshooting.',
+          icon: Icons.verified_user_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 27,
       versionName: '3.3.10',

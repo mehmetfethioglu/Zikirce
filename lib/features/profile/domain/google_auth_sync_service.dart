@@ -377,6 +377,15 @@ class GoogleAuthSyncService extends ChangeNotifier {
     if (error.contains('ApiException: 10') || error.contains('DEVELOPER_ERROR')) {
       return 'Google Cloud yapılandırması (SHA-1/OAuth) gerekiyor. Lütfen geliştirici ayarlarını kontrol edin.';
     }
+    if (error.contains('GIDClientID') ||
+        error.contains('No active configuration') ||
+        error.contains('missing support for the following URL schemes') ||
+        error.contains('keychain')) {
+      return 'iOS Google Sign-In yapılandırması (GIDClientID/URL Scheme) eksik veya hatalı.';
+    }
+    if (error.contains('access_denied') || error.contains('403')) {
+      return 'Google hesabı erişim izni reddedildi. OAuth izin veya test kullanıcısı ayarlarını kontrol edin.';
+    }
     return 'Google oturumu açılırken bir sorun oluştu. Lütfen tekrar deneyin.';
   }
 }

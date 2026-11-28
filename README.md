@@ -36,6 +36,7 @@ flutter build apk --release `
   --dart-define=ADMOB_ANDROID_INTERSTITIAL_ID=ca-app-pub-.../...
 ```
 
-### iOS Google Sign-In Notu
+### Google Sign-In (Android & iOS) Yapılandırması
 
-iOS yayınında `ios/Runner/Info.plist` içine Google Cloud Console iOS OAuth `GIDClientID` ve ters URL şeması (`CFBundleURLTypes`) eklenmelidir.
+- **Android (`com.akarworks.organicscore`):** Google Cloud Console (`organicscore`) projesinde Debug, Upload ve Google Play App Signing SHA-1 sertifikaları için ayrı Android OAuth 2.0 Client ID'leri ve **Google Drive API** (`drive.appdata`) etkinleştirilmiştir.
+- **iOS (`com.akarworks.kilerce`):** `ios/Runner/Info.plist` içinde `GIDClientID` ve ters URL şeması (`CFBundleURLTypes`) tanımlıdır; `ios/Runner/SceneDelegate.swift` içinde `UIScene` OAuth redirect callback'i `GIDSignIn.sharedInstance.handle(_:)` ile yönlendirilir.

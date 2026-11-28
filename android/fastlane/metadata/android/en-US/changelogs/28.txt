@@ -1,0 +1,1 @@
+Kilerce v3.3.11: Fixed Google Sign-In and Google Drive cloud backup connectivity on both Android and iOS. Added iOS UIScene OAuth redirect handling and clearer authentication error messages.

@@ -30,6 +30,19 @@
 	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<key>GIDClientID</key>
+	<string>523355849749-5312a3gqjqrpgd6mp0fiqu93vgumjgtr.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.523355849749-5312a3gqjqrpgd6mp0fiqu93vgumjgtr</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Kilerce, ürün barkodlarını ve market fişlerini tarayarak kilerinize hızlıca eklemek için kameranıza erişir.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

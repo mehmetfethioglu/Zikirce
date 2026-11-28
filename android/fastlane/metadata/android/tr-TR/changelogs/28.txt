@@ -1,0 +1,1 @@
+Kilerce v3.3.11: Android ve iOS cihazlarda Google ile giriş ve Google Drive bulut yedekleme bağlantı sorunu giderildi. iOS OAuth dönüş kararlılığı artırıldı ve daha anlaşılır oturum bildirimleri eklendi. Keyifli kullanımlar!
