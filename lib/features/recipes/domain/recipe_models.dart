@@ -82,6 +82,27 @@ enum MealSlot {
   }
 }
 
+/// Dynamic time-of-day window used to prioritize contextually relevant recipes.
+enum RecipeDaypart {
+  morning('🌅', 'Sabah Vakti', 'Kahvaltılıklar öncelikli'),
+  lunch('☀️', 'Öğle Vakti', 'Yemekler & çorbalar öncelikli'),
+  dinner('🌇', 'Akşam Yemeği', 'Ana yemekler & çorbalar öncelikli'),
+  lateNight('🌙', 'Gece Vakti', 'Hafif & pratik tarifler öncelikli');
+
+  final String emoji;
+  final String label;
+  final String sortHint;
+  const RecipeDaypart(this.emoji, this.label, this.sortHint);
+
+  static RecipeDaypart fromDateTime(DateTime now) {
+    final int hour = now.hour;
+    if (hour >= 5 && hour < 12) return RecipeDaypart.morning;
+    if (hour >= 12 && hour < 16) return RecipeDaypart.lunch;
+    if (hour >= 16 && hour < 22) return RecipeDaypart.dinner;
+    return RecipeDaypart.lateNight;
+  }
+}
+
 enum MealPlanPreset {
   zeroWasteSmart(
     'İsraf Önleyici Kiler',
@@ -313,6 +334,50 @@ class RecipeCategoryRegistry {
       return true;
     }
     return false;
+  }
+}
+
+/// OCP strategy registry scoring recipe suitability for each [RecipeDaypart].
+class RecipeDaypartRegistry {
+  static bool _isBreakfast(KilerRecipe r) =>
+      r.category == RecipeCategoryRegistry.breakfast ||
+      r.mealSlots.contains(MealSlot.breakfast);
+
+  static bool _isMainMeal(KilerRecipe r) =>
+      r.mealSlots.contains(MealSlot.mainCourse) ||
+      r.category == RecipeCategoryRegistry.meatFish ||
+      r.category == RecipeCategoryRegistry.vegOliveOil ||
+      r.category == RecipeCategoryRegistry.legumesGrains;
+
+  static bool _isSoup(KilerRecipe r) =>
+      r.mealSlots.contains(MealSlot.soupStarter) ||
+      r.category == RecipeCategoryRegistry.soup;
+
+  static bool _isLightOrSide(KilerRecipe r) =>
+      r.mealSlots.contains(MealSlot.sideSnack) ||
+      r.category == RecipeCategoryRegistry.saladMeze;
+
+  static bool _isDessert(KilerRecipe r) =>
+      r.category == RecipeCategoryRegistry.healthyDessertKids;
+
+  static final Map<RecipeDaypart, int Function(KilerRecipe)> _scorers = {
+    RecipeDaypart.morning: (r) =>
+        _isBreakfast(r) ? 3 : (_isLightOrSide(r) || _isSoup(r) ? 1 : 0),
+    RecipeDaypart.lunch: (r) => !_isBreakfast(r) && (_isMainMeal(r) || _isSoup(r))
+        ? 3
+        : (_isLightOrSide(r) ? 2 : (_isDessert(r) ? 1 : 0)),
+    RecipeDaypart.dinner: (r) => !_isBreakfast(r) && (_isMainMeal(r) || _isSoup(r))
+        ? 3
+        : (_isLightOrSide(r) ? 2 : (_isDessert(r) ? 1 : 0)),
+    RecipeDaypart.lateNight: (r) =>
+        _isSoup(r) || _isLightOrSide(r) || _isBreakfast(r) || r.totalMinutes <= 20
+            ? 3
+            : (_isDessert(r) ? 2 : 1),
+  };
+
+  static int priorityForRecipe(KilerRecipe recipe, RecipeDaypart daypart) {
+    final scorer = _scorers[daypart] ?? _scorers[RecipeDaypart.dinner]!;
+    return scorer(recipe);
   }
 }
 

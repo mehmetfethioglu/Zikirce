@@ -1,0 +1,1 @@
+Kilerce v3.3.9: Tarif Keşfet sayfası artık günün saatine göre dinamik sıralanıyor — öğleden önce kahvaltılıklar, öğle ve akşam ana yemekler ile çorbalar, gece ise pratik tarifler en üstte! Ayrıca bulut tarif eşleştirme motoru ve önbellekleme hızlandırıldı.

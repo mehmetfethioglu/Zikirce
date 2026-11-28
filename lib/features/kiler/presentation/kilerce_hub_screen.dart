@@ -37,6 +37,7 @@ class KilerceHubScreen extends StatefulWidget {
 
 class _KilerceHubScreenState extends State<KilerceHubScreen> {
   late int _currentIndex;
+  bool _syncedInitialRecipesTab = false;
 
   @override
   void initState() {
@@ -51,6 +52,25 @@ class _KilerceHubScreenState extends State<KilerceHubScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _maybeShowFirstLaunchGuide();
       });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_syncedInitialRecipesTab) {
+      _syncedInitialRecipesTab = true;
+      _syncRecipesTabActive(_currentIndex == 1);
+    }
+  }
+
+  void _syncRecipesTabActive(bool active) {
+    try {
+      ProviderScope.containerOf(context, listen: false)
+          .read(mealModuleNotifierProvider.notifier)
+          .setRecipesTabActive(active);
+    } catch (e) {
+      debugPrint('KilerceHubScreen._syncRecipesTabActive note: $e');
     }
   }
 
@@ -72,6 +92,7 @@ class _KilerceHubScreenState extends State<KilerceHubScreen> {
     setState(() {
       _currentIndex = index;
     });
+    _syncRecipesTabActive(index == 1);
     if (index == 1) {
       try {
         ProviderScope.containerOf(context, listen: false)

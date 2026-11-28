@@ -65,6 +65,11 @@ final mealModuleNotifierProvider =
 
 /// Coordinates pantry changes, active profile restrictions, recipe filtering, and weekly meal planning.
 class MealModuleNotifier extends StateNotifier<MealModuleState> {
+  static const Duration _cloudCacheTtl = Duration(minutes: 10);
+  static const int _maxCloudCacheEntries = 24;
+  static const Duration _pantryRefreshDebounce = Duration(milliseconds: 800);
+  static const Duration _searchRefreshDebounce = Duration(milliseconds: 400);
+
   final MealModuleRepository _repository;
   final ActiveProfileLoader _loadActiveProfile;
   final ValueListenable<KilerState> _kilerListenable;
@@ -80,6 +85,16 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
   Timer? _notificationSyncDebounce;
   int _cloudRequestSeq = 0;
 
+  final Map<String, _CloudQueryCacheEntry> _cloudQueryCache = {};
+  String? _activeCloudQueryKey;
+  String? _inFlightCloudQueryKey;
+  String _lastPantrySignature = '';
+  bool _isRecipesTabActive;
+  bool _cloudRefreshDirty = false;
+  RecipeDaypart? _lastEvaluatedDaypart;
+
+  RecipeDaypart get currentDaypart => RecipeDaypart.fromDateTime(_nowProvider());
+
   MealModuleNotifier({
     required this._repository,
     required this._loadActiveProfile,
@@ -92,6 +107,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     this._cloudGateway,
     DateTime? initialNow,
     bool autoLoad = true,
+    bool isRecipesTabActive = true,
   })  : _kilerListenable = kilerListenable ?? KilerService.instance,
         _onBatchAddDrafts =
             onBatchAddDrafts ?? KilerService.instance.addBatchDraftItems,
@@ -104,12 +120,16 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
             KilerService.instance.addMissingRecipeIngredientsToShopping,
         _nowProvider = nowProvider ??
             (initialNow != null ? () => initialNow : DateTime.now),
+        // ignore: prefer_initializing_formals
+        _isRecipesTabActive = isRecipesTabActive,
         super(
           _createInitialState(
             kilerState: (kilerListenable ?? KilerService.instance).value,
             now: initialNow ?? nowProvider?.call(),
           ),
         ) {
+    _lastPantrySignature =
+        _computePantrySignature(_kilerListenable.value.pantryItems);
     _kilerListenable.addListener(_onKilerChanged);
     if (autoLoad) {
       Future.microtask(loadAll);
@@ -128,6 +148,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       searchQuery: base.searchQuery,
       category: base.selectedCategory,
       region: base.selectedRegion,
+      now: now,
     );
     final wasteRescue = RecipeRecommendationEngine.topWasteRescueRecipes(
       pantryItems: kilerState.pantryItems,
@@ -139,10 +160,60 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     );
   }
 
+  static String _computePantrySignature(List<PantryItem> items) {
+    final List<String> tags = items
+        .map((e) => e.normalizedTag.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final List<String> expiring = items
+        .where((e) => e.isExpiringSoon || e.isExpired)
+        .map((e) => e.normalizedTag.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return '${tags.join(',')}|${expiring.join(',')}';
+  }
+
+  void setRecipesTabActive(bool active) {
+    final bool wasActive = _isRecipesTabActive;
+    _isRecipesTabActive = active;
+    if (!active) {
+      _cloudSearchDebounce?.cancel();
+      return;
+    }
+    if (_lastEvaluatedDaypart != currentDaypart) {
+      _commitDerivedState(state);
+    }
+    if ((wasActive && !_cloudRefreshDirty) ||
+        _cloudGateway == null ||
+        state.isCloudLoading) {
+      return;
+    }
+    if (_cloudRefreshDirty || _activeCloudQueryKey == null) {
+      _cloudRefreshDirty = false;
+      unawaited(refreshCloudRecipes(resetPage: true));
+    }
+  }
+
   void _onKilerChanged() {
     if (!mounted) return;
     _commitDerivedState(state);
-    _scheduleCloudRefresh(immediate: false);
+    final String nextSignature =
+        _computePantrySignature(_kilerListenable.value.pantryItems);
+    if (nextSignature == _lastPantrySignature) return;
+    _lastPantrySignature = nextSignature;
+    if (!_isRecipesTabActive) {
+      _cloudRefreshDirty = true;
+      _cloudSearchDebounce?.cancel();
+      return;
+    }
+    _scheduleCloudRefresh(
+      immediate: false,
+      debounceDuration: _pantryRefreshDebounce,
+    );
   }
 
   @override
@@ -151,6 +222,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     _cloudSearchDebounce = null;
     _notificationSyncDebounce?.cancel();
     _notificationSyncDebounce = null;
+    _cloudQueryCache.clear();
     _kilerListenable.removeListener(_onKilerChanged);
     super.dispose();
   }
@@ -208,7 +280,11 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       );
       _commitDerivedState(nextState);
       unawaited(_hydrateBuiltinRecipePhotos());
-      unawaited(refreshCloudRecipes(resetPage: true));
+      if (_isRecipesTabActive) {
+        unawaited(refreshCloudRecipes(resetPage: true));
+      } else {
+        _cloudRefreshDirty = true;
+      }
     } catch (e, st) {
       debugPrint('MealModuleNotifier.loadAll error: $e\n$st');
       if (!mounted) return;
@@ -283,18 +359,29 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     _scheduleCloudRefresh(immediate: query.trim().isEmpty);
   }
 
-  void _scheduleCloudRefresh({required bool immediate}) {
+  void _scheduleCloudRefresh({
+    required bool immediate,
+    Duration? debounceDuration,
+  }) {
     if (_cloudGateway == null) return;
+    if (!_isRecipesTabActive) {
+      _cloudRefreshDirty = true;
+      _cloudSearchDebounce?.cancel();
+      return;
+    }
     _cloudSearchDebounce?.cancel();
     if (immediate) {
       unawaited(refreshCloudRecipes(resetPage: true));
       return;
     }
-    _cloudSearchDebounce = Timer(const Duration(milliseconds: 350), () {
-      if (mounted) {
-        unawaited(refreshCloudRecipes(resetPage: true));
-      }
-    });
+    _cloudSearchDebounce = Timer(
+      debounceDuration ?? _searchRefreshDebounce,
+      () {
+        if (mounted) {
+          unawaited(refreshCloudRecipes(resetPage: true));
+        }
+      },
+    );
   }
 
   Future<void> refreshCloudRecipes({bool resetPage = true}) async {
@@ -304,34 +391,73 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
         state.selectedFilter == RecipeFilterTab.custom) {
       return;
     }
+    if (!resetPage && (state.isCloudLoading || !state.cloudHasMore)) {
+      return;
+    }
+
+    final pantryItems = _kilerListenable.value.pantryItems;
+    final pantryTags = pantryItems
+        .map((e) => e.normalizedTag.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final expiringTags = pantryItems
+        .where((e) => e.isExpiringSoon || e.isExpired)
+        .map((e) => e.normalizedTag.trim())
+        .where((t) => t.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final query = state.searchQuery.trim();
+    final bool usePantryEndpoint = query.isEmpty &&
+        state.selectedRegion == null &&
+        pantryTags.isNotEmpty &&
+        (state.selectedFilter == RecipeFilterTab.all ||
+            state.selectedFilter == RecipeFilterTab.readyNow ||
+            state.selectedFilter == RecipeFilterTab.wasteSaver ||
+            state.selectedFilter == RecipeFilterTab.almostReady);
+
+    final int maxMinutes =
+        state.selectedFilter == RecipeFilterTab.quick ? 20 : 0;
+    final String queryKey = usePantryEndpoint
+        ? 'pantry|cat:${state.selectedCategory ?? ''}|tags:${pantryTags.join(',')}|exp:${expiringTags.join(',')}'
+        : 'search|q:$query|cat:${state.selectedCategory ?? ''}|reg:${state.selectedRegion ?? ''}|max:$maxMinutes';
+
+    if (resetPage) {
+      if (_activeCloudQueryKey == queryKey &&
+          !state.isCloudLoading &&
+          state.cloudRecipes.isNotEmpty) {
+        _cloudRefreshDirty = false;
+        return;
+      }
+      if (_inFlightCloudQueryKey == queryKey && state.isCloudLoading) {
+        return;
+      }
+      final _CloudQueryCacheEntry? cached = _cloudQueryCache[queryKey];
+      if (cached != null &&
+          _nowProvider().difference(cached.cachedAt) < _cloudCacheTtl) {
+        _activeCloudQueryKey = queryKey;
+        _cloudRefreshDirty = false;
+        _commitDerivedState(
+          state.copyWith(
+            cloudRecipes: cached.items,
+            isCloudLoading: false,
+            cloudHasMore: cached.hasMore,
+            cloudPage: cached.page,
+          ),
+        );
+        return;
+      }
+    }
 
     final int targetPage = resetPage ? 1 : state.cloudPage + 1;
     final int reqSeq = ++_cloudRequestSeq;
+    _inFlightCloudQueryKey = queryKey;
     state = state.copyWith(isCloudLoading: true);
 
     try {
-      final pantryItems = _kilerListenable.value.pantryItems;
-      final pantryTags = pantryItems
-          .map((e) => e.normalizedTag.trim())
-          .where((t) => t.isNotEmpty)
-          .toSet()
-          .toList();
-      final expiringTags = pantryItems
-          .where((e) => e.isExpiringSoon || e.isExpired)
-          .map((e) => e.normalizedTag.trim())
-          .where((t) => t.isNotEmpty)
-          .toSet()
-          .toList();
-
-      final query = state.searchQuery.trim();
-      final bool usePantryEndpoint = query.isEmpty &&
-          state.selectedRegion == null &&
-          pantryTags.isNotEmpty &&
-          (state.selectedFilter == RecipeFilterTab.all ||
-              state.selectedFilter == RecipeFilterTab.readyNow ||
-              state.selectedFilter == RecipeFilterTab.wasteSaver ||
-              state.selectedFilter == RecipeFilterTab.almostReady);
-
       final CloudRecipeSearchPage page = usePantryEndpoint
           ? await gateway.matchPantry(
               pantryTags: pantryTags,
@@ -344,8 +470,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
               query: query,
               kilerceCategory: state.selectedCategory,
               regionId: state.selectedRegion,
-              maxMinutes:
-                  state.selectedFilter == RecipeFilterTab.quick ? 20 : null,
+              maxMinutes: maxMinutes > 0 ? maxMinutes : null,
               page: targetPage,
               limit: 20,
             );
@@ -361,6 +486,21 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
               ),
             ];
 
+      _activeCloudQueryKey = queryKey;
+      _inFlightCloudQueryKey = null;
+      _cloudRefreshDirty = false;
+
+      _cloudQueryCache.remove(queryKey);
+      if (_cloudQueryCache.length >= _maxCloudCacheEntries) {
+        _cloudQueryCache.remove(_cloudQueryCache.keys.first);
+      }
+      _cloudQueryCache[queryKey] = _CloudQueryCacheEntry(
+        items: nextCloud,
+        hasMore: page.hasMore,
+        page: targetPage,
+        cachedAt: _nowProvider(),
+      );
+
       _commitDerivedState(
         state.copyWith(
           cloudRecipes: nextCloud,
@@ -372,6 +512,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     } catch (e) {
       debugPrint('MealModuleNotifier.refreshCloudRecipes error: $e');
       if (!mounted || reqSeq != _cloudRequestSeq) return;
+      _inFlightCloudQueryKey = null;
       state = state.copyWith(isCloudLoading: false);
     }
   }
@@ -1181,6 +1322,9 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
               entry.key: _applyPhotoOverride(entry.value, overrides),
           };
 
+    final DateTime now = _nowProvider();
+    _lastEvaluatedDaypart = RecipeDaypart.fromDateTime(now);
+
     final List<EvaluatedRecipeMatch> rawMatches =
         RecipeRecommendationEngine.evaluateAll(
       pantryItems: pantryItems,
@@ -1194,6 +1338,7 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
       additionalRecipes: effectiveCloud,
       builtinImageUrls: next.builtinSignedImageUrls,
       cookCounts: next.cookCounts,
+      now: now,
     );
     final List<EvaluatedRecipeMatch> matches = overrides.isEmpty
         ? rawMatches
@@ -1331,4 +1476,18 @@ class MealModuleNotifier extends StateNotifier<MealModuleState> {
     final DateTime sunday = monday.add(const Duration(days: 6));
     return (MealDateUtils.toIsoDate(monday), MealDateUtils.toIsoDate(sunday));
   }
+}
+
+class _CloudQueryCacheEntry {
+  final List<KilerRecipe> items;
+  final bool hasMore;
+  final int page;
+  final DateTime cachedAt;
+
+  const _CloudQueryCacheEntry({
+    required this.items,
+    required this.hasMore,
+    required this.page,
+    required this.cachedAt,
+  });
 }

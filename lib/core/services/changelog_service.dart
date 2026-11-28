@@ -48,11 +48,39 @@ class ChangelogRelease {
 
 class ChangelogService {
   static const String _prefKeyLastSeenVersionCode = 'Changelog_LastSeenVersionCode';
-  static const int currentVersionCode = 25;
-  static const String currentVersionName = '3.3.8';
+  static const int currentVersionCode = 26;
+  static const String currentVersionName = '3.3.9';
 
   /// Sürüm geçmişi (En yeni sürüm en başta yer alır)
   static const List<ChangelogRelease> releases = [
+    ChangelogRelease(
+      versionCode: 26,
+      versionName: '3.3.9',
+      releaseDateTr: 'Kasım 2026',
+      releaseDateEn: 'November 2026',
+      items: [
+        ChangelogItem(
+          type: ChangelogType.newFeature,
+          titleTr: 'Saate Göre Dinamik Tarif Keşfi',
+          titleEn: 'Time-of-Day Dynamic Recipe Discovery',
+          descTr:
+              'Sabah kahvaltılıklar, öğle/akşam yemekler ve çorbalar, gece hafif/pratik tarifler otomatik olarak en üstte sıralanır.',
+          descEn:
+              'Breakfast dishes appear first in the morning, main meals and soups in the afternoon/evening, and light quick picks late at night.',
+          icon: Icons.schedule_rounded,
+        ),
+        ChangelogItem(
+          type: ChangelogType.improvement,
+          titleTr: 'Hızlı Bulut Eşleştirme & Akıllı Önbellek',
+          titleEn: 'Faster Cloud Matching & Smart Caching',
+          descTr:
+              'Tarif eşleştirme ve arama performansı hızlandırıldı; gereksiz ağ istekleri azaltılarak çok daha akıcı deneyim sağlandı.',
+          descEn:
+              'Accelerated cloud recipe matching and search with smart caching for a smoother, faster experience.',
+          icon: Icons.bolt_rounded,
+        ),
+      ],
+    ),
     ChangelogRelease(
       versionCode: 25,
       versionName: '3.3.8',

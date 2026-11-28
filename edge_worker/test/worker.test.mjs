@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import worker from '../worker.js';
+import { resetRecipeCachesForTesting } from '../src/recipes_api.js';
 import { hmacSha256Hex } from '../src/security.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -166,6 +167,7 @@ function seedSampleRecipes(d1) {
 }
 
 async function createTestEnv(overrides = {}) {
+  resetRecipeCachesForTesting();
   const d1 = new MockD1Database();
   seedSampleRecipes(d1);
   const r2 = new MockR2Bucket();
@@ -883,4 +885,191 @@ test('Gemini 2.5 Flash-Lite OCR endpoints enforce HMAC, disable thinking tokens,
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('match-pantry caches raw D1 candidates across tag order, offset, and expiring_tags while refreshing signed URLs', async () => {
+  const env = await createTestEnv();
+  let dbAllCalls = 0;
+  const baseDb = env.RECIPES_DB;
+  env.RECIPES_DB = {
+    prepare(sql) {
+      const stmt = baseDb.prepare(sql);
+      const wrapStmt = (s) => ({
+        bind(...args) {
+          return wrapStmt(s.bind(...args));
+        },
+        first() {
+          return s.first();
+        },
+        async all() {
+          dbAllCalls += 1;
+          return s.all();
+        },
+        run() {
+          return s.run();
+        },
+      });
+      return wrapStmt(stmt);
+    },
+  };
+
+  const req1 = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['sogan', 'domates', 'kiyma', 'patlican'],
+      expiring_tags: ['kiyma'],
+      limit: 1,
+      offset: 0,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const res1 = await worker.fetch(req1, env);
+  assert.equal(res1.status, 200);
+  assert.equal(res1.headers.get('X-Kilerce-Cache'), 'MISS');
+  const data1 = await res1.json();
+  assert.equal(data1.items.length, 1);
+  assert.equal(data1.items[0].id, 'kilerce_karniyarik');
+  assert.deepEqual(data1.items[0].expiring_matched_tags, ['kiyma']);
+  assert.ok(data1.items[0].image_url.includes('/api/media/'));
+  assert.equal(dbAllCalls, 1);
+
+  const req2 = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['patlican', 'kiyma', 'domates', 'sogan'],
+      expiring_tags: ['patlican'],
+      limit: 1,
+      offset: 1,
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const res2 = await worker.fetch(req2, env);
+  assert.equal(res2.status, 200);
+  assert.equal(res2.headers.get('X-Kilerce-Cache'), 'HIT-MEM');
+  const data2 = await res2.json();
+  assert.equal(data2.items.length, 1);
+  assert.equal(data2.items[0].id, 'kilerce_mercimek_corbasi');
+  assert.ok(data2.items[0].image_url.includes('/api/media/'));
+  assert.equal(dbAllCalls, 1);
+});
+
+test('match-pantry excludes high-frequency staple tags from SQL when selective tags exist, and falls back when only staples exist', async () => {
+  const env = await createTestEnv();
+  const capturedBinds = [];
+  const baseDb = env.RECIPES_DB;
+  env.RECIPES_DB = {
+    prepare(sql) {
+      const stmt = baseDb.prepare(sql);
+      const wrapStmt = (s, bound = []) => ({
+        bind(...args) {
+          return wrapStmt(s.bind(...args), args);
+        },
+        first() {
+          return s.first();
+        },
+        async all() {
+          capturedBinds.push(bound);
+          return s.all();
+        },
+        run() {
+          return s.run();
+        },
+      });
+      return wrapStmt(stmt);
+    },
+  };
+
+  // Seed a recipe with only staple ingredients for fallback verification
+  baseDb.db.prepare(`
+    INSERT INTO recipes (
+      id, source, title, subtitle, emoji, category, kilerce_category, region_id,
+      prep_minutes, cook_minutes, total_minutes, servings_count, servings_unit, servings_label,
+      difficulty, cooking_method, contains_gluten, contains_lactose, is_vegan, is_vegetarian,
+      has_margarine, is_refined_sugar_free, is_healthy_clean, base_health_score, quality_score,
+      clean_label_badges_json, diet_tags_json, meal_slots_json, required_tags_json, optional_tags_json,
+      ingredients_json, steps_json, image_rel_path, search_fold
+    ) VALUES (
+      'kilerce_un_helvasi', 'yemek_com', 'Un Helvası', 'Tatlı', '🍮', 'Tatlı', 'Tatlı', 'tum_turkiye',
+      5, 15, 20, 4, 'kisilik', '4 kişilik', 'easy', 'pan',
+      1, 1, 0, 1, 0, 0, 0, 70, 88,
+      '["Ev Yapımı"]', '[]', '["DESSERT"]', '["un","tereyagi"]', '[]',
+      '[]', '["Unu kavurun."]', 'photo_webp_v2/tatli/kilerce_un_helvasi.webp', 'un helvasi'
+    )
+  `).run();
+  baseDb.db.prepare(`
+    INSERT INTO recipe_ingredients (id, recipe_id, seq, display, name, amount, amount_max, unit, note, tag, is_optional, is_pantry_staple)
+    VALUES (1001, 'kilerce_un_helvasi', 1, '2 su bardağı un', 'un', 2, NULL, 'bardak', '', 'un', 0, 1),
+           (1002, 'kilerce_un_helvasi', 2, '100 g tereyağı', 'tereyagi', 100, NULL, 'gr', '', 'tereyagi', 0, 1)
+  `).run();
+
+  // Case 1: selective + staple tags -> staples excluded from SQL binds
+  const selectiveReq = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['patlican', 'kiyma', 'un', 'tereyagi', 'zeytinyagi'],
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const selectiveRes = await worker.fetch(selectiveReq, env);
+  assert.equal(selectiveRes.status, 200);
+  const selectiveData = await selectiveRes.json();
+  assert.equal(selectiveData.items[0].id, 'kilerce_karniyarik');
+  assert.deepEqual(capturedBinds[0], ['kiyma', 'patlican']);
+
+  // Case 2: only staple tags -> falls back to querying staple tags
+  const stapleOnlyReq = await signedRequest('/api/recipes/match-pantry', {
+    method: 'POST',
+    body: JSON.stringify({
+      pantry_tags: ['un', 'tereyagi'],
+    }),
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const stapleOnlyRes = await worker.fetch(stapleOnlyReq, env);
+  assert.equal(stapleOnlyRes.status, 200);
+  const stapleOnlyData = await stapleOnlyRes.json();
+  assert.equal(stapleOnlyData.items[0].id, 'kilerce_un_helvasi');
+  assert.deepEqual(capturedBinds[1], ['tereyagi', 'un']);
+});
+
+test('recipes search caches raw D1 results across repeated queries and serves HIT-MEM with fresh signed URLs', async () => {
+  const env = await createTestEnv();
+  let dbAllCalls = 0;
+  const baseDb = env.RECIPES_DB;
+  env.RECIPES_DB = {
+    prepare(sql) {
+      const stmt = baseDb.prepare(sql);
+      const wrapStmt = (s) => ({
+        bind(...args) {
+          return wrapStmt(s.bind(...args));
+        },
+        first() {
+          return s.first();
+        },
+        async all() {
+          dbAllCalls += 1;
+          return s.all();
+        },
+        run() {
+          return s.run();
+        },
+      });
+      return wrapStmt(stmt);
+    },
+  };
+
+  const res1 = await worker.fetch(await signedRequest('/api/recipes/search?q=karnıyarık&limit=10'), env);
+  assert.equal(res1.status, 200);
+  assert.equal(res1.headers.get('X-Kilerce-Cache'), 'MISS');
+  const data1 = await res1.json();
+  assert.equal(data1.items.length, 1);
+  assert.ok(data1.items[0].image_url.includes('/api/media/'));
+  assert.equal(dbAllCalls, 1);
+
+  const res2 = await worker.fetch(await signedRequest('/api/recipes/search?q=karnıyarık&limit=10'), env);
+  assert.equal(res2.status, 200);
+  assert.equal(res2.headers.get('X-Kilerce-Cache'), 'HIT-MEM');
+  const data2 = await res2.json();
+  assert.equal(data2.items.length, 1);
+  assert.ok(data2.items[0].image_url.includes('/api/media/'));
+  assert.equal(dbAllCalls, 1);
 });

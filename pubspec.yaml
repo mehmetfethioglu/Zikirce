@@ -2,7 +2,7 @@ name: organicscore
 description: "Kilerce: Barkod, Dolap & Tarif - Akıllı Mutfak Envanteri, Gıda Analizi ve Yemek Tavsiye Asistanı."
 publish_to: 'none'
 
-version: 3.3.8+25
+version: 3.3.9+26
 
 environment:
   sdk: ^3.12.2

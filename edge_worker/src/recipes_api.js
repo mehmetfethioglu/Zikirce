@@ -16,6 +16,147 @@ const MAX_LIST_LIMIT = 20;
 const MAX_SEARCH_PAGE = 50;
 const MAX_PANTRY_TAGS = 60;
 const MAX_PANTRY_OFFSET = 200;
+const MAX_SQL_MATCH_TAGS = 12;
+const MAX_SQL_STAPLE_FALLBACK_TAGS = 8;
+
+const MEM_CACHE_TTL_MS = 15 * 60 * 1000;
+const MEM_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
+const EDGE_CACHE_TTL_SEC = 1800;
+const EDGE_DETAIL_CACHE_TTL_SEC = 3600;
+const MAX_MEM_PANTRY_ENTRIES = 200;
+const MAX_MEM_SEARCH_ENTRIES = 200;
+const MAX_MEM_DETAIL_ENTRIES = 300;
+
+const HIGH_FREQ_STAPLE_TAGS = new Set([
+  'sumak_isot',
+  'un',
+  'tereyagi',
+  'zeytinyagi',
+  'aycicek_yagi',
+  'tuz',
+  'seker',
+  'karabiber',
+  'su',
+  'sivi_yag',
+  'kabartma_tozu',
+  'vanilya',
+]);
+
+const _memPantryCache = new Map();
+const _memSearchCache = new Map();
+const _memDetailCache = new Map();
+
+export function resetRecipeCachesForTesting() {
+  _memPantryCache.clear();
+  _memSearchCache.clear();
+  _memDetailCache.clear();
+}
+
+function getMemCache(map, key, nowMs = Date.now()) {
+  const entry = map.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= nowMs) {
+    map.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function setMemCache(map, key, value, ttlMs, maxSize, nowMs = Date.now()) {
+  if (map.has(key)) {
+    map.delete(key);
+  } else if (map.size >= maxSize) {
+    for (const [k, v] of map.entries()) {
+      if (v.expiresAt <= nowMs) {
+        map.delete(k);
+      }
+    }
+    while (map.size >= maxSize) {
+      const oldestKey = map.keys().next().value;
+      if (oldestKey === undefined) break;
+      map.delete(oldestKey);
+    }
+  }
+  map.set(key, { value, expiresAt: nowMs + ttlMs });
+}
+
+async function sha256HexShort(text) {
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 32);
+}
+
+function getEdgeCache() {
+  return typeof caches !== 'undefined' && caches?.default ? caches.default : null;
+}
+
+async function readEdgeJsonCache(cachePath) {
+  const cache = getEdgeCache();
+  if (!cache) return null;
+  try {
+    const resp = await cache.match(`https://kilerce-cache.internal/${cachePath}`);
+    if (!resp || !resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+async function writeEdgeJsonCache(cachePath, payload, ttlSec, ctx) {
+  const cache = getEdgeCache();
+  if (!cache) return;
+  try {
+    const resp = new Response(JSON.stringify(payload), {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': `public, max-age=${ttlSec}`,
+      },
+    });
+    const putPromise = cache.put(`https://kilerce-cache.internal/${cachePath}`, resp);
+    if (ctx && typeof ctx.waitUntil === 'function') {
+      ctx.waitUntil(putPromise.catch(() => {}));
+    } else {
+      await putPromise;
+    }
+  } catch {
+    // Best-effort edge cache write
+  }
+}
+
+function selectQueryTags(pantryTags, expiringSet) {
+  const nonStaple = [];
+  const staple = [];
+  for (const tag of pantryTags) {
+    if (HIGH_FREQ_STAPLE_TAGS.has(tag)) {
+      staple.push(tag);
+    } else {
+      nonStaple.push(tag);
+    }
+  }
+
+  let selected;
+  if (nonStaple.length >= 2) {
+    const expiringNonStaple = nonStaple.filter((t) => expiringSet.has(t));
+    const regularNonStaple = nonStaple.filter((t) => !expiringSet.has(t));
+    selected = [...expiringNonStaple, ...regularNonStaple].slice(0, MAX_SQL_MATCH_TAGS);
+  } else {
+    const expiringNonStaple = nonStaple.filter((t) => expiringSet.has(t));
+    const expiringStaple = staple.filter((t) => expiringSet.has(t));
+    const regularNonStaple = nonStaple.filter((t) => !expiringSet.has(t));
+    const regularStaple = staple.filter((t) => !expiringSet.has(t));
+    selected = [
+      ...expiringNonStaple,
+      ...expiringStaple,
+      ...regularNonStaple,
+      ...regularStaple,
+    ].slice(0, MAX_SQL_STAPLE_FALLBACK_TAGS);
+  }
+
+  return [...selected].sort();
+}
 
 const PREVIEW_COLUMNS = `
   r.id, r.title, r.subtitle, r.emoji, r.category, r.kilerce_category, r.region_id,
@@ -69,7 +210,7 @@ async function formatPreviewCard(request, env, row, extra = {}) {
   };
 }
 
-export async function handleRecipesSearch(request, env, corsHeaders) {
+export async function handleRecipesSearch(request, env, corsHeaders, ctx) {
   if (!env.RECIPES_DB) {
     return jsonResponse({ error: 'RECIPES_DB binding not configured' }, 503, corsHeaders);
   }
@@ -86,63 +227,102 @@ export async function handleRecipesSearch(request, env, corsHeaders) {
   const kilerceCat = (url.searchParams.get('kilerce_category') || '').trim();
   const category = (url.searchParams.get('category') || '').trim();
   const regionId = (url.searchParams.get('region_id') || '').trim();
+  const normalizedRegionId = regionId && regionId !== 'all' ? regionId : '';
   const healthyOnly = truthyFlag(url.searchParams.get('healthy_only'));
   const veganOnly = truthyFlag(url.searchParams.get('vegan'));
   const glutenFree = truthyFlag(url.searchParams.get('gluten_free'));
-  const maxMinutes = Number(url.searchParams.get('max_minutes')) || 0;
+  const maxMinutesRaw = Number(url.searchParams.get('max_minutes')) || 0;
+  const maxMinutes = maxMinutesRaw > 0 ? maxMinutesRaw : 0;
 
-  const whereClauses = [];
-  const bindings = [];
+  const cacheKey = JSON.stringify({
+    q: ftsTokens.join(' '),
+    kilerceCat,
+    category,
+    regionId: normalizedRegionId,
+    healthyOnly,
+    veganOnly,
+    glutenFree,
+    maxMinutes,
+    page,
+    limit,
+  });
 
-  let fromSql = 'FROM recipes r';
-  if (ftsTokens.length > 0) {
-    const ftsQuery = ftsTokens.map((t) => `${t}*`).join(' ');
-    fromSql = 'FROM recipes r INNER JOIN recipes_fts f ON f.recipe_id = r.id';
-    whereClauses.push('recipes_fts MATCH ?');
-    bindings.push(ftsQuery);
-  }
+  const nowMs = Date.now();
+  let cacheStatus = 'MISS';
+  let rawRows = getMemCache(_memSearchCache, cacheKey, nowMs);
+  let edgeCachePath = null;
 
-  if (kilerceCat) {
-    whereClauses.push('r.kilerce_category = ?');
-    bindings.push(kilerceCat);
-  }
-  if (category) {
-    whereClauses.push('r.category = ?');
-    bindings.push(category);
-  }
-  if (regionId && regionId !== 'all') {
-    whereClauses.push('r.region_id = ?');
-    bindings.push(regionId);
-  }
-  if (healthyOnly) {
-    whereClauses.push('r.is_healthy_clean = 1');
-  }
-  if (veganOnly) {
-    whereClauses.push('r.is_vegan = 1');
-  }
-  if (glutenFree) {
-    whereClauses.push('r.contains_gluten = 0');
-  }
-  if (maxMinutes > 0) {
-    whereClauses.push('r.total_minutes <= ?');
-    bindings.push(maxMinutes);
+  if (rawRows) {
+    cacheStatus = 'HIT-MEM';
+  } else {
+    edgeCachePath = `v1/search/${await sha256HexShort(cacheKey)}`;
+    const edgeCached = await readEdgeJsonCache(edgeCachePath);
+    if (Array.isArray(edgeCached)) {
+      rawRows = edgeCached;
+      cacheStatus = 'HIT-EDGE';
+      setMemCache(_memSearchCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_SEARCH_ENTRIES, nowMs);
+    }
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-  const dataSql = `
-    SELECT ${PREVIEW_COLUMNS}
-    ${fromSql}
-    ${whereSql}
-    ORDER BY r.quality_score DESC, r.base_health_score DESC
-    LIMIT ? OFFSET ?
-  `;
+  if (!rawRows) {
+    const whereClauses = [];
+    const bindings = [];
 
-  const result = await env.RECIPES_DB
-    .prepare(dataSql)
-    .bind(...bindings, limit + 1, offset)
-    .all();
+    let fromSql = 'FROM recipes r';
+    if (ftsTokens.length > 0) {
+      const ftsQuery = ftsTokens.map((t) => `${t}*`).join(' ');
+      fromSql = 'FROM recipes r INNER JOIN recipes_fts f ON f.recipe_id = r.id';
+      whereClauses.push('recipes_fts MATCH ?');
+      bindings.push(ftsQuery);
+    }
 
-  const rawRows = result?.results || [];
+    if (kilerceCat) {
+      whereClauses.push('r.kilerce_category = ?');
+      bindings.push(kilerceCat);
+    }
+    if (category) {
+      whereClauses.push('r.category = ?');
+      bindings.push(category);
+    }
+    if (normalizedRegionId) {
+      whereClauses.push('r.region_id = ?');
+      bindings.push(normalizedRegionId);
+    }
+    if (healthyOnly) {
+      whereClauses.push('r.is_healthy_clean = 1');
+    }
+    if (veganOnly) {
+      whereClauses.push('r.is_vegan = 1');
+    }
+    if (glutenFree) {
+      whereClauses.push('r.contains_gluten = 0');
+    }
+    if (maxMinutes > 0) {
+      whereClauses.push('r.total_minutes <= ?');
+      bindings.push(maxMinutes);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const dataSql = `
+      SELECT ${PREVIEW_COLUMNS}
+      ${fromSql}
+      ${whereSql}
+      ORDER BY r.quality_score DESC, r.base_health_score DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const result = await env.RECIPES_DB
+      .prepare(dataSql)
+      .bind(...bindings, limit + 1, offset)
+      .all();
+
+    rawRows = result?.results || [];
+    setMemCache(_memSearchCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_SEARCH_ENTRIES, nowMs);
+    if (edgeCachePath) {
+      await writeEdgeJsonCache(edgeCachePath, rawRows, EDGE_CACHE_TTL_SEC, ctx);
+    }
+  }
+
   const hasMore = rawRows.length > limit;
   const pageRows = rawRows.slice(0, limit);
   const items = await Promise.all(pageRows.map((row) => formatPreviewCard(request, env, row)));
@@ -152,10 +332,10 @@ export async function handleRecipesSearch(request, env, corsHeaders) {
     limit,
     has_more: hasMore,
     items,
-  }, 200, corsHeaders);
+  }, 200, corsHeaders, { 'X-Kilerce-Cache': cacheStatus });
 }
 
-export async function handlePantryMatch(request, env, corsHeaders, rawBody) {
+export async function handlePantryMatch(request, env, corsHeaders, rawBody, ctx) {
   if (!env.RECIPES_DB) {
     return jsonResponse({ error: 'RECIPES_DB binding not configured' }, 503, corsHeaders);
   }
@@ -191,28 +371,76 @@ export async function handlePantryMatch(request, env, corsHeaders, rawBody) {
   const limit = Math.max(1, Math.min(MAX_LIST_LIMIT, Number(body.limit) || 20));
   const offset = Math.max(0, Math.min(MAX_PANTRY_OFFSET, Number(body.offset) || 0));
 
-  const placeholders = pantryTags.map(() => '?').join(', ');
-  const whereParts = [`ri.tag IN (${placeholders})`];
-  const bindings = [...pantryTags];
+  const queryTags = selectQueryTags(pantryTags, expiringSet);
+  const cacheKey = `${kilerceCat}|${queryTags.join(',')}`;
+  const nowMs = Date.now();
+  let cacheStatus = 'MISS';
+  let rawRows = getMemCache(_memPantryCache, cacheKey, nowMs);
+  let edgeCachePath = null;
 
-  if (kilerceCat) {
-    whereParts.push('r.kilerce_category = ?');
-    bindings.push(kilerceCat);
+  if (rawRows) {
+    cacheStatus = 'HIT-MEM';
+  } else {
+    edgeCachePath = `v1/pantry-match/${await sha256HexShort(cacheKey)}`;
+    const edgeCached = await readEdgeJsonCache(edgeCachePath);
+    if (Array.isArray(edgeCached)) {
+      rawRows = edgeCached;
+      cacheStatus = 'HIT-EDGE';
+      setMemCache(_memPantryCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_PANTRY_ENTRIES, nowMs);
+    }
   }
 
-  const sql = `
-    SELECT ${PREVIEW_COLUMNS},
-      COUNT(DISTINCT CASE WHEN ri.is_optional = 0 THEN ri.tag END) AS matched_req_count
-    FROM recipe_ingredients ri
-    INNER JOIN recipes r ON r.id = ri.recipe_id
-    WHERE ${whereParts.join(' AND ')}
-    GROUP BY r.id
-    ORDER BY matched_req_count DESC, r.quality_score DESC
-    LIMIT 240
-  `;
+  if (!rawRows) {
+    const placeholders = queryTags.map(() => '?').join(', ');
+    const bindings = [...queryTags];
+    let sql;
 
-  const result = await env.RECIPES_DB.prepare(sql).bind(...bindings).all();
-  const candidates = (result?.results || []).map((row) => {
+    if (kilerceCat) {
+      bindings.push(kilerceCat);
+      sql = `
+        WITH top_candidates AS MATERIALIZED (
+          SELECT ri.recipe_id,
+            COUNT(DISTINCT CASE WHEN ri.is_optional = 0 THEN ri.tag END) AS matched_req_count
+          FROM recipe_ingredients ri
+          WHERE ri.tag IN (${placeholders})
+          GROUP BY ri.recipe_id
+          ORDER BY matched_req_count DESC
+          LIMIT 800
+        )
+        SELECT ${PREVIEW_COLUMNS}, tc.matched_req_count
+        FROM top_candidates tc
+        INNER JOIN recipes r ON r.id = tc.recipe_id
+        WHERE r.kilerce_category = ?
+        ORDER BY tc.matched_req_count DESC, r.quality_score DESC
+        LIMIT 160
+      `;
+    } else {
+      sql = `
+        WITH top_candidates AS MATERIALIZED (
+          SELECT ri.recipe_id,
+            COUNT(DISTINCT CASE WHEN ri.is_optional = 0 THEN ri.tag END) AS matched_req_count
+          FROM recipe_ingredients ri
+          WHERE ri.tag IN (${placeholders})
+          GROUP BY ri.recipe_id
+          ORDER BY matched_req_count DESC
+          LIMIT 160
+        )
+        SELECT ${PREVIEW_COLUMNS}, tc.matched_req_count
+        FROM top_candidates tc
+        INNER JOIN recipes r ON r.id = tc.recipe_id
+        ORDER BY tc.matched_req_count DESC, r.quality_score DESC
+      `;
+    }
+
+    const result = await env.RECIPES_DB.prepare(sql).bind(...bindings).all();
+    rawRows = result?.results || [];
+    setMemCache(_memPantryCache, cacheKey, rawRows, MEM_CACHE_TTL_MS, MAX_MEM_PANTRY_ENTRIES, nowMs);
+    if (edgeCachePath) {
+      await writeEdgeJsonCache(edgeCachePath, rawRows, EDGE_CACHE_TTL_SEC, ctx);
+    }
+  }
+
+  const candidates = rawRows.map((row) => {
     const reqTags = parseJsonArray(row.required_tags_json);
     const matchedTags = reqTags.filter((t) => pantrySet.has(t));
     const missingTags = reqTags.filter((t) => !pantrySet.has(t));
@@ -254,10 +482,10 @@ export async function handlePantryMatch(request, env, corsHeaders, rawBody) {
     total_candidates: candidates.length,
     has_more: offset + limit < candidates.length,
     items,
-  }, 200, corsHeaders);
+  }, 200, corsHeaders, { 'X-Kilerce-Cache': cacheStatus });
 }
 
-export async function handleRecipeDetail(request, env, corsHeaders, recipeId) {
+export async function handleRecipeDetail(request, env, corsHeaders, recipeId, ctx) {
   if (!env.RECIPES_DB) {
     return jsonResponse({ error: 'RECIPES_DB binding not configured' }, 503, corsHeaders);
   }
@@ -272,15 +500,29 @@ export async function handleRecipeDetail(request, env, corsHeaders, recipeId) {
     return jsonResponse({ error: 'Invalid recipe id' }, 400, corsHeaders);
   }
 
-  const row = await env.RECIPES_DB
-    .prepare('SELECT * FROM recipes WHERE id = ?')
-    .bind(cleanId)
-    .first();
+  const nowMs = Date.now();
+  let row = getMemCache(_memDetailCache, cleanId, nowMs);
+  if (!row) {
+    const edgeCachePath = `v1/detail/${await sha256HexShort(cleanId)}`;
+    const edgeCached = await readEdgeJsonCache(edgeCachePath);
+    if (edgeCached && typeof edgeCached === 'object' && edgeCached.id === cleanId) {
+      row = edgeCached;
+      setMemCache(_memDetailCache, cleanId, row, MEM_DETAIL_CACHE_TTL_MS, MAX_MEM_DETAIL_ENTRIES, nowMs);
+    } else {
+      row = await env.RECIPES_DB
+        .prepare('SELECT * FROM recipes WHERE id = ?')
+        .bind(cleanId)
+        .first();
+      if (row) {
+        setMemCache(_memDetailCache, cleanId, row, MEM_DETAIL_CACHE_TTL_MS, MAX_MEM_DETAIL_ENTRIES, nowMs);
+        await writeEdgeJsonCache(edgeCachePath, row, EDGE_DETAIL_CACHE_TTL_SEC, ctx);
+      }
+    }
+  }
   if (!row) {
     return jsonResponse({ error: 'Recipe not found' }, 404, corsHeaders);
   }
 
-  const nowMs = Date.now();
   let entitlement = await resolveEntitlement(env, appUserId, nowMs);
   if (!entitlement.is_pro) {
     const ipQuota = await consumeIpFreeDetailQuota(env, request, nowMs);

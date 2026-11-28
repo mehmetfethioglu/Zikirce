@@ -308,6 +308,7 @@ class _ExploreTabBody extends ConsumerWidget {
           selectedRegion: selectedRegion,
           searchQuery: searchQuery,
           activeProfile: activeProfile,
+          activeDaypart: notifier.currentDaypart,
           pantryItemCount: kilerState.pantryItems.length,
           readyNowCount: readyNowCount,
           wasteSaverCount: wasteSaverCount,

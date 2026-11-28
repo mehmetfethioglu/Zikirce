@@ -52,7 +52,7 @@ const DEFAULT_BOYCOTT_LIST = [
 ];
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
@@ -137,16 +137,16 @@ export default {
       }
 
       if (url.pathname === '/api/recipes/search' && request.method === 'GET') {
-        return await handleRecipesSearch(request, env, corsHeaders);
+        return await handleRecipesSearch(request, env, corsHeaders, ctx);
       }
 
       if (url.pathname === '/api/recipes/match-pantry' && request.method === 'POST') {
-        return await handlePantryMatch(request, env, corsHeaders, rawBody);
+        return await handlePantryMatch(request, env, corsHeaders, rawBody, ctx);
       }
 
       if (url.pathname.startsWith('/api/recipes/') && request.method === 'GET') {
         const recipeId = url.pathname.slice('/api/recipes/'.length);
-        return await handleRecipeDetail(request, env, corsHeaders, recipeId);
+        return await handleRecipeDetail(request, env, corsHeaders, recipeId, ctx);
       }
 
       if (url.pathname === '/api/media/sign-batch' && request.method === 'POST') {

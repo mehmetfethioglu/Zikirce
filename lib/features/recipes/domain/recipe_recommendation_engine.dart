@@ -72,6 +72,8 @@ class RecipeRecommendationEngine {
     List<KilerRecipe> additionalRecipes = const [],
     Map<String, String> builtinImageUrls = const {},
     Map<String, int> cookCounts = const {},
+    DateTime? now,
+    bool prioritizeByTimeOfDay = true,
   }) {
     final Set<String> availableTags =
         pantryItems.map((e) => e.normalizedTag).toSet();
@@ -118,14 +120,31 @@ class RecipeRecommendationEngine {
       evaluated.add(match);
     }
 
-    // 3-Tier Smart Chef Sorting:
+    final RecipeDaypart activeDaypart =
+        RecipeDaypart.fromDateTime(now ?? DateTime.now());
+    final bool applyPrimaryDaypart = prioritizeByTimeOfDay &&
+        queryTokens.isEmpty &&
+        (category == null || category.isEmpty) &&
+        filter != RecipeFilterTab.wasteSaver;
+
+    // 3-Tier Smart Chef Sorting (contextually prioritized by time of day):
+    // 0. Daypart relevance when browsing without explicit search/category/wasteSaver
     // 1. Ready-to-cook + Waste-saver recipes first
     // 2. Match ratio descending
     // 3. Expiring ingredients count descending
     // 4. Long-waiting pantry ingredients count descending
     // 5. Profile-safe recipes preferred over restricted ones
-    // 6. Combined health score descending
+    // 6. Combined health score descending (with daypart tie-breaker)
     evaluated.sort((a, b) {
+      if (applyPrimaryDaypart) {
+        final daypartCmp =
+            RecipeDaypartRegistry.priorityForRecipe(b.recipe, activeDaypart)
+                .compareTo(
+          RecipeDaypartRegistry.priorityForRecipe(a.recipe, activeDaypart),
+        );
+        if (daypartCmp != 0) return daypartCmp;
+      }
+
       if (a.isReadyToCook != b.isReadyToCook) {
         return a.isReadyToCook ? -1 : 1;
       }
@@ -147,7 +166,13 @@ class RecipeRecommendationEngine {
         return a.isProfileSafe ? -1 : 1;
       }
 
-      return b.combinedHealthScore.compareTo(a.combinedHealthScore);
+      final scoreCmp = b.combinedHealthScore.compareTo(a.combinedHealthScore);
+      if (scoreCmp != 0 || applyPrimaryDaypart) return scoreCmp;
+
+      return RecipeDaypartRegistry.priorityForRecipe(b.recipe, activeDaypart)
+          .compareTo(
+        RecipeDaypartRegistry.priorityForRecipe(a.recipe, activeDaypart),
+      );
     });
 
     return evaluated;
@@ -170,6 +195,7 @@ class RecipeRecommendationEngine {
       favoriteIds: favoriteIds,
       customRecipes: customRecipes,
       builtinImageUrls: builtinImageUrls,
+      prioritizeByTimeOfDay: false,
     );
     rescueMatches.sort((a, b) {
       if (a.isReadyToCook != b.isReadyToCook) {

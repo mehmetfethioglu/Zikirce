@@ -37,6 +37,7 @@ class RecipeCatalogExploreView extends StatefulWidget {
   final ValueChanged<EvaluatedRecipeMatch>? onAddRescueRecipeToPlan;
   final Future<int> Function(List<DraftPantryAddition> drafts)?
       onBatchAddPantryItems;
+  final RecipeDaypart? activeDaypart;
 
   const RecipeCatalogExploreView({
     super.key,
@@ -66,6 +67,7 @@ class RecipeCatalogExploreView extends StatefulWidget {
     this.wasteRescueMatches = const [],
     this.onAddRescueRecipeToPlan,
     this.onBatchAddPantryItems,
+    this.activeDaypart,
   });
 
   @override
@@ -228,6 +230,14 @@ class _RecipeCatalogExploreViewState extends State<RecipeCatalogExploreView> {
                   onCategoryChanged: widget.onCategoryChanged,
                   onClearAll: _resetAllFilters,
                 ),
+                if (widget.activeDaypart != null &&
+                    widget.selectedCategory == null &&
+                    widget.searchQuery.trim().isEmpty &&
+                    widget.selectedFilter != RecipeFilterTab.wasteSaver &&
+                    widget.matches.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _DaypartSortBanner(daypart: widget.activeDaypart!),
+                ],
                 if (widget.rescueItems.isNotEmpty ||
                     widget.wasteRescueMatches.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -1028,6 +1038,58 @@ class _ExploreEmptyState extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DaypartSortBanner extends StatelessWidget {
+  final RecipeDaypart daypart;
+
+  const _DaypartSortBanner({required this.daypart});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.primaryEmerald.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.primaryEmerald.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(daypart.emoji, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: daypart.label,
+                    style: TextStyle(
+                      color: context.textPrimaryColor,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' • ${daypart.sortHint}',
+                    style: TextStyle(
+                      color: context.textSecondaryColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
